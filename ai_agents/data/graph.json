@@ -1,0 +1,17 @@
+{
+  "nodes": [
+    {"id": "auth.validateSession", "name": "validateSession", "kind": "function",
+     "file": "src/auth/session.ts", "start": 12, "end": 48,
+     "cluster": "auth", "complexity": 7, "churn": 14},
+    {"id": "api.deleteAccount", "name": "deleteAccount", "kind": "function",
+     "file": "src/api/account.ts", "start": 5, "end": 40,
+     "cluster": "api", "complexity": 4, "churn": 3}
+  ],
+  "edges": [
+    {"src": "api.deleteAccount", "dst": "auth.validateSession", "type": "calls", "kind": "confirmed"}
+  ],
+  "tests": [
+    {"id": "test.session.expired", "file": "tests/session.test.ts", "covers": ["auth.validateSession"]}
+  ],
+  "coverage": {"auth.validateSession": 0.82, "api.deleteAccount": 0.0}
+}

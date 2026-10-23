@@ -1,0 +1,7 @@
+{
+  "branch": "feature/session-timeout",
+  "base": "main",
+  "message": "Shorten session timeout",
+  "changed_nodes": ["auth.validateSession"],
+  "diff": "--- a/src/auth/session.ts\n+++ b/src/auth/session.ts\n@@ ... @@\n"
+}

@@ -1,0 +1,6 @@
+{
+  "status": "passed",
+  "passed": ["session expires after timeout"],
+  "failed": [],
+  "not_run": []
+}
