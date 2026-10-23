@@ -1,22 +1,13 @@
 # Unity
-ui/
-[Ll]ibrary/
-[Tt]emp/
-[Oo]bj/
-[Bb]uild/
-[Bb]uilds/
-[Ll]ogs/
-[Mm]emoryCaptures/
-[Uu]ser[Ss]ettings/
-Assets/AssetStoreTools*
-Assets/Plugins/Editor/JetBrains*
-Assets/Plugins/Editor/Prefab*Editor*Tools*
-Assets/PlayFabSDK/
-Assets/TextMesh*Pro/
-Assets/Photon*
-Assets/Wwise*
-*.unityproj
-*.unityprefab
+ui/.aider.conf.yml
+ui/.claude/
+ui/.clinerules/
+ui/.cursor/
+ui/.opencode/
+ui/.roo/
+ui/.vscode/
+ui/.vsconfig
+ui/.windsurfrules
 
 # Python
 __pycache__/
