@@ -8,6 +8,7 @@ from ..tools.graph_tools import (find_tests_for_node, get_callers, get_coverage,
 change_loader = LlmAgent(
     name='change_loader_agent',
     model=MODEL,
+    include_contents='none',
     description='Loads the change under review, or the selected node as a hypothetical change.',
     instruction='''
 Load the change to analyse.
@@ -25,6 +26,7 @@ diff_summary (at most two sentences).
 static_impact = LlmAgent(
     name='static_impact_agent',
     model=MODEL,
+    include_contents='none',
     description='Finds everything that depends on the changed nodes using the code graph.',
     instruction='''
 Changed nodes: {changed_nodes}
@@ -45,6 +47,7 @@ unresolved (same, plus reason), counts (confirmed and unresolved totals).
 test_mapper = LlmAgent(
     name='test_mapper_agent',
     model=MODEL,
+    include_contents='none',
     description='Finds which tests cover the changed nodes and their callers, and which paths are untested.',
     instruction='''
 Changed nodes: {changed_nodes}
@@ -61,6 +64,7 @@ tests), low_coverage_nodes (node ids with coverage below 0.5).
 impact_synthesizer = LlmAgent(
     name='impact_synthesizer_agent',
     model=MODEL,
+    include_contents='none',
     description='Merges static impact and test mapping into one ranked impact report.',
     instruction='''
 Merge these inputs into one impact report.

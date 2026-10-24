@@ -42,8 +42,8 @@ def test_dot_dot_path_cannot_escape_the_repo():
 
 
 def test_absolute_path_cannot_escape_the_repo():
-    g, node = graph_with_file('/__ABS__')
-    with installed_graph(g) as env:
+    g, node = graph_with_file('/outside-the-repo.ts')
+    with installed_graph(g, write_sources=False) as env:       # never write fixture files to an absolute path
         secret = env.tmp / 'secret.txt'
         secret.write_text(SECRET + '\n')
         env.graph['nodes'][0]['file'] = str(secret)

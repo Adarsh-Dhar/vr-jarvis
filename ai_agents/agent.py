@@ -6,7 +6,7 @@ from .agents.fix import patch_agent, patch_repair, verifier
 from .agents.impact import change_loader, impact_synthesizer, static_impact, test_mapper
 from .agents.investigator import investigator
 from .agents.scene_director import make_scene_director
-from .callbacks import init_state
+from .callbacks import init_state, trim_history
 from .config import MODEL
 from .tools.control_tools import request_approval
 
@@ -82,4 +82,5 @@ root_agent = LlmAgent(
     tools=[request_approval],
     sub_agents=[investigate_pipeline, impact_pipeline, fix_pipeline, briefing_pipeline],
     before_agent_callback=init_state,
+    before_model_callback=trim_history,
 )

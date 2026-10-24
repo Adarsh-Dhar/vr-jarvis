@@ -13,6 +13,7 @@ KEYS = [
     'briefing',         # briefing_agent output
     'worktree',         # path of the sandbox worktree
     'last_test_run',    # raw test data for read_test_results
+    'impact_context',   # last turn's impact report, kept for the patch agent
 ]
 
 DEFAULT_STATE = {key: '' for key in KEYS}

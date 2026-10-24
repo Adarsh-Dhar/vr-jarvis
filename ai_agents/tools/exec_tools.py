@@ -4,6 +4,7 @@ import subprocess
 from google.adk.tools import ToolContext
 
 from ..config import CACHED_TESTS_PATH, USE_CACHED_TESTS
+from ._safe import safe
 
 
 def _run(cmd, cwd, timeout=180):
@@ -14,13 +15,14 @@ def _run(cmd, cwd, timeout=180):
         return 124, '', 'timeout'
 
 
+@safe
 def run_tests(test_files: list[str], tool_context: ToolContext) -> dict:
     '''Run only the given test files in the sandbox worktree and return per-test results.
     status is passed, failed or error. Never guess a result; report exactly what ran.'''
     if USE_CACHED_TESTS:
         data = json.loads(CACHED_TESTS_PATH.read_text())
         tool_context.state['last_test_run'] = data
-        return {'status': 'ok', 'source': 'cached', **data}
+        return {'source': 'cached', **data}
     cwd = tool_context.state.get('worktree')
     code, out, err = _run(['npx', 'jest', '--json', *test_files], cwd)
     try:
@@ -34,12 +36,15 @@ def run_tests(test_files: list[str], tool_context: ToolContext) -> dict:
                 passed.append(a['fullName'])
             else:
                 failed.append({'id': a['fullName'], 'message': ' '.join(a.get('failureMessages', []))[:500]})
+    if not passed and not failed:
+        return {'status': 'error', 'error': 'No tests were executed, so nothing can be reported as passed.'}
     result = {'status': 'failed' if failed else 'passed', 'source': 'live',
               'passed': passed, 'failed': failed}
     tool_context.state['last_test_run'] = result
-    return {'status': 'ok', **result}
+    return result
 
 
+@safe
 def run_typecheck(tool_context: ToolContext) -> dict:
     '''Run the TypeScript type check in the sandbox worktree. Returns the first 40 lines of errors.'''
     if USE_CACHED_TESTS:
@@ -49,9 +54,10 @@ def run_typecheck(tool_context: ToolContext) -> dict:
     return {'status': 'ok', 'typecheck': 'passed' if code == 0 else 'failed', 'errors': lines}
 
 
+@safe
 def read_test_results(tool_context: ToolContext) -> dict:
     '''Return the most recent test run from this session, or none if no tests have run.'''
     last = tool_context.state.get('last_test_run')
     if not last:
         return {'status': 'none'}
-    return {'status': 'ok', **last}
+    return dict(last)

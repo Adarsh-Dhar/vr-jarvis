@@ -10,11 +10,12 @@ from ..tools.graph_tools import find_tests_for_node, get_callers, get_source, se
 patch_agent = LlmAgent(
     name='patch_agent',
     model=MODEL,
+    include_contents='none',
     description='Proposes a minimal code change with a test, applied only inside a sandbox worktree.',
     instruction='''
 You write a small, safe patch for the user's request.
 Selected node (may be empty): {selection}
-Impact context (may be empty): {impact_report}
+Impact context from the last impact analysis (may be empty): {impact_context}
 
 Process:
 1. Locate the code to change with search_symbols or the selected node.
@@ -40,6 +41,7 @@ confidence).
 verifier = LlmAgent(
     name='verifier_agent',
     model=MODEL,
+    include_contents='none',
     description='Runs the relevant tests and type check on the sandbox patch and reports exact results.',
     instruction='''
 Patch under test: {proposed_patch}
@@ -65,6 +67,7 @@ objects with id and message), not_run (list), typecheck (passed, failed or not_r
 patch_repair = LlmAgent(
     name='patch_repair_agent',
     model=MODEL,
+    include_contents='none',
     description='Repairs a failing patch using the test failure output.',
     instruction='''
 The tests did not all pass. Repair the patch.

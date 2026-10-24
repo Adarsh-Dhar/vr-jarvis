@@ -31,6 +31,7 @@ def make_critic(name: str, review_key: str) -> LlmAgent:
     return LlmAgent(
         name=name,
         model=MODEL,
+        include_contents='none',
         description='Checks that every claim in a draft is backed by real graph evidence and test results.',
         instruction=TEMPLATE.replace('__REVIEW__', '{' + review_key + '}'),
         tools=[verify_citations, get_node],

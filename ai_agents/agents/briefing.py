@@ -8,6 +8,7 @@ from ..tools.memory_tools import load_project_memory
 briefing_agent = LlmAgent(
     name='briefing_agent',
     model=MODEL,
+    include_contents='none',
     description='Prepares the opening briefing for a project: what changed, what is risky, what is untested.',
     instruction='''
 Prepare a short opening briefing.

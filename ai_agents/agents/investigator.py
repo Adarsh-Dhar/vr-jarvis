@@ -33,6 +33,7 @@ Return a JSON object with these keys:
 investigator = LlmAgent(
     name='investigator_agent',
     model=MODEL,
+    include_contents='none',
     description=('Answers where, how and why questions about existing code by searching the code graph '
                  'and reading source. Use for explaining flows, finding where something happens, and '
                  'understanding a selected function.'),

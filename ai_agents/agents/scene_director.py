@@ -33,6 +33,7 @@ def make_scene_director(name: str) -> LlmAgent:
     return LlmAgent(
         name=name,
         model=MODEL,
+        include_contents='none',
         description='Updates the VR scene to show verified results and speaks a two-sentence summary.',
         instruction=INSTRUCTION,
         tools=[highlight_path, dim_unrelated, focus_camera, open_code_panel,
