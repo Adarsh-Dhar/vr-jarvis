@@ -1,0 +1,6 @@
+{
+  "name": "JarvisVR.Editor",
+  "rootNamespace": "JarvisVR.EditorTools",
+  "references": ["JarvisVR.Runtime"],
+  "includePlatforms": ["Editor"]
+}
