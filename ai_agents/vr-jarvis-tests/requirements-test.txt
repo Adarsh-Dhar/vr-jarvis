@@ -1,0 +1,5 @@
+google-adk
+pytest
+pytest-asyncio
+hypothesis
+networkx
