@@ -21,9 +21,20 @@ namespace JarvisVR
         {
             _bridge = gameObject.AddComponent<JarvisBridge>();
             FetchSource(_selectedNode);
+            Debug.Log("JARVIS: workspace built. Server " + PlayerPrefs.GetString("jarvis.server", JarvisBridge.DefaultServerUrl));
+            StartCoroutine(AutoBrief());
 #if UNITY_EDITOR
             gameObject.AddComponent<JarvisEditorInput>().Initialize(_canvas, _raycaster, _eventSystem, _canvas.worldCamera);
 #endif
+        }
+
+        // JARVIS speaks first: ask the backend for the opening briefing. Silent if the server is not running.
+        private System.Collections.IEnumerator AutoBrief()
+        {
+            yield return new WaitForSecondsRealtime(2f);
+            if (_bridge == null || PlayerPrefs.GetInt("jarvis.autobrief", 1) == 0) yield break;
+            _bridge.Ask("What is new in this project? Give me the status and the biggest risk.", "", OnAnswer,
+                err => Debug.LogWarning("JARVIS opening briefing skipped: " + err));
         }
 
         private void RunAsk(string text)

@@ -23,8 +23,9 @@ namespace JarvisVR
     {
       get
       {
-        if (_current == null) _current = Resources.Load<JarvisPalette>("JarvisPalette");
-        if (_current == null) _current = CreateInstance<JarvisPalette>();
+        if (_current != null) return _current;
+        // Don't call Resources.Load from static context - only call during Awake/Start
+        _current = CreateInstance<JarvisPalette>();
         return _current;
       }
     }

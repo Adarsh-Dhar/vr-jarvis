@@ -69,7 +69,7 @@ namespace JarvisVR
 
         private void Start()
         {
-            _hands = FindObjectsByType<OVRHand>(FindObjectsSortMode.None);
+            _hands = FindObjectsByType<OVRHand>(FindObjectsInactive.Include);
             if (_hands.Length > _wasPinching.Length)
             {
                 Debug.LogWarning("JARVIS input currently tracks the first two OVR hands only.");

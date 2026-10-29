@@ -20,18 +20,19 @@ namespace JarvisVR
         private const float VrTextScale = 1.15f;
         private const float CurveRadiusMeters = 2.4f; // 0 = flat
 
-        private static readonly JarvisPalette Pal = JarvisPalette.Current;
-        private static readonly Color Space = Pal.SpaceTop;
-        private static readonly Color Panel = new Color(Pal.Glass.r, Pal.Glass.g, Pal.Glass.b, 1f);
-        private static readonly Color PanelRaised = Pal.PanelRaised;
-        private static readonly Color Border = new Color(Pal.Cyan.r, Pal.Cyan.g, Pal.Cyan.b, 0.28f);
-        private static readonly Color Cyan = Pal.Cyan;
-        private static readonly Color Amber = Pal.Amber;
-        private static readonly Color Red = Pal.Red;
-        private static readonly Color Green = Pal.Green;
-        private static readonly Color Violet = Pal.Violet;
-        private static readonly Color MainText = Pal.Text;
-        private static readonly Color MutedText = Pal.TextMuted;
+        private JarvisPalette _pal;
+        private JarvisPalette Pal => _pal ??= JarvisPalette.Current;
+        private Color Space => Pal.SpaceTop;
+        private Color Panel => new Color(Pal.Glass.r, Pal.Glass.g, Pal.Glass.b, 1f);
+        private Color PanelRaised => Pal.PanelRaised;
+        private Color Border => new Color(Pal.Cyan.r, Pal.Cyan.g, Pal.Cyan.b, 0.28f);
+        private Color Cyan => Pal.Cyan;
+        private Color Amber => Pal.Amber;
+        private Color Red => Pal.Red;
+        private Color Green => Pal.Green;
+        private Color Violet => Pal.Violet;
+        private Color MainText => Pal.Text;
+        private Color MutedText => Pal.TextMuted;
 
         private readonly Dictionary<string, GameObject> _graphObjects = new();
         private readonly Dictionary<string, GameObject> _graphLabels = new();
@@ -70,7 +71,7 @@ namespace JarvisVR
         private Text _approvalHint;
         private readonly List<Image> _voiceBars = new();
 
-        private static readonly NodeFixture[] Nodes =
+        private NodeFixture[] Nodes => new NodeFixture[]
         {
             new("route.delete", "DELETE /account/:id", "api/", 166, 278, Amber),
             new("auth.require", "requireAuth", "auth/", 360, 214, Cyan),
@@ -124,7 +125,7 @@ namespace JarvisVR
             Camera camera = Camera.main;
             if (camera == null)
             {
-                camera = FindObjectsByType<Camera>(FindObjectsSortMode.None)
+                camera = FindObjectsByType<Camera>(FindObjectsInactive.Include)
                     .FirstOrDefaultCamera();
             }
 
@@ -140,7 +141,7 @@ namespace JarvisVR
             BuildGraph();
             ShowMode(_activeMode);
 
-            _eventSystem = FindFirstObjectByType<EventSystem>();
+            _eventSystem = FindAnyObjectByType<EventSystem>();
             if (_eventSystem == null)
             {
                 _eventSystem = new GameObject("JARVIS Event System").AddComponent<EventSystem>();
@@ -1226,7 +1227,7 @@ namespace JarvisVR
             }
         }
 
-        private static NodeFixture FindNode(string id)
+        private NodeFixture FindNode(string id)
         {
             foreach (NodeFixture node in Nodes)
             {

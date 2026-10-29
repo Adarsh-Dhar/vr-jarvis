@@ -8,6 +8,8 @@ ui/.roo/
 ui/.vscode/
 ui/.vsconfig
 ui/.windsurfrules
+ui/crash_logs/
+ui/mono_crash*
 
 # Python
 __pycache__/

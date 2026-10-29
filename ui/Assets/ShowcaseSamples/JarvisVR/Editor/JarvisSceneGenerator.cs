@@ -45,10 +45,10 @@ namespace JarvisVR.EditorTools
         if (go != null) go.SetActive(false);
       }
 
-      if (Object.FindFirstObjectByType<JarvisWorkspaceBootstrap>() == null)
+      if (Object.FindAnyObjectByType<JarvisWorkspaceBootstrap>() == null)
         new GameObject("JARVIS Workspace").AddComponent<JarvisWorkspaceBootstrap>();
 
-      Camera cam = Camera.main != null ? Camera.main : Object.FindFirstObjectByType<Camera>();
+      Camera cam = Camera.main != null ? Camera.main : Object.FindAnyObjectByType<Camera>();
       if (cam != null)
       {
         cam.clearFlags = CameraClearFlags.SolidColor;
@@ -56,7 +56,21 @@ namespace JarvisVR.EditorTools
       }
 
       EditorSceneManager.MarkSceneDirty(scene);
-      EditorSceneManager.SaveScene(scene);
+      if (!EditorSceneManager.SaveScene(scene))
+      {
+        Debug.LogError("JARVIS: SaveScene failed, so JarvisWorkspace.unity is still a plain copy of Meta's demo.");
+        return;
+      }
+      AssetDatabase.SaveAssets();
+      AssetDatabase.Refresh();
+      // Read the file back: a scene without the bootstrap must never be reported as generated.
+      string saved = File.ReadAllText(TargetScene);
+      string guid = AssetDatabase.AssetPathToGUID("Assets/ShowcaseSamples/JarvisVR/Runtime/JarvisWorkspaceBootstrap.cs");
+      if (!saved.Contains(guid))
+      {
+        Debug.LogError("JARVIS: the saved scene does not reference JarvisWorkspaceBootstrap. Generation failed.");
+        return;
+      }
 
       var list = EditorBuildSettings.scenes.Where(s => s.path != TargetScene).ToList();
       list.Insert(0, new EditorBuildSettingsScene(TargetScene, true));
