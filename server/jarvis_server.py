@@ -4,6 +4,8 @@ import os
 import uuid
 from collections import defaultdict
 
+from types import SimpleNamespace
+
 from fastapi import Depends, FastAPI, Header, HTTPException
 from google.adk.events import Event, EventActions
 from google.adk.runners import Runner
@@ -12,9 +14,13 @@ from google.genai import types
 from pydantic import BaseModel
 
 from ai_agents.agent import root_agent
+from ai_agents.config import GRAPH_PATH, USE_CACHED_TESTS
+from ai_agents.tools.git_tools import commit_worktree
+from ai_agents.tools.graph_tools import get_source
 
 APP, USER = 'jarvis', 'quest'
 TOKEN = os.getenv('JARVIS_TOKEN', '')
+ASK_TIMEOUT = float(os.getenv('JARVIS_ASK_TIMEOUT', '110'))   # keep below the Unity request timeout
 
 sessions = InMemorySessionService()
 runner = Runner(agent=root_agent, app_name=APP, session_service=sessions)
@@ -64,24 +70,62 @@ async def new_session():
     return {'session_id': session_id}
 
 
+@app.get('/health')
+async def health():
+    return {'ok': True, 'cached_tests': USE_CACHED_TESTS}
+
+
+@app.get('/graph', dependencies=[Depends(auth)])
+async def graph():
+    return json.loads(GRAPH_PATH.read_text())
+
+
+@app.get('/source/{node_id}', dependencies=[Depends(auth)])
+async def source(node_id: str, context: int = 0):
+    return get_source(node_id, SimpleNamespace(state={}), min(max(context, 0), 20))
+
+
+async def _run_turn(body):
+    message = types.Content(role='user', parts=[types.Part(text=body.text)])
+    reply = ''
+    async for event in runner.run_async(user_id=USER, session_id=body.session_id, new_message=message):
+        if event.is_final_response() and event.content and event.content.parts:
+            reply = ' '.join(p.text for p in event.content.parts if getattr(p, 'text', None))
+    return reply
+
+
 @app.post('/ask', dependencies=[Depends(auth)])
 async def ask(body: AskBody):
+    error = ''
+    reply = ''
     async with locks[body.session_id]:
         await ensure(body.session_id)
-        if body.selection:
-            await set_state(body.session_id, {'selection': body.selection})
-        message = types.Content(role='user', parts=[types.Part(text=body.text)])
-        reply = ''
-        async for event in runner.run_async(user_id=USER, session_id=body.session_id, new_message=message):
-            if event.is_final_response() and event.content and event.content.parts:
-                reply = ' '.join(p.text for p in event.content.parts if getattr(p, 'text', None))
+        await set_state(body.session_id, {'selection': body.selection})   # empty string clears a stale selection
+        try:
+            reply = await asyncio.wait_for(_run_turn(body), ASK_TIMEOUT)
+        except asyncio.TimeoutError:
+            error = 'JARVIS took too long to answer. Try a narrower question.'
+        except Exception as exc:                      # model/quota errors must not become an HTTP 500 in the headset
+            error = '%s: %s' % (type(exc).__name__, str(exc)[:200])
         state = (await ensure(body.session_id)).state
+    last = state.get('last_test_run') or {}
+    commands = list(state.get('scene_commands', []))
+    pending = _s(state.get('pending_approval'))
+    # Only the root agent may ask for approval, and the fix flow never does. So the server raises the prompt, and
+    # only when a patch exists AND its sandbox tests really passed. The commit itself happens in /approve.
+    if (not pending and not error and state.get('proposed_patch') and state.get('worktree')
+            and isinstance(last, dict) and last.get('status') == 'passed'):
+        pending = 'Commit the verified patch to a sandbox branch'
+        commands.append({'type': 'show_approval_prompt', 'summary': pending})
+        await set_state(body.session_id, {'pending_approval': pending, 'approved': False})
     return {
         'reply': reply,
-        'scene_commands': state.get('scene_commands', []),   # cleared every turn by init_state
-        'pending_approval': _s(state.get('pending_approval')),
+        'error': error,
+        'scene_commands': commands,   # state copy is cleared every turn by init_state
+        'pending_approval': pending,
         'approved': bool(state.get('approved', False)),
         'test_results': _s(state.get('test_results')),
+        'test_source': last.get('source', '') if isinstance(last, dict) else '',   # "cached" must be shown as simulated
         'evidence': list(state.get('evidence', [])),
     }
 
@@ -90,5 +134,12 @@ async def ask(body: AskBody):
 async def approve(body: ApproveBody):
     # The 2 s pinch-hold in the headset is the only thing that should call this.
     async with locks[body.session_id]:
+        state = (await ensure(body.session_id)).state
+        pending = state.get('pending_approval', '')
+        worktree = state.get('worktree', '')
         await set_state(body.session_id, {'approved': body.approved, 'pending_approval': ''})
-    return {'ok': True}
+    if not body.approved:
+        return {'ok': True, 'branch': '', 'commit': '', 'detail': 'Rejected. Nothing was changed.'}
+    if not pending:
+        return {'ok': False, 'branch': '', 'commit': '', 'detail': 'Nothing was waiting for approval.'}
+    return {'branch': '', 'commit': '', **commit_worktree(worktree, 'JARVIS: ' + str(pending)[:120])}

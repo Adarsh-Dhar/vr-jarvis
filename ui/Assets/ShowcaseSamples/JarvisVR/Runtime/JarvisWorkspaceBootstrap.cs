@@ -12,7 +12,7 @@ namespace JarvisVR
     /// added to the supplied Interaction SDK scene without editing vendor assets.
     /// The included account-deletion review is fixture data, not a live repository.
     /// </summary>
-    public sealed class JarvisWorkspaceBootstrap : MonoBehaviour
+    public sealed partial class JarvisWorkspaceBootstrap : MonoBehaviour
     {
         private const int CanvasWidth = 1440;
         private const int CanvasHeight = 810;
@@ -77,7 +77,7 @@ namespace JarvisVR
             new("service.delete", "deleteAccount", "services/", 514, 294, Amber),
             new("auth.owner", "checkOwner ?", "auth/", 671, 354, Red),
             new("db.delete", "users.repo.delete", "db/", 704, 465, Cyan),
-            new("test.other-user", "delete.other-user", "tests/", 432, 475, Violet),
+            new("test.own-account", "delete.own-account", "tests/", 432, 475, Violet),
             new("db.repo", "users.repo", "db/", 547, 535, Cyan),
         };
 
@@ -160,6 +160,7 @@ namespace JarvisVR
                 orbButton.targetGraphic = _orb;
                 orbButton.onClick.AddListener(() => voice.ToggleListening());
             }
+            InitBridge();
             JarvisAudio.Play(JarvisAudio.Cue.RiskPing);
         }
 
@@ -171,7 +172,7 @@ namespace JarvisVR
 
         private void AskAgent(string text)
         {
-            SetAssistantMessage("Agent bridge is not connected yet (patch 18).");
+            RunAsk(text);
         }
 
         private void BuildCanvas(Camera camera)
@@ -355,11 +356,11 @@ namespace JarvisVR
             }
 
             Link(graphArea, "route.delete", "auth.require", Cyan, false);
-            Link(graphArea, "auth.require", "service.delete", Violet, true);
-            Link(graphArea, "service.delete", "auth.owner", Amber, false);
-            Link(graphArea, "auth.owner", "db.delete", Amber, false);
-            Link(graphArea, "service.delete", "test.other-user", Red, true);
-            Link(graphArea, "db.delete", "db.repo", Cyan, false);
+            Link(graphArea, "route.delete", "service.delete", Amber, false);
+            Link(graphArea, "service.delete", "db.repo", Amber, false);
+            Link(graphArea, "db.repo", "db.delete", Cyan, false);
+            Link(graphArea, "service.delete", "auth.owner", Red, true);   // UI hint: checkOwner exists but is never called
+            Link(graphArea, "test.own-account", "service.delete", Violet, true);
             UpdateGraphLines();
         }
 
@@ -840,7 +841,7 @@ namespace JarvisVR
             }
 
             EvidenceCard(_contentRoot, "DIFF · GHOST LAYER",
-                "+ if (req.user.id !== id) throw Forbidden();\n   await users.repo.delete(id);\n\nIllustrative · not applied",
+                !string.IsNullOrEmpty(_ghostDiff) ? (_ghostDiff.Length > 420 ? _ghostDiff.Substring(0, 420) + "…" : _ghostDiff) + "\n\nProposed · not applied" : "+ if (req.user.id !== id) throw Forbidden();\n   await users.repo.delete(id);\n\nIllustrative · not applied",
                 26, 192, 250, 176, Amber);
             CreatePanel(_contentRoot, "Test results", 292, 192, 236, 176, PanelRaised, Border);
             Text(_contentRoot, "ILLUSTRATIVE RESULTS", 310, 208, 196, 24, 13, MainText, FontStyle.Bold);
@@ -1043,7 +1044,7 @@ namespace JarvisVR
             bool mapVisible = _activeMode == "MAP";
             foreach (NodeFixture node in Nodes)
             {
-                bool show = mapVisible && !(node.Id == "test.other-user" && !_overlays[2]);
+                bool show = mapVisible && !(node.Id == "test.own-account" && !_overlays[2]);
                 if (_graphObjects.TryGetValue(node.Id, out GameObject graphObject))
                 {
                     graphObject.SetActive(show);
@@ -1053,6 +1054,7 @@ namespace JarvisVR
                     if (renderer != null)
                     {
                         Color nodeColor = node.Color;
+                        nodeColor = SceneOverrideColor(node.Id, nodeColor);
                         if (!IsNeighbor(node.Id)) nodeColor = new Color(0.25f, 0.32f, 0.42f, 1f);
                         if ((nodeColor == Amber && !_overlays[0]) ||
                             (nodeColor == Red && !_overlays[1]))
@@ -1129,6 +1131,7 @@ namespace JarvisVR
 
         private void GetSelectedCodeFixture(out string title, out string source, out string finding, out Color accent)
         {
+            if (TryLiveFixture(out title, out source, out finding, out accent)) return;
             switch (_selectedNode)
             {
                 case "route.delete":
@@ -1164,7 +1167,7 @@ namespace JarvisVR
                     finding = "PARSER FACT · repository deletes the supplied id.";
                     accent = Cyan;
                     return;
-                case "test.other-user":
+                case "test.own-account":
                     title = "tests/account.test.ts";
                     source = "test('delete other user is rejected', async () => {\n" +
                              "  // No matching test found in this fixture.\n" +
@@ -1200,7 +1203,7 @@ namespace JarvisVR
                 return;
             }
             _approved = true;
-            SetAssistantMessage("Approval recorded in the demo. No files were changed or committed.");
+            OnApprovalCompleted(true);
             ShowMode("OPS");
         }
 
@@ -1211,7 +1214,7 @@ namespace JarvisVR
                 return;
             }
             _rejected = true;
-            SetAssistantMessage("Proposal rejected in the demo. No files were changed or committed.");
+            OnApprovalCompleted(false);
             ShowMode("OPS");
         }
 

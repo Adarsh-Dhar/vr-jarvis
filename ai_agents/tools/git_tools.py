@@ -4,6 +4,7 @@ import shutil
 import subprocess
 import threading
 import uuid
+from pathlib import Path
 
 from google.adk.tools import ToolContext
 
@@ -76,6 +77,9 @@ def create_worktree(tool_context: ToolContext, branch_name: str = 'jarvis/fix') 
         if proc.returncode != 0:
             return {'status': 'error', 'stderr': proc.stderr[-1500:]}
         _prune_worktrees()
+    nm = REPO_ROOT / 'node_modules'        # worktrees do not contain untracked node_modules
+    if nm.is_dir() and not (path / 'node_modules').exists():
+        (path / 'node_modules').symlink_to(nm, target_is_directory=True)
     tool_context.state['worktree'] = str(path)
     return {'status': 'ok', 'worktree': str(path)}
 
@@ -106,3 +110,18 @@ def get_worktree_diff(tool_context: ToolContext) -> dict:
     subprocess.run(['git', 'add', '-N', '.'], cwd=wt, capture_output=True, text=True)
     proc = subprocess.run(['git', 'diff', 'HEAD'], cwd=wt, capture_output=True, text=True)
     return {'status': 'ok', 'diff': proc.stdout}
+
+
+def commit_worktree(worktree: str, message: str) -> dict:
+    '''Called only by the /approve endpoint after a human pinch-hold. Commits on the sandbox branch.
+    Never merges into the main checkout. Not exposed to the model as a tool.'''
+    if not worktree or not Path(worktree).is_dir():
+        return {'ok': False, 'detail': 'No sandbox worktree to commit.'}
+    subprocess.run(['git', 'add', '-A', '--', '.', ':!node_modules'], cwd=worktree, capture_output=True, text=True)
+    c = subprocess.run(['git', '-c', 'user.name=JARVIS', '-c', 'user.email=jarvis@local', 'commit', '-m', message],
+                       cwd=worktree, capture_output=True, text=True)
+    if c.returncode != 0:
+        return {'ok': False, 'detail': (c.stdout + c.stderr)[-400:]}
+    sha = subprocess.run(['git', 'rev-parse', '--short', 'HEAD'], cwd=worktree, capture_output=True, text=True).stdout.strip()
+    br = subprocess.run(['git', 'rev-parse', '--abbrev-ref', 'HEAD'], cwd=worktree, capture_output=True, text=True).stdout.strip()
+    return {'ok': True, 'branch': br, 'commit': sha, 'detail': 'Committed on the sandbox branch. Main is untouched.'}

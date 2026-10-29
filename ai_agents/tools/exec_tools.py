@@ -5,6 +5,15 @@ from google.adk.tools import ToolContext
 
 from ..config import CACHED_TESTS_PATH, USE_CACHED_TESTS
 from ._safe import safe
+from .graph_tools import _graph
+
+
+def _test_id(full_name):
+    '''Jest reports names like "deleteAccount deletes own account". The scene needs graph node ids.'''
+    for tid, node in _graph()['nodes'].items():
+        if node.get('kind') == 'test' and node.get('name') and full_name.endswith(node['name']):
+            return tid
+    return full_name
 
 
 def _run(cmd, cwd, timeout=180):
@@ -24,6 +33,8 @@ def run_tests(test_files: list[str], tool_context: ToolContext) -> dict:
         tool_context.state['last_test_run'] = data
         return {'source': 'cached', **data}
     cwd = tool_context.state.get('worktree')
+    if not cwd:
+        return {'status': 'error', 'error': 'No sandbox worktree. Call create_worktree and apply the patch first.'}
     code, out, err = _run(['npx', 'jest', '--json', *test_files], cwd)
     try:
         report = json.loads(out)
@@ -33,9 +44,9 @@ def run_tests(test_files: list[str], tool_context: ToolContext) -> dict:
     for suite in report.get('testResults', []):
         for a in suite.get('assertionResults', []):
             if a['status'] == 'passed':
-                passed.append(a['fullName'])
+                passed.append(_test_id(a['fullName']))
             else:
-                failed.append({'id': a['fullName'], 'message': ' '.join(a.get('failureMessages', []))[:500]})
+                failed.append({'id': _test_id(a['fullName']), 'message': ' '.join(a.get('failureMessages', []))[:500]})
     if not passed and not failed:
         return {'status': 'error', 'error': 'No tests were executed, so nothing can be reported as passed.'}
     result = {'status': 'failed' if failed else 'passed', 'source': 'live',
@@ -49,7 +60,10 @@ def run_typecheck(tool_context: ToolContext) -> dict:
     '''Run the TypeScript type check in the sandbox worktree. Returns the first 40 lines of errors.'''
     if USE_CACHED_TESTS:
         return {'status': 'ok', 'typecheck': 'passed', 'source': 'cached'}
-    code, out, err = _run(['npx', 'tsc', '--noEmit'], tool_context.state.get('worktree'))
+    cwd = tool_context.state.get('worktree')
+    if not cwd:
+        return {'status': 'error', 'error': 'No sandbox worktree. Call create_worktree first.'}
+    code, out, err = _run(['npx', 'tsc', '--noEmit'], cwd)
     lines = (out + err).splitlines()[:40]
     return {'status': 'ok', 'typecheck': 'passed' if code == 0 else 'failed', 'errors': lines}
 

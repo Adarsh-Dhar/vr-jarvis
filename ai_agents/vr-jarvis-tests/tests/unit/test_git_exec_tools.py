@@ -105,7 +105,8 @@ def jest(*suites):
 
 
 @pytest.fixture
-def live(env):
+def live(env, ctx):
+    ctx.state['worktree'] = '/tmp/jarvis-test-worktree'   # run_tests/run_typecheck now refuse to run without one
     with mock.patch.object(ex, 'USE_CACHED_TESTS', False):
         yield
 
