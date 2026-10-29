@@ -6,6 +6,9 @@ EditorBuildSettings:
   serializedVersion: 2
   m_Scenes:
   - enabled: 1
+    path: Assets/ShowcaseSamples/JarvisVR/Scenes/JarvisWorkspace.unity
+    guid: c3dac17e1a0d54ed9821a4b520d55dcf
+  - enabled: 1
     path: Assets/MetaSplashScreen/Scenes/SplashScreenISDK.unity
     guid: 28357e73bd1173740a63e1b7ece9eb1b
   - enabled: 1
@@ -75,4 +78,3 @@ EditorBuildSettings:
     Unity.XR.Oculus.Settings: {fileID: 11400000, guid: d730f8000e2f1814291fdde8c7308752, type: 2}
     com.unity.xr.management.loader_settings: {fileID: 11400000, guid: 6f86a94401368ca409cdcb7fa64ac937, type: 2}
     com.unity.xr.openxr.settings4: {fileID: 11400000, guid: 1005f66eb5c49fb4581e102f3a2762a1, type: 2}
-  m_UseUCBPForAssetBundles: 0
