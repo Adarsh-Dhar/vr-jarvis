@@ -165,7 +165,7 @@ namespace JarvisVR
 
         private void OnVoiceTranscript(string text)
         {
-            SetAssistantMessage(""" + text + """);
+            SetAssistantMessage(text);
             AskAgent(text);
         }
 
@@ -208,14 +208,14 @@ namespace JarvisVR
 
         private void BuildPersistentFrame()
         {
-            Panel(_contentRoot, "Top status", 18, 16, 1404, 62, Panel, Border);
+            CreatePanel(_contentRoot, "Top status", 18, 16, 1404, 62, Panel, Border);
             Text(_contentRoot, "JARVIS  /  SOFTWARE INTELLIGENCE", 42, 29, 450, 30, 24, MainText, FontStyle.Bold);
             CreateImage(_contentRoot, "Repository indexed indicator", 804, 40, 10, 10, Green);
             Text(_contentRoot, "REPO INDEXED · DEMO", 824, 31, 154, 28, 14, MainText, FontStyle.Bold);
             Text(_contentRoot, "acme-shop   /   fix/account-delete   ·   7 changed",
                 956, 31, 430, 28, 16, MutedText, FontStyle.Normal, TextAnchor.MiddleRight);
 
-            Panel(_contentRoot, "JARVIS briefing", 24, 96, 272, 570, Panel, Border);
+            CreatePanel(_contentRoot, "JARVIS briefing", 24, 96, 272, 570, Panel, Border);
             CreateOrb(_contentRoot, 50, 119);
             Text(_contentRoot, "JARVIS", 106, 118, 150, 28, 21, MainText, FontStyle.Bold);
             Text(_contentRoot, "Demo fixture · visual briefing", 106, 145, 176, 24, 13, MutedText);
@@ -229,11 +229,11 @@ namespace JarvisVR
             Text(_contentRoot, "Evidence is labeled as fact, missing, or AI hypothesis.",
                 48, 583, 220, 54, 14, MutedText);
 
-            Panel(_contentRoot, "Main view", 316, 96, 842, 570,
+            CreatePanel(_contentRoot, "Main view", 316, 96, 842, 570,
                 new Color(Panel.r, Panel.g, Panel.b, Pal.Glass.a), Border);
             _contentRoot = CreateRect(_contentRoot, "Dynamic view", 316, 96, 842, 570);
 
-            Panel(_contentRoot.parent as RectTransform, "Navigation rail", 24, 696, 1392, 88, Panel, Border);
+            CreatePanel(_contentRoot.parent as RectTransform, "Navigation rail", 24, 696, 1392, 88, Panel, Border);
             CreateNavigation();
             CreateVoicePrompt();
         }
@@ -287,7 +287,7 @@ namespace JarvisVR
         private void CreateVoicePrompt()
         {
             RectTransform ui = _contentRoot.parent as RectTransform;
-            Panel(ui, "Voice prompt", 396, 706, 580, 66, PanelRaised, Border);
+            CreatePanel(ui, "Voice prompt", 396, 706, 580, 66, PanelRaised, Border);
             Image voiceOrb = CreateImage(ui, "Voice orb", 414, 718, 38, 38, Cyan);
             voiceOrb.sprite = JarvisGfx.Circle();
             Text(ui, "JARVIS", 464, 716, 78, 20, 13, Cyan, FontStyle.Bold);
@@ -600,7 +600,7 @@ namespace JarvisVR
             Text(_contentRoot, "Account deletion · 7 connected functions · 1 review gap",
                 26, 50, 720, 26, 15, MutedText);
 
-            Panel(_contentRoot, "Overlay controls", 852, 0, 246, 570, PanelRaised, Border);
+            CreatePanel(_contentRoot, "Overlay controls", 852, 0, 246, 570, PanelRaised, Border);
             Text(_contentRoot, "OVERLAYS", 870, 18, 210, 26, 16, MainText, FontStyle.Bold);
             string[] labels = { "Git changes", "Risks", "Test coverage", "Data flow" };
             for (int i = 0; i < labels.Length; i++)
@@ -643,7 +643,7 @@ namespace JarvisVR
                 "Database · users.repo.delete writes the supplied id."
             };
             Color detailColor = _flowStep == 3 ? Red : _flowStep == 2 ? Amber : Cyan;
-            Panel(_contentRoot, "Selected edge evidence", 28, 88, 786, 48,
+            CreatePanel(_contentRoot, "Selected edge evidence", 28, 88, 786, 48,
                 new Color(detailColor.r, detailColor.g, detailColor.b, 0.13f), detailColor);
             Text(_contentRoot, "STOP DETAIL   " + detail[_flowStep],
                 44, 101, 754, 28, 14, MainText, FontStyle.Normal, TextAnchor.MiddleLeft);
@@ -659,7 +659,7 @@ namespace JarvisVR
             {
                 int x = 28 + i * 157;
                 Color color = i == 3 ? Red : i == 2 ? Amber : Cyan;
-                Panel(_contentRoot, "Flow step " + i, x, 152, 142, 112,
+                CreatePanel(_contentRoot, "Flow step " + i, x, 152, 142, 112,
                     i == _flowStep ? new Color(color.r, color.g, color.b, 0.24f) : PanelRaised, color);
                 Image stepSurface = _contentRoot.Find("Flow step " + i)?.GetComponent<Image>();
                 if (stepSurface != null)
@@ -718,7 +718,7 @@ namespace JarvisVR
             Text(_contentRoot, "Selected · " + (selectedNode != null ? selectedNode.Label : _selectedNode),
                 26, 50, 740, 28, 15, MutedText);
 
-            Panel(_contentRoot, "Callers panel", 24, 104, 220, 290, PanelRaised, Border);
+            CreatePanel(_contentRoot, "Callers panel", 24, 104, 220, 290, PanelRaised, Border);
             Text(_contentRoot, "CALLERS · 2", 42, 120, 180, 24, 15, MainText, FontStyle.Bold);
             Button(_contentRoot, "routes/account.ts:14", 40, 158, 188, 42, Panel,
                 () => SelectNode("route.delete"), 12);
@@ -772,7 +772,7 @@ namespace JarvisVR
                 _codePanelScale = scale;
                 _codePanelOffset = localPosition - sourcePanelBasePosition;
             });
-            Panel(sourcePanelRoot, "Source panel", 0, 0, 348, 392, Panel, findingColor);
+            CreatePanel(sourcePanelRoot, "Source panel", 0, 0, 348, 392, Panel, findingColor);
             Text(sourcePanelRoot, sourceTitle + "  ·  DEMO FIXTURE", 20, 15, 306, 26, 14, MainText, FontStyle.Bold);
             string[] tabs = { "CODE", "DIFF", "BLAME", "NOTE" };
             for (int i = 0; i < tabs.Length; i++)
@@ -785,11 +785,11 @@ namespace JarvisVR
             }
             Text(sourcePanelRoot, sourceBody,
                 20, 90, 306, 178, 13, MainText, FontStyle.Normal);
-            Panel(sourcePanelRoot, "Finding", 16, 286, 316, 70,
+            CreatePanel(sourcePanelRoot, "Finding", 16, 286, 316, 70,
                 new Color(findingColor.r, findingColor.g, findingColor.b, 0.16f), findingColor);
             Text(sourcePanelRoot, sourceFinding, 30, 302, 286, 48, 14, findingColor, FontStyle.Bold);
 
-            Panel(_contentRoot, "Tests panel", 620, 104, 196, 290, PanelRaised, Border);
+            CreatePanel(_contentRoot, "Tests panel", 620, 104, 196, 290, PanelRaised, Border);
             Text(_contentRoot, "TESTS · 2", 638, 120, 156, 24, 15, MainText, FontStyle.Bold);
             Button(_contentRoot, "●  delete.happy-path  ·  pass", 636, 158, 164, 52,
                 new Color(Green.r, Green.g, Green.b, 0.16f),
@@ -820,7 +820,7 @@ namespace JarvisVR
                 int x = 26 + i * 198;
                 Color color = i == 3 ? (_approved ? Green : _rejected ? Red : Amber) :
                     i == 2 ? Amber : Green;
-                Panel(_contentRoot, labels[i], x, 74, 184, 92,
+                CreatePanel(_contentRoot, labels[i], x, 74, 184, 92,
                     i == 3 && !_approved && !_rejected
                         ? new Color(Amber.r, Amber.g, Amber.b, 0.16f)
                         : new Color(color.r, color.g, color.b, 0.1f), color);
@@ -842,11 +842,11 @@ namespace JarvisVR
             EvidenceCard(_contentRoot, "DIFF · GHOST LAYER",
                 "+ if (req.user.id !== id) throw Forbidden();\n   await users.repo.delete(id);\n\nIllustrative · not applied",
                 26, 192, 250, 176, Amber);
-            Panel(_contentRoot, "Test results", 292, 192, 236, 176, PanelRaised, Border);
+            CreatePanel(_contentRoot, "Test results", 292, 192, 236, 176, PanelRaised, Border);
             Text(_contentRoot, "ILLUSTRATIVE RESULTS", 310, 208, 196, 24, 13, MainText, FontStyle.Bold);
             Text(_contentRoot, "Fixture: 13 passed\nProposed: delete.other-user\nFixture: 0 failed\nNot run: staging DB",
                 310, 248, 196, 104, 14, MutedText);
-            Panel(_contentRoot, "Agent permissions", 544, 192, 272, 176, PanelRaised, Border);
+            CreatePanel(_contentRoot, "Agent permissions", 544, 192, 272, 176, PanelRaised, Border);
             Text(_contentRoot, "WHAT JARVIS MAY DO", 562, 208, 230, 24, 14, MainText, FontStyle.Bold);
             Text(_contentRoot, "Read + explain           AUTO\nEdit files (branch)       ASK\nRun tests (sandbox)       ASK\nMerge / commit            YOU ONLY",
                 562, 248, 232, 104, 13, MutedText);
@@ -899,19 +899,19 @@ namespace JarvisVR
         private void EvidenceCard(RectTransform parent, string tag, string body,
             float x, float y, float width, float height, Color accent)
         {
-            Panel(parent, tag, x, y, width, height, PanelRaised, new Color(accent.r, accent.g, accent.b, 0.55f));
+            CreatePanel(parent, tag, x, y, width, height, PanelRaised, new Color(accent.r, accent.g, accent.b, 0.55f));
             Text(parent, tag, x + 14, y + 12, width - 28, 22, 12, accent, FontStyle.Bold);
             Text(parent, body, x + 14, y + 42, width - 28, height - 50, 14, MainText);
         }
 
         private void Chip(RectTransform parent, string label, float x, float y, float width, float height, Color accent)
         {
-            Panel(parent, label, x, y, width, height,
+            CreatePanel(parent, label, x, y, width, height,
                 new Color(accent.r, accent.g, accent.b, 0.12f), new Color(accent.r, accent.g, accent.b, 0.4f));
             Text(parent, label, x + 10, y + 6, width - 20, height - 12, 12, MainText);
         }
 
-        private Image Panel(RectTransform parent, string name, float x, float y, float width, float height,
+        private Image CreatePanel(RectTransform parent, string name, float x, float y, float width, float height,
             Color fill, Color outline)
         {
             Image border = CreateImage(parent, name + " border", x, y, width, height, outline);

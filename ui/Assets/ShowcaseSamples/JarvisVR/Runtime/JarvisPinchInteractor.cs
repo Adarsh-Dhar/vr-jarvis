@@ -12,6 +12,9 @@ namespace JarvisVR
     /// </summary>
     public sealed class JarvisPinchInteractor : MonoBehaviour
     {
+        private static readonly Color Cyan = new Color(0f, 0.8f, 1f);
+        private static readonly Color Amber = new Color(1f, 0.6f, 0f);
+
         private Canvas _canvas;
         private GraphicRaycaster _raycaster;
         private EventSystem _eventSystem;
