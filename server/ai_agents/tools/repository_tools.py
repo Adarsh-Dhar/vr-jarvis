@@ -389,8 +389,24 @@ def search_symbols(
 ) -> dict:
     """Search functions, classes, variables and types."""
     try:
-        # This is a placeholder - real implementation would use AST parsing or tree-sitter
-        # For now, use grep to find symbol definitions
+        from .navigation_tools import get_symbol_definition
+        
+        # Try to find symbol definition first
+        def_result = get_symbol_definition(symbol_name, tool_context)
+        
+        if def_result.get('status') == 'ok':
+            return {
+                'status': 'ok',
+                'symbol_name': symbol_name,
+                'matches': [{
+                    'name': symbol_name,
+                    'type': def_result['definition'].get('symbol_type'),
+                    'file': def_result['definition'].get('file'),
+                    'line': def_result['definition'].get('line')
+                }]
+            }
+        
+        # Fallback to grep for more comprehensive search
         cwd = Path.cwd()
         matches = []
         
@@ -552,7 +568,7 @@ def watch_repository(repository_path: str, tool_context: ToolContext) -> dict:
             }
         
         # This is a placeholder - real implementation would use watchdog or fsnotify
-        # For now, just return success
+        # For now, provide a plan
         return {
             'status': 'ok',
             'repository_path': str(repo_path),

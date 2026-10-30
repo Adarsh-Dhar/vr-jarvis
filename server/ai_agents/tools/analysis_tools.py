@@ -451,11 +451,51 @@ def analyze_code_complexity(file_path: str, tool_context: ToolContext) -> dict:
 def detect_code_duplication(tool_context: ToolContext) -> dict:
     """Identify duplicate or similar code."""
     try:
-        # This is a placeholder - real implementation would use diff algorithms
+        from .repository_tools import list_files, read_file
+        from pathlib import Path
+        
+        # Get all Python files
+        files_result = list_files(tool_context, directory='.', pattern='.py', recursive=True)
+        if files_result.get('status') != 'ok':
+            return files_result
+        
+        # Simple duplicate detection based on line similarity
+        code_blocks = {}
+        duplicates = []
+        
+        for file_info in files_result['files']:
+            if file_info['type'] == 'file':
+                file_path = file_info['path']
+                file_result = read_file(file_path, tool_context)
+                
+                if file_result.get('status') == 'ok':
+                    content = file_result['content']
+                    lines = content.splitlines()
+                    
+                    # Look for repeated line patterns
+                    for i, line in enumerate(lines):
+                        if len(line.strip()) > 10:  # Ignore short lines
+                            if line.strip() in code_blocks:
+                                code_blocks[line.strip()].append({
+                                    'file': file_path,
+                                    'line': i + 1
+                                })
+                                if len(code_blocks[line.strip()]) >= 3:
+                                    duplicates.append({
+                                        'code': line.strip()[:100],
+                                        'occurrences': code_blocks[line.strip()],
+                                        'count': len(code_blocks[line.strip()])
+                                    })
+                            else:
+                                code_blocks[line.strip()] = [{
+                                    'file': file_path,
+                                    'line': i + 1
+                                }]
+        
         return {
             'status': 'ok',
-            'duplicates': [],
-            'note': 'Code duplication detection requires additional infrastructure'
+            'duplicates': duplicates[:20],  # Limit to 20
+            'note': 'Simple line-based detection - advanced detection requires diff algorithms'
         }
     except Exception as e:
         return {

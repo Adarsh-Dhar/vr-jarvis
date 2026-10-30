@@ -5,8 +5,26 @@ These are not UI design tools, but tools for interacting with software intellige
 """
 
 from typing import Optional, List, Dict, Any
+import time
 from google.adk.tools import ToolContext
 from ._safe import safe
+
+# In-memory VR state
+_vr_session_state = {
+    'active': False,
+    'session_id': None,
+    'started_at': None
+}
+
+_voice_commands = {}
+_hand_interaction_mode = 'default'
+_spatial_audio_settings = {}
+_haptic_feedback_settings = {}
+_vr_environment = 'default'
+_theme = 'default'
+_spatial_scale = 1.0
+_camera_state = {'position': [0, 0, 0], 'rotation': [0, 0, 0]}
+_scene_states = {}
 
 
 @safe
@@ -14,9 +32,9 @@ def get_vr_session_state(tool_context: ToolContext) -> dict:
     """Understand the current VR session."""
     try:
         return {
-            'status': 'not_implemented',
-            'message': 'VR session state requires Unity integration',
-            'note': 'This tool interfaces with the Unity VR application'
+            'status': 'ok',
+            'session': _vr_session_state,
+            'note': 'In-memory state - production requires Unity integration'
         }
     except Exception as e:
         return {
@@ -324,10 +342,21 @@ def process_voice_command(
 ) -> dict:
     """Process a voice command."""
     try:
+        # Check if command is registered
+        if command in _voice_commands:
+            return {
+                'status': 'ok',
+                'command': command,
+                'action': _voice_commands[command],
+                'executed': True,
+                'note': 'In-memory processing - production requires Unity speech recognition'
+            }
         return {
-            'status': 'not_implemented',
-            'message': 'Voice command processing requires Unity integration and speech recognition',
-            'command': command
+            'status': 'ok',
+            'command': command,
+            'executed': False,
+            'message': 'Command not recognized or not registered',
+            'note': 'In-memory processing - production requires Unity speech recognition'
         }
     except Exception as e:
         return {
@@ -344,11 +373,13 @@ def register_voice_command(
 ) -> dict:
     """Register a custom voice command."""
     try:
+        _voice_commands[command_text] = action
         return {
-            'status': 'not_implemented',
-            'message': 'Voice command registration requires Unity integration',
+            'status': 'ok',
             'command_text': command_text,
-            'action': action
+            'action': action,
+            'registered': True,
+            'note': 'In-memory registration - production requires Unity integration'
         }
     except Exception as e:
         return {
@@ -362,8 +393,10 @@ def list_voice_commands(tool_context: ToolContext) -> dict:
     """List registered voice commands."""
     try:
         return {
-            'status': 'not_implemented',
-            'message': 'Voice command listing requires Unity integration'
+            'status': 'ok',
+            'commands': list(_voice_commands.keys()),
+            'count': len(_voice_commands),
+            'note': 'In-memory listing - production requires Unity integration'
         }
     except Exception as e:
         return {
@@ -381,10 +414,13 @@ def set_hand_interaction_mode(
 ) -> dict:
     """Set hand interaction mode."""
     try:
+        global _hand_interaction_mode
+        _hand_interaction_mode = mode
         return {
-            'status': 'not_implemented',
-            'message': 'Hand interaction mode requires Unity integration',
-            'mode': mode
+            'status': 'ok',
+            'mode': mode,
+            'set': True,
+            'note': 'In-memory setting - production requires Unity integration'
         }
     except Exception as e:
         return {
@@ -398,8 +434,9 @@ def get_hand_interaction_state(tool_context: ToolContext) -> dict:
     """Get current hand interaction state."""
     try:
         return {
-            'status': 'not_implemented',
-            'message': 'Hand interaction state requires Unity integration'
+            'status': 'ok',
+            'mode': _hand_interaction_mode,
+            'note': 'In-memory state - production requires Unity integration'
         }
     except Exception as e:
         return {
@@ -418,11 +455,13 @@ def set_spatial_audio(
 ) -> dict:
     """Set spatial audio source."""
     try:
+        _spatial_audio_settings[source_id] = position
         return {
-            'status': 'not_implemented',
-            'message': 'Spatial audio requires Unity integration',
+            'status': 'ok',
             'source_id': source_id,
-            'position': position
+            'position': position,
+            'set': True,
+            'note': 'In-memory setting - production requires Unity integration'
         }
     except Exception as e:
         return {
@@ -439,11 +478,14 @@ def set_haptic_feedback(
 ) -> dict:
     """Set haptic feedback."""
     try:
+        _haptic_feedback_settings['intensity'] = intensity
+        _haptic_feedback_settings['duration'] = duration
         return {
-            'status': 'not_implemented',
-            'message': 'Haptic feedback requires Unity integration',
+            'status': 'ok',
             'intensity': intensity,
-            'duration': duration
+            'duration': duration,
+            'set': True,
+            'note': 'In-memory setting - production requires Unity integration'
         }
     except Exception as e:
         return {
@@ -461,10 +503,13 @@ def set_vr_environment(
 ) -> dict:
     """Set VR environment."""
     try:
+        global _vr_environment
+        _vr_environment = environment_id
         return {
-            'status': 'not_implemented',
-            'message': 'VR environment setting requires Unity integration',
-            'environment_id': environment_id
+            'status': 'ok',
+            'environment_id': environment_id,
+            'set': True,
+            'note': 'In-memory setting - production requires Unity integration'
         }
     except Exception as e:
         return {
@@ -480,10 +525,16 @@ def get_environment_info(
 ) -> dict:
     """Get environment information."""
     try:
+        current_env = environment_id if environment_id else _vr_environment
         return {
-            'status': 'not_implemented',
-            'message': 'Environment info requires Unity integration',
-            'environment_id': environment_id
+            'status': 'ok',
+            'environment_id': current_env,
+            'info': {
+                'name': current_env,
+                'type': 'vr_environment',
+                'active': current_env == _vr_environment
+            },
+            'note': 'In-memory info - production requires Unity integration'
         }
     except Exception as e:
         return {
@@ -499,10 +550,13 @@ def set_theme(
 ) -> dict:
     """Set visualization theme."""
     try:
+        global _theme
+        _theme = theme_id
         return {
-            'status': 'not_implemented',
-            'message': 'Theme setting requires Unity integration',
-            'theme_id': theme_id
+            'status': 'ok',
+            'theme_id': theme_id,
+            'set': True,
+            'note': 'In-memory setting - production requires Unity integration'
         }
     except Exception as e:
         return {
@@ -534,10 +588,13 @@ def set_spatial_scaling(
 ) -> dict:
     """Set spatial scaling."""
     try:
+        global _spatial_scale
+        _spatial_scale = scale
         return {
-            'status': 'not_implemented',
-            'message': 'Spatial scaling requires Unity integration',
-            'scale': scale
+            'status': 'ok',
+            'scale': scale,
+            'set': True,
+            'note': 'In-memory setting - production requires Unity integration'
         }
     except Exception as e:
         return {
@@ -550,9 +607,13 @@ def set_spatial_scaling(
 def reset_camera(tool_context: ToolContext) -> dict:
     """Reset camera to default position."""
     try:
+        global _camera_state
+        _camera_state = {'position': [0, 0, 0], 'rotation': [0, 0, 0]}
         return {
-            'status': 'not_implemented',
-            'message': 'Camera reset requires Unity integration'
+            'status': 'ok',
+            'camera_state': _camera_state,
+            'reset': True,
+            'note': 'In-memory reset - production requires Unity integration'
         }
     except Exception as e:
         return {
@@ -568,10 +629,18 @@ def save_scene_state(
 ) -> dict:
     """Save current scene state."""
     try:
+        _scene_states[state_id] = {
+            'environment': _vr_environment,
+            'theme': _theme,
+            'scale': _spatial_scale,
+            'camera': _camera_state,
+            'saved_at': time.time()
+        }
         return {
-            'status': 'not_implemented',
-            'message': 'Scene state saving requires Unity integration',
-            'state_id': state_id
+            'status': 'ok',
+            'state_id': state_id,
+            'saved': True,
+            'note': 'In-memory save - production requires Unity integration'
         }
     except Exception as e:
         return {
@@ -587,10 +656,23 @@ def load_scene_state(
 ) -> dict:
     """Load a saved scene state."""
     try:
+        if state_id in _scene_states:
+            state = _scene_states[state_id]
+            global _vr_environment, _theme, _spatial_scale, _camera_state
+            _vr_environment = state['environment']
+            _theme = state['theme']
+            _spatial_scale = state['scale']
+            _camera_state = state['camera']
+            return {
+                'status': 'ok',
+                'state_id': state_id,
+                'loaded': True,
+                'state': state,
+                'note': 'In-memory load - production requires Unity integration'
+            }
         return {
-            'status': 'not_implemented',
-            'message': 'Scene state loading requires Unity integration',
-            'state_id': state_id
+            'status': 'error',
+            'error': f'State {state_id} not found'
         }
     except Exception as e:
         return {

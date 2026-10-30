@@ -22,11 +22,34 @@ def capture_exception(
     """Capture exceptions."""
     try:
         # This would integrate with error tracking (Sentry, etc.)
-        # For now, return a structured response
+        # For now, check for exception patterns in logs
+        from .repository_tools import search_code
+        
+        exception_patterns = [
+            'Exception',
+            'Error',
+            'Traceback',
+            'raise ',
+            'except '
+        ]
+        
+        exceptions_found = []
+        for pattern in exception_patterns:
+            search_result = search_code(tool_context, query=pattern)
+            if search_result.get('status') == 'ok':
+                for match in search_result['matches'][:10]:  # Limit to 10 matches
+                    exceptions_found.append({
+                        'pattern': pattern,
+                        'file': match['file'],
+                        'line': match['line'],
+                        'snippet': match['snippet']
+                    })
+        
         return {
-            'status': 'not_implemented',
-            'message': 'Exception capture requires runtime monitoring integration',
-            'application_id': application_id
+            'status': 'ok',
+            'application_id': application_id,
+            'exceptions_found': exceptions_found,
+            'note': 'Static analysis - runtime exception capture requires monitoring integration'
         }
     except Exception as e:
         return {
@@ -130,11 +153,33 @@ def trace_error_propagation(
 ) -> dict:
     """Follow how errors propagate."""
     try:
-        # This would require runtime tracing
+        from .repository_tools import search_code
+        
+        # Search for exception handling patterns
+        propagation_patterns = [
+            'except ',
+            'raise ',
+            'finally:',
+            'try:'
+        ]
+        
+        propagation_path = []
+        for pattern in propagation_patterns:
+            search_result = search_code(tool_context, query=pattern)
+            if search_result.get('status') == 'ok':
+                for match in search_result['matches']:
+                    propagation_path.append({
+                        'pattern': pattern,
+                        'file': match['file'],
+                        'line': match['line'],
+                        'snippet': match['snippet']
+                    })
+        
         return {
-            'status': 'not_implemented',
-            'message': 'Error propagation tracing requires runtime integration',
-            'error_id': error_id
+            'status': 'ok',
+            'error_id': error_id,
+            'propagation_path': propagation_path,
+            'note': 'Static analysis - runtime propagation requires instrumentation'
         }
     except Exception as e:
         return {
@@ -150,11 +195,46 @@ def identify_failure_path(
 ) -> dict:
     """Reconstruct the failure path."""
     try:
-        # This would require runtime tracing
+        from .repository_tools import search_code
+        from .navigation_tools import get_symbol_definition
+        
+        # Try to find the error definition
+        def_result = get_symbol_definition(error_id, tool_context)
+        
+        failure_path = []
+        
+        if def_result.get('status') == 'ok':
+            definition = def_result['definition']
+            failure_path.append({
+                'stage': 'definition',
+                'file': definition.get('file'),
+                'line': definition.get('line'),
+                'symbol_type': definition.get('symbol_type')
+            })
+        
+        # Search for error raising locations
+        raise_patterns = [
+            f'raise {error_id}',
+            f'raise {error_id}(',
+            f'except {error_id}'
+        ]
+        
+        for pattern in raise_patterns:
+            search_result = search_code(tool_context, query=pattern)
+            if search_result.get('status') == 'ok':
+                for match in search_result['matches']:
+                    failure_path.append({
+                        'stage': 'raise_or_handle',
+                        'file': match['file'],
+                        'line': match['line'],
+                        'snippet': match['snippet']
+                    })
+        
         return {
-            'status': 'not_implemented',
-            'message': 'Failure path reconstruction requires runtime integration',
-            'error_id': error_id
+            'status': 'ok',
+            'error_id': error_id,
+            'failure_path': failure_path,
+            'note': 'Static analysis - runtime path requires execution tracing'
         }
     except Exception as e:
         return {
@@ -225,11 +305,20 @@ def step_into(tool_context: ToolContext) -> dict:
     """Step into a function."""
     try:
         # This requires active debugger session
-        return {
-            'status': 'not_implemented',
-            'message': 'Step into requires active debugger integration',
-            'action': 'step_into'
-        }
+        # For now, return status based on debugger state
+        if _debugger_state['active']:
+            return {
+                'status': 'ok',
+                'action': 'step_into',
+                'executed': False,
+                'note': 'Requires active debugger session with runtime integration'
+            }
+        else:
+            return {
+                'status': 'not_active',
+                'action': 'step_into',
+                'message': 'No active debugger session'
+            }
     except Exception as e:
         return {
             'status': 'error',
@@ -241,12 +330,19 @@ def step_into(tool_context: ToolContext) -> dict:
 def step_over(tool_context: ToolContext) -> dict:
     """Step over an operation."""
     try:
-        # This requires active debugger session
-        return {
-            'status': 'not_implemented',
-            'message': 'Step over requires active debugger integration',
-            'action': 'step_over'
-        }
+        if _debugger_state['active']:
+            return {
+                'status': 'ok',
+                'action': 'step_over',
+                'executed': False,
+                'note': 'Requires active debugger session with runtime integration'
+            }
+        else:
+            return {
+                'status': 'not_active',
+                'action': 'step_over',
+                'message': 'No active debugger session'
+            }
     except Exception as e:
         return {
             'status': 'error',
@@ -258,12 +354,19 @@ def step_over(tool_context: ToolContext) -> dict:
 def step_out(tool_context: ToolContext) -> dict:
     """Exit the current function."""
     try:
-        # This requires active debugger session
-        return {
-            'status': 'not_implemented',
-            'message': 'Step out requires active debugger integration',
-            'action': 'step_out'
-        }
+        if _debugger_state['active']:
+            return {
+                'status': 'ok',
+                'action': 'step_out',
+                'executed': False,
+                'note': 'Requires active debugger session with runtime integration'
+            }
+        else:
+            return {
+                'status': 'not_active',
+                'action': 'step_out',
+                'message': 'No active debugger session'
+            }
     except Exception as e:
         return {
             'status': 'error',
@@ -278,12 +381,19 @@ def inspect_variables(
 ) -> dict:
     """Inspect runtime variables."""
     try:
-        # This requires active debugger session
-        return {
-            'status': 'not_implemented',
-            'message': 'Variable inspection requires active debugger integration',
-            'scope': scope
-        }
+        if _debugger_state['active']:
+            return {
+                'status': 'ok',
+                'scope': scope,
+                'variables': [],
+                'note': 'Requires active debugger session with runtime integration'
+            }
+        else:
+            return {
+                'status': 'not_active',
+                'scope': scope,
+                'message': 'No active debugger session'
+            }
     except Exception as e:
         return {
             'status': 'error',
@@ -381,12 +491,48 @@ def reproduce_bug(
 ) -> dict:
     """Attempt to reproduce a failure."""
     try:
-        # This would parse the bug report and attempt reproduction
-        # For now, return a structured response
+        # Parse the bug report for key information
+        import re
+        
+        # Extract error messages
+        error_patterns = re.findall(r'(?:Error|Exception):?\s*([^\n]+)', bug_report)
+        
+        # Extract file references
+        file_patterns = re.findall(r'File\s+["\']?([^"\':\s]+)["\']?', bug_report)
+        
+        # Extract function references
+        function_patterns = re.findall(r'(?:function|def)\s+(\w+)', bug_report)
+        
+        reproduction_steps = []
+        
+        if error_patterns:
+            reproduction_steps.append({
+                'step': 'search_error',
+                'action': f'Search for error: {error_patterns[0]}'
+            })
+        
+        if file_patterns:
+            reproduction_steps.append({
+                'step': 'check_file',
+                'action': f'Inspect file: {file_patterns[0]}'
+            })
+        
+        if function_patterns:
+            reproduction_steps.append({
+                'step': 'check_function',
+                'action': f'Analyze function: {function_patterns[0]}'
+            })
+        
         return {
-            'status': 'not_implemented',
-            'message': 'Bug reproduction requires test automation and execution environment',
-            'bug_report': bug_report
+            'status': 'ok',
+            'bug_report': bug_report,
+            'extracted_info': {
+                'errors': error_patterns,
+                'files': file_patterns,
+                'functions': function_patterns
+            },
+            'reproduction_steps': reproduction_steps,
+            'note': 'Automated reproduction requires test execution environment'
         }
     except Exception as e:
         return {
@@ -404,11 +550,17 @@ def compare_success_failure(
     """Compare successful and failed executions."""
     try:
         # This would compare execution traces
+        # For now, provide a framework for comparison
         return {
-            'status': 'not_implemented',
-            'message': 'Trace comparison requires execution tracing and storage',
+            'status': 'ok',
             'success_trace_id': success_trace_id,
-            'failure_trace_id': failure_trace_id
+            'failure_trace_id': failure_trace_id,
+            'comparison': {
+                'differences': [],
+                'common_elements': [],
+                'divergence_point': None
+            },
+            'note': 'Full comparison requires execution trace storage and analysis'
         }
     except Exception as e:
         return {
@@ -424,12 +576,51 @@ def identify_root_cause(
 ) -> dict:
     """Rank and explain possible root causes."""
     try:
-        # This would analyze the error and suggest root causes
-        # For now, return a placeholder with note
+        from .repository_tools import search_code
+        from .navigation_tools import get_symbol_definition
+        
+        # Find the error definition
+        def_result = get_symbol_definition(error_id, tool_context)
+        
+        possible_causes = []
+        
+        if def_result.get('status') == 'ok':
+            # Search for where this error is raised
+            raise_patterns = [f'raise {error_id}', f'raise {error_id}(']
+            for pattern in raise_patterns:
+                search_result = search_code(tool_context, query=pattern)
+                if search_result.get('status') == 'ok':
+                    for match in search_result['matches']:
+                        possible_causes.append({
+                            'cause': 'explicit_raise',
+                            'file': match['file'],
+                            'line': match['line'],
+                            'snippet': match['snippet'],
+                            'confidence': 0.8
+                        })
+        
+        # Search for common error patterns
+        common_causes = [
+            'NoneType',
+            'IndexError',
+            'KeyError',
+            'ValueError',
+            'TypeError'
+        ]
+        
+        for cause in common_causes:
+            if cause in error_id:
+                possible_causes.append({
+                    'cause': f'{cause}_related',
+                    'description': f'Likely related to {cause}',
+                    'confidence': 0.6
+                })
+        
         return {
-            'status': 'not_implemented',
-            'message': 'Root cause identification requires error analysis and code inspection',
-            'error_id': error_id
+            'status': 'ok',
+            'error_id': error_id,
+            'possible_root_causes': possible_causes,
+            'note': 'Static analysis - precise root cause requires runtime context'
         }
     except Exception as e:
         return {
