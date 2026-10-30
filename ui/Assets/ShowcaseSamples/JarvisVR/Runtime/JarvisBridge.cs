@@ -38,7 +38,7 @@ namespace JarvisVR
 
   /// <summary>HTTP client for server/jarvis_server.py. On a Quest, 127.0.0.1 is the headset itself:
   /// set the PC's LAN IP via PlayerPrefs key "jarvis.server" (or DefaultServerUrl) and use the same token as JARVIS_TOKEN.</summary>
-  public sealed class JarvisBridge : MonoBehaviour
+  public sealed class JarvisBridge : MonoBehaviour, IJarvisBackend
   {
     public static string DefaultServerUrl = "http://127.0.0.1:8000";
     public string Token = "";

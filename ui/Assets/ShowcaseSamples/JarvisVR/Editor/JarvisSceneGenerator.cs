@@ -12,7 +12,7 @@ namespace JarvisVR.EditorTools
     private const string SourceScene =
       "Assets/Samples/Meta XR Interaction SDK/207.0.0/Example Scenes/BodyPoseDetectionExamples.unity";
     private const string TargetScene = "Assets/ShowcaseSamples/JarvisVR/Scenes/JarvisWorkspace.unity";
-    private static readonly string[] DisableByName = { "MiniPoses", "RoomEnvironment", "BackgroundSkydome" };
+    private static readonly string[] DisableByName = { "ISDKExampleMenu", "MiniPoses", "RoomEnvironment", "BackgroundSkydome" };
 
     [MenuItem("Tools/JARVIS/Generate Quest Workspace Scene")]
     public static void Generate()
@@ -40,10 +40,8 @@ namespace JarvisVR.EditorTools
 
       Scene scene = EditorSceneManager.OpenScene(TargetScene, OpenSceneMode.Single);
       foreach (string name in DisableByName)
-      {
-        GameObject go = FindDeep(scene, name);
-        if (go != null) go.SetActive(false);
-      }
+        foreach (GameObject go in FindAll(scene, name))   // every match: the Meta scene has two RoomEnvironment objects
+          go.SetActive(false);
 
       if (Object.FindAnyObjectByType<JarvisWorkspaceBootstrap>() == null)
         new GameObject("JARVIS Workspace").AddComponent<JarvisWorkspaceBootstrap>();
@@ -85,6 +83,15 @@ namespace JarvisVR.EditorTools
         foreach (Transform t in root.GetComponentsInChildren<Transform>(true))
           if (t.name == name) return t.gameObject;
       return null;
+    }
+
+    private static System.Collections.Generic.List<GameObject> FindAll(Scene scene, string name)
+    {
+      var found = new System.Collections.Generic.List<GameObject>();
+      foreach (GameObject root in scene.GetRootGameObjects())
+        foreach (Transform t in root.GetComponentsInChildren<Transform>(true))
+          if (t.name == name) found.Add(t.gameObject);
+      return found;
     }
   }
 }

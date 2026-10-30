@@ -1,6 +1,6 @@
 {
   "name": "JarvisVR.Runtime",
   "rootNamespace": "JarvisVR",
-  "references": ["UnityEngine.UI", "Oculus.VR"],
+  "references": ["UnityEngine.UI", "Oculus.VR", "Unity.RenderPipelines.Core.Runtime", "Unity.RenderPipelines.Universal.Runtime"],
   "autoReferenced": true
 }

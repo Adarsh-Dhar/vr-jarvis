@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -31,17 +32,71 @@ namespace JarvisVR
   }
 
   /// <summary>Grab handle: pinch and drag moves Target.</summary>
-  public sealed class JarvisSpatialGrab : MonoBehaviour { public Transform Target; }
+  public sealed class JarvisSpatialGrab : MonoBehaviour
+  {
+    public Transform Target;
+    private Vector3 _goal, _vel;
+    private bool _has;
+    public void SetGoal(Vector3 p) { _goal = p; _has = true; }
+    private void Update()
+    {
+      if (!_has || Target == null) return;
+      Target.position = Vector3.SmoothDamp(Target.position, _goal, ref _vel, 0.08f, Mathf.Infinity, Time.unscaledDeltaTime);
+      if ((Target.position - _goal).sqrMagnitude < 1e-8f) _has = false;
+    }
+  }
 
   public static class JarvisSpatialGfx
   {
-    public static Material Unlit(Color c)
+    public static Shader Find(params string[] names)
     {
-      Shader s = Shader.Find("Universal Render Pipeline/Unlit");
-      if (s == null) s = Shader.Find("Unlit/Color");
-      var m = new Material(s);
+      foreach (string n in names) { Shader sh = Shader.Find(n); if (sh != null && sh.isSupported) return sh; }
+      return null;
+    }
+
+    /// <summary>HDR-capable emissive unlit material (feeds Bloom). solid = writes depth (node bodies, orb).</summary>
+    public static Material Neon(Color c, float intensity = 1.6f, bool solid = false)
+    {
+      return Make(Find("JARVIS/NeonUnlit", "Universal Render Pipeline/Unlit", "Sprites/Default", "Unlit/Color"), c, intensity, solid);
+    }
+
+    public static Material Unlit(Color c) { return Neon(c, 1f, true); }
+
+    /// <summary>Material for LineRenderer, trails and particles: needs vertex colors.</summary>
+    public static Material Line(Color c, float intensity = 1.6f)
+    {
+      return Make(Find("JARVIS/NeonUnlit", "Sprites/Default"), c, intensity, false);
+    }
+
+    private static Material Make(Shader sh, Color c, float intensity, bool solid)
+    {
+      if (sh == null) { Debug.LogError("JARVIS: no usable unlit shader found."); sh = Shader.Find("Hidden/Internal-Colored"); }
+      var m = new Material(sh);
       m.color = c;
+      if (m.HasProperty("_Intensity")) m.SetFloat("_Intensity", intensity);
+      if (m.HasProperty("_ZWrite")) m.SetFloat("_ZWrite", solid ? 1f : 0f);
+      if (solid) m.renderQueue = 2000;
       return m;
+    }
+
+    /// <summary>Fresnel bubble. Returns null when the shader is missing: callers must then remove the mesh instead of leaving a default silver sphere.</summary>
+    public static Material Shell(Color c, float fill, float rim, float power)
+    {
+      Shader sh = Find("JARVIS/FresnelShell");
+      if (sh == null) { Debug.LogWarning("JARVIS: FresnelShell shader not found; shell skipped."); return null; }
+      var m = new Material(sh);
+      m.SetColor("_Color", c); m.SetFloat("_Fill", fill); m.SetFloat("_Rim", rim); m.SetFloat("_Power", power);
+      return m;
+    }
+
+    /// <summary>No shadows, probes or motion vectors: keeps reflections and lighting from turning flat shapes silver.</summary>
+    public static void Flat(Renderer r)
+    {
+      r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+      r.receiveShadows = false;
+      r.lightProbeUsage = UnityEngine.Rendering.LightProbeUsage.Off;
+      r.reflectionProbeUsage = UnityEngine.Rendering.ReflectionProbeUsage.Off;
+      r.motionVectorGenerationMode = MotionVectorGenerationMode.ForceNoMotion;
     }
   }
 
@@ -51,9 +106,20 @@ namespace JarvisVR
     public const float Scale = 0.0012f;
     public float Width, Height;
     public Text Body, TitleText;
-    private Image _border;
+    public JarvisPanelAnim Anim;
+    public bool Pinned, UserClosed;
+    private Image _border, _glow;
+    public const float BarHeight = 58f;
+    private readonly List<RectTransform> _frame = new List<RectTransform>();
+    private readonly List<float> _framePad = new List<float>();
+    private readonly HashSet<GameObject> _chrome = new HashSet<GameObject>();
+    private RectTransform _resizeRt;
+    private BoxCollider _rootBox;
+    private bool _minimized;
+    private float _c;
+    private Color _accent;
 
-    public static JarvisSpatialPanel Create(Transform parent, string title, float w, float h, Vector3 localPos, Color accent)
+    public static JarvisSpatialPanel Create(Transform parent, string title, float w, float h, Vector3 localPos, Color accent, bool closable = true)
     {
       JarvisPalette pal = JarvisPalette.Current;
       var go = new GameObject("Panel " + title, typeof(RectTransform), typeof(Canvas));
@@ -67,9 +133,18 @@ namespace JarvisVR
       var p = go.AddComponent<JarvisSpatialPanel>();
       p.Width = w; p.Height = h;
       go.AddComponent<JarvisBillboard>();
+      p.Anim = go.AddComponent<JarvisPanelAnim>();
+      p._accent = accent;
 
-      p._border = NewImage(go.transform, "Border", w + 4, h + 4, new Color(accent.r, accent.g, accent.b, 0.55f));
-      NewImage(go.transform, "Background", w, h, new Color(pal.Glass.r, pal.Glass.g, pal.Glass.b, 0.93f));
+      // neon-noir: soft outer glow + crisp emissive edge, smoked glass, cyan/magenta sheen
+      p._glow = NewImage(go.transform, "Glow", w + 22, h + 22, new Color(accent.r, accent.g, accent.b, 0.14f));
+      p._border = NewImage(go.transform, "Border", w + 4, h + 4, new Color(accent.r, accent.g, accent.b, 0.9f));
+      Image bg = NewImage(go.transform, "Background", w, h, new Color(pal.Glass.r * 0.6f, pal.Glass.g * 0.6f, pal.Glass.b * 0.7f, 0.62f));
+      Image sheen = JarvisSpatialFx.AddSheen(go.transform, w, h, accent);
+      p._frame.Add(p._glow.rectTransform); p._framePad.Add(22f);
+      p._frame.Add(p._border.rectTransform); p._framePad.Add(4f);
+      p._frame.Add(bg.rectTransform); p._framePad.Add(0f);
+      p._frame.Add(sheen.rectTransform); p._framePad.Add(0f);
       NewImage(go.transform, "Handle", 70, 6, new Color(accent.r, accent.g, accent.b, 0.9f)).rectTransform.anchoredPosition = new Vector2(0, h / 2f - 12);
       p.TitleText = NewText(go.transform, "Title", title.ToUpperInvariant(), 22, pal.TextMuted, TextAnchor.UpperLeft, FontRole.Heading,
         new Vector2(w - 40, 34), new Vector2(0, h / 2f - 36));
@@ -78,12 +153,30 @@ namespace JarvisVR
 
       var box = go.AddComponent<BoxCollider>();
       box.size = new Vector3(w, h, 8f);
+      p._rootBox = box;
+      p.Anim.OnSolid = p.SetSolid;
       var grabObject = new GameObject("Grab", typeof(RectTransform));
       grabObject.transform.SetParent(go.transform, false);
       grabObject.transform.localPosition = new Vector3(0, h / 2f - 28, -6f);
       var grabBox = grabObject.AddComponent<BoxCollider>();
       grabBox.size = new Vector3(w, 56f, 10f);
       grabObject.AddComponent<JarvisSpatialGrab>().Target = go.transform;
+
+      // resize handle: hangs off the bottom-right corner so it never covers buttons
+      var rh = new GameObject("Resize", typeof(RectTransform), typeof(Image));
+      rh.transform.SetParent(go.transform, false);
+      var rrt = rh.GetComponent<RectTransform>();
+      rrt.sizeDelta = new Vector2(40, 40);
+      rrt.anchoredPosition = new Vector2(w / 2f + 4, -h / 2f - 4);
+      var rimg = rh.GetComponent<Image>();
+      rimg.sprite = JarvisGfx.RoundedRect(); rimg.type = Image.Type.Sliced;
+      rimg.color = new Color(accent.r, accent.g, accent.b, 0.6f); rimg.raycastTarget = false;
+      var rbox = rh.AddComponent<BoxCollider>();
+      rbox.size = new Vector3(56, 56, 12f); rbox.center = new Vector3(0, 0, -8f);
+      rh.AddComponent<JarvisSpatialResize>().Panel = p.Anim;
+      p._resizeRt = rrt;
+
+      p.AddChrome(accent, closable);
       return p;
     }
 
@@ -104,9 +197,79 @@ namespace JarvisVR
 
     public void SetBody(string text) { if (Body != null) Body.text = text ?? ""; }
     public void SetTitle(string text) { if (TitleText != null) TitleText.text = (text ?? "").ToUpperInvariant(); }
-    public void SetAccent(Color c) { if (_border != null) _border.color = new Color(c.r, c.g, c.b, 0.55f); }
-    public void Show(bool on) { if (gameObject.activeSelf != on) gameObject.SetActive(on); }
-    public bool Visible { get { return gameObject.activeSelf; } }
+    public void SetAccent(Color c)
+    {
+      if (_border != null) _border.color = new Color(c.r, c.g, c.b, 0.9f);
+      if (_glow != null) _glow.color = new Color(c.r, c.g, c.b, 0.14f);
+    }
+
+    /// <summary>Fade and scale in or out. A panel the user closed stays closed until Reopen().</summary>
+    public void Show(bool on, float delay = 0f)
+    {
+      if (on && UserClosed) return;
+      Anim.SetVisible(on, delay);
+    }
+    public bool Visible { get { return Anim.WantVisible; } }
+    public void Close() { UserClosed = true; Anim.SetVisible(false); }
+    public void Reopen() { UserClosed = false; }
+
+    /// <summary>Title-bar controls: pin (lock position), minimize/restore, close.</summary>
+    public void AddChrome(Color accent, bool closable)
+    {
+      float x = Width - 12f - 3 * 68f;
+      _chrome.Add(AddButton("PIN", x, 8, 64, 34, TogglePin, 0f, accent).gameObject);
+      _chrome.Add(AddButton("–", x + 68, 8, 64, 34, ToggleMinimize, 0f, accent).gameObject);
+      if (closable) _chrome.Add(AddButton("×", x + 136, 8, 64, 34, Close, 0f, JarvisPalette.Current.Red).gameObject);
+    }
+
+    public bool Minimized { get { return _minimized; } }
+    public void ToggleMinimize() { SetMinimized(!_minimized); }
+
+    /// <summary>Collapses the panel to its title bar (frame shrinks, body text and action buttons hide; PIN, minimize and close stay).</summary>
+    public void SetMinimized(bool m)
+    {
+      _minimized = m;
+      foreach (Transform ch in transform)
+      {
+        bool content = ch.name == "Body" || (ch.name.StartsWith("Button ") && !_chrome.Contains(ch.gameObject));
+        if (content) ch.gameObject.SetActive(!m);
+      }
+    }
+
+    private void Update()
+    {
+      float target = _minimized ? 1f : 0f;
+      if (Mathf.Approximately(_c, target)) return;
+      _c = Mathf.MoveTowards(_c, target, Time.unscaledDeltaTime / 0.18f);
+      ApplyCollapse(JarvisSpatialFx.Smooth(_c));
+    }
+
+    private void ApplyCollapse(float k)
+    {
+      float cur = Mathf.Lerp(Height, BarHeight, k);
+      for (int i = 0; i < _frame.Count; i++)
+      {
+        _frame[i].sizeDelta = new Vector2(_frame[i].sizeDelta.x, cur + _framePad[i]);
+        _frame[i].anchoredPosition = new Vector2(0f, (Height - cur) / 2f);   // top edge stays fixed
+      }
+      if (_rootBox != null) { _rootBox.size = new Vector3(Width, cur, 8f); _rootBox.center = new Vector3(0f, (Height - cur) / 2f, 0f); }
+      if (_resizeRt != null) _resizeRt.anchoredPosition = new Vector2(Width / 2f + 4f, Height / 2f - cur - 4f);
+    }
+
+    /// <summary>Called by JarvisPanelAnim: no collider is active while the panel fades, so a ghost never blocks rays.</summary>
+    public void SetSolid(bool solid)
+    {
+      foreach (Collider c in GetComponentsInChildren<Collider>(true)) c.enabled = solid;
+      if (solid && Pinned) { Transform g = transform.Find("Grab"); if (g != null) g.GetComponent<Collider>().enabled = false; }
+    }
+
+    public void TogglePin()
+    {
+      Pinned = !Pinned;
+      Transform g = transform.Find("Grab");
+      if (g != null) g.GetComponent<Collider>().enabled = !Pinned;
+      SetAccent(Pinned ? JarvisPalette.Current.Amber : _accent);
+    }
 
     /// <summary>x, y are the button's top-left corner measured from the panel's top-left, in pixels.</summary>
     public JarvisSpatialButton AddButton(string label, float x, float y, float w, float h, Action onClick, float holdSeconds = 0f, Color? accent = null)

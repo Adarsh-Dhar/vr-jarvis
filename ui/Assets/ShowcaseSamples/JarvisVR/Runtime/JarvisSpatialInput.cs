@@ -10,9 +10,11 @@ namespace JarvisVR
       public Ray Ray; public bool Valid, Down, WasDown;
       public Transform Reticle;
       public JarvisSpatialButton Hover, Btn; public float BtnTime; public bool BtnFired;
-      public JarvisGraphNode Node; public Vector3 NodeStart, NodeLast; public float NodeDist; public bool NodeDragging;
+      public JarvisGraphNode Node; public Vector3 NodeStart, NodeLast; public float NodeDist, NodeTime; public bool NodeDragging, NodeHeld;
+      public JarvisNodeFx HoverFx;
+      public JarvisSpatialResize Resize; public float ResizeDist, ResizeStartScale, ResizeStartDistance;
       public JarvisSpatialGrab Grab; public float GrabDist; public Vector3 GrabOffset;
-      public bool Busy { get { return Btn != null || Node != null || Grab != null; } }
+      public bool Busy { get { return Btn != null || Node != null || Grab != null || Resize != null; } }
     }
 
     private readonly Slot[] _slots = { new Slot(), new Slot(), new Slot() };   // left hand, right hand, editor mouse
@@ -67,9 +69,15 @@ namespace JarvisVR
     private void Process(Slot s)
     {
       s.Reticle.gameObject.SetActive(s.Valid);
-      if (!s.Valid) { Release(s, null); return; }
+      if (!s.Valid)
+      {
+        if (s.HoverFx != null) { s.HoverFx.Hovered = false; s.HoverFx = null; }
+        Release(s, null);
+        return;
+      }
 
       JarvisSpatialButton hoverBtn = null; JarvisGraphNode hoverNode = null; JarvisSpatialGrab hoverGrab = null;
+      JarvisNodeFx hoverFx = null; JarvisSpatialResize hoverResize = null;
       float dist = 1.5f; bool hasHit = false;
       if (Physics.Raycast(s.Ray, out RaycastHit hit, 6f, ~0, QueryTriggerInteraction.Ignore))
       {
@@ -77,6 +85,8 @@ namespace JarvisVR
         hoverBtn = hit.collider.GetComponentInParent<JarvisSpatialButton>();
         hoverNode = hit.collider.GetComponentInParent<JarvisGraphNode>();
         hoverGrab = hit.collider.GetComponentInParent<JarvisSpatialGrab>();
+        hoverFx = hit.collider.GetComponentInParent<JarvisNodeFx>();
+        hoverResize = hit.collider.GetComponentInParent<JarvisSpatialResize>();
       }
       s.Reticle.position = s.Ray.GetPoint(hasHit ? dist - 0.01f : 1.5f);
       s.Reticle.GetComponent<Renderer>().sharedMaterial.color = s.Down ? new Color(0.96f, 0.65f, 0.14f) : new Color(0.24f, 0.84f, 0.91f);
@@ -88,17 +98,31 @@ namespace JarvisVR
         s.Hover = hoverBtn;
       }
 
+      if (s.HoverFx != hoverFx)
+      {
+        if (s.HoverFx != null) s.HoverFx.Hovered = false;
+        if (hoverFx != null) hoverFx.Hovered = true;
+        s.HoverFx = hoverFx;
+      }
+
       if (s.Down && !s.WasDown)
       {
         if (hoverBtn != null) { s.Btn = hoverBtn; s.BtnTime = Time.unscaledTime; s.BtnFired = false; }
         else if (hoverNode != null)
         {
           s.Node = hoverNode; s.NodeDist = dist; s.NodeStart = s.NodeLast = s.Ray.GetPoint(dist); s.NodeDragging = false;
+          s.NodeTime = Time.unscaledTime; s.NodeHeld = false;
         }
         else if (hoverGrab != null)
         {
           s.Grab = hoverGrab; s.GrabDist = dist;
           s.GrabOffset = hoverGrab.Target.position - s.Ray.GetPoint(dist);
+        }
+        else if (hoverResize != null)
+        {
+          s.Resize = hoverResize; s.ResizeDist = dist;
+          s.ResizeStartScale = hoverResize.Panel.UserScale;
+          s.ResizeStartDistance = Mathf.Max(0.05f, Vector3.Distance(s.Ray.GetPoint(dist), hoverResize.Panel.transform.position));
         }
       }
 
@@ -124,10 +148,16 @@ namespace JarvisVR
           Vector3 point = s.Ray.GetPoint(s.NodeDist);
           if (!s.NodeDragging && Vector3.Distance(point, s.NodeStart) > 0.04f) s.NodeDragging = true;
           if (s.NodeDragging) { s.Node.DragCluster(point - s.NodeLast); s.NodeLast = point; }
+          else if (!s.NodeHeld && Time.unscaledTime - s.NodeTime > 0.7f) { s.NodeHeld = true; JarvisAudio.Play(JarvisAudio.Cue.SelectTick); s.Node.Hold(); }
         }
         else if (s.Grab != null)
         {
-          s.Grab.Target.position = s.Ray.GetPoint(s.GrabDist) + s.GrabOffset;
+          s.Grab.SetGoal(s.Ray.GetPoint(s.GrabDist) + s.GrabOffset);
+        }
+        else if (s.Resize != null)
+        {
+          float d = Vector3.Distance(s.Ray.GetPoint(s.ResizeDist), s.Resize.Panel.transform.position);
+          s.Resize.Panel.UserScale = Mathf.Clamp(s.ResizeStartScale * d / s.ResizeStartDistance, 0.5f, 2.2f);
         }
       }
       else if (s.WasDown) Release(s, hoverBtn);
@@ -141,8 +171,8 @@ namespace JarvisVR
         if (s.Btn.HoldSeconds > 0f) JarvisAudio.SetCharge(0f);
         else if (hoverBtn == s.Btn) { JarvisAudio.Play(JarvisAudio.Cue.SelectTick); s.Btn.Click(); }
       }
-      if (s.Node != null && !s.NodeDragging) s.Node.Select();
-      s.Btn = null; s.Node = null; s.Grab = null; s.NodeDragging = false;
+      if (s.Node != null && !s.NodeDragging && !s.NodeHeld) s.Node.Select();
+      s.Btn = null; s.Node = null; s.Grab = null; s.Resize = null; s.NodeDragging = false; s.NodeHeld = false;
     }
 
     private void UpdateTwoHandScale()

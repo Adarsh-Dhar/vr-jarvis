@@ -4,15 +4,7 @@ using UnityEngine;
 
 namespace JarvisVR
 {
-  // Field names match ai_agents/data/graph.json and the server's /health JSON.
-  [Serializable] public class GraphNodeDto { public string id, name, file, cluster, kind; public int start, end; }
-  [Serializable] public class GraphEdgeDto { public string src, dst, type, kind; }
-  [Serializable] public class GraphDto
-  {
-    public List<GraphNodeDto> nodes = new List<GraphNodeDto>();
-    public List<GraphEdgeDto> edges = new List<GraphEdgeDto>();
-  }
-  [Serializable] public class HealthDto { public bool ok, cached_tests; public string repo, branch; public int changed; }
+  // DTO classes (GraphNodeDto, GraphEdgeDto, GraphDto, HealthDto) live in JarvisBridge.cs. They were duplicated here, which does not compile.
 
   public static class JarvisGraphModel
   {

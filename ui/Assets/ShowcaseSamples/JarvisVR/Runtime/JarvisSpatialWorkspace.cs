@@ -14,6 +14,8 @@ namespace JarvisVR
   public sealed class JarvisSpatialWorkspace : MonoBehaviour
   {
     public static bool Enabled { get { return PlayerPrefs.GetInt("jarvis.spatial", 1) == 1; } }
+    /// <summary>UI-only stage: scripted local answers, no network. Set PlayerPrefs "jarvis.mock" to 0 to talk to the real server.</summary>
+    public static bool MockMode { get { return PlayerPrefs.GetInt("jarvis.mock", 1) == 1; } }
 
     private const float WorkspaceDistance = 1.5f;   // metres in front of the user
     private const float LabelSize = 0.010f;         // TextMesh characterSize; raise for bigger node labels
@@ -25,15 +27,16 @@ namespace JarvisVR
     {
       public GraphNodeDto Dto; public Transform Root, BodyT; public Renderer Body; public TextMesh Label;
       public JarvisRiskRing Risk; public Color Base; public bool NoCallers; public string Badge = "";
-      public ClusterView Cluster; public int In, Out;
+      public ClusterView Cluster; public int In, Out; public JarvisNodeFx Fx;
     }
     private sealed class EdgeView { public GraphEdgeDto Dto; public NodeView From, To; public LineRenderer Line; public Color Base; public string Style; }
-    private sealed class ClusterView { public string Name; public readonly List<NodeView> Members = new List<NodeView>(); public Transform Shell; public TextMesh Label; }
+    private sealed class ClusterView { public string Name; public readonly List<NodeView> Members = new List<NodeView>(); public Transform Shell; public TextMesh Label; public bool Collapsed; }
 
     // ---- scene ----
     private Camera _cam;
     private Transform _root, _graphRoot;
-    private JarvisBridge _bridge;
+    private IJarvisBackend _bridge;
+    private bool _mock;
     private JarvisVoice _voice;
     private readonly Dictionary<string, JarvisSpatialPanel> _panels = new Dictionary<string, JarvisSpatialPanel>();
     private readonly Dictionary<string, NodeView> _nodes = new Dictionary<string, NodeView>();
@@ -53,10 +56,16 @@ namespace JarvisVR
     private float _errorUntil;
     private Transform _orb, _halo;
     private Material _orbMat;
+    private JarvisOrbFx _orbFx;
+    private readonly List<JarvisPathDot> _pulses = new List<JarvisPathDot>();
+    private JarvisSpatialPanel _menu;
+    private string _menuNode;
 
     public void Initialize(Camera cam)
     {
       _cam = cam;
+      JarvisSceneCleanup.HideMetaDemo();
+      JarvisLook.Apply(cam);
       _root = new GameObject("JARVIS Spatial Root").transform;
       Recenter();
       Invoke(nameof(Recenter), 1.0f);   // headset tracking settles after the first frames
@@ -66,13 +75,16 @@ namespace JarvisVR
       _graphRoot.localPosition = new Vector3(0f, 0.05f, 0f);
       _graphRoot.localScale = Vector3.one * 0.85f;
 
-      _bridge = gameObject.AddComponent<JarvisBridge>();
+      _mock = MockMode;
+      _bridge = _mock ? (IJarvisBackend)gameObject.AddComponent<JarvisMockBackend>() : gameObject.AddComponent<JarvisBridge>();
       _voice = gameObject.AddComponent<JarvisVoice>();
       _voice.Transcript += Ask;
       _voice.Notice += m => Say(m);
 
       BuildPanels();
       BuildOrb();
+      JarvisAtmosphere.BuildFloor(_root, JarvisPalette.Current.Cyan);
+      JarvisAtmosphere.BuildDust(_root, JarvisSpatialFx.Magenta, JarvisPalette.Current.Cyan);
       LoadGraph(JarvisGraphModel.Sample());
       SetMode("MAP");
       Select("service.delete");
@@ -82,7 +94,7 @@ namespace JarvisVR
       Log("workspace ready (sample graph)");
 
       _bridge.GetHealth(h => { _health = h; _serverOnline = h != null && h.ok; RefreshStatus(); }, e => { _serverOnline = false; RefreshStatus(); });
-      _bridge.GetGraph(g =>
+      if (!_mock) _bridge.GetGraph(g =>
       {
         if (g == null || g.nodes == null || g.nodes.Count == 0) return;
         _serverOnline = true;
@@ -122,7 +134,7 @@ namespace JarvisVR
 
     private JarvisSpatialPanel AddPanel(string key, string title, float w, float h, float x, float y, Color accent)
     {
-      JarvisSpatialPanel p = JarvisSpatialPanel.Create(_root, title, w, h, new Vector3(x, y, 0f), accent);
+      JarvisSpatialPanel p = JarvisSpatialPanel.Create(_root, title, w, h, new Vector3(x, y, 0f), accent, key != "nav" && key != "status" && key != "caption");
       _panels[key] = p;
       return p;
     }
@@ -174,30 +186,34 @@ namespace JarvisVR
       caption.AddButton("Show risky paths", 430, 128, 190, 50, () => Ask("Show me the risky paths in this change."));
       caption.AddButton("Run tests", 630, 128, 170, 50, () => Ask("Run the tests for this change."));
 
-      JarvisSpatialPanel nav = AddPanel("nav", "Navigate", 900, 110, 0.15f, -0.80f, pal.Cyan);
+      JarvisSpatialPanel nav = AddPanel("nav", "Navigate", 1000, 110, 0.15f, -0.80f, pal.Cyan);
       float x = 12f;
       foreach (string m in NavModes)
       {
         string mode = m;
-        nav.AddButton(mode, x, 52, 100, 46, () => SetMode(mode));
+        nav.AddButton(mode, x, 52, 100, 46, () => { foreach (JarvisSpatialPanel pp in _panels.Values) pp.Reopen(); SetMode(mode); });
         x += 108f;
       }
       nav.AddButton("CENTER", x, 52, 100, 46, Recenter);
+      nav.AddButton("FX", x + 108f, 52, 100, 46, CycleIsolation);
 
       RefreshStatus(); RefreshRepo(); RefreshActivity();
+      BuildMenu();
     }
 
     private void SetMode(string mode)
     {
+      if (mode != _mode && _panels.ContainsKey("menu")) _panels["menu"].Show(false);
       _mode = mode;
       string[] visible = ModePanels.ContainsKey(mode) ? ModePanels[mode] : ModePanels["MAP"];
+      int shown = 0;
       foreach (string key in new[] { "repo", "code", "evidence", "tests", "activity", "legend", "ghost", "approval" })
       {
         bool on = visible.Contains(key);
         // approval shares its slot with evidence and tests: while something is pending, approval wins
         if (!string.IsNullOrEmpty(_pending) && key == "approval") on = true;
         if (!string.IsNullOrEmpty(_pending) && (key == "evidence" || key == "tests")) on = false;
-        _panels[key].Show(on);
+        _panels[key].Show(on, on ? 0.05f * shown++ : 0f);
       }
       RefreshStatus();
     }
@@ -208,7 +224,7 @@ namespace JarvisVR
     {
       _graph = g;
       for (int i = _graphRoot.childCount - 1; i >= 0; i--) Destroy(_graphRoot.GetChild(i).gameObject);
-      _nodes.Clear(); _edges.Clear(); _clusters.Clear();
+      _nodes.Clear(); _edges.Clear(); _clusters.Clear(); _pulses.Clear();
       BuildGraph();
       RefreshRepo();
     }
@@ -240,10 +256,12 @@ namespace JarvisVR
         body.transform.localScale = Vector3.one * 0.075f;
         nv.BodyT = body.transform;
         nv.Body = body.GetComponent<Renderer>();
-        nv.Body.sharedMaterial = JarvisSpatialGfx.Unlit(Color.white);
-        nv.Body.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        nv.Body.sharedMaterial = JarvisSpatialGfx.Neon(Color.white, 1.5f, true);
+        JarvisSpatialGfx.Flat(nv.Body);
         nv.Base = dto.kind == "route" ? pal.Amber : dto.kind == "test" ? pal.Violet : pal.Cyan;
-        body.AddComponent<JarvisGraphNode>().Initialize(dto.id, Select, DragCluster);
+        body.AddComponent<JarvisGraphNode>().Initialize(dto.id, Select, DragCluster, ShowNodeMenu);
+        nv.Fx = rootGo.AddComponent<JarvisNodeFx>();
+        nv.Fx.Begin(nv.BodyT, 0.06f * _nodes.Count, nv.Base);
 
         nv.Label = MakeLabel(rootGo.transform, dto.name, pal.Text, LabelSize, new Vector3(0f, -0.085f, 0f));
         cv.Members.Add(nv);
@@ -273,10 +291,9 @@ namespace JarvisVR
         Destroy(shell.GetComponent<Collider>());   // never blocks node pinch rays
         shell.transform.SetParent(_graphRoot, false);
         Renderer r = shell.GetComponent<Renderer>();
-        Shader sh = Shader.Find("JARVIS/FresnelShell");
-        if (sh != null) { var m = new Material(sh); m.SetColor("_Color", pal.Cyan); r.sharedMaterial = m; }
-        r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-        cv.Shell = shell.transform;
+        Material shellMat = JarvisSpatialGfx.Shell(pal.Cyan, 0.03f, 0.45f, 3.5f);
+        if (shellMat == null) { Destroy(shell); cv.Shell = null; }   // never leave a default silver sphere
+        else { r.sharedMaterial = shellMat; JarvisSpatialGfx.Flat(r); cv.Shell = shell.transform; }
         cv.Label = MakeLabel(_graphRoot, cv.Name.ToUpperInvariant(), pal.TextMuted, LabelSize * 0.9f, Vector3.zero);
       }
 
@@ -290,9 +307,15 @@ namespace JarvisVR
 
     private static Texture2D PatternTexture(int on, int total)
     {
-      var t = new Texture2D(total, 1, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Repeat, filterMode = FilterMode.Point };
-      for (int x = 0; x < total; x++) t.SetPixel(x, 0, new Color(1, 1, 1, x < on ? 1f : 0f));
-      t.Apply();
+      // mipmapped, bilinear, soft-edged: a hard Point-filtered 16 px pattern shimmers into white streaks on thin lines in VR
+      var t = new Texture2D(total, 1, TextureFormat.RGBA32, true) { wrapMode = TextureWrapMode.Repeat, filterMode = FilterMode.Bilinear, anisoLevel = 4 };
+      for (int x = 0; x < total; x++)
+      {
+        float d = Mathf.Abs(x + 0.5f - on / 2f);
+        d = Mathf.Min(d, total - d);
+        t.SetPixel(x, 0, new Color(1, 1, 1, Mathf.Clamp01((on / 2f + 0.5f - d) / 1.5f)));
+      }
+      t.Apply(true);
       return t;
     }
 
@@ -302,11 +325,11 @@ namespace JarvisVR
       go.transform.SetParent(_graphRoot, false);
       LineRenderer line = go.AddComponent<LineRenderer>();
       line.useWorldSpace = false;
-      line.numCapVertices = 2;
-      Shader sh = Shader.Find("Sprites/Default");
-      if (sh == null) sh = Shader.Find("Universal Render Pipeline/Unlit");
-      line.material = new Material(sh);
-      line.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+      line.numCapVertices = 0;
+      line.numCornerVertices = 0;
+      line.material = JarvisSpatialGfx.Line(Color.white, 1.8f);
+      line.alignment = LineAlignment.View;
+      JarvisSpatialGfx.Flat(line);
       ev.Line = line;
       StyleEdge(ev, ev.Dto.kind);
     }
@@ -350,13 +373,14 @@ namespace JarvisVR
       foreach (ClusterView cv in _clusters.Values)
       {
         if (cv.Members.Count == 0 || cv.Shell == null) continue;
-        Vector3 c = Vector3.zero;
-        foreach (NodeView n in cv.Members) c += n.Root.localPosition;
-        c /= cv.Members.Count;
+        Vector3 c = Vector3.zero; int cnt = 0;
+        foreach (NodeView n in cv.Members) if (n.Fx.Shown) { c += n.Root.localPosition; cnt++; }
+        if (cnt == 0) continue;
+        c /= cnt;
         float r = 0.18f;
-        foreach (NodeView n in cv.Members) r = Mathf.Max(r, Vector3.Distance(c, n.Root.localPosition) + 0.15f);
+        foreach (NodeView n in cv.Members) if (n.Fx.Shown) r = Mathf.Max(r, Vector3.Distance(c, n.Root.localPosition) + 0.15f);
         cv.Shell.localPosition = c;
-        cv.Shell.localScale = new Vector3(r * 2f, r * 2f, r * 1.2f);
+        cv.Shell.localScale = Vector3.one * (r * 2f);
         if (cv.Label != null) cv.Label.transform.localPosition = c + new Vector3(0f, r + 0.04f, 0f);
       }
     }
@@ -434,6 +458,18 @@ namespace JarvisVR
           foreach (string id in c.node_ids) if (_nodes.ContainsKey(id)) _hot.Add(id);
           foreach (EdgeView e in _edges)
             if (_hot.Contains(e.Dto.src) && _hot.Contains(e.Dto.dst)) e.Line.startColor = e.Line.endColor = JarvisPalette.Current.Amber;
+          {
+            // animated traversal: a dot walks the path edge by edge, in node order
+            var pulsed = new HashSet<EdgeView>();
+            for (int i = 0; i + 1 < c.node_ids.Length; i++)
+              foreach (EdgeView e in _edges)
+                if (!pulsed.Contains(e) && ((e.Dto.src == c.node_ids[i] && e.Dto.dst == c.node_ids[i + 1]) || (e.Dto.dst == c.node_ids[i] && e.Dto.src == c.node_ids[i + 1])))
+                { pulsed.Add(e); _pulses.Add(JarvisPathDot.Attach(e.Line, JarvisPalette.Current.Amber, 0.6f * i)); }
+            int extra = pulsed.Count;
+            foreach (EdgeView e in _edges)
+              if (!pulsed.Contains(e) && _hot.Contains(e.Dto.src) && _hot.Contains(e.Dto.dst))
+                _pulses.Add(JarvisPathDot.Attach(e.Line, JarvisPalette.Current.Amber, 0.6f * extra++));
+          }
           JarvisAudio.Play(JarvisAudio.Cue.PathPulse);
           return true;
         case "dim_unrelated":
@@ -477,6 +513,8 @@ namespace JarvisVR
 
     private void ResetOverlay()
     {
+      foreach (JarvisPathDot pd in _pulses) if (pd != null) Destroy(pd.gameObject);
+      _pulses.Clear();
       _hot.Clear(); _keep = null; _ghostDiff = null; _testSummary = "No test run yet.";
       foreach (NodeView n in _nodes.Values) { n.Badge = ""; n.Label.text = n.Dto.name; }
       foreach (EdgeView e in _edges) StyleEdge(e, e.Dto.kind);
@@ -523,7 +561,8 @@ namespace JarvisVR
       string repo = _health != null && !string.IsNullOrEmpty(_health.repo) ? _health.repo : "demo repo";
       string branch = _health != null && !string.IsNullOrEmpty(_health.branch) ? _health.branch : "-";
       int changed = _health != null ? _health.changed : 0;
-      string server = _serverOnline ? "<color=#" + Hex(pal.Green) + ">server online</color>" : "<color=#" + Hex(pal.Amber) + ">server offline: sample graph</color>";
+      string server = _mock ? "<color=#" + Hex(JarvisSpatialFx.Magenta) + ">mock data (UI only)</color>"
+        : _serverOnline ? "<color=#" + Hex(pal.Green) + ">server online</color>" : "<color=#" + Hex(pal.Amber) + ">server offline: sample graph</color>";
       _panels["status"].SetBody(repo + "  ·  " + branch + "  ·  " + changed + " changed  ·  " + server + "  ·  " + _mode);
     }
 
@@ -617,9 +656,116 @@ namespace JarvisVR
         else if (_keep != null && !_keep.Contains(n.Dto.id)) c = new Color(0.2f, 0.26f, 0.34f, 1f);
         n.Body.sharedMaterial.color = c;
         bool sel = n.Dto.id == _selected;
-        n.BodyT.localScale = Vector3.one * (sel ? 0.10f : 0.075f);
+        n.Fx.Selected = sel;
+        if (n.Body.sharedMaterial.HasProperty("_Intensity")) n.Body.sharedMaterial.SetFloat("_Intensity", sel ? 2.4f : 1.5f);
         n.Label.color = _keep != null && !_keep.Contains(n.Dto.id) ? pal.TextMuted : pal.Text;
       }
+    }
+
+    // =========================================================== node context menu and clusters
+
+    private void BuildMenu()
+    {
+      _menu = AddPanel("menu", "Node", 380, 290, 0f, 0f, JarvisSpatialFx.Magenta);
+      _menu.SetBodyBox(54, 40); _menu.Body.fontSize = 20;
+      _menu.AddButton("ASK ABOUT THIS", 20, 100, 340, 50, () =>
+      {
+        if (_nodes.TryGetValue(_menuNode ?? "", out NodeView n)) Ask("What breaks if I change " + n.Dto.name + "?");
+        _menu.Show(false);
+      });
+      _menu.AddButton("HIGHLIGHT CALLERS", 20, 160, 340, 50, () => HighlightCallers(_menuNode));
+      _menu.AddButton("COLLAPSE / EXPAND CLUSTER", 20, 220, 340, 50, ToggleCluster);
+      _menu.Show(false);
+    }
+
+    /// <summary>Long pinch on a node (JarvisGraphNode.Hold).</summary>
+    private void ShowNodeMenu(string id)
+    {
+      if (_menu == null || !_nodes.TryGetValue(id, out NodeView n)) return;
+      _menuNode = id;
+      Select(id);
+      _menu.SetTitle(n.Dto.name);
+      _menu.SetBody(n.Cluster.Name + " · " + n.Dto.kind);
+      Vector3 toCam = (_cam.transform.position - n.Root.position).normalized;
+      _menu.transform.position = n.Root.position + Vector3.up * 0.22f + toCam * 0.12f;
+      _menu.Reopen();
+      _menu.Show(true);
+    }
+
+    private void HighlightCallers(string id)
+    {
+      if (string.IsNullOrEmpty(id) || !_nodes.TryGetValue(id, out NodeView n)) return;
+      ResetOverlay();
+      _hot.Add(id);
+      Color amber = JarvisPalette.Current.Amber;
+      foreach (EdgeView e in _edges)
+        if (e.To == n)
+        {
+          _hot.Add(e.From.Dto.id);
+          e.Line.startColor = e.Line.endColor = amber;
+          _pulses.Add(JarvisPathDot.Attach(e.Line, amber, 0f));
+        }
+      JarvisAudio.Play(JarvisAudio.Cue.PathPulse);
+      RefreshAll();
+      _menu.Show(false);
+    }
+
+    private void ToggleCluster()
+    {
+      if (!_nodes.TryGetValue(_menuNode ?? "", out NodeView n)) return;
+      ClusterView cv = n.Cluster;
+      cv.Collapsed = !cv.Collapsed;
+      for (int i = 1; i < cv.Members.Count; i++)   // member 0 stays as the cluster anchor
+      {
+        cv.Members[i].Fx.SetShown(!cv.Collapsed);
+        cv.Members[i].Label.gameObject.SetActive(!cv.Collapsed);
+      }
+      RefreshEdgeVisibility();
+      _menu.Show(false);
+    }
+
+    private void RefreshEdgeVisibility()
+    {
+      foreach (EdgeView e in _edges)
+        if (e.Line != null) e.Line.gameObject.SetActive(e.From.Fx.Shown && e.To.Fx.Shown);
+      _edgesDirty = true;
+    }
+
+    // =========================================================== render isolation (FX button)
+    // Press FX in the nav bar to step through: ALL, then hide one renderer group at a time. When the white streaks or silver
+    // shapes disappear at some step, that group is the offender.
+
+    private static readonly string[] IsoNames = { "ALL", "no edges", "no shells", "no halos+rings", "no labels", "no floor+dust", "no orb fx", "nodes only" };
+    private static readonly string[] IsoKeys = { "", "edges", "shells", "halos", "labels", "floor", "orbfx", "" };
+    private int _iso;
+
+    private static string RenderGroup(Renderer r)
+    {
+      string n = r.gameObject.name;
+      if (r is LineRenderer && n.StartsWith("Edge ")) return "edges";
+      if (n.StartsWith("ClusterShell")) return "shells";
+      if (n == "NodeHalo" || n == "SelectionRing" || n == "Halo") return "halos";
+      if (n == "Label") return "labels";
+      if (n == "JARVIS Floor Grid" || n == "JARVIS Dust") return "floor";
+      if (n.StartsWith("OrbRing") || n == "OrbSat") return "orbfx";
+      if (n == "Body") return "node";
+      return null;
+    }
+
+    private void CycleIsolation()
+    {
+      _iso = (_iso + 1) % IsoNames.Length;
+      foreach (Renderer r in _root.GetComponentsInChildren<Renderer>(true))
+      {
+        string g = RenderGroup(r);
+        if (g == null) continue;
+        bool on = _iso == 0 || (_iso == 7 ? g == "node" : g != IsoKeys[_iso]);
+        if (g == "node") on = true;
+        r.gameObject.SetActive(on);
+      }
+      RefreshEdgeVisibility();
+      Say("Render isolation: " + IsoNames[_iso]);
+      Log("iso: " + IsoNames[_iso]);
     }
 
     // =========================================================== orb
@@ -633,8 +779,9 @@ namespace JarvisVR
       go.transform.localPosition = new Vector3(-0.58f, -0.52f, 0f);
       go.transform.localScale = Vector3.one * 0.13f;
       _orb = go.transform;
-      _orbMat = JarvisSpatialGfx.Unlit(pal.Cyan);
+      _orbMat = JarvisSpatialGfx.Neon(pal.Cyan, 2f, true);
       go.GetComponent<Renderer>().sharedMaterial = _orbMat;
+      JarvisSpatialGfx.Flat(go.GetComponent<Renderer>());
       go.AddComponent<JarvisSpatialButton>().OnClick = ToggleVoice;   // pinch the orb to talk
 
       var halo = GameObject.CreatePrimitive(PrimitiveType.Sphere);
@@ -642,9 +789,12 @@ namespace JarvisVR
       Destroy(halo.GetComponent<Collider>());
       halo.transform.SetParent(go.transform, false);
       halo.transform.localScale = Vector3.one * 1.6f;
-      Shader sh = Shader.Find("JARVIS/FresnelShell");
-      if (sh != null) { var m = new Material(sh); m.SetColor("_Color", pal.Cyan); halo.GetComponent<Renderer>().sharedMaterial = m; }
-      _halo = halo.transform;
+      Material haloMat = JarvisSpatialGfx.Shell(pal.Cyan, 0.05f, 0.6f, 3f);
+      if (haloMat != null) { halo.GetComponent<Renderer>().sharedMaterial = haloMat; JarvisSpatialGfx.Flat(halo.GetComponent<Renderer>()); }
+      else Destroy(halo);
+      _halo = haloMat != null ? halo.transform : null;
+      _orbFx = go.AddComponent<JarvisOrbFx>();
+      _orbFx.Build(pal.Cyan);
     }
 
     private OrbState CurrentOrb()
@@ -667,15 +817,23 @@ namespace JarvisVR
       switch (s)
       {
         case OrbState.Listening: c = pal.Cyan; pulse = 1f + 0.25f * (_voice != null ? _voice.Level : 0f) + 0.05f * Mathf.Sin(t * 8f); break;
-        case OrbState.Thinking: c = pal.Violet; pulse = 1f + 0.08f * Mathf.Sin(t * 5f); _orb.Rotate(0f, 120f * Time.unscaledDeltaTime, 0f); break;
+        case OrbState.Thinking: c = JarvisSpatialFx.Magenta; pulse = 1f + 0.08f * Mathf.Sin(t * 5f); _orb.Rotate(0f, 120f * Time.unscaledDeltaTime, 0f); break;
         case OrbState.Speaking: c = pal.Green; pulse = 1f + 0.10f * Mathf.Sin(t * 12f); break;
         case OrbState.Approval: c = pal.Amber; pulse = 1f + 0.10f * Mathf.Sin(t * 3f); break;
         case OrbState.Error: c = pal.Red; pulse = 1f + 0.12f * Mathf.Sin(t * 14f); break;
       }
+      float energy = s == OrbState.Listening ? (_voice != null ? _voice.Level : 0f)
+                   : s == OrbState.Speaking ? 0.5f + 0.3f * Mathf.Sin(t * 9f)
+                   : s == OrbState.Thinking ? 0.8f : 0.1f;
+      _orbFx.Energy = Mathf.Lerp(_orbFx.Energy, energy, 0.2f);
+      _orbFx.Tint = c;
       _orb.localScale = Vector3.one * 0.13f * pulse;
       _orbMat.color = c;
-      Renderer hr = _halo.GetComponent<Renderer>();
-      if (hr.sharedMaterial != null && hr.sharedMaterial.HasProperty("_Color")) hr.sharedMaterial.SetColor("_Color", c);
+      if (_halo != null)
+      {
+        Renderer hr = _halo.GetComponent<Renderer>();
+        if (hr.sharedMaterial != null && hr.sharedMaterial.HasProperty("_Color")) hr.sharedMaterial.SetColor("_Color", c);
+      }
     }
 
     // =========================================================== loop
