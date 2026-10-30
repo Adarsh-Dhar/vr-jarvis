@@ -85,6 +85,7 @@ namespace JarvisVR
       BuildOrb();
       JarvisAtmosphere.BuildFloor(_root, JarvisPalette.Current.Cyan);
       JarvisAtmosphere.BuildDust(_root, JarvisSpatialFx.Magenta, JarvisPalette.Current.Cyan);
+      JarvisCityscape.Build(_root);
       LoadGraph(JarvisGraphModel.Sample());
       SetMode("MAP");
       Select("service.delete");
@@ -304,6 +305,18 @@ namespace JarvisVR
 
     // ---- edges: solid = static, dashed = inferred, dotted = runtime
     private static Texture2D _dashTex, _dotTex;
+    // One shared material per edge style instead of one instance per edge: fewer materials and draw-call state changes on Quest.
+    private static readonly Dictionary<string, Material> _edgeMats = new Dictionary<string, Material>();
+
+    private static Material EdgeMaterial(string style)
+    {
+      if (_edgeMats.TryGetValue(style, out Material m) && m != null) return m;
+      m = JarvisSpatialGfx.Line(Color.white, 1.8f);
+      if (style == "dashed") { if (_dashTex == null) _dashTex = PatternTexture(10, 16); m.mainTexture = _dashTex; }
+      else if (style == "dotted") { if (_dotTex == null) _dotTex = PatternTexture(4, 16); m.mainTexture = _dotTex; }
+      _edgeMats[style] = m;
+      return m;
+    }
 
     private static Texture2D PatternTexture(int on, int total)
     {
@@ -327,7 +340,6 @@ namespace JarvisVR
       line.useWorldSpace = false;
       line.numCapVertices = 0;
       line.numCornerVertices = 0;
-      line.material = JarvisSpatialGfx.Line(Color.white, 1.8f);
       line.alignment = LineAlignment.View;
       JarvisSpatialGfx.Flat(line);
       ev.Line = line;
@@ -343,9 +355,10 @@ namespace JarvisVR
       LineRenderer l = ev.Line;
       l.startColor = l.endColor = ev.Base;
       l.textureMode = LineTextureMode.Tile;
-      if (style == "dashed") { if (_dashTex == null) _dashTex = PatternTexture(10, 16); l.material.mainTexture = _dashTex; l.textureScale = new Vector2(1f / 0.035f, 1f); l.widthMultiplier = 0.007f; }
-      else if (style == "dotted") { if (_dotTex == null) _dotTex = PatternTexture(4, 16); l.material.mainTexture = _dotTex; l.textureScale = new Vector2(1f / 0.020f, 1f); l.widthMultiplier = 0.007f; }
-      else { l.material.mainTexture = null; l.widthMultiplier = 0.006f; }
+      l.sharedMaterial = EdgeMaterial(style);
+      if (style == "dashed") { l.textureScale = new Vector2(1f / 0.035f, 1f); l.widthMultiplier = 0.007f; }
+      else if (style == "dotted") { l.textureScale = new Vector2(1f / 0.020f, 1f); l.widthMultiplier = 0.007f; }
+      else { l.widthMultiplier = 0.006f; }
       _edgesDirty = true;
     }
 

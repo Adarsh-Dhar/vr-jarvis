@@ -1,6 +1,6 @@
 {
   "name": "JarvisVR.Editor",
   "rootNamespace": "JarvisVR.EditorTools",
-  "references": ["JarvisVR.Runtime"],
+  "references": ["JarvisVR.Runtime", "Unity.RenderPipelines.Core.Runtime", "Unity.RenderPipelines.Universal.Runtime"],
   "includePlatforms": ["Editor"]
 }

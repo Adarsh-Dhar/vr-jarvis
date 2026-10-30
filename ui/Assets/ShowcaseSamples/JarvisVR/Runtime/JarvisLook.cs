@@ -16,6 +16,10 @@ namespace JarvisVR
       {
         UniversalAdditionalCameraData data = cam.GetUniversalAdditionalCameraData();
         if (data != null) data.renderPostProcessing = true;
+        cam.allowHDR = true;   // without HDR the neon intensity above 1 is clamped and Bloom has nothing to bloom
+        var asset = GraphicsSettings.currentRenderPipeline as UniversalRenderPipelineAsset;
+        if (asset != null && !asset.supportsHDR)
+          Debug.LogWarning("JARVIS: the active URP asset has HDR off, so the neon glow will look flat. Run Tools > JARVIS > Configure Rendering for Quest.");
         cam.clearFlags = CameraClearFlags.SolidColor;
         cam.backgroundColor = new Color32(0x03, 0x04, 0x0A, 0xFF);
       }

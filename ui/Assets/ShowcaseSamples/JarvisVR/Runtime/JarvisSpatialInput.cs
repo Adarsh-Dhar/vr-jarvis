@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace JarvisVR
@@ -17,8 +18,12 @@ namespace JarvisVR
       public bool Busy { get { return Btn != null || Node != null || Grab != null || Resize != null; } }
     }
 
-    private readonly Slot[] _slots = { new Slot(), new Slot(), new Slot() };   // left hand, right hand, editor mouse
+    // 0 left hand, 1 right hand, 2 editor mouse, 3 left controller, 4 right controller
+    private readonly Slot[] _slots = { new Slot(), new Slot(), new Slot(), new Slot(), new Slot() };
     private OVRHand[] _hands;
+    private readonly System.Collections.Generic.List<OVRHand>[] _bySide =
+      { new System.Collections.Generic.List<OVRHand>(), new System.Collections.Generic.List<OVRHand>() };   // [0] left, [1] right
+    private Transform _tracking;   // tracking space: controller poses are reported in it
     private Camera _cam;
     private Transform _graphRoot;
     private Action _toggleVoice;
@@ -29,6 +34,14 @@ namespace JarvisVR
     {
       _cam = cam; _graphRoot = graphRoot; _toggleVoice = toggleVoice;
       _hands = FindObjectsByType<OVRHand>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+      foreach (OVRHand h in _hands) { int side = SideOf(h.transform); if (side >= 0) _bySide[side].Add(h); }
+      if (_bySide[0].Count == 0 && _bySide[1].Count == 0 && _hands.Length > 0)
+      {
+        Debug.LogWarning("JARVIS: no OVRHand has Left/Right in its hierarchy name; assuming scene order (left, right).");
+        for (int k = 0; k < _hands.Length && k < 2; k++) _bySide[k].Add(_hands[k]);
+      }
+      OVRCameraRig rig = FindAnyObjectByType<OVRCameraRig>(FindObjectsInactive.Include);
+      _tracking = rig != null && rig.trackingSpace != null ? rig.trackingSpace : (cam != null ? cam.transform.parent : null);
       foreach (Slot s in _slots)
       {
         GameObject r = GameObject.CreatePrimitive(PrimitiveType.Sphere);
@@ -41,12 +54,32 @@ namespace JarvisVR
       }
     }
 
+    /// <summary>0 = left, 1 = right, -1 = unknown. Looks for Left/Right in the object's own and parent names.</summary>
+    private static int SideOf(Transform t)
+    {
+      for (; t != null; t = t.parent)
+      {
+        string n = t.name.ToLowerInvariant();
+        if (n.Contains("left")) return 0;
+        if (n.Contains("right")) return 1;
+      }
+      return -1;
+    }
+
+    /// <summary>First tracked OVRHand on that side (the sample rig can contain several OVRHand objects per side).</summary>
+    private OVRHand PickHand(int side)
+    {
+      foreach (OVRHand h in _bySide[side])
+        if (h != null && h.isActiveAndEnabled && h.IsTracked && h.IsPointerPoseValid && h.PointerPose != null) return h;
+      return null;
+    }
+
     private void Update()
     {
       for (int i = 0; i < 2; i++)
       {
         Slot s = _slots[i];
-        OVRHand h = _hands != null && i < _hands.Length ? _hands[i] : null;
+        OVRHand h = PickHand(i);
         s.Valid = h != null && h.IsTracked && h.IsPointerPoseValid && h.PointerPose != null;
         s.Down = false;
         if (s.Valid)
@@ -54,6 +87,21 @@ namespace JarvisVR
           s.Ray = new Ray(h.PointerPose.position, h.PointerPose.forward);
           s.Down = h.GetFingerIsPinching(OVRHand.HandFinger.Index);
         }
+      }
+      // Touch controllers: used only while that side's hand is not tracked, so a hand and a controller never fight.
+      for (int i = 0; i < 2; i++)
+      {
+        Slot c = _slots[3 + i];
+        OVRInput.Controller ctrl = i == 0 ? OVRInput.Controller.LTouch : OVRInput.Controller.RTouch;
+        c.Valid = false; c.Down = false;
+        if (_slots[i].Valid || !OVRInput.IsControllerConnected(ctrl)) continue;
+        Vector3 lp = OVRInput.GetLocalControllerPosition(ctrl);
+        Quaternion lr = OVRInput.GetLocalControllerRotation(ctrl);
+        Vector3 origin = _tracking != null ? _tracking.TransformPoint(lp) : lp;
+        Quaternion world = (_tracking != null ? _tracking.rotation : Quaternion.identity) * lr;
+        c.Ray = new Ray(origin, world * Vector3.forward);
+        c.Valid = true;
+        c.Down = OVRInput.Get(OVRInput.Button.PrimaryIndexTrigger, ctrl);
       }
 #if UNITY_EDITOR
       Slot m = _slots[2];
@@ -107,7 +155,7 @@ namespace JarvisVR
 
       if (s.Down && !s.WasDown)
       {
-        if (hoverBtn != null) { s.Btn = hoverBtn; s.BtnTime = Time.unscaledTime; s.BtnFired = false; }
+        if (hoverBtn != null && hoverBtn.Interactable) { s.Btn = hoverBtn; s.Btn.SetPressed(true); s.BtnTime = Time.unscaledTime; s.BtnFired = false; }
         else if (hoverNode != null)
         {
           s.Node = hoverNode; s.NodeDist = dist; s.NodeStart = s.NodeLast = s.Ray.GetPoint(dist); s.NodeDragging = false;
@@ -130,7 +178,7 @@ namespace JarvisVR
       {
         if (s.Btn != null)
         {
-          if (hoverBtn != s.Btn) { s.Btn.SetProgress(0f); if (s.Btn.HoldSeconds > 0f) JarvisAudio.SetCharge(0f); s.Btn = null; }
+          if (hoverBtn != s.Btn) { s.Btn.SetPressed(false); s.Btn.SetProgress(0f); if (s.Btn.HoldSeconds > 0f) JarvisAudio.SetCharge(0f); s.Btn = null; }
           else if (s.Btn.HoldSeconds > 0f && !s.BtnFired)
           {
             float p = (Time.unscaledTime - s.BtnTime) / s.Btn.HoldSeconds;
@@ -139,7 +187,7 @@ namespace JarvisVR
             if (p >= 1f)
             {
               s.BtnFired = true; s.Btn.SetProgress(0f); JarvisAudio.SetCharge(0f);
-              JarvisAudio.Play(JarvisAudio.Cue.ApproveClick); s.Btn.Click();
+              JarvisAudio.Play(JarvisAudio.Cue.ApproveClick); s.Btn.SetPressed(false); s.Btn.Focus(); s.Btn.Click();
             }
           }
         }
@@ -167,9 +215,10 @@ namespace JarvisVR
     {
       if (s.Btn != null)
       {
+        s.Btn.SetPressed(false);
         s.Btn.SetProgress(0f);
         if (s.Btn.HoldSeconds > 0f) JarvisAudio.SetCharge(0f);
-        else if (hoverBtn == s.Btn) { JarvisAudio.Play(JarvisAudio.Cue.SelectTick); s.Btn.Click(); }
+        else if (hoverBtn == s.Btn) { JarvisAudio.Play(JarvisAudio.Cue.SelectTick); s.Btn.Focus(); s.Btn.Click(); }
       }
       if (s.Node != null && !s.NodeDragging && !s.NodeHeld) s.Node.Select();
       s.Btn = null; s.Node = null; s.Grab = null; s.Resize = null; s.NodeDragging = false; s.NodeHeld = false;
@@ -178,6 +227,7 @@ namespace JarvisVR
     private void UpdateTwoHandScale()
     {
       Slot a = _slots[0], b = _slots[1];
+      if (!(a.Valid && b.Valid)) { a = _slots[3]; b = _slots[4]; }   // controllers: both triggers pulled
       bool both = a.Valid && b.Valid && a.Down && b.Down && !a.Busy && !b.Busy;
       if (!both) { _zooming = false; return; }
       float d = Vector3.Distance(a.Ray.origin, b.Ray.origin);

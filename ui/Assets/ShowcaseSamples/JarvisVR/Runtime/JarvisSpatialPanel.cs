@@ -24,11 +24,49 @@ namespace JarvisVR
   {
     public Action OnClick;
     public float HoldSeconds;
-    public Image Background, Fill;
+    public Image Background, Fill, FocusRing;
+    public Text Label;
     public Color Idle = new Color(0.1f, 0.15f, 0.24f, 1f), Hover = new Color(0.16f, 0.27f, 0.42f, 1f);
-    public void SetHover(bool on) { if (Background != null) Background.color = on ? Hover : Idle; }
+    public Color Pressed = new Color(0.22f, 0.40f, 0.60f, 1f), DisabledColor = new Color(0.07f, 0.08f, 0.10f, 1f);
+    public Color LabelColor = Color.white, DisabledLabel = new Color(0.42f, 0.47f, 0.53f, 1f);
+
+    private bool _hover, _pressed, _disabled, _focused;
+    private static JarvisSpatialButton _focusOwner;   // only one button has focus at a time
+
+    /// <summary>False greys the button out and makes it ignore presses. Priority of looks: disabled, pressed, hover, idle.</summary>
+    public bool Interactable
+    {
+      get { return !_disabled; }
+      set
+      {
+        _disabled = !value;
+        if (_disabled) { _pressed = false; _hover = false; SetProgress(0f); if (_focusOwner == this) ClearFocus(); }
+        Refresh();
+      }
+    }
+
+    public void SetHover(bool on) { _hover = on; Refresh(); }
+    public void SetPressed(bool on) { _pressed = on && !_disabled; Refresh(); }
+
+    /// <summary>Keyboard-style focus ring: the last button that was activated keeps an outline until another takes focus.</summary>
+    public void Focus()
+    {
+      if (_disabled) return;
+      if (_focusOwner != null && _focusOwner != this) _focusOwner.ClearFocus();
+      _focusOwner = this; _focused = true; Refresh();
+    }
+    public void ClearFocus() { if (_focusOwner == this) _focusOwner = null; _focused = false; Refresh(); }
+    private void OnDisable() { if (_focusOwner == this) _focusOwner = null; _focused = false; _pressed = false; _hover = false; }
+
+    private void Refresh()
+    {
+      if (Background != null) Background.color = _disabled ? DisabledColor : _pressed ? Pressed : _hover ? Hover : Idle;
+      if (FocusRing != null) FocusRing.enabled = _focused && !_disabled;
+      if (Label != null) Label.color = _disabled ? DisabledLabel : LabelColor;
+    }
+
     public void SetProgress(float p) { if (Fill != null) { Fill.fillAmount = Mathf.Clamp01(p); Fill.enabled = p > 0.001f; } }
-    public void Click() { if (OnClick != null) OnClick(); }
+    public void Click() { if (_disabled) return; if (OnClick != null) OnClick(); }
   }
 
   /// <summary>Grab handle: pinch and drag moves Target.</summary>
@@ -89,6 +127,22 @@ namespace JarvisVR
       return m;
     }
 
+    /// <summary>Glass panel background (JARVIS/UIGlass). Returns null when the shader is missing so the caller keeps its flat fallback.
+    /// Backdrop refraction is switched on only if the active URP asset has Opaque Texture enabled (see Tools > JARVIS > Configure Rendering).</summary>
+    public static Material Glass(float w, float h, Color accent)
+    {
+      Shader sh = Find("JARVIS/UIGlass");
+      if (sh == null) { Debug.LogWarning("JARVIS: UIGlass shader not found; panels keep the flat background."); return null; }
+      JarvisPalette pal = JarvisPalette.Current;
+      var m = new Material(sh);
+      m.SetColor("_Tint", new Color(pal.Glass.r * 0.6f, pal.Glass.g * 0.6f, pal.Glass.b * 0.7f, 0.62f));
+      m.SetColor("_EdgeColor", accent);
+      m.SetVector("_Size", new Vector4(w, h, 0f, 0f));
+      var urp = UnityEngine.Rendering.GraphicsSettings.currentRenderPipeline as UnityEngine.Rendering.Universal.UniversalRenderPipelineAsset;
+      if (urp != null && urp.supportsCameraOpaqueTexture) m.EnableKeyword("_REFRACT");
+      return m;
+    }
+
     /// <summary>No shadows, probes or motion vectors: keeps reflections and lighting from turning flat shapes silver.</summary>
     public static void Flat(Renderer r)
     {
@@ -118,6 +172,7 @@ namespace JarvisVR
     private bool _minimized;
     private float _c;
     private Color _accent;
+    private Material _glassMat;
 
     public static JarvisSpatialPanel Create(Transform parent, string title, float w, float h, Vector3 localPos, Color accent, bool closable = true)
     {
@@ -140,6 +195,8 @@ namespace JarvisVR
       p._glow = NewImage(go.transform, "Glow", w + 22, h + 22, new Color(accent.r, accent.g, accent.b, 0.14f));
       p._border = NewImage(go.transform, "Border", w + 4, h + 4, new Color(accent.r, accent.g, accent.b, 0.9f));
       Image bg = NewImage(go.transform, "Background", w, h, new Color(pal.Glass.r * 0.6f, pal.Glass.g * 0.6f, pal.Glass.b * 0.7f, 0.62f));
+      Material glass = JarvisSpatialGfx.Glass(w, h, accent);
+      if (glass != null) { bg.material = glass; bg.color = Color.white; p._glassMat = glass; }   // the shader supplies tint; vertex alpha carries the fade
       Image sheen = JarvisSpatialFx.AddSheen(go.transform, w, h, accent);
       p._frame.Add(p._glow.rectTransform); p._framePad.Add(22f);
       p._frame.Add(p._border.rectTransform); p._framePad.Add(4f);
@@ -252,6 +309,7 @@ namespace JarvisVR
         _frame[i].sizeDelta = new Vector2(_frame[i].sizeDelta.x, cur + _framePad[i]);
         _frame[i].anchoredPosition = new Vector2(0f, (Height - cur) / 2f);   // top edge stays fixed
       }
+      if (_glassMat != null) _glassMat.SetVector("_Size", new Vector4(Width, cur, 0f, 0f));   // keep the glass edge on the shrinking frame
       if (_rootBox != null) { _rootBox.size = new Vector3(Width, cur, 8f); _rootBox.center = new Vector3(0f, (Height - cur) / 2f, 0f); }
       if (_resizeRt != null) _resizeRt.anchoredPosition = new Vector2(Width / 2f + 4f, Height / 2f - cur - 4f);
     }
@@ -286,6 +344,10 @@ namespace JarvisVR
       Color a = accent ?? pal.Cyan;
       btn.Idle = new Color(a.r * 0.18f, a.g * 0.18f, a.b * 0.18f, 1f);
       btn.Hover = new Color(a.r * 0.40f, a.g * 0.40f, a.b * 0.40f, 1f);
+      btn.Pressed = new Color(a.r * 0.62f, a.g * 0.62f, a.b * 0.62f, 1f);
+      btn.LabelColor = pal.Text;
+      btn.FocusRing = NewImage(go.transform, "Focus", w + 10, h + 10, new Color(a.r, a.g, a.b, 0.95f));   // drawn first, so it shows as an outline
+      btn.FocusRing.enabled = false;
       btn.Background = NewImage(go.transform, "Bg", w, h, btn.Idle);
       Image fill = NewImage(go.transform, "Fill", w, h, new Color(a.r, a.g, a.b, 0.7f));
       fill.type = Image.Type.Filled;
@@ -293,7 +355,7 @@ namespace JarvisVR
       fill.fillAmount = 0f;
       fill.enabled = false;
       btn.Fill = fill;
-      NewText(go.transform, "Label", label, 24, pal.Text, TextAnchor.MiddleCenter, FontRole.Auto, new Vector2(w - 12, h), Vector2.zero);
+      btn.Label = NewText(go.transform, "Label", label, 24, pal.Text, TextAnchor.MiddleCenter, FontRole.Auto, new Vector2(w - 12, h), Vector2.zero);
       var box = go.AddComponent<BoxCollider>();
       box.size = new Vector3(w, h, 12f);
       box.center = new Vector3(0, 0, -8f);   // in front of the panel so rays reach the button first
