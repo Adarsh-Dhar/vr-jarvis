@@ -31,8 +31,8 @@ def discover_api_endpoints(
 @safe
 def inspect_api_schema(
     schema_path: str,
-    schema_type: str = 'openapi',
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    schema_type: str = 'openapi'
 ) -> dict:
     """Read OpenAPI, GraphQL and other API schemas."""
     # Placeholder: Inspect API schema
@@ -153,8 +153,8 @@ def inspect_api_authorization(
 @safe
 def inspect_database_schema(
     schema_path: str,
-    database_type: str = 'postgresql',
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    database_type: str = 'postgresql'
 ) -> dict:
     """Read database schemas."""
     # Placeholder: Inspect database schema
@@ -272,8 +272,8 @@ def inspect_sql_queries(
 @safe
 def explain_query_plan(
     query: str,
-    database_type: str = 'postgresql',
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    database_type: str = 'postgresql'
 ) -> dict:
     """Understand database query execution plans."""
     # Placeholder: Explain query plan
@@ -294,8 +294,8 @@ def explain_query_plan(
 @safe
 def inspect_orm_models(
     repository_path: str,
-    orm: str = 'auto',
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    orm: str = 'auto'
 ) -> dict:
     """Understand ORM models."""
     # Placeholder: Inspect ORM models
@@ -320,8 +320,8 @@ def inspect_orm_models(
 @safe
 def inspect_orm_relationships(
     repository_path: str,
-    orm: str = 'auto',
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    orm: str = 'auto'
 ) -> dict:
     """Understand ORM associations."""
     # Placeholder: Inspect ORM relationships

@@ -181,8 +181,8 @@ def trace_file_history(
 @safe
 def identify_frequent_changes(
     repository_path: str,
-    time_period: str = '30d',
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    time_period: str = '30d'
 ) -> dict:
     """Identify frequently modified code."""
     # Placeholder: Identify frequent changes
@@ -237,8 +237,8 @@ def identify_contributor_relationships(
 @safe
 def analyze_change_frequency(
     repository_path: str,
-    file_path: Optional[str] = None,
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    file_path: Optional[str] = None
 ) -> dict:
     """Measure change frequency."""
     # Placeholder: Analyze change frequency
@@ -257,8 +257,8 @@ def analyze_change_frequency(
 @safe
 def analyze_bug_prone_areas(
     repository_path: str,
-    time_period: str = '90d',
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    time_period: str = '90d'
 ) -> dict:
     """Identify areas with recurring bugs."""
     # Placeholder: Analyze bug-prone areas
@@ -276,8 +276,8 @@ def analyze_bug_prone_areas(
 @safe
 def visualize_commit_history(
     repository_path: str,
-    branch: str = 'main',
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    branch: str = 'main'
 ) -> dict:
     """Visualize code evolution."""
     # Placeholder: Visualize commit history

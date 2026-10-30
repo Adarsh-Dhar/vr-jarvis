@@ -11,8 +11,8 @@ from ._safe import safe
 @safe
 def discover_tests(
     repository_path: str,
-    test_framework: str = 'auto',
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    test_framework: str = 'auto'
 ) -> dict:
     """Find existing tests."""
     # Placeholder: Discover tests
@@ -29,8 +29,8 @@ def discover_tests(
 
 @safe
 def run_unit_tests(
-    test_files: Optional[List[str]] = None,
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    test_files: Optional[List[str]] = None
 ) -> dict:
     """Execute unit tests."""
     # Placeholder: Run unit tests
@@ -49,8 +49,8 @@ def run_unit_tests(
 
 @safe
 def run_integration_tests(
-    test_files: Optional[List[str]] = None,
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    test_files: Optional[List[str]] = None
 ) -> dict:
     """Execute integration tests."""
     # Placeholder: Run integration tests
@@ -69,8 +69,8 @@ def run_integration_tests(
 
 @safe
 def run_end_to_end_tests(
-    test_files: Optional[List[str]] = None,
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    test_files: Optional[List[str]] = None
 ) -> dict:
     """Execute end-to-end tests."""
     # Placeholder: Run E2E tests
@@ -86,8 +86,8 @@ def run_end_to_end_tests(
 
 @safe
 def run_regression_tests(
-    test_files: Optional[List[str]] = None,
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    test_files: Optional[List[str]] = None
 ) -> dict:
     """Execute regression tests."""
     # Placeholder: Run regression tests
@@ -103,8 +103,8 @@ def run_regression_tests(
 
 @safe
 def run_property_tests(
-    test_files: Optional[List[str]] = None,
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    test_files: Optional[List[str]] = None
 ) -> dict:
     """Execute property-based tests."""
     # Placeholder: Run property tests
@@ -124,8 +124,8 @@ def run_property_tests(
 @safe
 def run_fuzz_tests(
     target_function: str,
-    duration: int = 60,
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    duration: int = 60
 ) -> dict:
     """Fuzz inputs and behavior."""
     # Placeholder: Run fuzz tests
@@ -300,8 +300,8 @@ def verify_types(
 @safe
 def verify_lint(
     repository_path: str,
-    linter: str = 'auto',
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    linter: str = 'auto'
 ) -> dict:
     """Check lint rules."""
     # Placeholder: Verify lint
@@ -357,8 +357,8 @@ def compare_before_after(
 @safe
 def generate_test_report(
     repository_path: str,
-    format: str = 'json',
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    format: str = 'json'
 ) -> dict:
     """Produce a verification report."""
     # Placeholder: Generate report

@@ -36,9 +36,9 @@ def github_get_repository(
 def github_get_commits(
     owner: str,
     repo: str,
+    tool_context: ToolContext,
     branch: str = 'main',
-    limit: int = 10,
-    tool_context: ToolContext
+    limit: int = 10
 ) -> dict:
     """Get commits from GitHub."""
     # Placeholder: GitHub API call
@@ -57,8 +57,8 @@ def github_get_commits(
 def github_get_pull_requests(
     owner: str,
     repo: str,
-    state: str = 'open',
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    state: str = 'open'
 ) -> dict:
     """Get pull requests from GitHub."""
     # Placeholder: GitHub API call
@@ -77,8 +77,8 @@ def github_get_pull_requests(
 def github_get_issues(
     owner: str,
     repo: str,
-    state: str = 'open',
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    state: str = 'open'
 ) -> dict:
     """Get issues from GitHub."""
     # Placeholder: GitHub API call
@@ -226,8 +226,8 @@ def docker_list_images(
 @safe
 def docker_get_container_logs(
     container_id: str,
-    lines: int = 100,
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    lines: int = 100
 ) -> dict:
     """Get container logs."""
     # Placeholder: Docker API call
@@ -263,8 +263,8 @@ def docker_get_container_stats(
 
 @safe
 def kubernetes_list_pods(
-    namespace: str = 'default',
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    namespace: str = 'default'
 ) -> dict:
     """List Kubernetes pods."""
     # Placeholder: Kubernetes API call
@@ -280,8 +280,8 @@ def kubernetes_list_pods(
 
 @safe
 def kubernetes_list_services(
-    namespace: str = 'default',
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    namespace: str = 'default'
 ) -> dict:
     """List Kubernetes services."""
     # Placeholder: Kubernetes API call
@@ -298,9 +298,9 @@ def kubernetes_list_services(
 @safe
 def kubernetes_get_pod_logs(
     pod_name: str,
+    tool_context: ToolContext,
     namespace: str = 'default',
-    lines: int = 100,
-    tool_context: ToolContext
+    lines: int = 100
 ) -> dict:
     """Get pod logs."""
     # Placeholder: Kubernetes API call
@@ -316,8 +316,8 @@ def kubernetes_get_pod_logs(
 @safe
 def kubernetes_get_pod_events(
     pod_name: str,
-    namespace: str = 'default',
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    namespace: str = 'default'
 ) -> dict:
     """Get pod events."""
     # Placeholder: Kubernetes API call
@@ -335,8 +335,8 @@ def kubernetes_get_pod_events(
 @safe
 def kubernetes_get_deployment_status(
     deployment_name: str,
-    namespace: str = 'default',
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    namespace: str = 'default'
 ) -> dict:
     """Get deployment status."""
     # Placeholder: Kubernetes API call
@@ -358,8 +358,8 @@ def kubernetes_get_deployment_status(
 @safe
 def cloud_get_logs(
     service_name: str,
-    time_range: str = '1h',
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    time_range: str = '1h'
 ) -> dict:
     """Get cloud logs."""
     # Placeholder: Cloud API call
@@ -378,8 +378,8 @@ def cloud_get_logs(
 def cloud_get_metrics(
     service_name: str,
     metric: str,
-    time_range: str = '1h',
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    time_range: str = '1h'
 ) -> dict:
     """Get cloud metrics."""
     # Placeholder: Cloud API call
@@ -435,8 +435,8 @@ def cloud_get_service_status(
 
 @safe
 def monitoring_get_alerts(
-    severity: Optional[str] = None,
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    severity: Optional[str] = None
 ) -> dict:
     """Get alerts from monitoring system."""
     # Placeholder: Monitoring API call
@@ -453,8 +453,8 @@ def monitoring_get_alerts(
 @safe
 def monitoring_get_metrics(
     metric_name: str,
-    time_range: str = '1h',
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    time_range: str = '1h'
 ) -> dict:
     """Get metrics from monitoring system."""
     # Placeholder: Monitoring API call
@@ -496,8 +496,8 @@ def monitoring_get_observability_dashboard(
 @safe
 def error_tracking_get_exceptions(
     service_name: str,
-    time_range: str = '24h',
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    time_range: str = '24h'
 ) -> dict:
     """Get exceptions from error tracking."""
     # Placeholder: Error tracking API call
@@ -608,8 +608,8 @@ def database_get_performance_metrics(
 @safe
 def issue_tracker_get_tasks(
     project_id: str,
-    status: Optional[str] = None,
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    status: Optional[str] = None
 ) -> dict:
     """Get tasks from issue tracker."""
     # Placeholder: Issue tracker API call
@@ -627,8 +627,8 @@ def issue_tracker_get_tasks(
 @safe
 def issue_tracker_get_bugs(
     project_id: str,
-    severity: Optional[str] = None,
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    severity: Optional[str] = None
 ) -> dict:
     """Get bugs from issue tracker."""
     # Placeholder: Issue tracker API call
@@ -684,8 +684,8 @@ def issue_tracker_get_project_status(
 @safe
 def package_registry_get_version(
     package_name: str,
-    registry: str = 'npm',
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    registry: str = 'npm'
 ) -> dict:
     """Get package version from registry."""
     # Placeholder: Package registry API call
@@ -704,8 +704,8 @@ def package_registry_get_version(
 @safe
 def package_registry_get_security_advisories(
     package_name: str,
-    registry: str = 'npm',
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    registry: str = 'npm'
 ) -> dict:
     """Get security advisories for package."""
     # Placeholder: Package registry API call

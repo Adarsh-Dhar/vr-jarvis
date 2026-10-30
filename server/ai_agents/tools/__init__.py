@@ -683,24 +683,24 @@ from .git_tools import (
 )
 
 from .memory_tools import (
-    store_memory,
-    retrieve_memory,
-    search_memory,
+    load_project_memory,
+    save_finding,
+    record_decision,
 )
 
-from .scene_tools import (
-    create_scene,
-    update_scene,
-    delete_scene,
-    get_scene,
-    list_scenes,
+from .scene_tools import (   # highlight_path is exported from visualization_spatial_tools above; import scene_tools.highlight_path directly if you need the real one
+    dim_unrelated,
+    focus_camera,
+    open_code_panel,
+    set_edge_style,
+    show_ghost_diff,
+    show_test_badges,
+    show_approval_prompt,
 )
 
 from .control_tools import (
-    start_scene,
-    stop_scene,
-    pause_scene,
-    resume_scene,
+    request_approval,
+    exit_loop,
 )
 
 # Common utilities
@@ -1252,18 +1252,18 @@ __all__ = [
     'apply_patch_to_worktree',
     'get_worktree_diff',
     'commit_worktree',
-    'store_memory',
-    'retrieve_memory',
-    'search_memory',
-    'create_scene',
-    'update_scene',
-    'delete_scene',
-    'get_scene',
-    'list_scenes',
-    'start_scene',
-    'stop_scene',
-    'pause_scene',
-    'resume_scene',
+    'load_project_memory',
+    'save_finding',
+    'record_decision',
+    'dim_unrelated',
+    'focus_camera',
+    'open_code_panel',
+    'set_edge_style',
+    'show_ghost_diff',
+    'show_test_badges',
+    'show_approval_prompt',
+    'request_approval',
+    'exit_loop',
     # Utilities
     'record_evidence',
     'safe',

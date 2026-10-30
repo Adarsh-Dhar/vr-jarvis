@@ -192,8 +192,8 @@ def get_framework_adapter(
 
 @safe
 def list_supported_frameworks(
-    language: Optional[str] = None,
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    language: Optional[str] = None
 ) -> dict:
     """List all supported frameworks."""
     # Placeholder: List supported frameworks

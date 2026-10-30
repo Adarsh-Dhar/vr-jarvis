@@ -54,8 +54,8 @@ def get_symbol_hover_info(symbol_name: str, tool_context: ToolContext) -> dict:
 @safe
 def get_call_hierarchy(
     symbol_name: str,
-    direction: str = 'both',
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    direction: str = 'both'
 ) -> dict:
     """Retrieve incoming and outgoing calls."""
     # Placeholder: Get call hierarchy

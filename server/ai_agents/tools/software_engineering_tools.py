@@ -134,8 +134,8 @@ def search_and_replace(
 @safe
 def format_code(
     file_path: str,
-    formatter: str = 'auto',
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    formatter: str = 'auto'
 ) -> dict:
     """Format source code."""
     # Placeholder: Format code
@@ -166,8 +166,8 @@ def organize_imports(
 @safe
 def execute_command(
     command: str,
-    working_directory: Optional[str] = None,
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    working_directory: Optional[str] = None
 ) -> dict:
     """Execute commands in terminal."""
     # Placeholder: Execute command (sandboxed)
@@ -184,8 +184,8 @@ def execute_command(
 @safe
 def execute_script(
     script_path: str,
-    arguments: Optional[List[str]] = None,
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    arguments: Optional[List[str]] = None
 ) -> dict:
     """Execute scripts."""
     # Placeholder: Execute script
@@ -201,8 +201,8 @@ def execute_script(
 @safe
 def install_dependency(
     package_name: str,
-    package_manager: str = 'auto',
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    package_manager: str = 'auto'
 ) -> dict:
     """Install dependencies."""
     # Placeholder: Install dependency
@@ -217,8 +217,8 @@ def install_dependency(
 @safe
 def remove_dependency(
     package_name: str,
-    package_manager: str = 'auto',
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    package_manager: str = 'auto'
 ) -> dict:
     """Remove dependencies."""
     # Placeholder: Remove dependency
@@ -233,8 +233,8 @@ def remove_dependency(
 @safe
 def run_compiler(
     source_files: List[str],
-    compiler: str = 'auto',
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    compiler: str = 'auto'
 ) -> dict:
     """Run compiler."""
     # Placeholder: Run compiler
@@ -249,8 +249,8 @@ def run_compiler(
 
 @safe
 def run_build(
-    build_config: Optional[str] = None,
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    build_config: Optional[str] = None
 ) -> dict:
     """Run build."""
     # Placeholder: Run build
@@ -265,8 +265,8 @@ def run_build(
 @safe
 def run_linter(
     file_path: str,
-    linter: str = 'auto',
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    linter: str = 'auto'
 ) -> dict:
     """Run linter."""
     # Placeholder: Run linter
@@ -284,8 +284,8 @@ def run_linter(
 @safe
 def run_formatter(
     file_path: str,
-    formatter: str = 'auto',
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    formatter: str = 'auto'
 ) -> dict:
     """Run formatter."""
     # Placeholder: Run formatter
@@ -300,8 +300,8 @@ def run_formatter(
 @safe
 def run_type_checker(
     file_path: str,
-    type_checker: str = 'auto',
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    type_checker: str = 'auto'
 ) -> dict:
     """Run type checker."""
     # Placeholder: Run type checker
@@ -350,8 +350,8 @@ def manage_environment_variables(
 @safe
 def manage_processes(
     action: str,
-    process_id: Optional[str] = None,
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    process_id: Optional[str] = None
 ) -> dict:
     """Manage processes."""
     # Placeholder: Manage processes
@@ -396,8 +396,8 @@ def git_status(repository_path: str, tool_context: ToolContext) -> dict:
 @safe
 def git_diff(
     repository_path: str,
-    file_path: Optional[str] = None,
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    file_path: Optional[str] = None
 ) -> dict:
     """Get git diff."""
     # Placeholder: Git diff
@@ -412,8 +412,8 @@ def git_diff(
 @safe
 def git_log(
     repository_path: str,
-    limit: int = 10,
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    limit: int = 10
 ) -> dict:
     """Get git log."""
     # Placeholder: Git log
@@ -562,8 +562,8 @@ def git_create_checkpoint(
 @safe
 def generate_function(
     description: str,
-    signature: Optional[str] = None,
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    signature: Optional[str] = None
 ) -> dict:
     """Generate function."""
     # Placeholder: Generate function
@@ -578,8 +578,8 @@ def generate_function(
 @safe
 def generate_class(
     description: str,
-    class_name: Optional[str] = None,
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    class_name: Optional[str] = None
 ) -> dict:
     """Generate class."""
     # Placeholder: Generate class
@@ -594,8 +594,8 @@ def generate_class(
 @safe
 def generate_module(
     description: str,
-    module_name: Optional[str] = None,
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    module_name: Optional[str] = None
 ) -> dict:
     """Generate module."""
     # Placeholder: Generate module
@@ -626,8 +626,8 @@ def generate_api(
 @safe
 def generate_database_model(
     description: str,
-    schema: Optional[Dict] = None,
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    schema: Optional[Dict] = None
 ) -> dict:
     """Generate database model."""
     # Placeholder: Generate model
@@ -741,8 +741,8 @@ def implement_interface(
 @safe
 def generate_documentation(
     element_id: str,
-    format: str = 'markdown',
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    format: str = 'markdown'
 ) -> dict:
     """Generate documentation."""
     # Placeholder: Generate documentation

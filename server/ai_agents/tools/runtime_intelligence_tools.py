@@ -86,8 +86,8 @@ def collect_execution_trace(
 @safe
 def record_function_calls(
     application_id: str,
-    function_names: Optional[List[str]] = None,
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    function_names: Optional[List[str]] = None
 ) -> dict:
     """Record actual function calls."""
     # Placeholder: Record function calls
@@ -282,8 +282,8 @@ def record_thread_activity(
 @safe
 def capture_application_logs(
     application_id: str,
-    since: Optional[str] = None,
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    since: Optional[str] = None
 ) -> dict:
     """Collect application logs."""
     # Placeholder: Capture logs
@@ -300,8 +300,8 @@ def capture_application_logs(
 @safe
 def capture_runtime_events(
     application_id: str,
-    event_types: Optional[List[str]] = None,
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    event_types: Optional[List[str]] = None
 ) -> dict:
     """Collect runtime events."""
     # Placeholder: Capture events

@@ -100,9 +100,8 @@ def identify_failure_path(
 @safe
 def set_breakpoint(
     file_path: str,
-    line: int,
-    condition: Optional[str] = None,
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    condition: Optional[str] = None
 ) -> dict:
     """Set a debugger breakpoint."""
     # Placeholder: Set breakpoint
@@ -162,8 +161,8 @@ def step_out(tool_context: ToolContext) -> dict:
 
 @safe
 def inspect_variables(
-    scope: str = 'local',
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    scope: str = 'local'
 ) -> dict:
     """Inspect runtime variables."""
     # Placeholder: Inspect variables

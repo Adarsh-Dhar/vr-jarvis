@@ -83,8 +83,8 @@ def manage_conversation(
 @safe
 def retrieve_conversation_context(
     conversation_id: str,
-    turn_range: Optional[tuple] = None,
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    turn_range: Optional[tuple] = None
 ) -> dict:
     """Retrieve relevant previous conversation."""
     # Placeholder: Retrieve conversation context
@@ -118,8 +118,8 @@ def retrieve_investigation_context(
 @safe
 def explain_code_element(
     element_id: str,
-    level: str = 'intermediate',
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    level: str = 'intermediate'
 ) -> dict:
     """Explain a selected code element."""
     # Placeholder: Explain code element
@@ -185,8 +185,8 @@ def compare_code_elements(
 @safe
 def summarize_investigation(
     investigation_id: str,
-    format: str = 'text',
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    format: str = 'text'
 ) -> dict:
     """Summarize an investigation."""
     # Placeholder: Summarize investigation

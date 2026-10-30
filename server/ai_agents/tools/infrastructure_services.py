@@ -65,9 +65,9 @@ def revoke_permission(
 
 @safe
 def list_permissions(
+    tool_context: ToolContext,
     agent_id: Optional[str] = None,
-    tool_name: Optional[str] = None,
-    tool_context: ToolContext
+    tool_name: Optional[str] = None
 ) -> dict:
     """List permissions for agents or tools."""
     # Placeholder: List permissions
@@ -188,9 +188,9 @@ def get_tool_definition(
 
 @safe
 def list_tools(
+    tool_context: ToolContext,
     agent_id: Optional[str] = None,
-    permission_level: Optional[str] = None,
-    tool_context: ToolContext
+    permission_level: Optional[str] = None
 ) -> dict:
     """List available tools, optionally filtered by agent or permission level."""
     # Placeholder: List tools
@@ -455,8 +455,8 @@ def get_agent_status(
 
 @safe
 def list_agents(
-    status: Optional[str] = None,
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    status: Optional[str] = None
 ) -> dict:
     """List agent instances."""
     # Placeholder: List agents
@@ -721,8 +721,8 @@ def start_telemetry_collection(
 @safe
 def get_telemetry_data(
     collection_id: str,
-    time_range: str = '1h',
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    time_range: str = '1h'
 ) -> dict:
     """Get collected telemetry data."""
     # Placeholder: Get telemetry data

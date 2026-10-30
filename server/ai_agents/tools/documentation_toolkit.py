@@ -45,8 +45,8 @@ def read_documentation(
 @safe
 def search_external_documentation(
     query: str,
-    library: Optional[str] = None,
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    library: Optional[str] = None
 ) -> dict:
     """Find relevant official technical documentation."""
     # Placeholder: Search external docs
@@ -64,8 +64,8 @@ def search_external_documentation(
 @safe
 def search_library_documentation(
     library_name: str,
-    version: Optional[str] = None,
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    version: Optional[str] = None
 ) -> dict:
     """Find documentation for dependencies."""
     # Placeholder: Search library docs
@@ -118,8 +118,8 @@ def search_api_documentation(
 @safe
 def search_issue_trackers(
     query: str,
-    repository: Optional[str] = None,
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    repository: Optional[str] = None
 ) -> dict:
     """Search reported bugs and issues."""
     # Placeholder: Search issues
@@ -137,8 +137,8 @@ def search_issue_trackers(
 @safe
 def search_pull_requests(
     query: str,
-    repository: Optional[str] = None,
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    repository: Optional[str] = None
 ) -> dict:
     """Find relevant pull requests."""
     # Placeholder: Search PRs
@@ -156,8 +156,8 @@ def search_pull_requests(
 @safe
 def search_technical_discussions(
     query: str,
-    platform: str = 'stackoverflow',
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    platform: str = 'stackoverflow'
 ) -> dict:
     """Search technical discussions."""
     # Placeholder: Search discussions
@@ -174,8 +174,8 @@ def search_technical_discussions(
 @safe
 def generate_architecture_document(
     repository_path: str,
-    format: str = 'markdown',
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    format: str = 'markdown'
 ) -> dict:
     """Produce architecture documentation."""
     # Placeholder: Generate architecture doc
@@ -191,8 +191,8 @@ def generate_architecture_document(
 @safe
 def generate_function_documentation(
     function_id: str,
-    format: str = 'markdown',
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    format: str = 'markdown'
 ) -> dict:
     """Document functions."""
     # Placeholder: Generate function documentation
@@ -212,8 +212,8 @@ def generate_function_documentation(
 @safe
 def generate_dependency_documentation(
     repository_path: str,
-    format: str = 'markdown',
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    format: str = 'markdown'
 ) -> dict:
     """Document dependencies."""
     # Placeholder: Generate dependency documentation
@@ -228,8 +228,8 @@ def generate_dependency_documentation(
 @safe
 def generate_investigation_report(
     investigation_id: str,
-    format: str = 'markdown',
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    format: str = 'markdown'
 ) -> dict:
     """Create investigation reports."""
     # Placeholder: Generate investigation report

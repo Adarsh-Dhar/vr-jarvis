@@ -57,6 +57,17 @@ class TestOrchestrator:
         self.current_run['end_time'] = time.time()
         self.current_run['duration'] = self.current_run['end_time'] - self.current_run['start_time']
         
+        # Add aggregated fields for report generation
+        self.current_run['success_rate'] = self.current_run['summary']['passed'] / self.current_run['summary']['total'] if self.current_run['summary']['total'] > 0 else 0
+        self.current_run['failed_tests'] = [
+            test_id for test_id, result in self.current_run['results'].items()
+            if result.get('status') == 'failed'
+        ]
+        self.current_run['error_tests'] = [
+            test_id for test_id, result in self.current_run['results'].items()
+            if result.get('status') == 'error'
+        ]
+        
         return self.current_run
     
     def _select_tests(
@@ -160,7 +171,7 @@ class TestOrchestrator:
         
         # Run pytest on the file
         result = subprocess.run(
-            ['python', '-m', 'pytest', test_def['file'], '-v'],
+            ['python3', '-m', 'pytest', test_def['file'], '-v'],
             capture_output=True,
             text=True,
             cwd=str(self.test_root.parent)

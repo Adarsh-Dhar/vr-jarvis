@@ -28,8 +28,8 @@ def parse_function(function_id: str, tool_context: ToolContext) -> dict:
 @safe
 def explain_function(
     function_id: str,
-    level: str = 'intermediate',
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    level: str = 'intermediate'
 ) -> dict:
     """Explain the function's purpose and behavior."""
     # Placeholder: Explain function

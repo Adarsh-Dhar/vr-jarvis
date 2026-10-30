@@ -1,0 +1,262 @@
+{
+  "run_id": "run_1793390588",
+  "timestamp": "2026-10-30T20:03:16.743151",
+  "summary": {
+    "total": 13,
+    "passed": 7,
+    "failed": 6,
+    "skipped": 0,
+    "errors": 0
+  },
+  "duration": 8.001285791397095,
+  "success_rate": 0.5384615384615384,
+  "failed_tests": [
+    "test_repository_scale",
+    "test_multi_agent_coordination",
+    "test_code_understanding_agent",
+    "test_understand_repository",
+    "test_parse_source_code",
+    "test_read_file"
+  ],
+  "error_tests": [],
+  "detailed_results": {
+    "REL-CALLEE-001": {
+      "status": "passed",
+      "test_id": "REL-CALLEE-001",
+      "duration_ms": 0,
+      "expected": {
+        "status": "ok",
+        "callees": [
+          {
+            "name": "alpha",
+            "file": "main.py",
+            "line": 18
+          }
+        ]
+      },
+      "checks": [
+        "correct_callees",
+        "correct_source_locations",
+        "correct_relationship_types",
+        "valid_response_schema"
+      ]
+    },
+    "REL-CALL-002": {
+      "status": "passed",
+      "test_id": "REL-CALL-002",
+      "duration_ms": 0,
+      "expected": {
+        "status": "ok",
+        "callers": [
+          {
+            "name": "alpha",
+            "file": "main.py",
+            "line": 6,
+            "depth": 1
+          },
+          {
+            "name": "beta",
+            "file": "main.py",
+            "line": 12,
+            "depth": 1
+          },
+          {
+            "name": "gamma",
+            "file": "main.py",
+            "line": 18,
+            "depth": 2,
+            "path": [
+              "gamma",
+              "alpha",
+              "target"
+            ]
+          },
+          {
+            "name": "delta",
+            "file": "main.py",
+            "line": 24,
+            "depth": 2,
+            "path": [
+              "delta",
+              "beta",
+              "target"
+            ]
+          }
+        ]
+      },
+      "checks": [
+        "correct_callers",
+        "correct_depth",
+        "correct_paths",
+        "correct_source_locations",
+        "valid_response_schema"
+      ]
+    },
+    "REL-CALL-005": {
+      "status": "passed",
+      "test_id": "REL-CALL-005",
+      "duration_ms": 0,
+      "expected": {
+        "status": "ok",
+        "callers": [
+          {
+            "name": "cross_package_caller",
+            "file": "main.py",
+            "line": 104,
+            "cross_package": true
+          }
+        ]
+      },
+      "checks": [
+        "correct_callers",
+        "cross_package_detection",
+        "correct_source_locations",
+        "valid_response_schema"
+      ]
+    },
+    "REL-CALL-001": {
+      "status": "passed",
+      "test_id": "REL-CALL-001",
+      "duration_ms": 0,
+      "expected": {
+        "status": "ok",
+        "callers": [
+          {
+            "name": "alpha",
+            "file": "main.py",
+            "line": 6
+          },
+          {
+            "name": "beta",
+            "file": "main.py",
+            "line": 12
+          }
+        ]
+      },
+      "checks": [
+        "correct_callers",
+        "correct_source_locations",
+        "correct_relationship_types",
+        "valid_response_schema"
+      ]
+    },
+    "REL-CALL-004": {
+      "status": "passed",
+      "test_id": "REL-CALL-004",
+      "duration_ms": 0,
+      "expected": {
+        "status": "ok",
+        "callers": [
+          {
+            "name": "recursive_b",
+            "file": "main.py",
+            "line": 45
+          }
+        ],
+        "is_recursive": true
+      },
+      "checks": [
+        "correct_callers",
+        "recursion_detected",
+        "no_infinite_loop",
+        "valid_response_schema"
+      ]
+    },
+    "REL-CALL-003": {
+      "status": "passed",
+      "test_id": "REL-CALL-003",
+      "duration_ms": 0,
+      "expected": {
+        "status": "error",
+        "error_type": "unknown_symbol"
+      },
+      "checks": [
+        "proper_error_handling",
+        "meaningful_error_message",
+        "no_crash",
+        "valid_response_schema"
+      ]
+    },
+    "REL-CALLEE-002": {
+      "status": "passed",
+      "test_id": "REL-CALLEE-002",
+      "duration_ms": 0,
+      "expected": {
+        "status": "ok",
+        "callees": [
+          {
+            "name": "alpha",
+            "file": "main.py",
+            "line": 18,
+            "depth": 1
+          },
+          {
+            "name": "target",
+            "file": "main.py",
+            "line": 6,
+            "depth": 2,
+            "path": [
+              "gamma",
+              "alpha",
+              "target"
+            ]
+          }
+        ]
+      },
+      "checks": [
+        "correct_callees",
+        "correct_depth",
+        "correct_paths",
+        "valid_response_schema"
+      ]
+    },
+    "test_repository_scale": {
+      "status": "failed",
+      "test_id": "test_repository_scale",
+      "duration_ms": 4627,
+      "exit_code": 1,
+      "stdout": "pository_scale.py::TestRepositoryScale::test_large_repository_indexing\nFAILED jarvis-tests/tests/stress/test_repository_scale.py::TestGraphComplexity::test_handle_dense_graph\nFAILED jarvis-tests/tests/stress/test_repository_scale.py::TestGraphComplexity::test_handle_sparse_graph\nFAILED jarvis-tests/tests/stress/test_repository_scale.py::TestGraphComplexity::test_graph_layout_calculation\nFAILED jarvis-tests/tests/stress/test_repository_scale.py::TestConcurrentAgents::test_concurrent_agent_execution\nFAILED jarvis-tests/tests/stress/test_repository_scale.py::TestRuntimeVolume::test_large_trace_processing\nFAILED jarvis-tests/tests/stress/test_repository_scale.py::TestRuntimeVolume::test_high_volume_logs\nFAILED jarvis-tests/tests/stress/test_repository_scale.py::TestFailureInjection::test_agent_stops_responding\nFAILED jarvis-tests/tests/stress/test_repository_scale.py::TestEdgeCases::test_circular_dependencies\n======================== 11 failed, 23 passed in 1.47s =========================\n",
+      "stderr": ""
+    },
+    "test_multi_agent_coordination": {
+      "status": "failed",
+      "test_id": "test_multi_agent_coordination",
+      "duration_ms": 4734,
+      "exit_code": 2,
+      "stdout": "lti-agent/test_multi_agent_coordination.py _\nImportError while importing test module '/Users/adarsh/Documents/vr-agent/jarvis-tests/tests/multi-agent/test_multi_agent_coordination.py'.\nHint: make sure your test modules/packages have valid Python names.\nTraceback:\n/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/importlib/__init__.py:88: in import_module\n    return _bootstrap._gcd_import(name[level:], package, level)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\njarvis-tests/tests/multi-agent/test_multi_agent_coordination.py:12: in <module>\n    from ai_agents.tools.orchestrator_tools import (\nE   ModuleNotFoundError: No module named 'ai_agents'\n=========================== short test summary info ============================\nERROR jarvis-tests/tests/multi-agent/test_multi_agent_coordination.py\n!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!\n=============================== 1 error in 1.42s ===============================\n",
+      "stderr": ""
+    },
+    "test_code_understanding_agent": {
+      "status": "failed",
+      "test_id": "test_code_understanding_agent",
+      "duration_ms": 4778,
+      "exit_code": 2,
+      "stdout": "anding_agent.py _\nImportError while importing test module '/Users/adarsh/Documents/vr-agent/jarvis-tests/tests/agent-capabilities/test_code_understanding_agent.py'.\nHint: make sure your test modules/packages have valid Python names.\nTraceback:\n/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/importlib/__init__.py:88: in import_module\n    return _bootstrap._gcd_import(name[level:], package, level)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\njarvis-tests/tests/agent-capabilities/test_code_understanding_agent.py:11: in <module>\n    from ai_agents.tools.code_understanding_tools import (\nE   ModuleNotFoundError: No module named 'ai_agents'\n=========================== short test summary info ============================\nERROR jarvis-tests/tests/agent-capabilities/test_code_understanding_agent.py\n!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!\n=============================== 1 error in 1.44s ===============================\n",
+      "stderr": ""
+    },
+    "test_understand_repository": {
+      "status": "failed",
+      "test_id": "test_understand_repository",
+      "duration_ms": 5103,
+      "exit_code": 1,
+      "stdout": "un_tests\nFAILED jarvis-tests/tests/end-to-end/test_understand_repository.py::TestInvestigateRegressionScenario::test_compare_commits\nFAILED jarvis-tests/tests/end-to-end/test_understand_repository.py::TestInvestigateRegressionScenario::test_find_introducing_commit\nFAILED jarvis-tests/tests/end-to-end/test_understand_repository.py::TestInvestigateRegressionScenario::test_analyze_commit_impact\nFAILED jarvis-tests/tests/end-to-end/test_understand_repository.py::TestExploreComplexSystemScenario::test_trace_cross_module_relationships\nFAILED jarvis-tests/tests/end-to-end/test_understand_repository.py::TestExploreComplexSystemScenario::test_build_dependency_graph\nFAILED jarvis-tests/tests/end-to-end/test_understand_repository.py::TestExplainExecutionScenario::test_replay_execution_trace\nFAILED jarvis-tests/tests/end-to-end/test_understand_repository.py::TestExplainExecutionScenario::test_compare_execution_traces\n============================== 28 failed in 2.32s ==============================\n",
+      "stderr": ""
+    },
+    "test_parse_source_code": {
+      "status": "failed",
+      "test_id": "test_parse_source_code",
+      "duration_ms": 7855,
+      "exit_code": 1,
+      "stdout": "agent/server/ai_agents/agent.py:44: DeprecationWarning: SequentialAgent is deprecated in favor of Workflow and will be removed in a future version. Workflow cannot yet be used as an LlmAgent sub-agent.\n    fix_pipeline = SequentialAgent(\n\nserver/ai_agents/agent.py:53\n  /Users/adarsh/Documents/vr-agent/server/ai_agents/agent.py:53: DeprecationWarning: SequentialAgent is deprecated in favor of Workflow and will be removed in a future version. Workflow cannot yet be used as an LlmAgent sub-agent.\n    briefing_pipeline = SequentialAgent(\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n=========================== short test summary info ============================\nFAILED jarvis-tests/tests/unit/parsing/test_parse_source_code.py::TestParseSourceCode::test_t02_input_validation\nFAILED jarvis-tests/tests/unit/parsing/test_parse_source_code.py::TestExtractSymbols::test_t02_input_validation\n=================== 2 failed, 24 passed, 6 warnings in 4.69s ===================\n",
+      "stderr": ""
+    },
+    "test_read_file": {
+      "status": "failed",
+      "test_id": "test_read_file",
+      "duration_ms": 7963,
+      "exit_code": 1,
+      "stdout": "dation\nFAILED jarvis-tests/tests/unit/repository/test_read_file.py::TestReadFile::test_t04_empty_input\nFAILED jarvis-tests/tests/unit/repository/test_read_file.py::TestReadFile::test_t08_malformed_input\nFAILED jarvis-tests/tests/unit/repository/test_read_file.py::TestReadFile::test_t12_security\nFAILED jarvis-tests/tests/unit/repository/test_read_file.py::TestReadFileRange::test_t01_happy_path\nFAILED jarvis-tests/tests/unit/repository/test_read_file.py::TestReadFileRange::test_t02_input_validation\nFAILED jarvis-tests/tests/unit/repository/test_read_file.py::TestReadFileRange::test_t05_boundary_conditions\nFAILED jarvis-tests/tests/unit/repository/test_read_file.py::TestReadFileRange::test_t08_malformed_input\nFAILED jarvis-tests/tests/unit/repository/test_read_file.py::TestListFiles::test_t02_input_validation\nFAILED jarvis-tests/tests/unit/repository/test_read_file.py::TestListFiles::test_t08_malformed_input\n================== 11 failed, 20 passed, 6 warnings in 4.84s ===================\n",
+      "stderr": ""
+    }
+  }
+}

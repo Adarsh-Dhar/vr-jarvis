@@ -79,8 +79,8 @@ def select_code_element(
 @safe
 def focus_on_object(
     object_id: str,
-    animation: str = 'smooth',
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    animation: str = 'smooth'
 ) -> dict:
     """Bring an object into focus."""
     # Placeholder: Focus on object
@@ -96,9 +96,9 @@ def focus_on_object(
 @safe
 def expand_relationships(
     object_id: str,
+    tool_context: ToolContext,
     relationship_type: Optional[str] = None,
-    depth: int = 1,
-    tool_context: ToolContext
+    depth: int = 1
 ) -> dict:
     """Reveal connected code elements."""
     # Placeholder: Expand relationships
@@ -155,8 +155,8 @@ def isolate_relationship_path(
 def compare_code_regions(
     region1_id: str,
     region2_id: str,
-    comparison_mode: str = 'side_by_side',
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    comparison_mode: str = 'side_by_side'
 ) -> dict:
     """Compare multiple selected code elements."""
     # Placeholder: Compare code regions
@@ -212,8 +212,8 @@ def restore_investigation(
 def create_spatial_bookmark(
     bookmark_id: str,
     description: str,
-    position: Optional[Dict] = None,
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    position: Optional[Dict] = None
 ) -> dict:
     """Bookmark a location in the code intelligence environment."""
     # Placeholder: Create spatial bookmark
@@ -230,8 +230,8 @@ def create_spatial_bookmark(
 def annotate_code_element(
     element_id: str,
     annotation: str,
-    annotation_type: str = 'note',
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    annotation_type: str = 'note'
 ) -> dict:
     """Attach an explanation or note to a code element."""
     # Placeholder: Annotate element
@@ -248,8 +248,8 @@ def annotate_code_element(
 @safe
 def synchronize_graphs(
     graph_ids: List[str],
-    sync_mode: str = 'selection',
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    sync_mode: str = 'selection'
 ) -> dict:
     """Keep related visualizations synchronized."""
     # Placeholder: Synchronize graphs
@@ -265,8 +265,8 @@ def synchronize_graphs(
 def request_visualization(
     visualization_type: str,
     parameters: Dict,
-    position: Optional[Dict] = None,
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    position: Optional[Dict] = None
 ) -> dict:
     """Request a particular visualization."""
     # Placeholder: Request visualization

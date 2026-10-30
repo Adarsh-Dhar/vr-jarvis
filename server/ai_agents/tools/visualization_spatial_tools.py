@@ -98,8 +98,8 @@ def remove_graph_edge(
 def expand_graph_node(
     graph_id: str,
     node_id: str,
-    depth: int = 1,
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    depth: int = 1
 ) -> dict:
     """Expand a node to show its connections."""
     # Placeholder: Expand node
@@ -188,8 +188,8 @@ def highlight_path(
 def highlight_dependencies(
     graph_id: str,
     node_id: str,
-    depth: int = 2,
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    depth: int = 2
 ) -> dict:
     """Highlight dependencies of a node."""
     # Placeholder: Highlight dependencies
@@ -243,8 +243,8 @@ def compare_graphs(
 @safe
 def calculate_graph_layout(
     graph_id: str,
-    layout_algorithm: str = 'force_directed',
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    layout_algorithm: str = 'force_directed'
 ) -> dict:
     """Calculate graph layout."""
     # Placeholder: Calculate layout
@@ -262,8 +262,8 @@ def calculate_graph_layout(
 @safe
 def calculate_graph_clusters(
     graph_id: str,
-    algorithm: str = 'louvain',
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    algorithm: str = 'louvain'
 ) -> dict:
     """Calculate graph clusters."""
     # Placeholder: Calculate clusters
@@ -281,8 +281,8 @@ def calculate_graph_clusters(
 @safe
 def calculate_graph_centrality(
     graph_id: str,
-    centrality_type: str = 'betweenness',
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    centrality_type: str = 'betweenness'
 ) -> dict:
     """Calculate graph centrality metrics."""
     # Placeholder: Calculate centrality
@@ -343,8 +343,8 @@ def summarize_graph(
 @safe
 def visualize_call_graph(
     function_id: str,
-    scope: str = 'local',
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    scope: str = 'local'
 ) -> dict:
     """Visualize call graph."""
     # Placeholder: Visualize call graph
@@ -361,8 +361,8 @@ def visualize_call_graph(
 @safe
 def visualize_dependency_graph(
     component_id: str,
-    scope: str = 'direct',
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    scope: str = 'direct'
 ) -> dict:
     """Visualize dependency graph."""
     # Placeholder: Visualize dependency graph
@@ -442,8 +442,8 @@ def visualize_class_hierarchy(
 
 @safe
 def visualize_architecture(
-    scope: str = 'full',
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    scope: str = 'full'
 ) -> dict:
     """Visualize architecture."""
     # Placeholder: Visualize architecture
@@ -527,8 +527,8 @@ def visualize_memory_usage(
 @safe
 def visualize_performance(
     application_id: str,
-    metric: str = 'cpu',
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    metric: str = 'cpu'
 ) -> dict:
     """Visualize performance metrics."""
     # Placeholder: Visualize performance
@@ -561,8 +561,8 @@ def visualize_security_flow(
 @safe
 def visualize_git_history(
     repository_path: str,
-    branch: str = 'main',
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    branch: str = 'main'
 ) -> dict:
     """Visualize git history."""
     # Placeholder: Visualize git history
@@ -677,8 +677,8 @@ def focus_on_object(
 @safe
 def expand_relationships(
     object_id: str,
-    relationship_type: Optional[str] = None,
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    relationship_type: Optional[str] = None
 ) -> dict:
     """Reveal connected code elements."""
     # Placeholder: Expand relationships
