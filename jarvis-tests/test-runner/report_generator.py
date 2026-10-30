@@ -16,9 +16,9 @@ class ReportGenerator:
     """Generates detailed test reports"""
     
     def __init__(self, test_root: Path):
-        self.test_root = test_root
-        self.reports_dir = test_root / 'test-reports'
-        self.reports_dir.mkdir(exist_ok=True)
+        self.test_root = Path(test_root).absolute()
+        self.reports_dir = self.test_root / 'test-reports'
+        self.reports_dir.mkdir(parents=True, exist_ok=True)
     
     def generate_report(self, run_data: Dict) -> Path:
         """Generate a detailed report from test run data"""

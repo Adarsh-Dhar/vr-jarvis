@@ -98,7 +98,7 @@ class TestOrchestrator:
     
     def _run_tests_parallel(self, test_ids: List[str]):
         """Run tests in parallel"""
-        max_workers = min(10, len(test_ids))
+        max_workers = max(1, min(10, len(test_ids)))
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = {
                 executor.submit(self._run_single_test, test_id): test_id

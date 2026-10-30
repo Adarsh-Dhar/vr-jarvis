@@ -1,0 +1,16 @@
+{
+  "run_id": "run_1793396256",
+  "timestamp": "2026-10-30T21:37:36.731201",
+  "summary": {
+    "total": 0,
+    "passed": 0,
+    "failed": 0,
+    "skipped": 0,
+    "errors": 0
+  },
+  "duration": 0.0004189014434814453,
+  "success_rate": 0,
+  "failed_tests": [],
+  "error_tests": [],
+  "detailed_results": {}
+}

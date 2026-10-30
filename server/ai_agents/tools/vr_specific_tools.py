@@ -12,184 +12,158 @@ from ._safe import safe
 @safe
 def get_vr_session_state(tool_context: ToolContext) -> dict:
     """Understand the current VR session."""
-    # Placeholder: Get VR session state
-    return {
-        'status': 'ok',
-        'session_id': 'vr_session_123',
-        'user_id': 'user_456',
-        'active_visualization': 'call_graph',
-        'camera_position': {'x': 0, 'y': 1.5, 'z': -2},
-        'hand_positions': {
-            'left': {'x': -0.5, 'y': 1.0, 'z': -1.5},
-            'right': {'x': 0.5, 'y': 1.0, 'z': -1.5}
+    try:
+        return {
+            'status': 'not_implemented',
+            'message': 'VR session state requires Unity integration',
+            'note': 'This tool interfaces with the Unity VR application'
         }
-    }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
 
 
 @safe
 def get_selected_object(tool_context: ToolContext) -> dict:
     """Identify the currently selected code element or graph node."""
-    # Placeholder: Get selected object
-    return {
-        'status': 'ok',
-        'selected_object': {
-            'type': 'node',
-            'id': 'node_123',
-            'name': 'my_function',
-            'file': 'src/main.py',
-            'line': 10,
-            'visualization_id': 'viz_123'
+    try:
+        from .visualization_spatial_tools import get_current_selection
+        return get_current_selection(tool_context)
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
         }
-    }
 
 
 @safe
 def get_spatial_selection_context(tool_context: ToolContext) -> dict:
     """Understand the selected object's surrounding relationships."""
-    # Placeholder: Get spatial context
-    return {
-        'status': 'ok',
-        'context': {
-            'selected_node': 'node_123',
-            'connected_nodes': ['node_124', 'node_125', 'node_126'],
-            'nearby_nodes': ['node_127', 'node_128'],
-            'cluster': 'cluster_auth',
-            'distance_to_camera': 2.5
+    try:
+        from .visualization_spatial_tools import get_spatial_selection_context
+        return get_spatial_selection_context(tool_context)
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
         }
-    }
 
 
 @safe
 def select_code_element(
     element_id: str,
-    visualization_id: str,
     tool_context: ToolContext
 ) -> dict:
     """Select a function, class, file or other code element."""
-    # Placeholder: Select code element
-    return {
-        'status': 'ok',
-        'element_id': element_id,
-        'visualization_id': visualization_id,
-        'selected': True,
-        'camera_focus': {'x': 0, 'y': 0, 'z': 0}
-    }
+    try:
+        from .visualization_spatial_tools import select_code_element
+        return select_code_element(element_id, tool_context)
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
 
 
 @safe
 def focus_on_object(
     object_id: str,
-    tool_context: ToolContext,
-    animation: str = 'smooth'
+    tool_context: ToolContext
 ) -> dict:
     """Bring an object into focus."""
-    # Placeholder: Focus on object
-    return {
-        'status': 'ok',
-        'object_id': object_id,
-        'animation': animation,
-        'focused': True,
-        'camera_position': {'x': 0, 'y': 0, 'z': -3}
-    }
+    try:
+        from .visualization_spatial_tools import focus_on_object
+        return focus_on_object(object_id, tool_context)
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
 
 
 @safe
 def expand_relationships(
     object_id: str,
     tool_context: ToolContext,
-    relationship_type: Optional[str] = None,
-    depth: int = 1
+    relationship_type: Optional[str] = None
 ) -> dict:
     """Reveal connected code elements."""
-    # Placeholder: Expand relationships
-    return {
-        'status': 'ok',
-        'object_id': object_id,
-        'relationship_type': relationship_type,
-        'depth': depth,
-        'expanded_nodes': 5,
-        'expanded_edges': 8,
-        'animation': 'expand_radial'
-    }
+    try:
+        from .visualization_spatial_tools import expand_relationships
+        return expand_relationships(object_id, tool_context, relationship_type)
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
 
 
 @safe
 def trace_relationship_path(
     from_id: str,
     to_id: str,
-    visualization_id: str,
     tool_context: ToolContext
 ) -> dict:
     """Follow a selected relationship through the graph."""
-    # Placeholder: Trace relationship path
-    return {
-        'status': 'ok',
-        'from_id': from_id,
-        'to_id': to_id,
-        'visualization_id': visualization_id,
-        'path': ['node_a', 'node_b', 'node_c'],
-        'highlighted': True,
-        'animation': 'trace_path'
-    }
+    try:
+        from .visualization_spatial_tools import trace_relationship_path
+        return trace_relationship_path(from_id, to_id, tool_context)
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
 
 
 @safe
 def isolate_relationship_path(
     path: List[str],
-    visualization_id: str,
     tool_context: ToolContext
 ) -> dict:
     """Show only a particular investigation path."""
-    # Placeholder: Isolate path
-    return {
-        'status': 'ok',
-        'path': path,
-        'visualization_id': visualization_id,
-        'isolated': True,
-        'hidden_nodes': 45,
-        'visible_nodes': 3
-    }
+    try:
+        from .visualization_spatial_tools import isolate_relationship_path
+        return isolate_relationship_path(path, tool_context)
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
 
 
 @safe
 def compare_code_regions(
     region1_id: str,
     region2_id: str,
-    tool_context: ToolContext,
-    comparison_mode: str = 'side_by_side'
+    tool_context: ToolContext
 ) -> dict:
     """Compare multiple selected code elements."""
-    # Placeholder: Compare code regions
-    return {
-        'status': 'ok',
-        'region1_id': region1_id,
-        'region2_id': region2_id,
-        'comparison_mode': comparison_mode,
-        'comparison': {
-            'complexity': {'region1': 5, 'region2': 8},
-            'lines': {'region1': 20, 'region2': 35},
-            'functions': {'region1': 3, 'region2': 5}
-        },
-        'visualization_created': True
-    }
+    try:
+        from .visualization_spatial_tools import compare_code_regions
+        return compare_code_regions(region1_id, region2_id, tool_context)
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
 
 
 @safe
 def pin_investigation(
     investigation_id: str,
-    label: str,
     tool_context: ToolContext
 ) -> dict:
     """Preserve an investigation for later."""
-    # Placeholder: Pin investigation
-    return {
-        'status': 'ok',
-        'investigation_id': investigation_id,
-        'label': label,
-        'pinned': True,
-        'pinned_at': '2024-01-01T12:00:00Z',
-        'bookmark_position': {'x': 1, 'y': 1.5, 'z': -2}
-    }
+    try:
+        from .visualization_spatial_tools import pin_investigation
+        return pin_investigation(investigation_id, tool_context)
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
 
 
 @safe
@@ -198,86 +172,81 @@ def restore_investigation(
     tool_context: ToolContext
 ) -> dict:
     """Restore a previous investigation."""
-    # Placeholder: Restore investigation
-    return {
-        'status': 'ok',
-        'investigation_id': investigation_id,
-        'restored': True,
-        'visualization_state': {...},
-        'camera_position': {'x': 0, 'y': 1.5, 'z': -2}
-    }
+    try:
+        from .visualization_spatial_tools import restore_investigation
+        return restore_investigation(investigation_id, tool_context)
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
 
 
 @safe
 def create_spatial_bookmark(
     bookmark_id: str,
     description: str,
-    tool_context: ToolContext,
-    position: Optional[Dict] = None
+    tool_context: ToolContext
 ) -> dict:
     """Bookmark a location in the code intelligence environment."""
-    # Placeholder: Create spatial bookmark
-    return {
-        'status': 'ok',
-        'bookmark_id': bookmark_id,
-        'description': description,
-        'position': position or {'x': 0, 'y': 1.5, 'z': -2},
-        'created': True
-    }
+    try:
+        from .visualization_spatial_tools import create_spatial_bookmark
+        return create_spatial_bookmark(bookmark_id, description, tool_context)
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
 
 
 @safe
 def annotate_code_element(
     element_id: str,
     annotation: str,
-    tool_context: ToolContext,
-    annotation_type: str = 'note'
+    tool_context: ToolContext
 ) -> dict:
     """Attach an explanation or note to a code element."""
-    # Placeholder: Annotate element
-    return {
-        'status': 'ok',
-        'element_id': element_id,
-        'annotation': annotation,
-        'annotation_type': annotation_type,
-        'annotated': True,
-        'annotation_id': 'annot_123'
-    }
+    try:
+        from .visualization_spatial_tools import annotate_code_element
+        return annotate_code_element(element_id, annotation, tool_context)
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
 
 
 @safe
 def synchronize_graphs(
     graph_ids: List[str],
-    tool_context: ToolContext,
-    sync_mode: str = 'selection'
+    tool_context: ToolContext
 ) -> dict:
     """Keep related visualizations synchronized."""
-    # Placeholder: Synchronize graphs
-    return {
-        'status': 'ok',
-        'graph_ids': graph_ids,
-        'sync_mode': sync_mode,
-        'synchronized': True
-    }
+    try:
+        from .visualization_spatial_tools import synchronize_graphs
+        return synchronize_graphs(graph_ids, tool_context)
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
 
 
 @safe
 def request_visualization(
     visualization_type: str,
     parameters: Dict,
-    tool_context: ToolContext,
-    position: Optional[Dict] = None
+    tool_context: ToolContext
 ) -> dict:
     """Request a particular visualization."""
-    # Placeholder: Request visualization
-    return {
-        'status': 'ok',
-        'visualization_type': visualization_type,
-        'parameters': parameters,
-        'position': position or {'x': 0, 'y': 1.5, 'z': -3},
-        'visualization_id': 'viz_123',
-        'created': True
-    }
+    try:
+        from .visualization_spatial_tools import request_visualization
+        return request_visualization(visualization_type, parameters, tool_context)
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
 
 
 @safe
@@ -287,15 +256,14 @@ def change_visualization_depth(
     tool_context: ToolContext
 ) -> dict:
     """Expand or reduce graph depth."""
-    # Placeholder: Change depth
-    return {
-        'status': 'ok',
-        'visualization_id': visualization_id,
-        'depth': depth,
-        'updated': True,
-        'nodes_added': 10,
-        'nodes_removed': 5
-    }
+    try:
+        from .visualization_spatial_tools import change_visualization_depth
+        return change_visualization_depth(visualization_id, depth, tool_context)
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
 
 
 @safe
@@ -305,13 +273,14 @@ def change_visualization_scope(
     tool_context: ToolContext
 ) -> dict:
     """Switch between local, direct, extended and runtime scopes."""
-    # Placeholder: Change scope
-    return {
-        'status': 'ok',
-        'visualization_id': visualization_id,
-        'scope': scope,
-        'updated': True
-    }
+    try:
+        from .visualization_spatial_tools import change_visualization_scope
+        return change_visualization_scope(visualization_id, scope, tool_context)
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
 
 
 @safe
@@ -320,20 +289,14 @@ def get_visualization_state(
     tool_context: ToolContext
 ) -> dict:
     """Understand what is currently being visualized."""
-    # Placeholder: Get visualization state
-    return {
-        'status': 'ok',
-        'visualization_id': visualization_id,
-        'state': {
-            'type': 'call_graph',
-            'nodes': 50,
-            'edges': 75,
-            'scope': 'extended',
-            'depth': 3,
-            'camera_position': {'x': 0, 'y': 1.5, 'z': -2},
-            'selected_node': 'node_123'
+    try:
+        from .visualization_spatial_tools import get_visualization_state
+        return get_visualization_state(visualization_id, tool_context)
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
         }
-    }
 
 
 @safe
@@ -342,537 +305,345 @@ def get_spatial_object_details(
     tool_context: ToolContext
 ) -> dict:
     """Retrieve information about a selected spatial object."""
-    # Placeholder: Get spatial object details
-    return {
-        'status': 'ok',
-        'object_id': object_id,
-        'details': {
-            'type': 'function',
-            'name': 'my_function',
-            'file': 'src/main.py',
-            'line': 10,
-            'connections': 5,
-            'position': {'x': 0, 'y': 0, 'z': 0},
-            'size': 1.0
+    try:
+        from .visualization_spatial_tools import get_spatial_object_details
+        return get_spatial_object_details(object_id, tool_context)
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
         }
-    }
 
 
-# Voice Command Support
+# Voice and Gesture Tools
 
 @safe
 def process_voice_command(
     command: str,
     tool_context: ToolContext
 ) -> dict:
-    """Process a voice command and execute the corresponding action."""
-    # Placeholder: Process voice command
-    return {
-        'status': 'ok',
-        'command': command,
-        'parsed_intent': 'expand_dependencies',
-        'executed': True,
-        'result': 'Expanded all direct dependencies'
-    }
+    """Process a voice command."""
+    try:
+        return {
+            'status': 'not_implemented',
+            'message': 'Voice command processing requires Unity integration and speech recognition',
+            'command': command
+        }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
 
 
 @safe
 def register_voice_command(
-    command_pattern: str,
+    command_text: str,
     action: str,
     tool_context: ToolContext
 ) -> dict:
     """Register a custom voice command."""
-    # Placeholder: Register voice command
-    return {
-        'status': 'ok',
-        'command_pattern': command_pattern,
-        'action': action,
-        'registered': True
-    }
+    try:
+        return {
+            'status': 'not_implemented',
+            'message': 'Voice command registration requires Unity integration',
+            'command_text': command_text,
+            'action': action
+        }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
 
 
 @safe
 def list_voice_commands(tool_context: ToolContext) -> dict:
-    """List all available voice commands."""
-    # Placeholder: List voice commands
-    return {
-        'status': 'ok',
-        'voice_commands': [
-            {'command': 'expand all direct dependencies', 'action': 'expand_dependencies', 'scope': 'direct'},
-            {'command': 'follow this function\'s execution path', 'action': 'trace_execution', 'scope': 'runtime'},
-            {'command': 'show only the database-related connections', 'action': 'filter_graph', 'filter': 'database'},
-            {'command': 'compare these two functions', 'action': 'compare_elements', 'scope': 'selected'},
-            {'command': 'go back to the previous investigation', 'action': 'restore_investigation', 'scope': 'history'},
-            {'command': 'show me every function that can reach this endpoint', 'action': 'find_callers', 'scope': 'transitive'}
-        ]
-    }
+    """List registered voice commands."""
+    try:
+        return {
+            'status': 'not_implemented',
+            'message': 'Voice command listing requires Unity integration'
+        }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
 
 
-# Spatial Interaction
+# Hand Interaction Tools
 
 @safe
 def set_hand_interaction_mode(
-    hand: str,
     mode: str,
     tool_context: ToolContext
 ) -> dict:
-    """Set interaction mode for a hand controller."""
-    # Placeholder: Set hand interaction mode
-    return {
-        'status': 'ok',
-        'hand': hand,
-        'mode': mode,
-        'updated': True
-    }
-
-
-@safe
-def get_hand_interaction_state(
-    hand: str,
-    tool_context: ToolContext
-) -> dict:
-    """Get current interaction state for a hand controller."""
-    # Placeholder: Get hand interaction state
-    return {
-        'status': 'ok',
-        'hand': hand,
-        'state': {
-            'mode': 'grab',
-            'grabbing': False,
-            'hovered_object': 'node_123',
-            'position': {'x': -0.5, 'y': 1.0, 'z': -1.5}
+    """Set hand interaction mode."""
+    try:
+        return {
+            'status': 'not_implemented',
+            'message': 'Hand interaction mode requires Unity integration',
+            'mode': mode
         }
-    }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
 
 
 @safe
-def set_spatial_audio_source(
-    object_id: str,
-    audio_type: str,
+def get_hand_interaction_state(tool_context: ToolContext) -> dict:
+    """Get current hand interaction state."""
+    try:
+        return {
+            'status': 'not_implemented',
+            'message': 'Hand interaction state requires Unity integration'
+        }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
+
+
+# Spatial Audio Tools
+
+@safe
+def set_spatial_audio(
+    source_id: str,
+    position: Dict,
     tool_context: ToolContext
 ) -> dict:
-    """Set spatial audio source for an object."""
-    # Placeholder: Set spatial audio
-    return {
-        'status': 'ok',
-        'object_id': object_id,
-        'audio_type': audio_type,
-        'set': True
-    }
+    """Set spatial audio source."""
+    try:
+        return {
+            'status': 'not_implemented',
+            'message': 'Spatial audio requires Unity integration',
+            'source_id': source_id,
+            'position': position
+        }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
 
 
 @safe
 def set_haptic_feedback(
-    object_id: str,
-    feedback_pattern: str,
+    intensity: float,
+    duration: float,
     tool_context: ToolContext
 ) -> dict:
-    """Set haptic feedback for interacting with an object."""
-    # Placeholder: Set haptic feedback
-    return {
-        'status': 'ok',
-        'object_id': object_id,
-        'feedback_pattern': feedback_pattern,
-        'set': True
-    }
+    """Set haptic feedback."""
+    try:
+        return {
+            'status': 'not_implemented',
+            'message': 'Haptic feedback requires Unity integration',
+            'intensity': intensity,
+            'duration': duration
+        }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
 
 
-# Environment and Scene
+# Environment Tools
 
 @safe
 def set_vr_environment(
-    environment_type: str,
+    environment_id: str,
     tool_context: ToolContext
 ) -> dict:
-    """Set the VR environment (e.g., workspace, infinity room)."""
-    # Placeholder: Set VR environment
-    return {
-        'status': 'ok',
-        'environment_type': environment_type,
-        'set': True
-    }
-
-
-@safe
-def get_vr_environment_info(tool_context: ToolContext) -> dict:
-    """Get information about the current VR environment."""
-    # Placeholder: Get environment info
-    return {
-        'status': 'ok',
-        'environment': {
-            'type': 'workspace',
-            'lighting': 'auto',
-            'background': 'dark',
-            'grid': True
+    """Set VR environment."""
+    try:
+        return {
+            'status': 'not_implemented',
+            'message': 'VR environment setting requires Unity integration',
+            'environment_id': environment_id
         }
-    }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
 
 
 @safe
-def set_visualization_theme(
-    theme: str,
+def get_environment_info(
+    environment_id: str,
     tool_context: ToolContext
 ) -> dict:
-    """Set the visualization theme (e.g., dark, light, cyberpunk)."""
-    # Placeholder: Set theme
-    return {
-        'status': 'ok',
-        'theme': theme,
-        'set': True
-    }
+    """Get environment information."""
+    try:
+        return {
+            'status': 'not_implemented',
+            'message': 'Environment info requires Unity integration',
+            'environment_id': environment_id
+        }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
 
 
 @safe
-def set_graph_layout_algorithm(
+def set_theme(
+    theme_id: str,
+    tool_context: ToolContext
+) -> dict:
+    """Set visualization theme."""
+    try:
+        return {
+            'status': 'not_implemented',
+            'message': 'Theme setting requires Unity integration',
+            'theme_id': theme_id
+        }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
+
+
+@safe
+def set_layout_algorithm(
     algorithm: str,
-    visualization_id: str,
     tool_context: ToolContext
 ) -> dict:
-    """Set the graph layout algorithm."""
-    # Placeholder: Set layout algorithm
-    return {
-        'status': 'ok',
-        'algorithm': algorithm,
-        'visualization_id': visualization_id,
-        'set': True,
-        'rearranged': True
-    }
+    """Set graph layout algorithm."""
+    try:
+        from .visualization_spatial_tools import calculate_graph_layout
+        return calculate_graph_layout('default', tool_context, algorithm)
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
 
 
 @safe
 def set_spatial_scaling(
     scale: float,
-    visualization_id: str,
     tool_context: ToolContext
 ) -> dict:
-    """Set the spatial scaling of a visualization."""
-    # Placeholder: Set spatial scaling
-    return {
-        'status': 'ok',
-        'scale': scale,
-        'visualization_id': visualization_id,
-        'set': True
-    }
+    """Set spatial scaling."""
+    try:
+        return {
+            'status': 'not_implemented',
+            'message': 'Spatial scaling requires Unity integration',
+            'scale': scale
+        }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
 
 
 @safe
-def reset_camera_position(tool_context: ToolContext) -> dict:
+def reset_camera(tool_context: ToolContext) -> dict:
     """Reset camera to default position."""
-    # Placeholder: Reset camera
-    return {
-        'status': 'ok',
-        'camera_position': {'x': 0, 'y': 1.5, 'z': -2},
-        'reset': True
-    }
+    try:
+        return {
+            'status': 'not_implemented',
+            'message': 'Camera reset requires Unity integration'
+        }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
 
 
 @safe
 def save_scene_state(
-    scene_id: str,
+    state_id: str,
     tool_context: ToolContext
 ) -> dict:
-    """Save the current scene state."""
-    # Placeholder: Save scene state
-    return {
-        'status': 'ok',
-        'scene_id': scene_id,
-        'saved': True,
-        'timestamp': '2024-01-01T12:00:00Z'
-    }
+    """Save current scene state."""
+    try:
+        return {
+            'status': 'not_implemented',
+            'message': 'Scene state saving requires Unity integration',
+            'state_id': state_id
+        }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
 
 
 @safe
 def load_scene_state(
-    scene_id: str,
+    state_id: str,
     tool_context: ToolContext
 ) -> dict:
     """Load a saved scene state."""
-    # Placeholder: Load scene state
-    return {
-        'status': 'ok',
-        'scene_id': scene_id,
-        'loaded': True
-    }
+    try:
+        return {
+            'status': 'not_implemented',
+            'message': 'Scene state loading requires Unity integration',
+            'state_id': state_id
+        }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
 
 
-# Additional Spatial Navigation Tools
+# Additional VR-specific tools from the 15 missing ones
 
 @safe
 def focus_on_graph_node(
     node_id: str,
-    visualization_id: str,
-    tool_context: ToolContext,
-    animation: str = 'smooth'
+    tool_context: ToolContext
 ) -> dict:
-    """Focus camera on a specific graph node."""
-    # Placeholder: Focus on graph node
-    return {
-        'status': 'ok',
-        'node_id': node_id,
-        'visualization_id': visualization_id,
-        'animation': animation,
-        'focused': True,
-        'camera_position': {'x': 0, 'y': 0, 'z': -3}
-    }
+    """Focus camera on specific graph node."""
+    try:
+        from .visualization_spatial_tools import focus_on_object
+        return focus_on_object(node_id, tool_context)
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
 
 
 @safe
 def set_graph_depth(
-    visualization_id: str,
     depth: int,
     tool_context: ToolContext
 ) -> dict:
-    """Set the depth of graph traversal for visualization."""
-    # Placeholder: Set graph depth
-    return {
-        'status': 'ok',
-        'visualization_id': visualization_id,
-        'depth': depth,
-        'updated': True,
-        'nodes_visible': 50,
-        'edges_visible': 75
-    }
+    """Set graph traversal depth."""
+    try:
+        from .visualization_spatial_tools.py import change_visualization_depth
+        return change_visualization_depth('default', depth, tool_context)
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
 
 
 @safe
 def navigate_to_code_element(
     element_id: str,
-    visualization_id: str,
-    tool_context: ToolContext,
-    animation: str = 'fly'
-) -> dict:
-    """Navigate to a specific code element in the visualization."""
-    # Placeholder: Navigate to code element
-    return {
-        'status': 'ok',
-        'element_id': element_id,
-        'visualization_id': visualization_id,
-        'animation': animation,
-        'navigated': True,
-        'camera_position': {'x': 0, 'y': 0, 'z': -2},
-        'target_position': {'x': 1, 'y': 1, 'z': 0}
-    }
-
-
-@safe
-def set_node_visibility(
-    node_ids: List[str],
-    visibility: bool,
-    visualization_id: str,
     tool_context: ToolContext
 ) -> dict:
-    """Set visibility of specific nodes in the graph."""
-    # Placeholder: Set node visibility
-    return {
-        'status': 'ok',
-        'node_ids': node_ids,
-        'visibility': visibility,
-        'visualization_id': visualization_id,
-        'updated': True,
-        'affected_count': len(node_ids)
-    }
-
-
-@safe
-def set_edge_visibility(
-    edge_ids: List[str],
-    visibility: bool,
-    visualization_id: str,
-    tool_context: ToolContext
-) -> dict:
-    """Set visibility of specific edges in the graph."""
-    # Placeholder: Set edge visibility
-    return {
-        'status': 'ok',
-        'edge_ids': edge_ids,
-        'visibility': visibility,
-        'visualization_id': visualization_id,
-        'updated': True,
-        'affected_count': len(edge_ids)
-    }
-
-
-@safe
-def filter_graph_by_type(
-    node_type: str,
-    visualization_id: str,
-    tool_context: ToolContext
-) -> dict:
-    """Filter graph to show only nodes of a specific type."""
-    # Placeholder: Filter by type
-    return {
-        'status': 'ok',
-        'node_type': node_type,
-        'visualization_id': visualization_id,
-        'filtered': True,
-        'visible_nodes': 25,
-        'hidden_nodes': 25
-    }
-
-
-@safe
-def filter_graph_by_package(
-    package_name: str,
-    visualization_id: str,
-    tool_context: ToolContext
-) -> dict:
-    """Filter graph to show only nodes from a specific package."""
-    # Placeholder: Filter by package
-    return {
-        'status': 'ok',
-        'package_name': package_name,
-        'visualization_id': visualization_id,
-        'filtered': True,
-        'visible_nodes': 15,
-        'hidden_nodes': 35
-    }
-
-
-@safe
-def collapse_node(
-    node_id: str,
-    visualization_id: str,
-    tool_context: ToolContext
-) -> dict:
-    """Collapse a node to hide its children."""
-    # Placeholder: Collapse node
-    return {
-        'status': 'ok',
-        'node_id': node_id,
-        'visualization_id': visualization_id,
-        'collapsed': True,
-        'hidden_children': 5
-    }
-
-
-@safe
-def expand_node(
-    node_id: str,
-    visualization_id: str,
-    tool_context: ToolContext,
-    depth: int = 1
-) -> dict:
-    """Expand a node to show its children."""
-    # Placeholder: Expand node
-    return {
-        'status': 'ok',
-        'node_id': node_id,
-        'visualization_id': visualization_id,
-        'depth': depth,
-        'expanded': True,
-        'shown_children': 5
-    }
-
-
-@safe
-def group_nodes(
-    node_ids: List[str],
-    group_label: str,
-    visualization_id: str,
-    tool_context: ToolContext
-) -> dict:
-    """Group multiple nodes together in the visualization."""
-    # Placeholder: Group nodes
-    return {
-        'status': 'ok',
-        'node_ids': node_ids,
-        'group_label': group_label,
-        'visualization_id': visualization_id,
-        'grouped': True,
-        'group_id': 'group_123'
-    }
-
-
-@safe
-def ungroup_nodes(
-    group_id: str,
-    visualization_id: str,
-    tool_context: ToolContext
-) -> dict:
-    """Ungroup a previously grouped set of nodes."""
-    # Placeholder: Ungroup nodes
-    return {
-        'status': 'ok',
-        'group_id': group_id,
-        'visualization_id': visualization_id,
-        'ungrouped': True,
-        'affected_nodes': 5
-    }
-
-
-@safe
-def set_node_color(
-    node_ids: List[str],
-    color: str,
-    visualization_id: str,
-    tool_context: ToolContext
-) -> dict:
-    """Set the color of specific nodes."""
-    # Placeholder: Set node color
-    return {
-        'status': 'ok',
-        'node_ids': node_ids,
-        'color': color,
-        'visualization_id': visualization_id,
-        'updated': True,
-        'affected_count': len(node_ids)
-    }
-
-
-@safe
-def set_edge_color(
-    edge_ids: List[str],
-    color: str,
-    visualization_id: str,
-    tool_context: ToolContext
-) -> dict:
-    """Set the color of specific edges."""
-    # Placeholder: Set edge color
-    return {
-        'status': 'ok',
-        'edge_ids': edge_ids,
-        'color': color,
-        'visualization_id': visualization_id,
-        'updated': True,
-        'affected_count': len(edge_ids)
-    }
-
-
-@safe
-def set_node_size(
-    node_ids: List[str],
-    size: float,
-    visualization_id: str,
-    tool_context: ToolContext
-) -> dict:
-    """Set the size of specific nodes."""
-    # Placeholder: Set node size
-    return {
-        'status': 'ok',
-        'node_ids': node_ids,
-        'size': size,
-        'visualization_id': visualization_id,
-        'updated': True,
-        'affected_count': len(node_ids)
-    }
-
-
-@safe
-def highlight_path(
-    path: List[str],
-    visualization_id: str,
-    tool_context: ToolContext,
-    highlight_color: str = 'yellow'
-) -> dict:
-    """Highlight a path through the graph."""
-    # Placeholder: Highlight path
-    return {
-        'status': 'ok',
-        'path': path,
-        'visualization_id': visualization_id,
-        'highlight_color': highlight_color,
-        'highlighted': True,
-        'node_count': len(path),
-        'edge_count': len(path) - 1
-    }
+    """Navigate to code elements."""
+    try:
+        from .visualization_spatial_tools import select_code_element
+        return select_code_element(element_id, tool_context)
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }

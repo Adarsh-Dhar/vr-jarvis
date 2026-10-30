@@ -11,178 +11,178 @@ from ._safe import safe
 @safe
 def build_call_graph(scope: str, tool_context: ToolContext) -> dict:
     """Construct function call graphs."""
-    # Placeholder: Build call graph
-    return {
-        'status': 'ok',
-        'scope': scope,
-        'graph': {
-            'nodes': ['func1', 'func2', 'func3'],
-            'edges': [
-                {'from': 'func1', 'to': 'func2', 'type': 'call'},
-                {'from': 'func2', 'to': 'func3', 'type': 'call'}
-            ]
+    try:
+        return {
+            'status': 'not_implemented',
+            'message': 'Call graph construction requires code analysis integration',
+            'scope': scope
         }
-    }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
 
 
 @safe
 def find_callers(function_id: str, tool_context: ToolContext) -> dict:
     """Find functions calling a selected function."""
-    # Placeholder: Find callers
-    return {
-        'status': 'ok',
-        'function_id': function_id,
-        'callers': [
-            {'function': 'caller1', 'file': 'src/a.py', 'line': 10},
-            {'function': 'caller2', 'file': 'src/b.py', 'line': 15}
-        ]
-    }
+    try:
+        from .navigation_tools import find_callers as nav_find_callers
+        return nav_find_callers(function_id, tool_context)
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
 
 
 @safe
 def find_callees(function_id: str, tool_context: ToolContext) -> dict:
     """Find functions called by a selected function."""
-    # Placeholder: Find callees
-    return {
-        'status': 'ok',
-        'function_id': function_id,
-        'callees': [
-            {'function': 'callee1', 'file': 'src/c.py', 'line': 20},
-            {'function': 'callee2', 'file': 'src/d.py', 'line': 25}
-        ]
-    }
+    try:
+        from .navigation_tools import get_call_hierarchy
+        return get_call_hierarchy(function_id, tool_context)
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
 
 
 @safe
 def trace_call_chain(
-    start_function: str,
-    end_function: str,
+    function_id: str,
+    tool_context: ToolContext,
+    depth: int = 3
+) -> dict:
+    """Trace the complete call chain."""
+    try:
+        from .navigation_tools import get_call_hierarchy
+        return get_call_hierarchy(function_id, tool_context)
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
+
+
+@safe
+def find_indirect_callers(
+    function_id: str,
     tool_context: ToolContext
 ) -> dict:
-    """Follow a chain of function calls."""
-    # Placeholder: Trace call chain
-    return {
-        'status': 'ok',
-        'start_function': start_function,
-        'end_function': end_function,
-        'chain': [
-            'func_a',
-            'func_b',
-            'func_c',
-            'func_d'
-        ]
-    }
-
-
-@safe
-def find_indirect_callers(function_id: str, depth: int, tool_context: ToolContext) -> dict:
-    """Find transitive callers."""
-    # Placeholder: Find indirect callers
-    return {
-        'status': 'ok',
-        'function_id': function_id,
-        'depth': depth,
-        'indirect_callers': [
-            {'function': 'indirect1', 'path': ['indirect1', 'direct1', 'target']},
-            {'function': 'indirect2', 'path': ['indirect2', 'direct2', 'target']}
-        ]
-    }
-
-
-@safe
-def build_dependency_graph(scope: str, tool_context: ToolContext) -> dict:
-    """Construct dependency graphs."""
-    # Placeholder: Build dependency graph
-    return {
-        'status': 'ok',
-        'scope': scope,
-        'graph': {
-            'nodes': ['module1', 'module2', 'module3'],
-            'edges': [
-                {'from': 'module1', 'to': 'module2', 'type': 'import'},
-                {'from': 'module2', 'to': 'module3', 'type': 'import'}
-            ]
+    """Find functions indirectly calling a selected function."""
+    try:
+        return {
+            'status': 'not_implemented',
+            'message': 'Indirect caller analysis requires call graph construction',
+            'function_id': function_id
         }
-    }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
 
 
 @safe
-def find_dependents(component_id: str, tool_context: ToolContext) -> dict:
-    """Find components depending on a selected component."""
-    # Placeholder: Find dependents
-    return {
-        'status': 'ok',
-        'component_id': component_id,
-        'dependents': [
-            {'component': 'dependent1', 'type': 'module'},
-            {'component': 'dependent2', 'type': 'service'}
-        ]
-    }
+def build_dependency_graph(
+    repository_path: str,
+    tool_context: ToolContext
+) -> dict:
+    """Build module dependency graphs."""
+    try:
+        from .analysis_tools import analyze_dependencies
+        return analyze_dependencies(repository_path, tool_context)
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
+
+
+@safe
+def find_downstream_dependencies(
+    module_id: str,
+    tool_context: ToolContext
+) -> dict:
+    """Find modules depending on a selected module."""
+    try:
+        return {
+            'status': 'not_implemented',
+            'message': 'Downstream dependency analysis requires dependency graph',
+            'module_id': module_id
+        }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
 
 
 @safe
 def find_shared_dependencies(
-    component_ids: List[str],
+    module_ids: List[str],
     tool_context: ToolContext
 ) -> dict:
-    """Find components using the same dependencies."""
-    # Placeholder: Find shared dependencies
-    return {
-        'status': 'ok',
-        'component_ids': component_ids,
-        'shared_dependencies': [
-            {'dependency': 'requests', 'used_by': ['comp1', 'comp2']},
-            {'dependency': 'numpy', 'used_by': ['comp1', 'comp3']}
-        ]
-    }
+    """Find dependencies shared by multiple modules."""
+    try:
+        return {
+            'status': 'not_implemented',
+            'message': 'Shared dependency analysis requires dependency graph',
+            'module_ids': module_ids
+        }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
 
 
 @safe
 def build_reference_graph(scope: str, tool_context: ToolContext) -> dict:
     """Construct reference relationships."""
-    # Placeholder: Build reference graph
-    return {
-        'status': 'ok',
-        'scope': scope,
-        'graph': {
-            'nodes': ['var1', 'var2', 'var3'],
-            'edges': [
-                {'from': 'var1', 'to': 'var2', 'type': 'reference'},
-                {'from': 'var2', 'to': 'var3', 'type': 'reference'}
-            ]
+    try:
+        return {
+            'status': 'not_implemented',
+            'message': 'Reference graph construction requires code analysis',
+            'scope': scope
         }
-    }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
 
 
 @safe
 def build_class_relationship_graph(scope: str, tool_context: ToolContext) -> dict:
     """Map inheritance and composition."""
-    # Placeholder: Build class relationship graph
-    return {
-        'status': 'ok',
-        'scope': scope,
-        'graph': {
-            'nodes': ['BaseClass', 'DerivedClass'],
-            'edges': [
-                {'from': 'DerivedClass', 'to': 'BaseClass', 'type': 'inherits'},
-                {'from': 'DerivedClass', 'to': 'Component', 'type': 'composes'}
-            ]
+    try:
+        from .navigation_tools import get_type_hierarchy
+        return get_type_hierarchy(scope, tool_context)
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
         }
-    }
 
 
 @safe
 def find_interface_implementations(interface_id: str, tool_context: ToolContext) -> dict:
     """Find implementations of an interface."""
-    # Placeholder: Find implementations
-    return {
-        'status': 'ok',
-        'interface_id': interface_id,
-        'implementations': [
-            {'class': 'Impl1', 'file': 'src/impl1.py'},
-            {'class': 'Impl2', 'file': 'src/impl2.py'}
-        ]
-    }
+    try:
+        return {
+            'status': 'not_implemented',
+            'message': 'Interface implementation finding requires code analysis',
+            'interface_id': interface_id
+        }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
 
 
 @safe
@@ -191,15 +191,17 @@ def trace_cross_module_relationships(
     tool_context: ToolContext
 ) -> dict:
     """Follow relationships between modules."""
-    # Placeholder: Trace cross-module relationships
-    return {
-        'status': 'ok',
-        'module_id': module_id,
-        'relationships': [
-            {'target_module': 'module2', 'type': 'import', 'symbols': ['func1']},
-            {'target_module': 'module3', 'type': 'dependency', 'symbols': ['Class1']}
-        ]
-    }
+    try:
+        return {
+            'status': 'not_implemented',
+            'message': 'Cross-module relationship tracing requires dependency analysis',
+            'module_id': module_id
+        }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
 
 
 @safe
@@ -208,43 +210,49 @@ def trace_cross_service_relationships(
     tool_context: ToolContext
 ) -> dict:
     """Follow relationships between services."""
-    # Placeholder: Trace cross-service relationships
-    return {
-        'status': 'ok',
-        'service_id': service_id,
-        'relationships': [
-            {'target_service': 'auth-service', 'type': 'api_call', 'endpoint': '/verify'},
-            {'target_service': 'data-service', 'type': 'api_call', 'endpoint': '/query'}
-        ]
-    }
+    try:
+        return {
+            'status': 'not_implemented',
+            'message': 'Cross-service relationship tracing requires runtime tracing',
+            'service_id': service_id
+        }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
 
 
 @safe
 def find_circular_dependencies(scope: str, tool_context: ToolContext) -> dict:
     """Detect dependency cycles."""
-    # Placeholder: Find circular dependencies
-    return {
-        'status': 'ok',
-        'scope': scope,
-        'cycles': [
-            {'cycle': ['module1', 'module2', 'module3', 'module1'], 'length': 3}
-        ]
-    }
+    try:
+        return {
+            'status': 'not_implemented',
+            'message': 'Circular dependency detection requires dependency graph analysis',
+            'scope': scope
+        }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
 
 
 @safe
 def analyze_architecture_boundaries(scope: str, tool_context: ToolContext) -> dict:
     """Identify architectural boundaries."""
-    # Placeholder: Analyze boundaries
-    return {
-        'status': 'ok',
-        'scope': scope,
-        'boundaries': [
-            {'name': 'frontend', 'modules': ['ui', 'components']},
-            {'name': 'backend', 'modules': ['api', 'services']},
-            {'name': 'database', 'modules': ['models', 'repositories']}
-        ]
-    }
+    try:
+        return {
+            'status': 'not_implemented',
+            'message': 'Architecture boundary analysis requires module analysis',
+            'scope': scope
+        }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
 
 
 @safe
@@ -253,15 +261,17 @@ def calculate_change_impact(
     tool_context: ToolContext
 ) -> dict:
     """Estimate which components are affected by a change."""
-    # Placeholder: Calculate change impact
-    return {
-        'status': 'ok',
-        'element_id': element_id,
-        'affected_components': [
-            {'component': 'comp1', 'impact': 'high', 'reason': 'direct dependency'},
-            {'component': 'comp2', 'impact': 'medium', 'reason': 'indirect dependency'}
-        ]
-    }
+    try:
+        return {
+            'status': 'not_implemented',
+            'message': 'Change impact calculation requires dependency graph',
+            'element_id': element_id
+        }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
 
 
 @safe
@@ -271,13 +281,31 @@ def find_all_paths_between_symbols(
     tool_context: ToolContext
 ) -> dict:
     """Find paths connecting two code elements."""
-    # Placeholder: Find all paths
-    return {
-        'status': 'ok',
-        'from_id': from_id,
-        'to_id': to_id,
-        'paths': [
-            {'path': ['a', 'b', 'c'], 'length': 3},
-            {'path': ['a', 'd', 'c'], 'length': 3}
-        ]
-    }
+    try:
+        return {
+            'status': 'not_implemented',
+            'message': 'Path finding requires graph analysis',
+            'from_id': from_id,
+            'to_id': to_id
+        }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
+
+
+@safe
+def find_dependents(component_id: str, tool_context: ToolContext) -> dict:
+    """Find components depending on a selected component."""
+    try:
+        return {
+            'status': 'not_implemented',
+            'message': 'Dependent finding requires dependency graph',
+            'component_id': component_id
+        }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }

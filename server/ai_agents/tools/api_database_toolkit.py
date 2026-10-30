@@ -4,6 +4,8 @@ Important for understanding full-stack applications.
 """
 
 from typing import Optional, List, Dict, Any
+from pathlib import Path
+import json
 from google.adk.tools import ToolContext
 from ._safe import safe
 
@@ -16,16 +18,21 @@ def discover_api_endpoints(
     tool_context: ToolContext
 ) -> dict:
     """Find application endpoints."""
-    # Placeholder: Discover API endpoints
-    return {
-        'status': 'ok',
-        'repository_path': repository_path,
-        'endpoints': [
-            {'path': '/api/users', 'method': 'GET', 'handler': 'get_users'},
-            {'path': '/api/users', 'method': 'POST', 'handler': 'create_user'},
-            {'path': '/api/users/:id', 'method': 'PUT', 'handler': 'update_user'}
-        ]
-    }
+    try:
+        path = Path(repository_path)
+        if not path.is_absolute():
+            path = Path.cwd() / path
+        
+        return {
+            'status': 'not_implemented',
+            'message': 'API endpoint discovery requires framework adapter integration',
+            'repository_path': repository_path
+        }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
 
 
 @safe
@@ -35,21 +42,102 @@ def inspect_api_schema(
     schema_type: str = 'openapi'
 ) -> dict:
     """Read OpenAPI, GraphQL and other API schemas."""
-    # Placeholder: Inspect API schema
-    return {
-        'status': 'ok',
-        'schema_path': schema_path,
-        'schema_type': schema_type,
-        'schema': {
-            'version': '3.0.0',
-            'paths': {
-                '/api/users': {
-                    'get': {'summary': 'Get users'},
-                    'post': {'summary': 'Create user'}
-                }
+    try:
+        path = Path(schema_path)
+        if not path.is_absolute():
+            path = Path.cwd() / path
+        
+        if not path.exists():
+            return {
+                'status': 'error',
+                'error': f'Schema file not found: {schema_path}'
             }
+        
+        content = path.read_text(encoding='utf-8')
+        
+        if schema_type == 'openapi':
+            try:
+                schema = json.loads(content)
+                return {
+                    'status': 'ok',
+                    'schema_path': str(path),
+                    'schema_type': schema_type,
+                    'schema': schema
+                }
+            except json.JSONDecodeError:
+                return {
+                    'status': 'error',
+                    'error': 'Invalid JSON schema'
+                }
+        
+        return {
+            'status': 'not_implemented',
+            'message': f'Schema parsing for {schema_type} requires specific integration',
+            'schema_path': str(path),
+            'schema_type': schema_type
         }
-    }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
+
+
+@safe
+def analyze_api_contract(
+    endpoint: str,
+    tool_context: ToolContext
+) -> dict:
+    """Analyze API contract (request/response)."""
+    try:
+        return {
+            'status': 'not_implemented',
+            'message': 'API contract analysis requires runtime integration or schema inspection',
+            'endpoint': endpoint
+        }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
+
+
+@safe
+def trace_api_call(
+    endpoint: str,
+    tool_context: ToolContext
+) -> dict:
+    """Trace an API call through the application."""
+    try:
+        return {
+            'status': 'not_implemented',
+            'message': 'API call tracing requires runtime instrumentation',
+            'endpoint': endpoint
+        }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
+
+
+@safe
+def analyze_api_security(
+    endpoint: str,
+    tool_context: ToolContext
+) -> dict:
+    """Analyze API security (auth, rate limiting, etc.)."""
+    try:
+        return {
+            'status': 'not_implemented',
+            'message': 'API security analysis requires framework adapter integration',
+            'endpoint': endpoint
+        }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
 
 
 @safe
@@ -57,16 +145,18 @@ def inspect_http_routes(
     repository_path: str,
     tool_context: ToolContext
 ) -> dict:
-    """Understand route definitions."""
-    # Placeholder: Inspect HTTP routes
-    return {
-        'status': 'ok',
-        'repository_path': repository_path,
-        'routes': [
-            {'path': '/', 'handler': 'home_controller.index', 'middleware': ['auth']},
-            {'path': '/api/*', 'handler': 'api_controller', 'middleware': ['cors', 'auth']}
-        ]
-    }
+    """Inspect HTTP routes."""
+    try:
+        return {
+            'status': 'not_implemented',
+            'message': 'HTTP route inspection requires framework adapter integration',
+            'repository_path': repository_path
+        }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
 
 
 @safe
@@ -74,182 +164,277 @@ def trace_request_lifecycle(
     endpoint: str,
     tool_context: ToolContext
 ) -> dict:
-    """Follow a request through the application."""
-    # Placeholder: Trace request lifecycle
-    return {
-        'status': 'ok',
-        'endpoint': endpoint,
-        'lifecycle': [
-            {'step': 1, 'component': 'middleware', 'action': 'authentication'},
-            {'step': 2, 'component': 'middleware', 'action': 'validation'},
-            {'step': 3, 'component': 'controller', 'action': 'handle_request'},
-            {'step': 4, 'component': 'service', 'action': 'process_logic'},
-            {'step': 5, 'component': 'database', 'action': 'query'},
-            {'step': 6, 'component': 'response', 'action': 'serialize'}
-        ]
-    }
-
-
-@safe
-def inspect_request_middleware(
-    repository_path: str,
-    tool_context: ToolContext
-) -> dict:
-    """Understand middleware execution."""
-    # Placeholder: Inspect middleware
-    return {
-        'status': 'ok',
-        'repository_path': repository_path,
-        'middleware': [
-            {'name': 'auth', 'position': 'before', 'config': {...}},
-            {'name': 'cors', 'position': 'before', 'config': {...}},
-            {'name': 'logging', 'position': 'after', 'config': {...}}
-        ]
-    }
-
-
-@safe
-def inspect_api_authentication(
-    repository_path: str,
-    tool_context: ToolContext
-) -> dict:
-    """Understand API authentication."""
-    # Placeholder: Inspect authentication
-    return {
-        'status': 'ok',
-        'repository_path': repository_path,
-        'authentication': {
-            'mechanism': 'jwt',
-            'token_location': 'header',
-            'validation_endpoint': '/auth/validate'
+    """Trace request lifecycle."""
+    try:
+        return {
+            'status': 'not_implemented',
+            'message': 'Request lifecycle tracing requires runtime instrumentation',
+            'endpoint': endpoint
         }
-    }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
 
 
 @safe
-def inspect_api_authorization(
+def inspect_middleware(
     repository_path: str,
     tool_context: ToolContext
 ) -> dict:
-    """Understand API access controls."""
-    # Placeholder: Inspect authorization
-    return {
-        'status': 'ok',
-        'repository_path': repository_path,
-        'authorization': {
-            'mechanism': 'rbac',
-            'roles': ['admin', 'user', 'guest'],
-            'permissions': {
-                'admin': ['read', 'write', 'delete'],
-                'user': ['read', 'write'],
-                'guest': ['read']
-            }
+    """Inspect middleware."""
+    try:
+        return {
+            'status': 'not_implemented',
+            'message': 'Middleware inspection requires framework adapter integration',
+            'repository_path': repository_path
         }
-    }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
+
+
+@safe
+def inspect_authentication(
+    repository_path: str,
+    tool_context: ToolContext
+) -> dict:
+    """Inspect authentication."""
+    try:
+        return {
+            'status': 'not_implemented',
+            'message': 'Authentication inspection requires framework adapter integration',
+            'repository_path': repository_path
+        }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
+
+
+@safe
+def inspect_authorization(
+    repository_path: str,
+    tool_context: ToolContext
+) -> dict:
+    """Inspect authorization."""
+    try:
+        return {
+            'status': 'not_implemented',
+            'message': 'Authorization inspection requires framework adapter integration',
+            'repository_path': repository_path
+        }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
 
 
 # Database Intelligence Tools
 
 @safe
-def inspect_database_schema(
-    schema_path: str,
-    tool_context: ToolContext,
-    database_type: str = 'postgresql'
+def discover_database_schema(
+    repository_path: str,
+    tool_context: ToolContext
 ) -> dict:
-    """Read database schemas."""
-    # Placeholder: Inspect database schema
-    return {
-        'status': 'ok',
-        'schema_path': schema_path,
-        'database_type': database_type,
-        'schema': {
-            'tables': [
-                {'name': 'users', 'columns': ['id', 'name', 'email']},
-                {'name': 'posts', 'columns': ['id', 'user_id', 'title']}
-            ]
+    """Discover database schema."""
+    try:
+        path = Path(repository_path)
+        if not path.is_absolute():
+            path = Path.cwd() / path
+        
+        return {
+            'status': 'not_implemented',
+            'message': 'Database schema discovery requires ORM adapter integration',
+            'repository_path': repository_path
         }
-    }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
 
 
 @safe
-def inspect_database_tables(
-    schema_path: str,
+def inspect_database_connection(
+    connection_string: str,
     tool_context: ToolContext
 ) -> dict:
-    """Inspect table structures."""
-    # Placeholder: Inspect tables
-    return {
-        'status': 'ok',
-        'schema_path': schema_path,
-        'tables': [
-            {
-                'name': 'users',
-                'columns': [
-                    {'name': 'id', 'type': 'integer', 'primary_key': True},
-                    {'name': 'name', 'type': 'varchar', 'nullable': False},
-                    {'name': 'email', 'type': 'varchar', 'unique': True}
-                ]
-            }
-        ]
-    }
+    """Inspect database connection configuration."""
+    try:
+        return {
+            'status': 'not_implemented',
+            'message': 'Database connection inspection requires database driver integration',
+            'connection_string': '***masked***'
+        }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
 
 
 @safe
-def inspect_database_columns(
-    table_name: str,
-    schema_path: str,
+def analyze_database_queries(
+    repository_path: str,
     tool_context: ToolContext
 ) -> dict:
-    """Inspect column types and constraints."""
-    # Placeholder: Inspect columns
-    return {
-        'status': 'ok',
-        'table_name': table_name,
-        'columns': [
-            {'name': 'id', 'type': 'integer', 'constraints': ['primary_key', 'not_null']},
-            {'name': 'name', 'type': 'varchar(255)', 'constraints': ['not_null']},
-            {'name': 'email', 'type': 'varchar(255)', 'constraints': ['unique', 'not_null']}
-        ]
-    }
+    """Analyze database queries."""
+    try:
+        return {
+            'status': 'not_implemented',
+            'message': 'Database query analysis requires SQL parser integration',
+            'repository_path': repository_path
+        }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
 
 
 @safe
-def inspect_database_indexes(
-    schema_path: str,
+def trace_database_operation(
+    query_id: str,
     tool_context: ToolContext
 ) -> dict:
-    """Inspect indexes."""
-    # Placeholder: Inspect indexes
-    return {
-        'status': 'ok',
-        'schema_path': schema_path,
-        'indexes': [
-            {'name': 'idx_users_email', 'table': 'users', 'columns': ['email'], 'unique': True},
-            {'name': 'idx_posts_user_id', 'table': 'posts', 'columns': ['user_id'], 'unique': False}
-        ]
-    }
+    """Trace a database operation."""
+    try:
+        return {
+            'status': 'not_implemented',
+            'message': 'Database operation tracing requires runtime instrumentation',
+            'query_id': query_id
+        }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
 
 
 @safe
-def inspect_database_foreign_keys(
-    schema_path: str,
+def analyze_database_performance(
+    connection_string: str,
     tool_context: ToolContext
 ) -> dict:
-    """Understand table relationships."""
-    # Placeholder: Inspect foreign keys
-    return {
-        'status': 'ok',
-        'schema_path': schema_path,
-        'foreign_keys': [
-            {
-                'from_table': 'posts',
-                'from_column': 'user_id',
-                'to_table': 'users',
-                'to_column': 'id',
-                'on_delete': 'cascade'
-            }
-        ]
-    }
+    """Analyze database performance."""
+    try:
+        return {
+            'status': 'not_implemented',
+            'message': 'Database performance analysis requires database integration',
+            'connection_string': '***masked***'
+        }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
+
+
+@safe
+def inspect_database_schema(
+    connection_string: str,
+    tool_context: ToolContext
+) -> dict:
+    """Inspect database schema."""
+    try:
+        return {
+            'status': 'not_implemented',
+            'message': 'Database schema inspection requires database driver integration',
+            'connection_string': '***masked***'
+        }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
+
+
+@safe
+def inspect_tables(
+    connection_string: str,
+    tool_context: ToolContext
+) -> dict:
+    """Inspect database tables."""
+    try:
+        return {
+            'status': 'not_implemented',
+            'message': 'Table inspection requires database driver integration',
+            'connection_string': '***masked***'
+        }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
+
+
+@safe
+def inspect_columns(
+    connection_string: str,
+    table: str,
+    tool_context: ToolContext
+) -> dict:
+    """Inspect table columns."""
+    try:
+        return {
+            'status': 'not_implemented',
+            'message': 'Column inspection requires database driver integration',
+            'connection_string': '***masked***',
+            'table': table
+        }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
+
+
+@safe
+def inspect_indexes(
+    connection_string: str,
+    table: str,
+    tool_context: ToolContext
+) -> dict:
+    """Inspect table indexes."""
+    try:
+        return {
+            'status': 'not_implemented',
+            'message': 'Index inspection requires database driver integration',
+            'connection_string': '***masked***',
+            'table': table
+        }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
+
+
+@safe
+def inspect_foreign_keys(
+    connection_string: str,
+    table: str,
+    tool_context: ToolContext
+) -> dict:
+    """Inspect foreign keys."""
+    try:
+        return {
+            'status': 'not_implemented',
+            'message': 'Foreign key inspection requires database driver integration',
+            'connection_string': '***masked***',
+            'table': table
+        }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
 
 
 @safe
@@ -257,87 +442,76 @@ def inspect_sql_queries(
     repository_path: str,
     tool_context: ToolContext
 ) -> dict:
-    """Analyze SQL queries."""
-    # Placeholder: Inspect SQL queries
-    return {
-        'status': 'ok',
-        'repository_path': repository_path,
-        'queries': [
-            {'file': 'src/db.py', 'line': 10, 'query': 'SELECT * FROM users WHERE id = $1', 'type': 'select'},
-            {'file': 'src/db.py', 'line': 20, 'query': 'INSERT INTO posts ...', 'type': 'insert'}
-        ]
-    }
+    """Inspect SQL queries."""
+    try:
+        return {
+            'status': 'not_implemented',
+            'message': 'SQL query inspection requires SQL parser integration',
+            'repository_path': repository_path
+        }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
 
 
 @safe
 def explain_query_plan(
     query: str,
-    tool_context: ToolContext,
-    database_type: str = 'postgresql'
+    connection_string: str,
+    tool_context: ToolContext
 ) -> dict:
-    """Understand database query execution plans."""
-    # Placeholder: Explain query plan
-    return {
-        'status': 'ok',
-        'query': query,
-        'database_type': database_type,
-        'plan': {
-            'steps': [
-                {'operation': 'Index Scan', 'index': 'idx_users_email', 'cost': 0.5},
-                {'operation': 'Filter', 'condition': 'email = ?', 'cost': 0.1}
-            ],
-            'total_cost': 0.6
+    """Explain query execution plan."""
+    try:
+        return {
+            'status': 'not_implemented',
+            'message': 'Query plan explanation requires database driver integration',
+            'connection_string': '***masked***'
         }
-    }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
 
 
 @safe
 def inspect_orm_models(
     repository_path: str,
-    tool_context: ToolContext,
-    orm: str = 'auto'
+    tool_context: ToolContext
 ) -> dict:
-    """Understand ORM models."""
-    # Placeholder: Inspect ORM models
-    return {
-        'status': 'ok',
-        'repository_path': repository_path,
-        'orm': orm,
-        'models': [
-            {
-                'name': 'User',
-                'table': 'users',
-                'fields': [
-                    {'name': 'id', 'type': 'Integer', 'primary_key': True},
-                    {'name': 'name', 'type': 'String'},
-                    {'name': 'email', 'type': 'String'}
-                ]
-            }
-        ]
-    }
+    """Inspect ORM models."""
+    try:
+        return {
+            'status': 'not_implemented',
+            'message': 'ORM model inspection requires framework adapter integration',
+            'repository_path': repository_path
+        }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
 
 
 @safe
 def inspect_orm_relationships(
     repository_path: str,
-    tool_context: ToolContext,
-    orm: str = 'auto'
+    tool_context: ToolContext
 ) -> dict:
-    """Understand ORM associations."""
-    # Placeholder: Inspect ORM relationships
-    return {
-        'status': 'ok',
-        'repository_path': repository_path,
-        'orm': orm,
-        'relationships': [
-            {
-                'from_model': 'User',
-                'to_model': 'Post',
-                'relationship_type': 'one_to_many',
-                'foreign_key': 'user_id'
-            }
-        ]
-    }
+    """Inspect ORM relationships."""
+    try:
+        return {
+            'status': 'not_implemented',
+            'message': 'ORM relationship inspection requires framework adapter integration',
+            'repository_path': repository_path
+        }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
 
 
 @safe
@@ -345,66 +519,72 @@ def trace_transaction(
     transaction_id: str,
     tool_context: ToolContext
 ) -> dict:
-    """Follow database transactions."""
-    # Placeholder: Trace transaction
-    return {
-        'status': 'ok',
-        'transaction_id': transaction_id,
-        'operations': [
-            {'operation': 'BEGIN', 'timestamp': '12:00:00'},
-            {'operation': 'INSERT INTO users', 'timestamp': '12:00:01'},
-            {'operation': 'INSERT INTO posts', 'timestamp': '12:00:02'},
-            {'operation': 'COMMIT', 'timestamp': '12:00:03'}
-        ]
-    }
+    """Trace database transaction."""
+    try:
+        return {
+            'status': 'not_implemented',
+            'message': 'Transaction tracing requires runtime instrumentation',
+            'transaction_id': transaction_id
+        }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
 
 
 @safe
-def trace_database_migrations(
+def trace_migrations(
     repository_path: str,
     tool_context: ToolContext
 ) -> dict:
-    """Understand schema changes."""
-    # Placeholder: Trace migrations
-    return {
-        'status': 'ok',
-        'repository_path': repository_path,
-        'migrations': [
-            {'version': '001', 'name': 'create_users', 'timestamp': '2024-01-01'},
-            {'version': '002', 'name': 'add_email_index', 'timestamp': '2024-01-02'},
-            {'version': '003', 'name': 'create_posts', 'timestamp': '2024-01-03'}
-        ]
-    }
+    """Trace database migrations."""
+    try:
+        return {
+            'status': 'not_implemented',
+            'message': 'Migration tracing requires migration tool integration',
+            'repository_path': repository_path
+        }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
 
 
 @safe
 def map_api_to_database(
-    endpoint: str,
+    repository_path: str,
     tool_context: ToolContext
 ) -> dict:
-    """Connect endpoints to database operations."""
-    # Placeholder: Map API to database
-    return {
-        'status': 'ok',
-        'endpoint': endpoint,
-        'database_operations': [
-            {'operation': 'SELECT', 'table': 'users', 'triggered_by': 'GET /api/users'},
-            {'operation': 'INSERT', 'table': 'users', 'triggered_by': 'POST /api/users'}
-        ]
-    }
+    """Map API endpoints to database operations."""
+    try:
+        return {
+            'status': 'not_implemented',
+            'message': 'API-to-database mapping requires runtime tracing',
+            'repository_path': repository_path
+        }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
 
 
 @safe
 def visualize_database_schema(
-    schema_path: str,
+    connection_string: str,
     tool_context: ToolContext
 ) -> dict:
-    """Construct database relationship visualizations."""
-    # Placeholder: Visualize database schema
-    return {
-        'status': 'ok',
-        'schema_path': schema_path,
-        'visualization_id': 'viz_db_schema_123',
-        'tables': 8,
-        'relationships': 12
-    }
+    """Visualize database schema."""
+    try:
+        return {
+            'status': 'not_implemented',
+            'message': 'Database schema visualization requires database driver integration',
+            'connection_string': '***masked***'
+        }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
