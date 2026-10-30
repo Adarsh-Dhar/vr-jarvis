@@ -1,0 +1,38 @@
+test_id: REL-CALL-004
+name: Find callers with recursive functions
+category: relationship_intelligence
+tool: find_callers
+description: >
+  Verify correct handling of recursive function
+  relationships without infinite loops.
+
+fixture:
+  repository: simple-python
+  target_symbol: recursive_a
+
+input:
+  depth: 1
+
+expected:
+  status: ok
+  callers:
+    - name: recursive_b
+      file: main.py
+      line: 45
+  is_recursive: true
+
+must_not:
+  - infinite_loop
+  - stack_overflow
+  - duplicate_callers
+
+checks:
+  - correct_callers
+  - recursion_detected
+  - no_infinite_loop
+  - valid_response_schema
+
+performance:
+  max_duration_ms: 2000
+
+severity: high

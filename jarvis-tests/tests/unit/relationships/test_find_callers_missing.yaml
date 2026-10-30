@@ -1,0 +1,34 @@
+test_id: REL-CALL-003
+name: Find callers for missing function
+category: relationship_intelligence
+tool: find_callers
+description: >
+  Verify correct error handling when requesting
+  callers for a non-existent function.
+
+fixture:
+  repository: simple-python
+  target_symbol: does_not_exist
+
+input:
+  depth: 1
+
+expected:
+  status: error
+  error_type: unknown_symbol
+
+must_not:
+  - crash
+  - empty_callers_list
+  - fabricated_callers
+
+checks:
+  - proper_error_handling
+  - meaningful_error_message
+  - no_crash
+  - valid_response_schema
+
+performance:
+  max_duration_ms: 1000
+
+severity: critical

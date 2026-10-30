@@ -1,0 +1,36 @@
+test_id: REL-CALL-005
+name: Find callers across package boundaries
+category: relationship_intelligence
+tool: find_callers
+description: >
+  Verify correct identification of callers that
+  span across different packages/modules.
+
+fixture:
+  repository: simple-python
+  target_symbol: helper_function
+
+input:
+  depth: 1
+
+expected:
+  status: ok
+  callers:
+    - name: cross_package_caller
+      file: main.py
+      line: 104
+      cross_package: true
+
+must_not:
+  - false_positive_callers
+
+checks:
+  - correct_callers
+  - cross_package_detection
+  - correct_source_locations
+  - valid_response_schema
+
+performance:
+  max_duration_ms: 2000
+
+severity: high

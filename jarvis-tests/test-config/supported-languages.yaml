@@ -1,0 +1,281 @@
+# JARVIS Supported Languages Configuration
+# Lists all supported languages with their testing status
+
+languages:
+  python:
+    name: Python
+    versions:
+      - "3.8"
+      - "3.9"
+      - "3.10"
+      - "3.11"
+    testing_status: validated
+    parser: tree-sitter-python
+    features:
+      - ast_parsing
+      - type_checking
+      - symbol_resolution
+      - decorators
+      - async
+      - imports
+      - dynamic_references
+    test_coverage: 0.95
+
+  javascript:
+    name: JavaScript
+    versions:
+      - ES2020
+      - ES2021
+      - ES2022
+    testing_status: validated
+    parser: tree-sitter-javascript
+    features:
+      - ast_parsing
+      - closures
+      - prototypes
+      - modules
+      - promises
+    test_coverage: 0.90
+
+  typescript:
+    name: TypeScript
+    versions:
+      - "4.9"
+      - "5.0"
+    testing_status: validated
+    parser: tree-sitter-typescript
+    features:
+      - type_checker
+      - interfaces
+      - generics
+      - decorators
+      - types
+    test_coverage: 0.90
+
+  java:
+    name: Java
+    versions:
+      - "11"
+      - "17"
+      - "21"
+    testing_status: experimental
+    parser: tree-sitter-java
+    features:
+      - compiler_model
+      - annotations
+      - inheritance
+      - reflection
+    test_coverage: 0.60
+
+  c:
+    name: C
+    versions:
+      - C11
+      - C17
+    testing_status: experimental
+    parser: tree-sitter-c
+    features:
+      - preprocessor
+      - ast
+      - pointers
+      - memory
+      - symbols
+    test_coverage: 0.50
+
+  cpp:
+    name: C++
+    versions:
+      - C++14
+      - C++17
+      - C++20
+    testing_status: experimental
+    parser: tree-sitter-cpp
+    features:
+      - templates
+      - macros
+      - inheritance
+      - pointers
+      - memory
+    test_coverage: 0.50
+
+  csharp:
+    name: C#
+    versions:
+      - C# 10
+      - C# 11
+    testing_status: experimental
+    parser: tree-sitter-csharp
+    features:
+      - roslyn_semantic_model
+      - linq
+      - delegates
+      - reflection
+    test_coverage: 0.50
+
+  go:
+    name: Go
+    versions:
+      - "1.19"
+      - "1.20"
+      - "1.21"
+    testing_status: experimental
+    parser: tree-sitter-go
+    features:
+      - ast
+      - interfaces
+      - goroutines
+      - channels
+      - modules
+    test_coverage: 0.50
+
+  rust:
+    name: Rust
+    versions:
+      - "1.70"
+      - "1.71"
+    testing_status: experimental
+    parser: tree-sitter-rust
+    features:
+      - traits
+      - ownership
+      - lifetimes
+      - macros
+      - async
+    test_coverage: 0.50
+
+  php:
+    name: PHP
+    versions:
+      - "8.1"
+      - "8.2"
+    testing_status: untested
+    parser: tree-sitter-php
+    features:
+      - namespaces
+      - traits
+      - inheritance
+      - composer_dependencies
+    test_coverage: 0.00
+
+  ruby:
+    name: Ruby
+    versions:
+      - "3.0"
+      - "3.1"
+      - "3.2"
+    testing_status: untested
+    parser: tree-sitter-ruby
+    features:
+      - metaprogramming
+      - blocks
+      - modules
+      - dynamic_dispatch
+    test_coverage: 0.00
+
+  swift:
+    name: Swift
+    versions:
+      - "5.7"
+      - "5.8"
+      - "5.9"
+    testing_status: untested
+    parser: tree-sitter-swift
+    features:
+      - protocols
+      - generics
+      - actors
+      - concurrency
+    test_coverage: 0.00
+
+  kotlin:
+    name: Kotlin
+    versions:
+      - "1.8"
+      - "1.9"
+    testing_status: untested
+    parser: tree-sitter-kotlin
+    features:
+      - coroutines
+      - extensions
+      - nullability
+      - jvm_interoperability
+    test_coverage: 0.00
+
+  dart:
+    name: Dart
+    versions:
+      - "3.0"
+    testing_status: untested
+    parser: tree-sitter-dart
+    features:
+      - types
+      - async
+      - isolates
+      - flutter_relationships
+    test_coverage: 0.00
+
+  sql:
+    name: SQL
+    versions:
+      - SQL:2016
+    testing_status: experimental
+    parser: tree-sitter-sql
+    features:
+      - tables
+      - queries
+      - joins
+      - procedures
+      - triggers
+    test_coverage: 0.40
+
+  solidity:
+    name: Solidity
+    versions:
+      - "0.8.0"
+    testing_status: untested
+    parser: tree-sitter-solidity
+    features:
+      - contracts
+      - events
+      - storage
+      - inheritance
+      - external_calls
+    test_coverage: 0.00
+
+  lua:
+    name: Lua
+    versions:
+      - "5.4"
+    testing_status: untested
+    parser: tree-sitter-lua
+    features:
+      - tables
+      - metatables
+      - modules
+      - dynamic_execution
+    test_coverage: 0.00
+
+  r:
+    name: R
+    versions:
+      - "4.3"
+    testing_status: untested
+    parser: tree-sitter-r
+    features:
+      - functions
+      - environments
+      - data_transformations
+    test_coverage: 0.00
+
+  scala:
+    name: Scala
+    versions:
+      - "2.13"
+      - "3.3"
+    testing_status: untested
+    parser: tree-sitter-scala
+    features:
+      - traits
+      - functional_constructs
+      - jvm_relationships
+    test_coverage: 0.00

@@ -1,0 +1,39 @@
+test_id: REL-CALL-001
+name: Direct function caller discovery
+category: relationship_intelligence
+tool: find_callers
+description: >
+  Verify that the tool identifies all direct
+  callers of a selected function.
+
+fixture:
+  repository: simple-python
+  target_symbol: target
+
+input:
+  depth: 1
+
+expected:
+  status: ok
+  callers:
+    - name: alpha
+      file: main.py
+      line: 6
+    - name: beta
+      file: main.py
+      line: 12
+
+must_not:
+  - gamma
+  - delta
+
+checks:
+  - correct_callers
+  - correct_source_locations
+  - correct_relationship_types
+  - valid_response_schema
+
+performance:
+  max_duration_ms: 2000
+
+severity: critical

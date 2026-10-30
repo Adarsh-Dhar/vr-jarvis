@@ -1,0 +1,42 @@
+test_id: REL-CALLEE-002
+name: Indirect function callee discovery
+category: relationship_intelligence
+tool: find_callees
+description: >
+  Verify that the tool identifies all indirect
+  callees of a selected function with depth > 1.
+
+fixture:
+  repository: simple-python
+  target_symbol: gamma
+
+input:
+  depth: 2
+
+expected:
+  status: ok
+  callees:
+    - name: alpha
+      file: main.py
+      line: 18
+      depth: 1
+    - name: target
+      file: main.py
+      line: 6
+      depth: 2
+      path: [gamma, alpha, target]
+
+must_not:
+  - beta
+  - delta
+
+checks:
+  - correct_callees
+  - correct_depth
+  - correct_paths
+  - valid_response_schema
+
+performance:
+  max_duration_ms: 3000
+
+severity: critical

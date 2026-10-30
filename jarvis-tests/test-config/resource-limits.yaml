@@ -1,0 +1,165 @@
+# JARVIS Resource Limits Configuration
+# Defines resource limits for different test scenarios
+
+resource_limits:
+  unit_tests:
+    max_cpu_percent: 50
+    max_memory_mb: 512
+    max_disk_mb: 100
+    max_network_mbps: 100
+    max_duration_seconds: 60
+    max_concurrent_tests: 10
+
+  integration_tests:
+    max_cpu_percent: 75
+    max_memory_mb: 2048
+    max_disk_mb: 500
+    max_network_mbps: 500
+    max_duration_seconds: 300
+    max_concurrent_tests: 5
+
+  agent_tests:
+    max_cpu_percent: 80
+    max_memory_mb: 4096
+    max_disk_mb: 1000
+    max_network_mbps: 500
+    max_duration_seconds: 600
+    max_concurrent_tests: 3
+
+  multi_agent_tests:
+    max_cpu_percent: 90
+    max_memory_mb: 8192
+    max_disk_mb: 2000
+    max_network_mbps: 1000
+    max_duration_seconds: 1200
+    max_concurrent_tests: 2
+
+  end_to_end_tests:
+    max_cpu_percent: 95
+    max_memory_mb: 16384
+    max_disk_mb: 5000
+    max_network_mbps: 1000
+    max_duration_seconds: 1800
+    max_concurrent_tests: 1
+
+  stress_tests:
+    max_cpu_percent: 100
+    max_memory_mb: 32768
+    max_disk_mb: 10000
+    max_network_mbps: 10000
+    max_duration_seconds: 3600
+    max_concurrent_tests: 1
+
+  load_tests:
+    max_cpu_percent: 100
+    max_memory_mb: 65536
+    max_disk_mb: 20000
+    max_network_mbps: 10000
+    max_duration_seconds: 7200
+    max_concurrent_tests: 1
+
+  chaos_tests:
+    max_cpu_percent: 100
+    max_memory_mb: 32768
+    max_disk_mb: 10000
+    max_network_mbps: 10000
+    max_duration_seconds: 3600
+    max_concurrent_tests: 1
+
+  benchmarks:
+    max_cpu_percent: 100
+    max_memory_mb: 65536
+    max_disk_mb: 20000
+    max_network_mbps: 10000
+    max_duration_seconds: 7200
+    max_concurrent_tests: 1
+
+# Tool-specific limits
+tool_limits:
+  repository_tools:
+    read_file:
+      max_file_size_mb: 10
+      max_timeout_ms: 5000
+    search_code:
+      max_timeout_ms: 10000
+    index_repository:
+      max_repo_size_mb: 1000
+      max_timeout_ms: 300000
+
+  navigation_tools:
+    get_symbol_definition:
+      max_timeout_ms: 5000
+    get_call_hierarchy:
+      max_depth: 10
+      max_timeout_ms: 30000
+
+  analysis_tools:
+    parse_source_code:
+      max_file_size_mb: 5
+      max_timeout_ms: 10000
+    analyze_code_complexity:
+      max_timeout_ms: 15000
+
+  runtime_tools:
+    collect_execution_trace:
+      max_trace_size_mb: 100
+      max_timeout_ms: 60000
+    record_function_calls:
+      max_timeout_ms: 30000
+
+  software_engineering_tools:
+    execute_command:
+      max_timeout_ms: 60000
+    run_build:
+      max_timeout_ms: 600000
+
+  visualization_tools:
+    create_graph:
+      max_nodes: 10000
+      max_edges: 50000
+      max_timeout_ms: 30000
+    calculate_graph_layout:
+      max_nodes: 5000
+      max_timeout_ms: 60000
+
+# Agent-specific limits
+agent_limits:
+  orchestrator:
+    max_concurrent_tasks: 50
+    max_task_duration_seconds: 300
+    max_memory_mb: 2048
+
+  code_understanding:
+    max_analysis_depth: 10
+    max_files_per_analysis: 100
+    max_timeout_ms: 60000
+
+  relationship_intelligence:
+    max_graph_depth: 5
+    max_nodes_analyzed: 1000
+    max_timeout_ms: 120000
+
+  runtime_intelligence:
+    max_trace_size_mb: 500
+    max_events_analyzed: 10000
+    max_timeout_ms: 180000
+
+  debugging_intelligence:
+    max_breakpoints: 100
+    max_stack_depth: 50
+    max_timeout_ms: 300000
+
+  software_engineering:
+    max_files_modified: 50
+    max_patch_size_mb: 10
+    max_timeout_ms: 600000
+
+  testing_verification:
+    max_tests_executed: 1000
+    max_test_duration_seconds: 600
+    max_timeout_ms: 1800000
+
+  visualization_spatial:
+    max_nodes_visualized: 5000
+    max_edges_visualized: 20000
+    max_timeout_ms: 60000

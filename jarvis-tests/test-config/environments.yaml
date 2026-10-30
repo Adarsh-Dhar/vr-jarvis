@@ -1,0 +1,90 @@
+# JARVIS Test Environment Configuration
+# Defines test environments for different testing scenarios
+
+environments:
+  development:
+    name: Development
+    description: Local development environment with relaxed constraints
+    resource_limits:
+      max_cpu: 4
+      max_memory_gb: 8
+      max_disk_gb: 50
+      max_network_mbps: 1000
+    timeout_settings:
+      default_timeout_ms: 30000
+      tool_timeout_ms: 10000
+      agent_timeout_ms: 60000
+    enabled_features:
+      - mock_services
+      - fast_indexing
+      - debug_logging
+
+  testing:
+    name: Testing
+    description: Standard testing environment
+    resource_limits:
+      max_cpu: 8
+      max_memory_gb: 16
+      max_disk_gb: 100
+      max_network_mbps: 1000
+    timeout_settings:
+      default_timeout_ms: 60000
+      tool_timeout_ms: 30000
+      agent_timeout_ms: 120000
+    enabled_features:
+      - real_services
+      - standard_indexing
+      - test_logging
+
+  staging:
+    name: Staging
+    description: Pre-production environment
+    resource_limits:
+      max_cpu: 16
+      max_memory_gb: 32
+      max_disk_gb: 200
+      max_network_mbps: 1000
+    timeout_settings:
+      default_timeout_ms: 120000
+      tool_timeout_ms: 60000
+      agent_timeout_ms: 300000
+    enabled_features:
+      - real_services
+      - production_indexing
+      - minimal_logging
+
+  production:
+    name: Production
+    description: Production-like environment
+    resource_limits:
+      max_cpu: 32
+      max_memory_gb: 64
+      max_disk_gb: 500
+      max_network_mbps: 10000
+    timeout_settings:
+      default_timeout_ms: 300000
+      tool_timeout_ms: 120000
+      agent_timeout_ms: 600000
+    enabled_features:
+      - real_services
+      - production_indexing
+      - production_logging
+
+  stress:
+    name: Stress Testing
+    description: High-load testing environment
+    resource_limits:
+      max_cpu: 64
+      max_memory_gb: 128
+      max_disk_gb: 1000
+      max_network_mbps: 10000
+    timeout_settings:
+      default_timeout_ms: 600000
+      tool_timeout_ms: 300000
+      agent_timeout_ms: 1200000
+    enabled_features:
+      - real_services
+      - production_indexing
+      - performance_logging
+
+default_environment: testing

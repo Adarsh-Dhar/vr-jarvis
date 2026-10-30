@@ -1,0 +1,560 @@
+# JARVIS Supported Frameworks Configuration
+# Lists all supported frameworks with their testing status
+
+frameworks:
+  javascript:
+    react:
+      name: React
+      versions:
+        - "17.0"
+        - "18.0"
+      testing_status: validated
+      features:
+        - hooks
+        - components
+        - jsx
+        - virtual_dom
+      test_coverage: 0.90
+
+    nextjs:
+      name: Next.js
+      versions:
+        - "13.0"
+        - "14.0"
+      testing_status: experimental
+      features:
+        - ssr
+        - routing
+        - api_routes
+      test_coverage: 0.60
+
+    vue:
+      name: Vue
+      versions:
+        - "3.0"
+      testing_status: experimental
+      features:
+        - components
+        - composition_api
+        - directives
+      test_coverage: 0.50
+
+    nuxt:
+      name: Nuxt
+      versions:
+        - "3.0"
+      testing_status: untested
+      features:
+        - ssr
+        - middleware
+        - modules
+      test_coverage: 0.00
+
+    angular:
+      name: Angular
+      versions:
+        - "16.0"
+        - "17.0"
+      testing_status: untested
+      features:
+        - components
+        - services
+        - directives
+      test_coverage: 0.00
+
+    svelte:
+      name: Svelte
+      versions:
+        - "4.0"
+      testing_status: untested
+      features:
+        - components
+        - stores
+        - transitions
+      test_coverage: 0.00
+
+    express:
+      name: Express
+      versions:
+        - "4.18"
+      testing_status: validated
+      features:
+        - routes
+        - middleware
+        - routing
+      test_coverage: 0.85
+
+    nestjs:
+      name: NestJS
+      versions:
+        - "10.0"
+      testing_status: experimental
+      features:
+        - modules
+        - controllers
+        - dependency_injection
+      test_coverage: 0.50
+
+  python:
+    django:
+      name: Django
+      versions:
+        - "4.2"
+      testing_status: experimental
+      features:
+        - models
+        - views
+        - middleware
+      test_coverage: 0.60
+
+    fastapi:
+      name: FastAPI
+      versions:
+        - "0.104"
+      testing_status: experimental
+      features:
+        - routes
+        - dependency_injection
+        - async
+      test_coverage: 0.50
+
+    flask:
+      name: Flask
+      versions:
+        - "3.0"
+      testing_status: experimental
+      features:
+        - routes
+        - blueprints
+        - extensions
+      test_coverage: 0.50
+
+    celery:
+      name: Celery
+      versions:
+        - "5.3"
+      testing_status: untested
+      features:
+        - tasks
+        - workers
+        - beat
+      test_coverage: 0.00
+
+    pytorch:
+      name: PyTorch
+      versions:
+        - "2.1"
+      testing_status: untested
+      features:
+        - tensors
+        - models
+        - autograd
+      test_coverage: 0.00
+
+  java:
+    spring_boot:
+      name: Spring Boot
+      versions:
+        - "3.1"
+      testing_status: experimental
+      features:
+        - controllers
+        - services
+        - repositories
+      test_coverage: 0.50
+
+    spring_security:
+      name: Spring Security
+      versions:
+        - "6.1"
+      testing_status: untested
+      features:
+        - authentication
+        - authorization
+        - csrf
+      test_coverage: 0.00
+
+    hibernate:
+      name: Hibernate
+      versions:
+        - "6.2"
+      testing_status: untested
+      features:
+        - entities
+        - repositories
+        - queries
+      test_coverage: 0.00
+
+    quarkus:
+      name: Quarkus
+      versions:
+        - "3.4"
+      testing_status: untested
+      features:
+        - endpoints
+        - injection
+        - native
+      test_coverage: 0.00
+
+  csharp:
+    aspnet_core:
+      name: ASP.NET Core
+      versions:
+        - "8.0"
+      testing_status: experimental
+      features:
+        - controllers
+        - middleware
+        - dependency_injection
+      test_coverage: 0.50
+
+    entity_framework:
+      name: Entity Framework
+      versions:
+        - "8.0"
+      testing_status: untested
+      features:
+        - dbcontext
+        - entities
+        - linq
+      test_coverage: 0.00
+
+    unity:
+      name: Unity
+      versions:
+        - "2022.3"
+      testing_status: experimental
+      features:
+        - components
+        - scripts
+        - lifecycle
+      test_coverage: 0.40
+
+  cpp:
+    unreal_engine:
+      name: Unreal Engine
+      versions:
+        - "5.3"
+      testing_status: experimental
+      features:
+        - actors
+        - components
+        - blueprints
+      test_coverage: 0.40
+
+    qt:
+      name: Qt
+      versions:
+        - "6.6"
+      testing_status: untested
+      features:
+        - widgets
+        - signals
+        - slots
+      test_coverage: 0.00
+
+    boost:
+      name: Boost
+      versions:
+        - "1.83"
+      testing_status: untested
+      features:
+        - libraries
+        - smart_pointers
+        - containers
+      test_coverage: 0.00
+
+  rust:
+    tokio:
+      name: Tokio
+      versions:
+        - "1.35"
+      testing_status: untested
+      features:
+        - async
+        - runtime
+        - tasks
+      test_coverage: 0.00
+
+    actix:
+      name: Actix
+      versions:
+        - "4.4"
+      testing_status: untested
+      features:
+        - handlers
+        - middleware
+        - extractors
+      test_coverage: 0.00
+
+    axum:
+      name: Axum
+      versions:
+        - "0.7"
+      testing_status: untested
+      features:
+        - handlers
+        - extractors
+        - middleware
+      test_coverage: 0.00
+
+  php:
+    laravel:
+      name: Laravel
+      versions:
+        - "10.0"
+      testing_status: untested
+      features:
+        - controllers
+        - models
+        - middleware
+      test_coverage: 0.00
+
+    symfony:
+      name: Symfony
+      versions:
+        - "6.3"
+      testing_status: untested
+      features:
+        - controllers
+        - services
+        - bundles
+      test_coverage: 0.00
+
+  ruby:
+    rails:
+      name: Rails
+      versions:
+        - "7.1"
+      testing_status: untested
+      features:
+        - controllers
+        - models
+        - views
+      test_coverage: 0.00
+
+    sinatra:
+      name: Sinatra
+      versions:
+        - "3.0"
+      testing_status: untested
+      features:
+        - routes
+        - middleware
+        - helpers
+      test_coverage: 0.00
+
+  go:
+    gin:
+      name: Gin
+      versions:
+        - "1.9"
+      testing_status: untested
+      features:
+        - handlers
+        - middleware
+        - routes
+      test_coverage: 0.00
+
+    echo:
+      name: Echo
+      versions:
+        - "4.11"
+      testing_status: untested
+      features:
+        - handlers
+        - middleware
+        - routes
+      test_coverage: 0.00
+
+    fiber:
+      name: Fiber
+      versions:
+        - "2.48"
+      testing_status: untested
+      features:
+        - handlers
+        - middleware
+        - routes
+      test_coverage: 0.00
+
+  kotlin:
+    ktor:
+      name: Ktor
+      versions:
+        - "2.3"
+      testing_status: untested
+      features:
+        - routes
+        - plugins
+        - content_negotiation
+      test_coverage: 0.00
+
+    spring:
+      name: Spring
+      versions:
+        - "3.1"
+      testing_status: untested
+      features:
+        - controllers
+        - services
+        - repositories
+      test_coverage: 0.00
+
+    android:
+      name: Android
+      versions:
+        - "14.0"
+      testing_status: untested
+      features:
+        - activities
+        - fragments
+        - viewmodels
+      test_coverage: 0.00
+
+  dart:
+    flutter:
+      name: Flutter
+      versions:
+        - "3.16"
+      testing_status: untested
+      features:
+        - widgets
+        - state
+        - navigation
+      test_coverage: 0.00
+
+  swift:
+    swiftui:
+      name: SwiftUI
+      versions:
+        - "5.0"
+      testing_status: untested
+      features:
+        - views
+        - state
+        - previews
+      test_coverage: 0.00
+
+    uikit:
+      name: UIKit
+      versions:
+        - "17.0"
+      testing_status: untested
+      features:
+        - view_controllers
+        - delegates
+        - protocols
+      test_coverage: 0.00
+
+    vapor:
+      name: Vapor
+      versions:
+        - "4.0"
+      testing_status: untested
+      features:
+        - routes
+        - controllers
+        - middleware
+      test_coverage: 0.00
+
+  databases:
+    postgresql:
+      name: PostgreSQL
+      versions:
+        - "16.0"
+      testing_status: experimental
+      features:
+        - tables
+        - indexes
+        - triggers
+      test_coverage: 0.60
+
+    mysql:
+      name: MySQL
+      versions:
+        - "8.0"
+      testing_status: experimental
+      features:
+        - tables
+        - indexes
+        - views
+      test_coverage: 0.50
+
+    mongodb:
+      name: MongoDB
+      versions:
+        - "7.0"
+      testing_status: experimental
+      features:
+        - collections
+        - indexes
+        - aggregation
+      test_coverage: 0.50
+
+    redis:
+      name: Redis
+      versions:
+        - "7.2"
+      testing_status: experimental
+      features:
+        - keys
+        - data_structures
+        - pubsub
+      test_coverage: 0.50
+
+    sqlite:
+      name: SQLite
+      versions:
+        - "3.44"
+      testing_status: validated
+      features:
+        - tables
+        - indexes
+        - triggers
+      test_coverage: 0.85
+
+  infrastructure:
+    docker:
+      name: Docker
+      versions:
+        - "24.0"
+      testing_status: experimental
+      features:
+        - containers
+        - images
+        - networks
+      test_coverage: 0.50
+
+    kubernetes:
+      name: Kubernetes
+      versions:
+        - "1.28"
+      testing_status: experimental
+      features:
+        - pods
+        - services
+        - deployments
+      test_coverage: 0.50
+
+    terraform:
+      name: Terraform
+      versions:
+        - "1.6"
+      testing_status: untested
+      features:
+        - resources
+        - modules
+        - state
+      test_coverage: 0.00
+
+    helm:
+      name: Helm
+      versions:
+        - "3.13"
+      testing_status: untested
+      features:
+        - charts
+        - templates
+        - values
+      test_coverage: 0.00

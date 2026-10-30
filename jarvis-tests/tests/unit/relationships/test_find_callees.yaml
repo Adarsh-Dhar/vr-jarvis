@@ -1,0 +1,36 @@
+test_id: REL-CALLEE-001
+name: Direct function callee discovery
+category: relationship_intelligence
+tool: find_callees
+description: >
+  Verify that the tool identifies all direct
+  callees of a selected function.
+
+fixture:
+  repository: simple-python
+  target_symbol: gamma
+
+input:
+  depth: 1
+
+expected:
+  status: ok
+  callees:
+    - name: alpha
+      file: main.py
+      line: 18
+
+must_not:
+  - target
+  - beta
+
+checks:
+  - correct_callees
+  - correct_source_locations
+  - correct_relationship_types
+  - valid_response_schema
+
+performance:
+  max_duration_ms: 2000
+
+severity: critical

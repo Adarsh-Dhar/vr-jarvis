@@ -1,0 +1,306 @@
+# Ground Truth Manifest for simple-python repository
+# Contains the correct answers for all expected analysis results
+
+repository:
+  name: simple-python
+  language: python
+  version: "3.11"
+  files:
+    - main.py
+    - subpackage/__init__.py
+    - subpackage/helper.py
+
+functions:
+  alpha:
+    file: main.py
+    line: 5
+    callers: []
+    callees:
+      - name: target
+        line: 6
+        type: direct
+    complexity: 1
+    returns: None
+
+  beta:
+    file: main.py
+    line: 11
+    callers: []
+    callees:
+      - name: target
+        line: 12
+        type: direct
+    complexity: 1
+    returns: None
+
+  gamma:
+    file: main.py
+    line: 17
+    callers: []
+    callees:
+      - name: alpha
+        line: 18
+        type: direct
+    complexity: 1
+    returns: None
+
+  delta:
+    file: main.py
+    line: 23
+    callers: []
+    callees:
+      - name: beta
+        line: 24
+        type: direct
+    complexity: 1
+    returns: None
+
+  target:
+    file: main.py
+    line: 29
+    direct_callers:
+      - name: alpha
+        file: main.py
+        line: 6
+      - name: beta
+        file: main.py
+        line: 12
+    indirect_callers:
+      - name: gamma
+        file: main.py
+        line: 18
+        path: [gamma, alpha, target]
+      - name: delta
+        file: main.py
+        line: 24
+        path: [delta, beta, target]
+    callees: []
+    complexity: 1
+    returns: bool
+
+  epsilon:
+    file: main.py
+    line: 34
+    callers: []
+    callees: []
+    complexity: 1
+    returns: str
+
+  recursive_a:
+    file: main.py
+    line: 39
+    callers:
+      - name: recursive_b
+        file: main.py
+        line: 45
+        type: direct
+    callees:
+      - name: recursive_b
+        line: 40
+        type: direct
+    complexity: 2
+    returns: None
+    is_recursive: true
+
+  recursive_b:
+    file: main.py
+    line: 44
+    callers:
+      - name: recursive_a
+        file: main.py
+        line: 40
+        type: direct
+    callees:
+      - name: recursive_a
+        line: 45
+        type: direct
+    complexity: 2
+    returns: None
+    is_recursive: true
+
+  overloaded_example:
+    file: main.py
+    line: 50
+    callers: []
+    callees: []
+    complexity: 1
+    returns: str
+
+  ExampleClass.method_a:
+    file: main.py
+    line: 61
+    callers: []
+    callees:
+      - name: target_method
+        line: 62
+        type: direct
+    complexity: 1
+    returns: str
+
+  ExampleClass.method_b:
+    file: main.py
+    line: 66
+    callers: []
+    callees:
+      - name: target_method
+        line: 67
+        type: direct
+    complexity: 1
+    returns: str
+
+  ExampleClass.target_method:
+    file: main.py
+    line: 72
+    direct_callers:
+      - name: method_a
+        class: ExampleClass
+        file: main.py
+        line: 62
+      - name: method_b
+        class: ExampleClass
+        file: main.py
+        line: 67
+    callees: []
+    complexity: 1
+    returns: str
+
+  ExampleClass.static_method:
+    file: main.py
+    line: 77
+    callers: []
+    callees: []
+    complexity: 1
+    returns: str
+
+  ExampleClass.class_method:
+    file: main.py
+    line: 82
+    callers: []
+    callees: []
+    complexity: 1
+    returns: str
+
+  callback_example:
+    file: main.py
+    line: 87
+    callers: []
+    callees: []
+    complexity: 1
+    returns: Any
+    accepts_callback: true
+
+  dependency_injection_example:
+    file: main.py
+    line: 92
+    callers: []
+    callees: []
+    complexity: 1
+    returns: Any
+    uses_dependency_injection: true
+
+  imported_function:
+    file: main.py
+    line: 97
+    callers: []
+    callees: []
+    complexity: 1
+    returns: str
+
+  cross_package_caller:
+    file: main.py
+    line: 102
+    callers: []
+    callees:
+      - name: helper_function
+        file: subpackage/helper.py
+        line: 4
+        type: direct
+        cross_package: true
+    complexity: 1
+    returns: str
+
+  helper_function:
+    file: subpackage/helper.py
+    line: 4
+    callers:
+      - name: cross_package_caller
+        file: main.py
+        line: 104
+        type: direct
+        cross_package: true
+    callees: []
+    complexity: 1
+    returns: str
+
+  helper_with_imports:
+    file: subpackage/helper.py
+    line: 8
+    callers: []
+    callees: []
+    imports:
+      - module: os
+        functions: [exists]
+      - module: json
+        functions: []
+    complexity: 1
+    returns: bool
+
+classes:
+  ExampleClass:
+    file: main.py
+    line: 55
+    methods:
+      - method_a
+      - method_b
+      - target_method
+      - static_method
+      - class_method
+    base_classes: []
+    complexity: 5
+
+call_graph:
+  edges:
+    - from: alpha
+      to: target
+      type: direct
+    - from: beta
+      to: target
+      type: direct
+    - from: gamma
+      to: alpha
+      type: direct
+    - from: delta
+      to: beta
+      type: direct
+    - from: recursive_a
+      to: recursive_b
+      type: direct
+    - from: recursive_b
+      to: recursive_a
+      type: direct
+    - from: ExampleClass.method_a
+      to: ExampleClass.target_method
+      type: direct
+    - from: ExampleClass.method_b
+      to: ExampleClass.target_method
+      type: direct
+    - from: cross_package_caller
+      to: helper_function
+      type: direct
+      cross_package: true
+
+dependency_graph:
+  edges:
+    - from: main
+      to: subpackage
+      type: import
+    - from: helper_with_imports
+      to: os
+      type: import
+    - from: helper_with_imports
+      to: json
+      type: import
+
+expected_vulnerabilities: []
+expected_bugs: []
+known_issues: []

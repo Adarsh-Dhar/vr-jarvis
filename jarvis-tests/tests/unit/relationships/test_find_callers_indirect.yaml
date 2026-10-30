@@ -1,0 +1,51 @@
+test_id: REL-CALL-002
+name: Indirect function caller discovery
+category: relationship_intelligence
+tool: find_callers
+description: >
+  Verify that the tool identifies all indirect
+  callers of a selected function with depth > 1.
+
+fixture:
+  repository: simple-python
+  target_symbol: target
+
+input:
+  depth: 2
+
+expected:
+  status: ok
+  callers:
+    - name: alpha
+      file: main.py
+      line: 6
+      depth: 1
+    - name: beta
+      file: main.py
+      line: 12
+      depth: 1
+    - name: gamma
+      file: main.py
+      line: 18
+      depth: 2
+      path: [gamma, alpha, target]
+    - name: delta
+      file: main.py
+      line: 24
+      depth: 2
+      path: [delta, beta, target]
+
+must_not:
+  - epsilon
+
+checks:
+  - correct_callers
+  - correct_depth
+  - correct_paths
+  - correct_source_locations
+  - valid_response_schema
+
+performance:
+  max_duration_ms: 3000
+
+severity: critical
