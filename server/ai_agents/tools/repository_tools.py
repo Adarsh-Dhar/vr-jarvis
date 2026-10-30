@@ -567,13 +567,28 @@ def watch_repository(repository_path: str, tool_context: ToolContext) -> dict:
                 'error': f'Repository path does not exist: {repository_path}'
             }
         
-        # This is a placeholder - real implementation would use watchdog or fsnotify
-        # For now, provide a plan
+        # Simulate file watching by checking recent modifications
+        import time
+        recent_files = []
+        for file_path in repo_path.rglob('*'):
+            if file_path.is_file():
+                try:
+                    mtime = file_path.stat().st_mtime
+                    if time.time() - mtime < 3600:  # Modified in last hour
+                        recent_files.append({
+                            'file': str(file_path.relative_to(repo_path)),
+                            'modified_at': mtime
+                        })
+                except Exception:
+                    pass
+        
         return {
             'status': 'ok',
             'repository_path': str(repo_path),
             'watching': True,
-            'note': 'Real file watching requires watchdog library integration'
+            'recent_changes': recent_files[:20],  # Last 20 changes
+            'change_count': len(recent_files),
+            'note': 'Recent file changes detected - real-time watching requires watchdog library integration'
         }
     except Exception as e:
         return {

@@ -501,14 +501,6 @@ def generate_integration_tests(
             'status': 'error',
             'error': str(e)
         }
-            ],
-            'note': 'Real test generation requires LLM integration'
-        }
-    except Exception as e:
-        return {
-            'status': 'error',
-            'error': str(e)
-        }
 
 
 @safe

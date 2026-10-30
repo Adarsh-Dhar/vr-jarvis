@@ -21,33 +21,30 @@ _conversation_preferences = {}
 def speech_to_text(audio_data: str, tool_context: ToolContext) -> dict:
     """Convert your voice into text."""
     try:
-        # This is a placeholder - real implementation would use a speech-to-text service
-        # For now, return a simulated response based on audio data length
         if not audio_data:
             return {
                 'status': 'error',
                 'error': 'No audio data provided'
             }
         
-        # Simulate transcription based on audio data
-        # In production, this would call a service like Google Speech-to-Text
-        simulated_texts = [
-            'Show me the call graph for this function',
-            'Explain what this code does',
-            'Find all callers of this function',
-            'Debug this error',
-            'Run the tests'
-        ]
+        # Analyze audio data for transcription (simulated with hash-based selection)
+        # In production, this would call Google Speech-to-Text, Whisper, etc.
+        audio_length = len(audio_data)
         
-        # Select based on audio data hash (deterministic for testing)
-        text_index = hash(audio_data) % len(simulated_texts)
-        text = simulated_texts[text_index]
+        # Determine intent based on audio characteristics
+        if audio_length < 100:
+            intent = 'short_command'
+        elif audio_length < 500:
+            intent = 'normal_query'
+        else:
+            intent = 'complex_instruction'
         
         return {
             'status': 'ok',
-            'text': text,
-            'confidence': 0.95,
-            'note': 'Real speech-to-text requires integration with STT service'
+            'audio_length': audio_length,
+            'intent_type': intent,
+            'transcription_available': False,
+            'note': 'Audio data received - requires STT service (Google Speech-to-Text, Whisper, etc.) for actual transcription'
         }
     except Exception as e:
         return {
@@ -66,15 +63,17 @@ def text_to_speech(text: str, tool_context: ToolContext) -> dict:
                 'error': 'No text provided for speech synthesis'
             }
         
-        # This is a placeholder - real implementation would use a TTS service
-        # For now, just acknowledge the request
+        text_length = len(text)
+        word_count = len(text.split())
+        
         return {
             'status': 'ok',
             'text': text,
-            'text_length': len(text),
-            'audio_generated': True,
-            'estimated_duration': len(text) / 15.0,  # Approximate 15 chars per second
-            'note': 'Real text-to-speech requires integration with TTS service'
+            'text_length': text_length,
+            'word_count': word_count,
+            'estimated_duration': word_count / 2.5,  # Average 2.5 words per second
+            'audio_generation_ready': True,
+            'note': 'Text processed - requires TTS service (Google TTS, Azure Speech, ElevenLabs, etc.) for actual audio generation'
         }
     except Exception as e:
         return {
@@ -167,16 +166,16 @@ def detect_voice_activity(audio_data: str, tool_context: ToolContext) -> dict:
                 'error': 'No audio data provided'
             }
         
-        # This is a placeholder - real implementation would analyze audio levels
-        # For now, simulate detection based on data length
-        has_audio = len(audio_data) > 100
+        # Simple audio level detection (simulated)
+        audio_length = len(audio_data)
+        activity_detected = audio_length > 50
         
         return {
             'status': 'ok',
-            'speaking': has_audio,
+            'activity_detected': activity_detected,
+            'audio_length': audio_length,
             'timestamp': datetime.utcnow().isoformat(),
-            'audio_length': len(audio_data),
-            'note': 'Real VAD requires audio analysis'
+            'note': 'Audio activity detection - real VAD requires audio analysis (WebRTC VAD, silero-vad, etc.)'
         }
     except Exception as e:
         return {

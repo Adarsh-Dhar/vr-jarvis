@@ -1014,15 +1014,6 @@ def cloud_execute_command(
             'status': 'error',
             'error': str(e)
         }
-            'stdout': f'Command executed on {instance_id}: {command}',
-            'return_code': 0,
-            'note': f'For real {provider} command execution, configure appropriate cloud provider credentials and SDK (AWS SSM, GCP SSH, Azure RunCommand)'
-        }
-    except Exception as e:
-        return {
-            'status': 'error',
-            'error': str(e)
-        }
 
 
 @safe

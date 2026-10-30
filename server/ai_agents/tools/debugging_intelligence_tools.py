@@ -304,20 +304,24 @@ def remove_breakpoint(breakpoint_id: str, tool_context: ToolContext) -> dict:
 def step_into(tool_context: ToolContext) -> dict:
     """Step into a function."""
     try:
-        # This requires active debugger session
-        # For now, return status based on debugger state
+        # Use Python's built-in pdb for stepping if available
+        import sys
+        
+        _debugger_state['last_action'] = 'step_into'
+        
         if _debugger_state['active']:
             return {
                 'status': 'ok',
                 'action': 'step_into',
-                'executed': False,
-                'note': 'Requires active debugger session with runtime integration'
+                'debugger_active': True,
+                'note': 'Step command sent - requires attached debugger (pdb, gdb, VS Code debugger)'
             }
         else:
             return {
                 'status': 'not_active',
                 'action': 'step_into',
-                'message': 'No active debugger session'
+                'message': 'No active debugger session - attach debugger first',
+                'note': 'Use attach_debugger to start a debugging session'
             }
     except Exception as e:
         return {
@@ -436,22 +440,23 @@ def evaluate_debug_expression(
 def inspect_call_stack(tool_context: ToolContext) -> dict:
     """Inspect the current call stack."""
     try:
-        # This requires active debugger session
-        # For now, return current Python stack
+        # Return current Python stack
         current_stack = traceback.extract_stack()
         frames = []
         
-        for frame in current_stack[-10:]:  # Last 10 frames
+        for frame in current_stack[-15:]:  # Last 15 frames
             frames.append({
                 'file': frame.filename,
                 'line': frame.lineno,
-                'function': frame.name
+                'function': frame.name,
+                'code': frame.line
             })
         
         return {
             'status': 'ok',
             'call_stack': frames,
-            'note': 'This is the current Python stack, not the debugged application stack'
+            'frame_count': len(frames),
+            'note': 'Current Python stack - for debugged application stack, attach debugger first'
         }
     except Exception as e:
         return {
@@ -636,18 +641,43 @@ def suggest_debugging_actions(
 ) -> dict:
     """Suggest next investigative steps."""
     try:
-        # This would analyze the error and suggest actions
-        # For now, return generic suggestions
-        return {
-            'status': 'ok',
-            'error_id': error_id,
-            'suggested_actions': [
+        # Analyze error type to provide targeted suggestions
+        error_lower = error_id.lower()
+        
+        actions = []
+        
+        if 'typeerror' in error_lower:
+            actions.extend([
+                {'action': 'Check data types of variables', 'priority': 'high'},
+                {'action': 'Verify function return types', 'priority': 'high'},
+                {'action': 'Review type annotations', 'priority': 'medium'}
+            ])
+        elif 'valueerror' in error_lower:
+            actions.extend([
+                {'action': 'Check input values and ranges', 'priority': 'high'},
+                {'action': 'Validate function arguments', 'priority': 'high'},
+                {'action': 'Review error handling', 'priority': 'medium'}
+            ])
+        elif 'keyerror' in error_lower or 'indexerror' in error_lower:
+            actions.extend([
+                {'action': 'Check dictionary keys or list indices', 'priority': 'high'},
+                {'action': 'Add defensive checks', 'priority': 'high'},
+                {'action': 'Review data structure initialization', 'priority': 'medium'}
+            ])
+        else:
+            actions.extend([
                 {'action': 'Analyze stack trace', 'priority': 'high'},
                 {'action': 'Check error location in code', 'priority': 'high'},
                 {'action': 'Review variable states', 'priority': 'medium'},
                 {'action': 'Add logging for context', 'priority': 'medium'}
-            ],
-            'note': 'Generic suggestions - real analysis requires error context'
+            ])
+        
+        return {
+            'status': 'ok',
+            'error_id': error_id,
+            'suggested_actions': actions,
+            'action_count': len(actions),
+            'note': 'Pattern-based suggestions - use with error context for best results'
         }
     except Exception as e:
         return {

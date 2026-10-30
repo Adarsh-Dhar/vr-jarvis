@@ -510,10 +510,17 @@ def analyze_cryptography(
                         'line': match['line']
                     })
         
+        # Identify weak cryptography
+        weak_crypto = [u for u in crypto_usage if 'weak' in u.get('type', '')]
+        
         return {
             'status': 'ok',
             'repository_path': repository_path,
-            'cryptographic_usage': crypto_usage
+            'cryptographic_usage': crypto_usage,
+            'total_usage': len(crypto_usage),
+            'weak_usage': weak_crypto,
+            'weak_count': len(weak_crypto),
+            'note': 'Pattern-based analysis - review weak algorithms (MD5, SHA1) for security'
         }
     except Exception as e:
         return {

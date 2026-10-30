@@ -978,9 +978,6 @@ def inspect_command_output(
             'status': 'error',
             'error': str(e)
         }
-            'status': 'error',
-            'error': str(e)
-        }
 
 
 # Git Tools (extending existing git_tools.py)
@@ -1473,9 +1470,6 @@ if __name__ == '__main__':
         }
     except Exception as e:
         return {
-            'status': 'error',
-            'error': str(e)
-        }
             'status': 'error',
             'error': str(e)
         }
