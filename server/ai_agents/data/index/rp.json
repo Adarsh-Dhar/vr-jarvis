@@ -1,0 +1,670 @@
+{
+ "nodes": [
+  {
+   "id": "eutro.data.make_dataset",
+   "name": "make_dataset",
+   "kind": "function",
+   "file": "eutro/data.py",
+   "start": 4,
+   "end": 11,
+   "cluster": "eutro",
+   "loc": 8
+  },
+  {
+   "id": "eutro.features._since",
+   "name": "_since",
+   "kind": "function",
+   "file": "eutro/features.py",
+   "start": 7,
+   "end": 9,
+   "cluster": "eutro",
+   "loc": 3
+  },
+  {
+   "id": "eutro.features.rain_features",
+   "name": "rain_features",
+   "kind": "function",
+   "file": "eutro/features.py",
+   "start": 12,
+   "end": 38,
+   "cluster": "eutro",
+   "loc": 27
+  },
+  {
+   "id": "eutro.features.temp_features",
+   "name": "temp_features",
+   "kind": "function",
+   "file": "eutro/features.py",
+   "start": 41,
+   "end": 54,
+   "cluster": "eutro",
+   "loc": 14
+  },
+  {
+   "id": "eutro.features.nutrient_features",
+   "name": "nutrient_features",
+   "kind": "function",
+   "file": "eutro/features.py",
+   "start": 57,
+   "end": 73,
+   "cluster": "eutro",
+   "loc": 17
+  },
+  {
+   "id": "eutro.features.build_features",
+   "name": "build_features",
+   "kind": "function",
+   "file": "eutro/features.py",
+   "start": 76,
+   "end": 92,
+   "cluster": "eutro",
+   "loc": 17
+  },
+  {
+   "id": "eutro.io._read",
+   "name": "_read",
+   "kind": "function",
+   "file": "eutro/io.py",
+   "start": 8,
+   "end": 15,
+   "cluster": "eutro",
+   "loc": 8
+  },
+  {
+   "id": "eutro.io._find",
+   "name": "_find",
+   "kind": "function",
+   "file": "eutro/io.py",
+   "start": 18,
+   "end": 23,
+   "cluster": "eutro",
+   "loc": 6
+  },
+  {
+   "id": "eutro.io._daily",
+   "name": "_daily",
+   "kind": "function",
+   "file": "eutro/io.py",
+   "start": 26,
+   "end": 28,
+   "cluster": "eutro",
+   "loc": 3
+  },
+  {
+   "id": "eutro.io.load_rain",
+   "name": "load_rain",
+   "kind": "function",
+   "file": "eutro/io.py",
+   "start": 31,
+   "end": 45,
+   "cluster": "eutro",
+   "loc": 15
+  },
+  {
+   "id": "eutro.io.load_temp",
+   "name": "load_temp",
+   "kind": "function",
+   "file": "eutro/io.py",
+   "start": 48,
+   "end": 60,
+   "cluster": "eutro",
+   "loc": 13
+  },
+  {
+   "id": "eutro.io.load_nutrients",
+   "name": "load_nutrients",
+   "kind": "function",
+   "file": "eutro/io.py",
+   "start": 63,
+   "end": 77,
+   "cluster": "eutro",
+   "loc": 15
+  },
+  {
+   "id": "eutro.io.load_obs",
+   "name": "load_obs",
+   "kind": "function",
+   "file": "eutro/io.py",
+   "start": 80,
+   "end": 92,
+   "cluster": "eutro",
+   "loc": 13
+  },
+  {
+   "id": "eutro.models.SeasonalBaseline",
+   "name": "SeasonalBaseline",
+   "kind": "object",
+   "file": "eutro/models.py",
+   "start": 14,
+   "end": 22,
+   "cluster": "eutro",
+   "loc": 9
+  },
+  {
+   "id": "eutro.models.SeasonalBaseline._bin",
+   "name": "_bin",
+   "kind": "function",
+   "file": "eutro/models.py",
+   "start": 16,
+   "end": 18,
+   "cluster": "eutro",
+   "loc": 3
+  },
+  {
+   "id": "eutro.models.SeasonalBaseline.fit",
+   "name": "fit",
+   "kind": "function",
+   "file": "eutro/models.py",
+   "start": 19,
+   "end": 21,
+   "cluster": "eutro",
+   "loc": 3
+  },
+  {
+   "id": "eutro.models.SeasonalBaseline.predict",
+   "name": "predict",
+   "kind": "function",
+   "file": "eutro/models.py",
+   "start": 22,
+   "end": 22,
+   "cluster": "eutro",
+   "loc": 1
+  },
+  {
+   "id": "eutro.models.candidates",
+   "name": "candidates",
+   "kind": "function",
+   "file": "eutro/models.py",
+   "start": 25,
+   "end": 33,
+   "cluster": "eutro",
+   "loc": 9
+  },
+  {
+   "id": "eutro.models.quantile_model",
+   "name": "quantile_model",
+   "kind": "function",
+   "file": "eutro/models.py",
+   "start": 36,
+   "end": 38,
+   "cluster": "eutro",
+   "loc": 3
+  },
+  {
+   "id": "eutro.models.metrics",
+   "name": "metrics",
+   "kind": "function",
+   "file": "eutro/models.py",
+   "start": 41,
+   "end": 47,
+   "cluster": "eutro",
+   "loc": 7
+  },
+  {
+   "id": "eutro.models.cv_rmse",
+   "name": "cv_rmse",
+   "kind": "function",
+   "file": "eutro/models.py",
+   "start": 50,
+   "end": 55,
+   "cluster": "eutro",
+   "loc": 6
+  },
+  {
+   "id": "eutro.predict._cdf",
+   "name": "_cdf",
+   "kind": "function",
+   "file": "eutro/predict.py",
+   "start": 12,
+   "end": 12,
+   "cluster": "eutro",
+   "loc": 1
+  },
+  {
+   "id": "eutro.predict.predict",
+   "name": "predict",
+   "kind": "function",
+   "file": "eutro/predict.py",
+   "start": 15,
+   "end": 36,
+   "cluster": "eutro",
+   "loc": 22
+  },
+  {
+   "id": "eutro.simulate._rain_base",
+   "name": "_rain_base",
+   "kind": "function",
+   "file": "eutro/simulate.py",
+   "start": 9,
+   "end": 16,
+   "cluster": "eutro",
+   "loc": 8
+  },
+  {
+   "id": "eutro.simulate._scs",
+   "name": "_scs",
+   "kind": "function",
+   "file": "eutro/simulate.py",
+   "start": 19,
+   "end": 21,
+   "cluster": "eutro",
+   "loc": 3
+  },
+  {
+   "id": "eutro.simulate._adj",
+   "name": "_adj",
+   "kind": "function",
+   "file": "eutro/simulate.py",
+   "start": 24,
+   "end": 27,
+   "cluster": "eutro",
+   "loc": 4
+  },
+  {
+   "id": "eutro.simulate.make_synthetic",
+   "name": "make_synthetic",
+   "kind": "function",
+   "file": "eutro/simulate.py",
+   "start": 30,
+   "end": 81,
+   "cluster": "eutro",
+   "loc": 52
+  },
+  {
+   "id": "eutro.train._group_of",
+   "name": "_group_of",
+   "kind": "function",
+   "file": "eutro/train.py",
+   "start": 20,
+   "end": 21,
+   "cluster": "eutro",
+   "loc": 2
+  },
+  {
+   "id": "eutro.train.train",
+   "name": "train",
+   "kind": "function",
+   "file": "eutro/train.py",
+   "start": 24,
+   "end": 112,
+   "cluster": "eutro",
+   "loc": 89
+  },
+  {
+   "id": "eutro.tsi.tsi_chl",
+   "name": "tsi_chl",
+   "kind": "function",
+   "file": "eutro/tsi.py",
+   "start": 3,
+   "end": 3,
+   "cluster": "eutro",
+   "loc": 1
+  },
+  {
+   "id": "eutro.tsi.chl_from_tsi",
+   "name": "chl_from_tsi",
+   "kind": "function",
+   "file": "eutro/tsi.py",
+   "start": 4,
+   "end": 4,
+   "cluster": "eutro",
+   "loc": 1
+  },
+  {
+   "id": "eutro.tsi.tsi_to_class",
+   "name": "tsi_to_class",
+   "kind": "function",
+   "file": "eutro/tsi.py",
+   "start": 5,
+   "end": 5,
+   "cluster": "eutro",
+   "loc": 1
+  },
+  {
+   "id": "main.main",
+   "name": "main",
+   "kind": "function",
+   "file": "main.py",
+   "start": 12,
+   "end": 38,
+   "cluster": "root",
+   "loc": 27
+  }
+ ],
+ "edges": [
+  {
+   "src": "eutro.features.rain_features",
+   "dst": "eutro.features._since",
+   "type": "calls",
+   "kind": "confirmed"
+  },
+  {
+   "src": "eutro.features.build_features",
+   "dst": "eutro.features.temp_features",
+   "type": "calls",
+   "kind": "confirmed"
+  },
+  {
+   "src": "eutro.features.build_features",
+   "dst": "eutro.features.nutrient_features",
+   "type": "calls",
+   "kind": "confirmed"
+  },
+  {
+   "src": "eutro.features.build_features",
+   "dst": "eutro.features.rain_features",
+   "type": "calls",
+   "kind": "confirmed"
+  },
+  {
+   "src": "eutro.io.load_rain",
+   "dst": "eutro.io._find",
+   "type": "calls",
+   "kind": "confirmed"
+  },
+  {
+   "src": "eutro.io.load_rain",
+   "dst": "eutro.io._read",
+   "type": "calls",
+   "kind": "confirmed"
+  },
+  {
+   "src": "eutro.io.load_temp",
+   "dst": "eutro.io._daily",
+   "type": "calls",
+   "kind": "confirmed"
+  },
+  {
+   "src": "eutro.io.load_temp",
+   "dst": "eutro.io._find",
+   "type": "calls",
+   "kind": "confirmed"
+  },
+  {
+   "src": "eutro.io.load_temp",
+   "dst": "eutro.io._read",
+   "type": "calls",
+   "kind": "confirmed"
+  },
+  {
+   "src": "eutro.io.load_nutrients",
+   "dst": "eutro.io._daily",
+   "type": "calls",
+   "kind": "confirmed"
+  },
+  {
+   "src": "eutro.io.load_nutrients",
+   "dst": "eutro.io._find",
+   "type": "calls",
+   "kind": "confirmed"
+  },
+  {
+   "src": "eutro.io.load_nutrients",
+   "dst": "eutro.io._read",
+   "type": "calls",
+   "kind": "confirmed"
+  },
+  {
+   "src": "eutro.io.load_obs",
+   "dst": "eutro.io._find",
+   "type": "calls",
+   "kind": "confirmed"
+  },
+  {
+   "src": "eutro.io.load_obs",
+   "dst": "eutro.io._read",
+   "type": "calls",
+   "kind": "confirmed"
+  },
+  {
+   "src": "eutro.io.load_obs",
+   "dst": "eutro.tsi.tsi_chl",
+   "type": "calls",
+   "kind": "confirmed"
+  },
+  {
+   "src": "eutro.models.SeasonalBaseline.fit",
+   "dst": "eutro.models.SeasonalBaseline._bin",
+   "type": "calls",
+   "kind": "confirmed"
+  },
+  {
+   "src": "eutro.models.metrics",
+   "dst": "eutro.tsi.tsi_to_class",
+   "type": "calls",
+   "kind": "confirmed"
+  },
+  {
+   "src": "eutro.models.metrics",
+   "dst": "eutro.tsi.chl_from_tsi",
+   "type": "calls",
+   "kind": "confirmed"
+  },
+  {
+   "src": "eutro.models.cv_rmse",
+   "dst": "eutro.models.SeasonalBaseline.predict",
+   "type": "calls",
+   "kind": "confirmed"
+  },
+  {
+   "src": "eutro.models.cv_rmse",
+   "dst": "eutro.predict.predict",
+   "type": "calls",
+   "kind": "inferred"
+  },
+  {
+   "src": "eutro.models.cv_rmse",
+   "dst": "eutro.models.SeasonalBaseline.fit",
+   "type": "calls",
+   "kind": "confirmed"
+  },
+  {
+   "src": "eutro.predict.predict",
+   "dst": "eutro.io.load_temp",
+   "type": "calls",
+   "kind": "confirmed"
+  },
+  {
+   "src": "eutro.predict.predict",
+   "dst": "eutro.tsi.chl_from_tsi",
+   "type": "calls",
+   "kind": "confirmed"
+  },
+  {
+   "src": "eutro.predict.predict",
+   "dst": "eutro.features.build_features",
+   "type": "calls",
+   "kind": "confirmed"
+  },
+  {
+   "src": "eutro.predict.predict",
+   "dst": "eutro.models.SeasonalBaseline.predict",
+   "type": "calls",
+   "kind": "inferred"
+  },
+  {
+   "src": "eutro.predict.predict",
+   "dst": "eutro.io.load_nutrients",
+   "type": "calls",
+   "kind": "confirmed"
+  },
+  {
+   "src": "eutro.predict.predict",
+   "dst": "eutro.predict._cdf",
+   "type": "calls",
+   "kind": "confirmed"
+  },
+  {
+   "src": "eutro.predict.predict",
+   "dst": "eutro.tsi.tsi_to_class",
+   "type": "calls",
+   "kind": "confirmed"
+  },
+  {
+   "src": "eutro.predict.predict",
+   "dst": "eutro.io.load_rain",
+   "type": "calls",
+   "kind": "confirmed"
+  },
+  {
+   "src": "eutro.simulate.make_synthetic",
+   "dst": "eutro.simulate._scs",
+   "type": "calls",
+   "kind": "confirmed"
+  },
+  {
+   "src": "eutro.simulate.make_synthetic",
+   "dst": "eutro.simulate._rain_base",
+   "type": "calls",
+   "kind": "confirmed"
+  },
+  {
+   "src": "eutro.simulate.make_synthetic",
+   "dst": "eutro.simulate._adj",
+   "type": "calls",
+   "kind": "confirmed"
+  },
+  {
+   "src": "eutro.train.train",
+   "dst": "eutro.io.load_temp",
+   "type": "calls",
+   "kind": "confirmed"
+  },
+  {
+   "src": "eutro.train.train",
+   "dst": "eutro.models.metrics",
+   "type": "calls",
+   "kind": "confirmed"
+  },
+  {
+   "src": "eutro.train.train",
+   "dst": "eutro.train._group_of",
+   "type": "calls",
+   "kind": "confirmed"
+  },
+  {
+   "src": "eutro.train.train",
+   "dst": "eutro.features.build_features",
+   "type": "calls",
+   "kind": "confirmed"
+  },
+  {
+   "src": "eutro.train.train",
+   "dst": "eutro.models.SeasonalBaseline.predict",
+   "type": "calls",
+   "kind": "confirmed"
+  },
+  {
+   "src": "eutro.train.train",
+   "dst": "eutro.predict.predict",
+   "type": "calls",
+   "kind": "inferred"
+  },
+  {
+   "src": "eutro.train.train",
+   "dst": "eutro.simulate.make_synthetic",
+   "type": "calls",
+   "kind": "confirmed"
+  },
+  {
+   "src": "eutro.train.train",
+   "dst": "eutro.models.SeasonalBaseline.fit",
+   "type": "calls",
+   "kind": "confirmed"
+  },
+  {
+   "src": "eutro.train.train",
+   "dst": "eutro.models.quantile_model",
+   "type": "calls",
+   "kind": "confirmed"
+  },
+  {
+   "src": "eutro.train.train",
+   "dst": "eutro.models.candidates",
+   "type": "calls",
+   "kind": "confirmed"
+  },
+  {
+   "src": "eutro.train.train",
+   "dst": "eutro.models.cv_rmse",
+   "type": "calls",
+   "kind": "confirmed"
+  },
+  {
+   "src": "eutro.train.train",
+   "dst": "eutro.models.SeasonalBaseline",
+   "type": "calls",
+   "kind": "confirmed"
+  },
+  {
+   "src": "eutro.train.train",
+   "dst": "eutro.data.make_dataset",
+   "type": "calls",
+   "kind": "confirmed"
+  },
+  {
+   "src": "eutro.train.train",
+   "dst": "eutro.io.load_rain",
+   "type": "calls",
+   "kind": "confirmed"
+  },
+  {
+   "src": "eutro.train.train",
+   "dst": "eutro.io.load_nutrients",
+   "type": "calls",
+   "kind": "confirmed"
+  },
+  {
+   "src": "eutro.train.train",
+   "dst": "eutro.io.load_obs",
+   "type": "calls",
+   "kind": "confirmed"
+  },
+  {
+   "src": "main.main",
+   "dst": "eutro.train.train",
+   "type": "calls",
+   "kind": "confirmed"
+  },
+  {
+   "src": "main.main",
+   "dst": "eutro.models.SeasonalBaseline.predict",
+   "type": "calls",
+   "kind": "inferred"
+  },
+  {
+   "src": "main.main",
+   "dst": "eutro.predict.predict",
+   "type": "calls",
+   "kind": "confirmed"
+  },
+  {
+   "src": "main.main",
+   "dst": "eutro.simulate.make_synthetic",
+   "type": "calls",
+   "kind": "confirmed"
+  }
+ ],
+ "tests": [
+  {
+   "id": "test.tests.test_pipeline",
+   "file": "tests/test_pipeline.py",
+   "covers": [
+    "eutro.data.make_dataset",
+    "eutro.features.build_features",
+    "eutro.io.load_nutrients",
+    "eutro.io.load_obs",
+    "eutro.io.load_rain",
+    "eutro.io.load_temp",
+    "eutro.models.SeasonalBaseline.predict",
+    "eutro.predict.predict",
+    "eutro.simulate.make_synthetic",
+    "eutro.train.train",
+    "eutro.tsi.chl_from_tsi",
+    "eutro.tsi.tsi_chl",
+    "eutro.tsi.tsi_to_class"
+   ]
+  }
+ ],
+ "coverage": {}
+}

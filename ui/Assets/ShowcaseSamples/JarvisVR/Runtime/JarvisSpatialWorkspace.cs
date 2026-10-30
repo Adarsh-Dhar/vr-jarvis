@@ -14,8 +14,9 @@ namespace JarvisVR
   public sealed class JarvisSpatialWorkspace : MonoBehaviour
   {
     public static bool Enabled { get { return PlayerPrefs.GetInt("jarvis.spatial", 1) == 1; } }
-    /// <summary>UI-only stage: scripted local answers, no network. Set PlayerPrefs "jarvis.mock" to 0 to talk to the real server.</summary>
-    public static bool MockMode { get { return PlayerPrefs.GetInt("jarvis.mock", 1) == 1; } }
+    /// <summary>UI-only stage: scripted local answers, no network. Default is the REAL server (reads /repository).
+    /// Set PlayerPrefs "jarvis.mock" to 1 (menu: JARVIS > Use mock data) for the scripted placeholder data.</summary>
+    public static bool MockMode { get { return PlayerPrefs.GetInt("jarvis.mock", 0) == 1; } }
 
     private const float WorkspaceDistance = 1.5f;   // metres in front of the user
     private const float LabelSize = 0.010f;         // TextMesh characterSize; raise for bigger node labels
@@ -137,9 +138,41 @@ namespace JarvisVR
       { "AGENT",  new[] { "activity", "ghost" } },
     };
 
+    // Panels live on a dome around the user instead of one flat wall:
+    //   front wall (XY plane): status above the graph, caption below it
+    //   left / right walls (YZ plane): repository + legend on the left, code + evidence on the right, activity / tests behind
+    //   floor (ZX plane): navigation tablet at your feet      ceiling (ZX plane): legend
+    // Value = (azimuth degrees, 0 = toward the graph, + = right; elevation degrees, + = up; radius in metres).
+    // Panels that are never visible together (code/ghost, evidence/approval) deliberately share a slot.
+    private static readonly Dictionary<string, Vector3> Slots = new Dictionary<string, Vector3>
+    {
+      { "status",   new Vector3(   0f,  34f, 2.0f) },
+      { "caption",  new Vector3(   0f, -30f, 1.6f) },
+      { "nav",      new Vector3(   0f, -54f, 1.25f) },
+      { "repo",     new Vector3( -65f,   6f, 1.9f) },
+      { "code",     new Vector3(  65f,   6f, 1.9f) },
+      { "ghost",    new Vector3(  65f,   6f, 1.9f) },
+      { "evidence", new Vector3(  65f, -28f, 1.8f) },
+      { "approval", new Vector3( 65f, -28f, 1.8f) },
+      { "activity", new Vector3(-125f,   0f, 2.0f) },
+      { "tests",    new Vector3( 125f,   0f, 2.0f) },
+      { "legend",   new Vector3( -30f,  58f, 1.7f) },
+    };
+
+    /// <summary>Where the user's head is, in the workspace root's local space (see Recenter).</summary>
+    private static Vector3 UserLocal { get { return new Vector3(0f, 0.05f, -WorkspaceDistance); } }
+
+    private static Vector3 SlotPosition(Vector3 slot)
+    {
+      float az = slot.x * Mathf.Deg2Rad, el = slot.y * Mathf.Deg2Rad;
+      var dir = new Vector3(Mathf.Sin(az) * Mathf.Cos(el), Mathf.Sin(el), Mathf.Cos(az) * Mathf.Cos(el));
+      return UserLocal + dir * slot.z;
+    }
+
     private JarvisSpatialPanel AddPanel(string key, string title, float w, float h, float x, float y, Color accent)
     {
-      JarvisSpatialPanel p = JarvisSpatialPanel.Create(_root, title, w, h, new Vector3(x, y, 0f), accent, key != "nav" && key != "status" && key != "caption");
+      Vector3 pos = Slots.TryGetValue(key, out Vector3 slot) ? SlotPosition(slot) : new Vector3(x, y, 0f);
+      JarvisSpatialPanel p = JarvisSpatialPanel.Create(_root, title, w, h, pos, accent, key != "nav" && key != "status" && key != "caption");
       _panels[key] = p;
       return p;
     }

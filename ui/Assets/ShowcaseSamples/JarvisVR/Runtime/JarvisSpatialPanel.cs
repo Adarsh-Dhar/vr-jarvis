@@ -9,12 +9,14 @@ namespace JarvisVR
   public sealed class JarvisBillboard : MonoBehaviour
   {
     private Camera _cam;
+    /// <summary>True also tilts up/down toward the user (panels on the floor or ceiling plates).</summary>
+    public bool Pitch;
     private void LateUpdate()
     {
       if (_cam == null) _cam = Camera.main;
       if (_cam == null) return;
       Vector3 d = transform.position - _cam.transform.position;
-      d.y = 0f;
+      if (!Pitch) d.y = 0f;
       if (d.sqrMagnitude > 0.0001f) transform.rotation = Quaternion.LookRotation(d, Vector3.up);
     }
   }
@@ -187,7 +189,7 @@ namespace JarvisVR
       canvas.worldCamera = Camera.main;
       var p = go.AddComponent<JarvisSpatialPanel>();
       p.Width = w; p.Height = h;
-      go.AddComponent<JarvisBillboard>();
+      go.AddComponent<JarvisBillboard>().Pitch = true;
       p.Anim = go.AddComponent<JarvisPanelAnim>();
       p._accent = accent;
 

@@ -40,7 +40,17 @@ namespace JarvisVR
       { "lib", new Vector3(0.65f, 0.55f, 0f) },
     };
 
-    /// <summary>Deterministic 3D layout in metres, one anchor per cluster, members on a small ring.</summary>
+    /// <summary>Evenly spread unit-sphere point i of n (Fibonacci sphere).</summary>
+    private static Vector3 Sphere(int i, int n)
+    {
+      if (n <= 1) return Vector3.zero;
+      float y = 1f - 2f * (i + 0.5f) / n;
+      float r = Mathf.Sqrt(Mathf.Max(0f, 1f - y * y));
+      float phi = i * 2.399963f;
+      return new Vector3(Mathf.Cos(phi) * r, y * 0.8f, Mathf.Sin(phi) * r);
+    }
+
+    /// <summary>Deterministic 3D layout in metres, one anchor per cluster, members on a small ring or sphere.</summary>
     public static Dictionary<string, Vector3> Layout(GraphDto g)
     {
       var result = new Dictionary<string, Vector3>();
@@ -51,12 +61,23 @@ namespace JarvisVR
         if (!byCluster.TryGetValue(c, out List<GraphNodeDto> list)) byCluster[c] = list = new List<GraphNodeDto>();
         list.Add(n);
       }
+      // Known demo clusters keep their hand-placed anchors. Any other cluster (every real repository) is spread
+      // in 3D: cluster centres on a sphere around the origin, members on a small sphere around their centre.
+      int unknownTotal = 0;
+      foreach (string key in byCluster.Keys) if (!Anchors.ContainsKey(key)) unknownTotal++;
       int unknown = 0;
       foreach (var kv in byCluster)
       {
-        if (!Anchors.TryGetValue(kv.Key, out Vector3 anchor))
-          anchor = new Vector3(0.9f, 0.5f - 0.3f * unknown++, 0f);
         int count = kv.Value.Count;
+        Vector3 anchor;
+        if (!Anchors.TryGetValue(kv.Key, out anchor))
+        {
+          anchor = unknownTotal <= 1 ? Vector3.zero : Sphere(unknown, unknownTotal) * Mathf.Min(0.75f + 0.08f * unknownTotal, 1.4f);
+          unknown++;
+          float radius = count > 1 ? 0.12f + 0.14f * Mathf.Pow(count, 1f / 3f) : 0f;
+          for (int i = 0; i < count; i++) result[kv.Value[i].id] = anchor + Sphere(i, count) * radius;
+          continue;
+        }
         for (int i = 0; i < count; i++)
         {
           Vector3 offset = Vector3.zero;
@@ -68,6 +89,13 @@ namespace JarvisVR
           }
           result[kv.Value[i].id] = anchor + offset;
         }
+      }
+      if (unknownTotal == byCluster.Count && result.Count > 0)   // real repo: keep the whole graph centred in front of the user
+      {
+        Vector3 sum = Vector3.zero;
+        foreach (Vector3 v in result.Values) sum += v;
+        Vector3 centre = sum / result.Count;
+        foreach (string id in new List<string>(result.Keys)) result[id] -= centre;
       }
       return result;
     }
