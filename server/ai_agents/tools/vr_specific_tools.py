@@ -594,3 +594,285 @@ def load_scene_state(
         'scene_id': scene_id,
         'loaded': True
     }
+
+
+# Additional Spatial Navigation Tools
+
+@safe
+def focus_on_graph_node(
+    node_id: str,
+    visualization_id: str,
+    tool_context: ToolContext,
+    animation: str = 'smooth'
+) -> dict:
+    """Focus camera on a specific graph node."""
+    # Placeholder: Focus on graph node
+    return {
+        'status': 'ok',
+        'node_id': node_id,
+        'visualization_id': visualization_id,
+        'animation': animation,
+        'focused': True,
+        'camera_position': {'x': 0, 'y': 0, 'z': -3}
+    }
+
+
+@safe
+def set_graph_depth(
+    visualization_id: str,
+    depth: int,
+    tool_context: ToolContext
+) -> dict:
+    """Set the depth of graph traversal for visualization."""
+    # Placeholder: Set graph depth
+    return {
+        'status': 'ok',
+        'visualization_id': visualization_id,
+        'depth': depth,
+        'updated': True,
+        'nodes_visible': 50,
+        'edges_visible': 75
+    }
+
+
+@safe
+def navigate_to_code_element(
+    element_id: str,
+    visualization_id: str,
+    tool_context: ToolContext,
+    animation: str = 'fly'
+) -> dict:
+    """Navigate to a specific code element in the visualization."""
+    # Placeholder: Navigate to code element
+    return {
+        'status': 'ok',
+        'element_id': element_id,
+        'visualization_id': visualization_id,
+        'animation': animation,
+        'navigated': True,
+        'camera_position': {'x': 0, 'y': 0, 'z': -2},
+        'target_position': {'x': 1, 'y': 1, 'z': 0}
+    }
+
+
+@safe
+def set_node_visibility(
+    node_ids: List[str],
+    visibility: bool,
+    visualization_id: str,
+    tool_context: ToolContext
+) -> dict:
+    """Set visibility of specific nodes in the graph."""
+    # Placeholder: Set node visibility
+    return {
+        'status': 'ok',
+        'node_ids': node_ids,
+        'visibility': visibility,
+        'visualization_id': visualization_id,
+        'updated': True,
+        'affected_count': len(node_ids)
+    }
+
+
+@safe
+def set_edge_visibility(
+    edge_ids: List[str],
+    visibility: bool,
+    visualization_id: str,
+    tool_context: ToolContext
+) -> dict:
+    """Set visibility of specific edges in the graph."""
+    # Placeholder: Set edge visibility
+    return {
+        'status': 'ok',
+        'edge_ids': edge_ids,
+        'visibility': visibility,
+        'visualization_id': visualization_id,
+        'updated': True,
+        'affected_count': len(edge_ids)
+    }
+
+
+@safe
+def filter_graph_by_type(
+    node_type: str,
+    visualization_id: str,
+    tool_context: ToolContext
+) -> dict:
+    """Filter graph to show only nodes of a specific type."""
+    # Placeholder: Filter by type
+    return {
+        'status': 'ok',
+        'node_type': node_type,
+        'visualization_id': visualization_id,
+        'filtered': True,
+        'visible_nodes': 25,
+        'hidden_nodes': 25
+    }
+
+
+@safe
+def filter_graph_by_package(
+    package_name: str,
+    visualization_id: str,
+    tool_context: ToolContext
+) -> dict:
+    """Filter graph to show only nodes from a specific package."""
+    # Placeholder: Filter by package
+    return {
+        'status': 'ok',
+        'package_name': package_name,
+        'visualization_id': visualization_id,
+        'filtered': True,
+        'visible_nodes': 15,
+        'hidden_nodes': 35
+    }
+
+
+@safe
+def collapse_node(
+    node_id: str,
+    visualization_id: str,
+    tool_context: ToolContext
+) -> dict:
+    """Collapse a node to hide its children."""
+    # Placeholder: Collapse node
+    return {
+        'status': 'ok',
+        'node_id': node_id,
+        'visualization_id': visualization_id,
+        'collapsed': True,
+        'hidden_children': 5
+    }
+
+
+@safe
+def expand_node(
+    node_id: str,
+    visualization_id: str,
+    tool_context: ToolContext,
+    depth: int = 1
+) -> dict:
+    """Expand a node to show its children."""
+    # Placeholder: Expand node
+    return {
+        'status': 'ok',
+        'node_id': node_id,
+        'visualization_id': visualization_id,
+        'depth': depth,
+        'expanded': True,
+        'shown_children': 5
+    }
+
+
+@safe
+def group_nodes(
+    node_ids: List[str],
+    group_label: str,
+    visualization_id: str,
+    tool_context: ToolContext
+) -> dict:
+    """Group multiple nodes together in the visualization."""
+    # Placeholder: Group nodes
+    return {
+        'status': 'ok',
+        'node_ids': node_ids,
+        'group_label': group_label,
+        'visualization_id': visualization_id,
+        'grouped': True,
+        'group_id': 'group_123'
+    }
+
+
+@safe
+def ungroup_nodes(
+    group_id: str,
+    visualization_id: str,
+    tool_context: ToolContext
+) -> dict:
+    """Ungroup a previously grouped set of nodes."""
+    # Placeholder: Ungroup nodes
+    return {
+        'status': 'ok',
+        'group_id': group_id,
+        'visualization_id': visualization_id,
+        'ungrouped': True,
+        'affected_nodes': 5
+    }
+
+
+@safe
+def set_node_color(
+    node_ids: List[str],
+    color: str,
+    visualization_id: str,
+    tool_context: ToolContext
+) -> dict:
+    """Set the color of specific nodes."""
+    # Placeholder: Set node color
+    return {
+        'status': 'ok',
+        'node_ids': node_ids,
+        'color': color,
+        'visualization_id': visualization_id,
+        'updated': True,
+        'affected_count': len(node_ids)
+    }
+
+
+@safe
+def set_edge_color(
+    edge_ids: List[str],
+    color: str,
+    visualization_id: str,
+    tool_context: ToolContext
+) -> dict:
+    """Set the color of specific edges."""
+    # Placeholder: Set edge color
+    return {
+        'status': 'ok',
+        'edge_ids': edge_ids,
+        'color': color,
+        'visualization_id': visualization_id,
+        'updated': True,
+        'affected_count': len(edge_ids)
+    }
+
+
+@safe
+def set_node_size(
+    node_ids: List[str],
+    size: float,
+    visualization_id: str,
+    tool_context: ToolContext
+) -> dict:
+    """Set the size of specific nodes."""
+    # Placeholder: Set node size
+    return {
+        'status': 'ok',
+        'node_ids': node_ids,
+        'size': size,
+        'visualization_id': visualization_id,
+        'updated': True,
+        'affected_count': len(node_ids)
+    }
+
+
+@safe
+def highlight_path(
+    path: List[str],
+    visualization_id: str,
+    tool_context: ToolContext,
+    highlight_color: str = 'yellow'
+) -> dict:
+    """Highlight a path through the graph."""
+    # Placeholder: Highlight path
+    return {
+        'status': 'ok',
+        'path': path,
+        'visualization_id': visualization_id,
+        'highlight_color': highlight_color,
+        'highlighted': True,
+        'node_count': len(path),
+        'edge_count': len(path) - 1
+    }

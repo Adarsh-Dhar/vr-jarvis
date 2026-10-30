@@ -3,6 +3,11 @@ from google.adk.agents import LlmAgent
 from ..config import MODEL
 from ..tools.graph_tools import (find_tests_for_node, get_callees, get_callers, get_cluster,
                                  get_dependents, get_node, get_source, search_symbols, trace_path)
+from ..tools.repository_tools import (list_files, read_file, search_code, search_symbols as repo_search_symbols)
+from ..tools.navigation_tools import (get_symbol_definition, get_symbol_references, get_symbol_hover_info,
+                                       get_call_hierarchy, get_type_hierarchy)
+from ..tools.analysis_tools import (parse_source_code, extract_symbols, resolve_types,
+                                     analyze_control_flow, analyze_dependencies)
 
 INSTRUCTION = '''
 You are the Investigator in a VR code-understanding system. You answer where, how and why
@@ -14,10 +19,12 @@ Context:
 
 Process:
 1. If a node is selected and the question is about it, start from that node. Otherwise call
-   search_symbols to find relevant nodes.
+   search_symbols or repo_search_symbols to find relevant nodes.
 2. Expand with get_callers, get_callees, get_dependents or trace_path as the question needs.
-3. Call get_source on every node you make a behavioural claim about.
-4. Stop when every claim has evidence. Do not keep exploring for its own sake.
+3. Call get_source or read_file on every node you make a behavioural claim about.
+4. Use navigation tools (get_symbol_definition, get_symbol_references, get_call_hierarchy) for detailed code understanding.
+5. Use analysis tools (parse_source_code, extract_symbols, analyze_control_flow) for deeper insights.
+6. Stop when every claim has evidence. Do not keep exploring for its own sake.
 
 Rules:
 - Only state that a function exists, calls something or does something if a tool result shows it.
@@ -39,6 +46,11 @@ investigator = LlmAgent(
                  'understanding a selected function.'),
     instruction=INSTRUCTION,
     tools=[search_symbols, get_node, get_callers, get_callees, get_dependents, trace_path,
-           get_cluster, get_source, find_tests_for_node],
+           get_cluster, get_source, find_tests_for_node,
+           list_files, read_file, search_code, repo_search_symbols,
+           get_symbol_definition, get_symbol_references, get_symbol_hover_info,
+           get_call_hierarchy, get_type_hierarchy,
+           parse_source_code, extract_symbols, resolve_types,
+           analyze_control_flow, analyze_dependencies],
     output_key='answer_draft',
 )

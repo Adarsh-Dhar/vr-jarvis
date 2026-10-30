@@ -6,6 +6,9 @@ from ..tools.control_tools import exit_loop
 from ..tools.exec_tools import read_test_results, run_tests, run_typecheck
 from ..tools.git_tools import apply_patch_to_worktree, create_worktree, get_worktree_diff
 from ..tools.graph_tools import find_tests_for_node, get_callers, get_source, search_symbols
+from ..tools.repository_tools import (list_files, read_file, search_code, search_symbols as repo_search_symbols)
+from ..tools.navigation_tools import (get_symbol_definition, get_symbol_references, get_symbol_hover_info,
+                                       get_call_hierarchy)
 
 patch_agent = LlmAgent(
     name='patch_agent',
@@ -18,11 +21,12 @@ Selected node (may be empty): {selection}
 Impact context from the last impact analysis (may be empty): {impact_context}
 
 Process:
-1. Locate the code to change with search_symbols or the selected node.
-2. Read it and its neighbours with get_source and get_callers so you follow the repo's conventions.
-3. Call create_worktree, then write a minimal unified diff that includes a regression test, and
+1. Locate the code to change with search_symbols, repo_search_symbols or the selected node.
+2. Read it and its neighbours with get_source, read_file and get_callers so you follow the repo's conventions.
+3. Use navigation tools (get_symbol_definition, get_symbol_references) to understand the code structure.
+4. Call create_worktree, then write a minimal unified diff that includes a regression test, and
    apply it with apply_patch_to_worktree. If applying fails, fix the diff and retry once.
-4. Call get_worktree_diff to get the diff that was actually applied.
+5. Call get_worktree_diff to get the diff that was actually applied.
 
 Rules:
 - Touch only what the request needs. Never commit or merge.
@@ -33,7 +37,10 @@ tests_added (list of test file paths), assumptions (list), claims (list of objec
 confidence).
 ''',
     tools=[search_symbols, get_source, get_callers, find_tests_for_node,
-           create_worktree, apply_patch_to_worktree, get_worktree_diff],
+           create_worktree, apply_patch_to_worktree, get_worktree_diff,
+           list_files, read_file, search_code, repo_search_symbols,
+           get_symbol_definition, get_symbol_references, get_symbol_hover_info,
+           get_call_hierarchy],
     before_tool_callback=permission_guard,
     output_key='proposed_patch',
 )

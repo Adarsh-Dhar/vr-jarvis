@@ -100,6 +100,7 @@ def identify_failure_path(
 @safe
 def set_breakpoint(
     file_path: str,
+    line: int,
     tool_context: ToolContext,
     condition: Optional[str] = None
 ) -> dict:
