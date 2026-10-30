@@ -136,6 +136,13 @@ namespace JarvisVR
                 return;
             }
 
+            if (JarvisSpatialWorkspace.Enabled)
+            {
+                gameObject.AddComponent<JarvisSpatialWorkspace>().Initialize(camera);
+                enabled = false;
+                return;
+            }
+
             BuildCanvas(camera);
             BuildPersistentFrame();
             BuildGraph();

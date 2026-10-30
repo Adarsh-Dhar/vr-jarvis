@@ -26,6 +26,16 @@ namespace JarvisVR
   [Serializable] internal class AskRequest { public string session_id, text, selection; }
   [Serializable] internal class ApproveRequest { public string session_id; public bool approved; }
 
+  // Field names match ai_agents/data/graph.json and the server's /health JSON.
+  [Serializable] public class GraphNodeDto { public string id, name, file, cluster, kind; public int start, end; }
+  [Serializable] public class GraphEdgeDto { public string src, dst, type, kind; }
+  [Serializable] public class GraphDto
+  {
+    public System.Collections.Generic.List<GraphNodeDto> nodes = new System.Collections.Generic.List<GraphNodeDto>();
+    public System.Collections.Generic.List<GraphEdgeDto> edges = new System.Collections.Generic.List<GraphEdgeDto>();
+  }
+  [Serializable] public class HealthDto { public bool ok, cached_tests; public string repo, branch; public int changed; }
+
   /// <summary>HTTP client for server/jarvis_server.py. On a Quest, 127.0.0.1 is the headset itself:
   /// set the PC's LAN IP via PlayerPrefs key "jarvis.server" (or DefaultServerUrl) and use the same token as JARVIS_TOKEN.</summary>
   public sealed class JarvisBridge : MonoBehaviour
@@ -48,6 +58,12 @@ namespace JarvisVR
       StartCoroutine(ApproveRoutine(approved, ok, fail));
 
     public void GetSource(string nodeId, Action<SourceResponse> ok) => StartCoroutine(SourceRoutine(nodeId, ok));
+
+    public void GetHealth(Action<HealthDto> ok, Action<string> fail) =>
+      StartCoroutine(Send("GET", "/health", null, b => ok(JsonUtility.FromJson<HealthDto>(b)), fail));
+
+    public void GetGraph(Action<GraphDto> ok) =>
+      StartCoroutine(Send("GET", "/graph", null, b => ok(JsonUtility.FromJson<GraphDto>(b)), e => Debug.LogWarning("JARVIS graph: " + e)));
 
     private IEnumerator EnsureSession(Action<string> fail)
     {

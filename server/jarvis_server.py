@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import subprocess
 import uuid
 from collections import defaultdict
 
@@ -14,7 +15,7 @@ from google.genai import types
 from pydantic import BaseModel
 
 from ai_agents.agent import root_agent
-from ai_agents.config import GRAPH_PATH, USE_CACHED_TESTS
+from ai_agents.config import GRAPH_PATH, REPO_ROOT, USE_CACHED_TESTS
 from ai_agents.tools.git_tools import commit_worktree
 from ai_agents.tools.graph_tools import get_source
 
@@ -70,9 +71,18 @@ async def new_session():
     return {'session_id': session_id}
 
 
+def _git(*args):
+    try:
+        return subprocess.run(['git', *args], cwd=REPO_ROOT, capture_output=True, text=True, timeout=5).stdout.strip()
+    except Exception:
+        return ''
+
+
 @app.get('/health')
 async def health():
-    return {'ok': True, 'cached_tests': USE_CACHED_TESTS}
+    changed = len([line for line in _git('status', '--porcelain').splitlines() if line.strip()])
+    return {'ok': True, 'cached_tests': USE_CACHED_TESTS, 'repo': REPO_ROOT.name,
+            'branch': _git('rev-parse', '--abbrev-ref', 'HEAD') or '?', 'changed': changed}
 
 
 @app.get('/graph', dependencies=[Depends(auth)])
