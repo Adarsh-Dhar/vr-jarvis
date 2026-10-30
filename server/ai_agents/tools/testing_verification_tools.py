@@ -374,30 +374,38 @@ def generate_unit_tests(
             signature = sig_result['signature']
             params = signature.get('parameters', [])
             
-            # Generate test template
+            # Generate test template based on signature
             test_code = f"import pytest\n\n"
             test_code += f"def test_{function_id}_normal_case():\n"
-            test_code += f"    # TODO: Implement test for {function_id}\n"
-            test_code += f"    assert True\n\n"
+            test_code += f"    \"\"\"Test normal operation of {function_id}\"\"\"\n"
+            test_code += f"    # TODO: Provide test input and expected output\n"
+            test_code += f"    result = {function_id}()\n"
+            test_code += f"    assert result is not None\n\n"
             
             if params:
                 test_code += f"def test_{function_id}_with_params():\n"
+                test_code += f"    \"\"\"Test {function_id} with parameters\"\"\"\n"
                 test_code += f"    # TODO: Test with parameters: {', '.join(p['name'] for p in params)}\n"
-                test_code += f"    assert True\n\n"
+                test_code += f"    params = {{}}\n"
+                test_code += f"    result = {function_id}(**params)\n"
+                test_code += f"    assert result is not None\n\n"
             
             test_code += f"def test_{function_id}_error_case():\n"
-            test_code += f"    # TODO: Test error handling\n"
-            test_code += f"    assert True\n"
+            test_code += f"    \"\"\"Test error handling for {function_id}\"\"\"\n"
+            test_code += f"    # TODO: Test with invalid input\n"
+            test_code += f"    with pytest.raises(Exception):\n"
+            test_code += f"        {function_id}()\n"
             
             return {
                 'status': 'ok',
                 'function_id': function_id,
                 'generated_tests': [
-                    {'name': f'test_{function_id}_normal_case', 'code': test_code},
-                    {'name': f'test_{function_id}_with_params', 'code': test_code},
-                    {'name': f'test_{function_id}_error_case', 'code': test_code}
+                    {'name': f'test_{function_id}_normal_case', 'code': test_code.split('\n\n')[0] + '\n'},
+                    {'name': f'test_{function_id}_with_params', 'code': test_code.split('\n\n')[1] + '\n' if params else None},
+                    {'name': f'test_{function_id}_error_case', 'code': test_code.split('\n\n')[-1]}
                 ],
-                'note': 'Real test generation requires LLM integration'
+                'template': True,
+                'note': 'Template generated - full test generation requires LLM integration or manual completion'
             }
         
         return sig_result
@@ -415,28 +423,36 @@ def generate_edge_case_tests(
 ) -> dict:
     """Generate edge-case tests."""
     try:
-        test_code = f"import pytest\n\n"
-        test_code += f"def test_{function_id}_null_input():\n"
-        test_code += f"    # TODO: Test with None/null input\n"
-        test_code += f"    assert True\n\n"
+        tests = []
         
-        test_code += f"def test_{function_id}_empty_input():\n"
-        test_code += f"    # TODO: Test with empty string/list\n"
-        test_code += f"    assert True\n\n"
+        # Null input test
+        null_test = f"def test_{function_id}_null_input():\n"
+        null_test += f"    \"\"\"Test {function_id} with None/null input\"\"\"\n"
+        null_test += f"    with pytest.raises((ValueError, TypeError)):\n"
+        null_test += f"        {function_id}(None)\n"
+        tests.append({'name': f'test_{function_id}_null_input', 'code': null_test})
         
-        test_code += f"def test_{function_id}_boundary_value():\n"
-        test_code += f"    # TODO: Test with boundary values\n"
-        test_code += f"    assert True\n"
+        # Empty input test
+        empty_test = f"def test_{function_id}_empty_input():\n"
+        empty_test += f"    \"\"\"Test {function_id} with empty input\"\"\"\n"
+        empty_test += f"    result = {function_id}('')\n"
+        empty_test += f"    assert result is not None\n"
+        tests.append({'name': f'test_{function_id}_empty_input', 'code': empty_test})
+        
+        # Boundary value test
+        boundary_test = f"def test_{function_id}_boundary_value():\n"
+        boundary_test += f"    \"\"\"Test {function_id} with boundary values\"\"\"\n"
+        boundary_test += f"    # TODO: Test with max/min values\n"
+        boundary_test += f"    result = {function_id}(0)\n"
+        boundary_test += f"    assert result is not None\n"
+        tests.append({'name': f'test_{function_id}_boundary_value', 'code': boundary_test})
         
         return {
             'status': 'ok',
             'function_id': function_id,
-            'generated_tests': [
-                {'name': f'test_{function_id}_null_input', 'code': test_code},
-                {'name': f'test_{function_id}_empty_input', 'code': test_code},
-                {'name': f'test_{function_id}_boundary_value', 'code': test_code}
-            ],
-            'note': 'Real test generation requires LLM integration'
+            'generated_tests': tests,
+            'template': True,
+            'note': 'Template generated - full test generation requires LLM integration or manual completion'
         }
     except Exception as e:
         return {
@@ -452,21 +468,39 @@ def generate_integration_tests(
 ) -> dict:
     """Generate integration tests."""
     try:
-        test_code = f"import pytest\n\n"
-        test_code += f"def test_{endpoint.replace('/', '_')}_success():\n"
-        test_code += f"    # TODO: Test successful endpoint call\n"
-        test_code += f"    assert True\n\n"
+        import re
+        endpoint_name = re.sub(r'[^a-zA-Z0-9_]', '_', endpoint.replace('/', '_'))
         
-        test_code += f"def test_{endpoint.replace('/', '_')}_error():\n"
-        test_code += f"    # TODO: Test error handling\n"
-        test_code += f"    assert True\n"
+        tests = []
+        
+        # Success test
+        success_test = f"def test_{endpoint_name}_success():\n"
+        success_test += f"    \"\"\"Test successful {endpoint} call\"\"\"\n"
+        success_test += f"    # TODO: Configure request payload\n"
+        success_test += f"    response = requests.get('{endpoint}')\n"
+        success_test += f"    assert response.status_code == 200\n"
+        tests.append({'name': f'test_{endpoint_name}_success', 'code': success_test})
+        
+        # Error test
+        error_test = f"def test_{endpoint_name}_error():\n"
+        error_test += f"    \"\"\"Test {endpoint} error handling\"\"\"\n"
+        error_test += f"    # TODO: Test with invalid input\n"
+        error_test += f"    response = requests.get('{endpoint}/invalid')\n"
+        error_test += f"    assert response.status_code in [400, 404, 500]\n"
+        tests.append({'name': f'test_{endpoint_name}_error', 'code': error_test})
         
         return {
             'status': 'ok',
             'endpoint': endpoint,
-            'generated_tests': [
-                {'name': f'test_{endpoint.replace('/', '_')}_success', 'code': test_code},
-                {'name': f'test_{endpoint.replace('/', '_')}_error', 'code': test_code}
+            'generated_tests': tests,
+            'template': True,
+            'note': 'Template generated - full test generation requires LLM integration or manual completion'
+        }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
             ],
             'note': 'Real test generation requires LLM integration'
         }
@@ -785,11 +819,18 @@ def verify_security(
 ) -> dict:
     """Check security findings."""
     try:
-        # This is a placeholder - real implementation would use tools like bandit, safety, etc.
+        from .security_quality_tools import scan_security_vulnerabilities, scan_vulnerabilities
+        
+        # Use existing security scanning tools
+        vuln_result = scan_vulnerabilities(repository_path, tool_context)
+        security_result = scan_security_vulnerabilities(repository_path, tool_context)
+        
         return {
-            'status': 'not_implemented',
-            'message': 'Security verification requires integration with tools like bandit, safety, or SAST tools',
-            'repository_path': repository_path
+            'status': 'ok',
+            'repository_path': repository_path,
+            'vulnerabilities': vuln_result.get('vulnerabilities', []),
+            'security_issues': security_result.get('security_issues', []),
+            'note': 'Using existing security scanning tools - additional verification requires bandit/safety integration'
         }
     except Exception as e:
         return {
@@ -806,15 +847,54 @@ def compare_before_after(
 ) -> dict:
     """Compare results before and after changes."""
     try:
-        # This would compare test results, coverage, etc.
-        # For now, return a placeholder
+        from pathlib import Path
+        import difflib
+        
+        before_path = Path(before_snapshot)
+        after_path = Path(after_snapshot)
+        
+        # If paths exist, compare files
+        if before_path.exists() and after_path.exists():
+            before_content = before_path.read_text(encoding='utf-8')
+            after_content = after_path.read_text(encoding='utf-8')
+            
+            diff = list(difflib.unified_diff(
+                before_content.splitlines(keepends=True),
+                after_content.splitlines(keepends=True),
+                fromfile=str(before_path),
+                tofile=str(after_path)
+            ))
+            
+            return {
+                'status': 'ok',
+                'before_snapshot': before_snapshot,
+                'after_snapshot': after_snapshot,
+                'diff': ''.join(diff),
+                'changes_detected': len(diff) > 0,
+                'note': 'File comparison - full snapshot comparison requires test result management'
+            }
+        
+        # Otherwise, compare as strings
+        diff = list(difflib.unified_diff(
+            before_snapshot.splitlines(keepends=True),
+            after_snapshot.splitlines(keepends=True),
+            fromfile='before',
+            tofile='after'
+        ))
+        
         return {
-            'status': 'not_implemented',
-            'message': 'Before/after comparison requires snapshot management',
-            'before_snapshot': before_snapshot,
-            'after_snapshot': after_snapshot
+            'status': 'ok',
+            'before_snapshot': before_snapshot[:100] + '...' if len(before_snapshot) > 100 else before_snapshot,
+            'after_snapshot': after_snapshot[:100] + '...' if len(after_snapshot) > 100 else after_snapshot,
+            'diff': ''.join(diff),
+            'changes_detected': len(diff) > 0,
+            'note': 'String comparison - full snapshot comparison requires test result management'
         }
     except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
         return {
             'status': 'error',
             'error': str(e)

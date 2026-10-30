@@ -195,10 +195,29 @@ def expand_graph_node(
                 'error': f'Graph {graph_id} not found'
             }
         
-        # In a real implementation, this would query code intelligence to find related nodes
-        # For now, return the current state
-        node_count = len(_graph_state[graph_id]['nodes'])
-        edge_count = len(_graph_state[graph_id]['edges'])
+        # Expand node by adding related nodes based on depth
+        from .relationship_intelligence_tools import find_downstream_dependencies, find_shared_dependencies
+        
+        graph = _graph_state[graph_id]
+        
+        # Add downstream dependencies
+        dep_result = find_downstream_dependencies(node_id, tool_context)
+        if dep_result.get('status') == 'ok':
+            for dep in dep_result.get('dependencies', []):
+                if dep not in [n['id'] for n in graph['nodes']]:
+                    graph['nodes'].append({'id': dep, 'type': 'dependency'})
+                    graph['edges'].append({'from': node_id, 'to': dep})
+        
+        # Add shared dependencies
+        shared_result = find_shared_dependencies(node_id, tool_context)
+        if shared_result.get('status') == 'ok':
+            for shared in shared_result.get('shared_dependencies', []):
+                if shared not in [n['id'] for n in graph['nodes']]:
+                    graph['nodes'].append({'id': shared, 'type': 'shared'})
+                    graph['edges'].append({'from': node_id, 'to': shared})
+        
+        node_count = len(graph['nodes'])
+        edge_count = len(graph['edges'])
         
         return {
             'status': 'ok',
@@ -208,7 +227,8 @@ def expand_graph_node(
             'expanded': True,
             'total_nodes': node_count,
             'total_edges': edge_count,
-            'note': 'Real expansion requires code intelligence integration'
+            'new_nodes': node_count - (len(graph['nodes']) - (len(dep_result.get('dependencies', [])) + len(shared_result.get('shared_dependencies', [])))),
+            'note': 'Expanded using relationship analysis'
         }
     except Exception as e:
         return {

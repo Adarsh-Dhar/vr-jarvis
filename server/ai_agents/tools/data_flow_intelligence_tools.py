@@ -327,10 +327,42 @@ def trace_cross_service_flow(
 ) -> dict:
     """Track data across service boundaries."""
     try:
+        from .repository_tools import search_code
+        
+        # Search for cross-service patterns
+        service_patterns = [
+            'requests.get',
+            'requests.post',
+            'http.request',
+            'fetch(',
+            'axios.',
+            'grpc.',
+            'redis.',
+            'kafka.',
+            'rabbitmq.',
+            'sqs.',
+            'publish(',
+            'emit('
+        ]
+        
+        service_calls = []
+        for pattern in service_patterns:
+            search_result = search_code(tool_context, query=pattern)
+            if search_result.get('status') == 'ok':
+                for match in search_result['matches']:
+                    service_calls.append({
+                        'pattern': pattern,
+                        'file': match['file'],
+                        'line': match['line'],
+                        'snippet': match['snippet']
+                    })
+        
         return {
-            'status': 'not_implemented',
-            'message': 'Cross-service flow analysis requires runtime tracing',
-            'data_id': data_id
+            'status': 'ok',
+            'data_id': data_id,
+            'service_calls': service_calls,
+            'count': len(service_calls),
+            'note': 'Pattern-based analysis - full cross-service flow requires runtime tracing'
         }
     except Exception as e:
         return {
@@ -346,10 +378,39 @@ def trace_database_reads(
 ) -> dict:
     """Track data from database reads."""
     try:
+        from .repository_tools import search_code
+        
+        # Search for database read patterns
+        read_patterns = [
+            'SELECT',
+            '.find(',
+            '.get(',
+            '.filter(',
+            '.all()',
+            '.first()',
+            '.one()',
+            'select(',
+            'query('
+        ]
+        
+        read_operations = []
+        for pattern in read_patterns:
+            search_result = search_code(tool_context, query=pattern)
+            if search_result.get('status') == 'ok':
+                for match in search_result['matches']:
+                    read_operations.append({
+                        'pattern': pattern,
+                        'file': match['file'],
+                        'line': match['line'],
+                        'snippet': match['snippet']
+                    })
+        
         return {
-            'status': 'not_implemented',
-            'message': 'Database read tracking requires runtime tracing',
-            'query_id': query_id
+            'status': 'ok',
+            'query_id': query_id,
+            'read_operations': read_operations,
+            'count': len(read_operations),
+            'note': 'Pattern-based analysis - full database read tracking requires runtime tracing'
         }
     except Exception as e:
         return {
@@ -365,10 +426,42 @@ def trace_database_writes(
 ) -> dict:
     """Track data to database writes."""
     try:
+        from .repository_tools import search_code
+        
+        # Search for database write patterns
+        write_patterns = [
+            'INSERT',
+            'UPDATE',
+            'DELETE',
+            '.save(',
+            '.create(',
+            '.update(',
+            '.delete(',
+            '.add(',
+            '.remove(',
+            'insert(',
+            'update(',
+            'delete('
+        ]
+        
+        write_operations = []
+        for pattern in write_patterns:
+            search_result = search_code(tool_context, query=pattern)
+            if search_result.get('status') == 'ok':
+                for match in search_result['matches']:
+                    write_operations.append({
+                        'pattern': pattern,
+                        'file': match['file'],
+                        'line': match['line'],
+                        'snippet': match['snippet']
+                    })
+        
         return {
-            'status': 'not_implemented',
-            'message': 'Database write tracking requires runtime tracing',
-            'query_id': query_id
+            'status': 'ok',
+            'query_id': query_id,
+            'write_operations': write_operations,
+            'count': len(write_operations),
+            'note': 'Pattern-based analysis - full database write tracking requires runtime tracing'
         }
     except Exception as e:
         return {
@@ -384,10 +477,42 @@ def trace_api_data_flow(
 ) -> dict:
     """Track data through API calls."""
     try:
+        from .repository_tools import search_code
+        
+        # Search for API data flow patterns
+        api_patterns = [
+            'request.json',
+            'request.data',
+            'request.form',
+            'request.body',
+            'response.json',
+            'json.dumps',
+            'json.loads',
+            '@app.route',
+            '@api.route',
+            'POST',
+            'PUT',
+            'PATCH'
+        ]
+        
+        api_flows = []
+        for pattern in api_patterns:
+            search_result = search_code(tool_context, query=pattern)
+            if search_result.get('status') == 'ok':
+                for match in search_result['matches']:
+                    api_flows.append({
+                        'pattern': pattern,
+                        'file': match['file'],
+                        'line': match['line'],
+                        'snippet': match['snippet']
+                    })
+        
         return {
-            'status': 'not_implemented',
-            'message': 'API data flow tracking requires runtime tracing',
-            'endpoint': endpoint
+            'status': 'ok',
+            'endpoint': endpoint,
+            'api_flows': api_flows,
+            'count': len(api_flows),
+            'note': 'Pattern-based analysis - full API data flow tracking requires runtime tracing'
         }
     except Exception as e:
         return {
@@ -403,10 +528,41 @@ def trace_file_operations(
 ) -> dict:
     """Track data through file operations."""
     try:
+        from .repository_tools import search_code
+        
+        # Search for file operation patterns
+        file_patterns = [
+            'open(',
+            '.read(',
+            '.write(',
+            '.readlines(',
+            '.writelines(',
+            'with open',
+            'Path(',
+            'read_file',
+            'write_file',
+            'save(',
+            'load('
+        ]
+        
+        file_ops = []
+        for pattern in file_patterns:
+            search_result = search_code(tool_context, query=pattern)
+            if search_result.get('status') == 'ok':
+                for match in search_result['matches']:
+                    file_ops.append({
+                        'pattern': pattern,
+                        'file': match['file'],
+                        'line': match['line'],
+                        'snippet': match['snippet']
+                    })
+        
         return {
-            'status': 'not_implemented',
-            'message': 'File operation tracking requires runtime tracing',
-            'file_path': file_path
+            'status': 'ok',
+            'file_path': file_path,
+            'file_operations': file_ops,
+            'count': len(file_ops),
+            'note': 'Pattern-based analysis - full file operation tracking requires runtime tracing'
         }
     except Exception as e:
         return {
@@ -422,10 +578,40 @@ def trace_state_changes(
 ) -> dict:
     """Track state mutations."""
     try:
+        from .repository_tools import search_code
+        
+        # Search for state change patterns
+        state_patterns = [
+            'setState',
+            'useState',
+            'this.state',
+            '.state =',
+            'self.',
+            'state.',
+            'dispatch(',
+            'emit(',
+            'store.',
+            'setState('
+        ]
+        
+        state_changes = []
+        for pattern in state_patterns:
+            search_result = search_code(tool_context, query=pattern)
+            if search_result.get('status') == 'ok':
+                for match in search_result['matches']:
+                    state_changes.append({
+                        'pattern': pattern,
+                        'file': match['file'],
+                        'line': match['line'],
+                        'snippet': match['snippet']
+                    })
+        
         return {
-            'status': 'not_implemented',
-            'message': 'State change tracking requires runtime tracing',
-            'component_id': component_id
+            'status': 'ok',
+            'component_id': component_id,
+            'state_changes': state_changes,
+            'count': len(state_changes),
+            'note': 'Pattern-based analysis - full state change tracking requires runtime tracing'
         }
     except Exception as e:
         return {

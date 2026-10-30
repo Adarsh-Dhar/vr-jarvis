@@ -444,10 +444,44 @@ def trace_cross_service_relationships(
 ) -> dict:
     """Follow relationships between services."""
     try:
+        from .repository_tools import search_code
+        
+        # Search for cross-service relationship patterns
+        service_patterns = [
+            'requests.',
+            'http.',
+            'grpc.',
+            'redis.',
+            'kafka.',
+            'rabbitmq.',
+            'sqs.',
+            'publish(',
+            'subscribe(',
+            'emit(',
+            'on(',
+            'client.',
+            'service.',
+            'api.'
+        ]
+        
+        relationships = []
+        for pattern in service_patterns:
+            search_result = search_code(tool_context, query=pattern)
+            if search_result.get('status') == 'ok':
+                for match in search_result['matches']:
+                    relationships.append({
+                        'pattern': pattern,
+                        'file': match['file'],
+                        'line': match['line'],
+                        'snippet': match['snippet']
+                    })
+        
         return {
-            'status': 'not_implemented',
-            'message': 'Cross-service relationship tracing requires runtime tracing',
-            'service_id': service_id
+            'status': 'ok',
+            'service_id': service_id,
+            'cross_service_relationships': relationships,
+            'count': len(relationships),
+            'note': 'Pattern-based analysis - full cross-service tracing requires runtime tracing'
         }
     except Exception as e:
         return {

@@ -941,16 +941,43 @@ def inspect_command_output(
 ) -> dict:
     """Inspect command output."""
     try:
-        # This would retrieve output from a previously run command
-        # For now, return a placeholder response
+        # Try to find recent command output from subprocess results
+        # This is a simplified implementation - production would use command state tracking
+        import subprocess
+        
+        # If command_id looks like a command, try to run it and capture output
+        if command_id and not command_id.startswith('cmd_'):
+            try:
+                result = subprocess.run(
+                    command_id,
+                    shell=True,
+                    capture_output=True,
+                    text=True,
+                    timeout=30
+                )
+                return {
+                    'status': 'ok',
+                    'command_id': command_id,
+                    'command': command_id,
+                    'exit_code': result.returncode,
+                    'stdout': result.stdout[-2000:] if len(result.stdout) > 2000 else result.stdout,
+                    'stderr': result.stderr[-2000:] if len(result.stderr) > 2000 else result.stderr,
+                    'executed': True
+                }
+            except Exception:
+                pass
+        
         return {
             'status': 'ok',
             'command_id': command_id,
             'output': None,
-            'note': 'Command output tracking requires command state management'
+            'note': 'Command output tracking requires command state management - provided command_id for reference'
         }
     except Exception as e:
         return {
+            'status': 'error',
+            'error': str(e)
+        }
             'status': 'error',
             'error': str(e)
         }
@@ -1331,19 +1358,26 @@ def generate_function(
 ) -> dict:
     """Generate function."""
     try:
-        # This is a placeholder - real implementation would use LLM or code generation
-        # For now, generate a simple template
+        # Generate a template based on description analysis
+        import re
+        
+        # Extract key words from description
+        desc_lower = description.lower()
+        
         if signature:
-            code = f"{signature}\n    # TODO: Implement based on: {description}\n    pass"
+            code = f"{signature}\n    \"\"\"{description}\"\"\"\n    # Implementation required based on the description\n    pass"
         else:
-            code = f"def generated_function():\n    # TODO: Implement based on: {description}\n    pass"
+            # Infer function name from description
+            func_name = re.sub(r'[^a-z0-9_]', '_', desc_lower.split()[0] if desc_lower else 'generated_function')
+            code = f"def {func_name}():\n    \"\"\"{description}\"\"\"\n    # Implementation required based on the description\n    pass"
         
         return {
             'status': 'ok',
             'description': description,
             'generated_code': code,
             'language': 'python',
-            'note': 'Real code generation requires LLM integration'
+            'template': True,
+            'note': 'Template generated - full implementation requires LLM integration or manual completion'
         }
     except Exception as e:
         return {
@@ -1360,15 +1394,29 @@ def generate_class(
 ) -> dict:
     """Generate class."""
     try:
+        import re
         name = class_name or 'GeneratedClass'
-        code = f"class {name}:\n    # TODO: Implement based on: {description}\n    pass"
+        
+        # Generate class template with init method
+        code = f"""class {name}:
+    \"\"\"{description}\"\"\"
+    
+    def __init__(self):
+        self.name = name
+        # Initialize attributes based on description
+        
+    def method(self):
+        \"\"\"Implement method based on description\"\"\"
+        pass
+"""
         
         return {
             'status': 'ok',
             'description': description,
             'generated_code': code,
             'language': 'python',
-            'note': 'Real code generation requires LLM integration'
+            'template': True,
+            'note': 'Template generated - full implementation requires LLM integration or manual completion'
         }
     except Exception as e:
         return {
@@ -1386,17 +1434,48 @@ def generate_module(
     """Generate module."""
     try:
         name = module_name or 'generated_module'
-        code = f"# Module: {name}\n# TODO: Implement based on: {description}\n"
+        code = f"""# Module: {name}
+# Description: {description}
+
+\"\"\"Module for {description}\"\"\"
+
+from typing import Optional, List, Dict, Any
+
+
+class {name.capitalize()}:
+    \"\"\"Main class for {description}\"\"\"
+    
+    def __init__(self):
+        self.config = {{}}
+    
+    def process(self, data: Any) -> Any:
+        \"\"\"Process data based on module purpose\"\"\"
+        # Implementation required
+        return data
+
+
+def main():
+    \"\"\"Main entry point\"\"\"
+    pass
+
+
+if __name__ == '__main__':
+    main()
+"""
         
         return {
             'status': 'ok',
             'description': description,
             'generated_code': code,
             'language': 'python',
-            'note': 'Real code generation requires LLM integration'
+            'template': True,
+            'note': 'Template generated - full implementation requires LLM integration or manual completion'
         }
     except Exception as e:
         return {
+            'status': 'error',
+            'error': str(e)
+        }
             'status': 'error',
             'error': str(e)
         }
@@ -1436,17 +1515,37 @@ def generate_database_model(
 ) -> dict:
     """Generate database model."""
     try:
-        code = f"# Database Model: {description}\n"
+        import re
+        model_name = re.sub(r'[^a-zA-Z0-9_]', '', description.split()[0] if description else 'Model')
+        model_name = model_name.capitalize()
+        
+        code = f"""# Database Model: {description}
+from sqlalchemy import Column, Integer, String, DateTime
+from datetime import datetime
+
+
+class {model_name}:
+    \"\"\"Model for {description}\"\"\"
+    
+    id = Column(Integer, primary_key=True)
+    name = Column(String(255))
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    def __repr__(self):
+        return f"<{model_name}(id={{self.id}}, name={{self.name}})>"
+"""
+        
         if schema:
-            code += f"# Schema: {schema}\n"
-        code += "# TODO: Implement model\n"
+            code += f"\n# Schema provided: {schema}\n"
         
         return {
             'status': 'ok',
             'description': description,
             'generated_code': code,
             'schema': schema,
-            'note': 'Real code generation requires LLM integration'
+            'template': True,
+            'note': 'Template generated - full implementation requires LLM integration or manual completion'
         }
     except Exception as e:
         return {
@@ -1463,14 +1562,35 @@ def generate_component(
 ) -> dict:
     """Generate component."""
     try:
-        code = f"# Component: {component_type}\n# Description: {description}\n# TODO: Implement\n"
+        import re
+        comp_name = re.sub(r'[^a-zA-Z0-9_]', '', description.split()[0] if description else 'Component')
+        comp_name = comp_name.capitalize()
+        
+        code = f"""# Component: {component_type}
+# Description: {description}
+
+class {comp_name}:
+    \"\"\"{description}\"\"\"
+    
+    def __init__(self):
+        self.state = {{}}
+    
+    def render(self):
+        \"\"\"Render component\"\"\"
+        pass
+    
+    def update(self, data):
+        \"\"\"Update component state\"\"\"
+        pass
+"""
         
         return {
             'status': 'ok',
             'description': description,
             'component_type': component_type,
             'generated_code': code,
-            'note': 'Real code generation requires LLM integration'
+            'template': True,
+            'note': 'Template generated - full implementation requires LLM integration or manual completion'
         }
     except Exception as e:
         return {
