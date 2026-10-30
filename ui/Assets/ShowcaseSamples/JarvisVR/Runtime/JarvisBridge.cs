@@ -34,6 +34,9 @@ namespace JarvisVR
     public System.Collections.Generic.List<GraphNodeDto> nodes = new System.Collections.Generic.List<GraphNodeDto>();
     public System.Collections.Generic.List<GraphEdgeDto> edges = new System.Collections.Generic.List<GraphEdgeDto>();
   }
+  [Serializable] public class RepoInfoDto { public string name, branch; public int files; }
+  [Serializable] public class ReposDto { public string active; public System.Collections.Generic.List<RepoInfoDto> repos = new System.Collections.Generic.List<RepoInfoDto>(); }
+  [Serializable] internal class RepoSelectRequest { public string name; }
   [Serializable] public class HealthDto { public bool ok, cached_tests; public string repo, branch; public int changed; }
 
   /// <summary>HTTP client for server/jarvis_server.py. On a Quest, 127.0.0.1 is the headset itself:
@@ -61,6 +64,13 @@ namespace JarvisVR
 
     public void GetHealth(Action<HealthDto> ok, Action<string> fail) =>
       StartCoroutine(Send("GET", "/health", null, b => ok(JsonUtility.FromJson<HealthDto>(b)), fail));
+
+    public void GetRepos(Action<ReposDto> ok) =>
+      StartCoroutine(Send("GET", "/repos", null, b => ok(JsonUtility.FromJson<ReposDto>(b)), e => Debug.LogWarning("JARVIS repos: " + e)));
+
+    public void SelectRepo(string name, Action<bool> done) =>
+      StartCoroutine(Send("POST", "/repos/select", JsonUtility.ToJson(new RepoSelectRequest { name = name }), b => done(true),
+        e => { Debug.LogWarning("JARVIS select repo: " + e); done(false); }));
 
     public void GetGraph(Action<GraphDto> ok) =>
       StartCoroutine(Send("GET", "/graph", null, b => ok(JsonUtility.FromJson<GraphDto>(b)), e => Debug.LogWarning("JARVIS graph: " + e)));

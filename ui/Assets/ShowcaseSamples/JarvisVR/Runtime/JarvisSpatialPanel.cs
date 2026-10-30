@@ -229,7 +229,7 @@ namespace JarvisVR
       rimg.sprite = JarvisGfx.RoundedRect(); rimg.type = Image.Type.Sliced;
       rimg.color = new Color(accent.r, accent.g, accent.b, 0.6f); rimg.raycastTarget = false;
       var rbox = rh.AddComponent<BoxCollider>();
-      rbox.size = new Vector3(56, 56, 12f); rbox.center = new Vector3(0, 0, -8f);
+      rbox.size = new Vector3(80, 80, 30f); rbox.center = new Vector3(0, 0, 8f);   // larger hit area, in front for device pinch
       rh.AddComponent<JarvisSpatialResize>().Panel = p.Anim;
       p._resizeRt = rrt;
 

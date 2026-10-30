@@ -15,7 +15,8 @@ from google.genai import types
 from pydantic import BaseModel
 
 from ai_agents.agent import root_agent
-from ai_agents.config import GRAPH_PATH, REPO_ROOT, USE_CACHED_TESTS
+from ai_agents import config, repository
+from ai_agents.config import USE_CACHED_TESTS
 from ai_agents.tools.git_tools import commit_worktree
 from ai_agents.tools.graph_tools import get_source
 
@@ -73,7 +74,7 @@ async def new_session():
 
 def _git(*args):
     try:
-        return subprocess.run(['git', *args], cwd=REPO_ROOT, capture_output=True, text=True, timeout=5).stdout.strip()
+        return subprocess.run(['git', *args], cwd=config.REPO_ROOT, capture_output=True, text=True, timeout=5).stdout.strip()
     except Exception:
         return ''
 
@@ -81,13 +82,33 @@ def _git(*args):
 @app.get('/health')
 async def health():
     changed = len([line for line in _git('status', '--porcelain').splitlines() if line.strip()])
-    return {'ok': True, 'cached_tests': USE_CACHED_TESTS, 'repo': REPO_ROOT.name,
+    return {'ok': True, 'cached_tests': USE_CACHED_TESTS, 'repo': config.REPO_ROOT.name,
             'branch': _git('rev-parse', '--abbrev-ref', 'HEAD') or '?', 'changed': changed}
 
 
 @app.get('/graph', dependencies=[Depends(auth)])
 async def graph():
-    return json.loads(GRAPH_PATH.read_text())
+    if not config.GRAPH_PATH.is_file() and config.REPO_ROOT.name in repository.list_repos():
+        repository.activate(config.REPO_ROOT.name)
+    return json.loads(config.GRAPH_PATH.read_text())
+
+
+class RepoBody(BaseModel):
+    name: str
+
+
+@app.get('/repos', dependencies=[Depends(auth)])
+async def repos():
+    return {'active': config.REPO_ROOT.name, 'repos': [repository.info(n) for n in repository.list_repos()]}
+
+
+@app.post('/repos/select', dependencies=[Depends(auth)])
+async def select_repo(body: RepoBody):
+    try:
+        g = await asyncio.to_thread(repository.activate, body.name)
+    except KeyError:
+        raise HTTPException(status_code=404, detail='unknown repository: ' + body.name)
+    return {'active': body.name, 'nodes': len(g['nodes']), 'edges': len(g['edges'])}
 
 
 @app.get('/source/{node_id}', dependencies=[Depends(auth)])

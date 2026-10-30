@@ -135,6 +135,16 @@ namespace JarvisVR
         hoverGrab = hit.collider.GetComponentInParent<JarvisSpatialGrab>();
         hoverFx = hit.collider.GetComponentInParent<JarvisNodeFx>();
         hoverResize = hit.collider.GetComponentInParent<JarvisSpatialResize>();
+        // Pinching anywhere on a panel body (not only the thin title strip) grabs the panel, unless it is pinned.
+        if (hoverBtn == null && hoverNode == null && hoverGrab == null && hoverResize == null)
+        {
+          JarvisSpatialPanel panel = hit.collider.GetComponentInParent<JarvisSpatialPanel>();
+          if (panel != null && !panel.Pinned)
+          {
+            Transform g = panel.transform.Find("Grab");
+            if (g != null) hoverGrab = g.GetComponent<JarvisSpatialGrab>();
+          }
+        }
       }
       s.Reticle.position = s.Ray.GetPoint(hasHit ? dist - 0.01f : 1.5f);
       s.Reticle.GetComponent<Renderer>().sharedMaterial.color = s.Down ? new Color(0.96f, 0.65f, 0.14f) : new Color(0.24f, 0.84f, 0.91f);

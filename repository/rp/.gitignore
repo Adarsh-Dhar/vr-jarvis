@@ -1,0 +1,77 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Large binary files
+*.joblib
+*.pkl
+*.pkl.gz
+*.pth
+
+# Data files (Excel, CSV - these are often large and shouldn't be versioned)
+*.xlsx
+*.xls
+*.csv
+*.parquet
+*.feather
+*.h5
+*.hdf5
+
+# Generated reports and images
+reports/*.png
+reports/*.jpg
+reports/*.jpeg
+reports/*.pdf
+reports/*.html
+
+# Model artifacts
+models/*.joblib
+models/*.pkl
+models/*.pth
+models/*.h5
+models/*.bin
+
+# Data artifacts
+data/*.xlsx
+data/*.xls
+data/*.csv
+data/*.parquet
+data/*.feather
+data/*.h5

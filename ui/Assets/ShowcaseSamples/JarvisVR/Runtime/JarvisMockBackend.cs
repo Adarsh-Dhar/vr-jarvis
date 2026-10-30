@@ -14,6 +14,8 @@ namespace JarvisVR
     void GetSource(string nodeId, Action<SourceResponse> ok);
     void GetHealth(Action<HealthDto> ok, Action<string> fail);
     void GetGraph(Action<GraphDto> ok);
+    void GetRepos(Action<ReposDto> ok);
+    void SelectRepo(string name, Action<bool> done);
   }
 
   /// <summary>Local, network-free backend with scripted answers for UI development. Uses the ids of JarvisGraphModel.Sample().</summary>
@@ -48,6 +50,15 @@ namespace JarvisVR
     {
       StartCoroutine(After(0.15f, () => ok(new HealthDto { ok = true, cached_tests = true, repo = "demo-repo (mock)", branch = "main", changed = 3 })));
     }
+
+    public void GetRepos(Action<ReposDto> ok)
+    {
+      var r = new ReposDto { active = "demo-repo (mock)" };
+      r.repos.Add(new RepoInfoDto { name = "demo-repo (mock)", branch = "main", files = 7 });
+      StartCoroutine(After(0.1f, () => ok(r)));
+    }
+
+    public void SelectRepo(string name, Action<bool> done) { StartCoroutine(After(0.1f, () => done(true))); }
 
     public void GetGraph(Action<GraphDto> ok) { StartCoroutine(After(0.2f, () => ok(JarvisGraphModel.Sample()))); }
 

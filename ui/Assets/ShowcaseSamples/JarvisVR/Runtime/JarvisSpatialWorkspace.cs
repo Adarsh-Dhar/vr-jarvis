@@ -50,6 +50,9 @@ namespace JarvisVR
     // ---- state ----
     private GraphDto _graph;
     private HealthDto _health;
+    private ReposDto _repos;
+    private JarvisSpatialButton _repoPrev, _repoNext;
+    private bool _switching;
     private bool _serverOnline;
     private string _selected, _mode = "MAP", _pending, _ghostDiff, _testSummary = "No test run yet.";
     private readonly List<string> _log = new List<string>();
@@ -95,6 +98,7 @@ namespace JarvisVR
       Log("workspace ready (sample graph)");
 
       _bridge.GetHealth(h => { _health = h; _serverOnline = h != null && h.ok; RefreshStatus(); }, e => { _serverOnline = false; RefreshStatus(); });
+      _bridge.GetRepos(r => { _repos = r; RefreshRepo(); });
       if (!_mock) _bridge.GetGraph(g =>
       {
         if (g == null || g.nodes == null || g.nodes.Count == 0) return;
@@ -148,7 +152,10 @@ namespace JarvisVR
       status.SetBodyBox(46, 36); status.Body.fontSize = 22;
 
       JarvisSpatialPanel repo = AddPanel("repo", "Repository", 440, 520, -1.12f, 0.20f, pal.Cyan);
-      repo.SetBodyBox(60, 440); repo.Body.fontSize = 22;
+      repo.SetBodyBox(60, 370); repo.Body.fontSize = 22;
+      _repoPrev = repo.AddButton("< PREV", 20, 448, 190, 54, () => SwitchRepo(-1));
+      _repoNext = repo.AddButton("NEXT >", 230, 448, 190, 54, () => SwitchRepo(+1));
+      _repoPrev.Interactable = _repoNext.Interactable = false;   // enabled once the server lists 2+ repos
 
       JarvisSpatialPanel code = AddPanel("code", "Code inspector", 560, 520, 1.18f, 0.20f, pal.Cyan);
       code.SetBodyBox(60, 450); code.UseMono(20);
@@ -579,18 +586,46 @@ namespace JarvisVR
       _panels["status"].SetBody(repo + "  ·  " + branch + "  ·  " + changed + " changed  ·  " + server + "  ·  " + _mode);
     }
 
+    private void SwitchRepo(int delta)
+    {
+      if (_switching || _repos == null || _repos.repos.Count < 2) return;
+      int cur = Mathf.Max(0, _repos.repos.FindIndex(r => r.name == _repos.active));
+      string next = _repos.repos[(cur + delta + _repos.repos.Count) % _repos.repos.Count].name;
+      _switching = true;
+      Log("loading repository " + next + " ...");
+      _bridge.SelectRepo(next, ok =>
+      {
+        if (!ok) { _switching = false; Say("Could not open " + next + "."); return; }
+        _repos.active = next;
+        _bridge.GetHealth(h => { _health = h; RefreshStatus(); }, e => { });
+        _bridge.GetGraph(g =>
+        {
+          _switching = false;
+          if (g == null || g.nodes == null) return;
+          LoadGraph(g);
+          if (g.nodes.Count > 0) Select(g.nodes[0].id);
+          Log("repository " + next + ": " + g.nodes.Count + " nodes");
+          RefreshStatus();
+        });
+      });
+    }
+
     private void RefreshRepo()
     {
       if (!_panels.ContainsKey("repo") || _graph == null) return;
+      bool many = _repos != null && _repos.repos.Count > 1;
+      if (_repoPrev != null) _repoPrev.Interactable = _repoNext.Interactable = many && !_switching;
       var sb = new StringBuilder();
-      int lines = 0;
+      if (_repos != null && !string.IsNullOrEmpty(_repos.active))
+        sb.Append("<b>").Append(_repos.active).Append("</b>  (").Append(_repos.repos.Count).Append(" in /repository)\n");
+      int lines = _repos != null ? 1 : 0;
       foreach (ClusterView cv in _clusters.Values)
       {
-        if (lines++ > 14) break;
+        if (lines++ > 11) break;
         sb.Append("<b>").Append(cv.Name).Append("/</b>\n");
         foreach (string file in cv.Members.Select(m => m.Dto.file).Where(f => !string.IsNullOrEmpty(f)).Distinct())
         {
-          if (lines++ > 14) break;
+          if (lines++ > 11) break;
           sb.Append("   ").Append(Path.GetFileName(file)).Append('\n');
         }
       }

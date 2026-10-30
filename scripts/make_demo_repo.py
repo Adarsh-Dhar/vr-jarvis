@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Build ai_agents/demo_repo (a real git repo with a real authorization bug) and regenerate
+"""Build repository/demo-account-service (a real git repo with a real authorization bug) and regenerate
 ai_agents/data/graph.json and demo_change.json from it, using the SAME node ids as the Unity UI."""
 import json, re, shutil, subprocess, sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-REPO = ROOT / 'ai_agents' / 'demo_repo'
+REPO = ROOT / 'repository' / 'demo-account-service'
 DATA = ROOT / 'ai_agents' / 'data'
 
 FILES = {
@@ -159,6 +159,7 @@ def main():
     diff = sh('git', 'diff', 'main', 'feature/account-audit')
     sh('git', 'checkout', '-q', 'main')
     (DATA / 'graph.json').write_text(json.dumps(graph, indent=2))
+    (REPO.parent / (REPO.name + '.graph.json')).write_text(json.dumps(graph, indent=2))   # curated graph wins over auto-index
     (DATA / 'demo_change.json').write_text(json.dumps({
         'branch': 'feature/account-audit', 'base': 'main', 'message': 'Add audit log to deleteAccount',
         'changed_nodes': ['service.delete'], 'diff': diff}, indent=2))
