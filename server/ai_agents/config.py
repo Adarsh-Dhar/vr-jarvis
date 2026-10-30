@@ -7,7 +7,7 @@ ROOT = Path(__file__).parent
 MODEL = os.getenv('JARVIS_MODEL', 'gemini-3.5-flash')
 
 # Every folder inside REPOSITORY_DIR is one code repository the VR UI can show.
-REPOSITORY_DIR = Path(os.getenv('JARVIS_REPOSITORY_DIR', ROOT.parent / 'repository')).resolve()
+REPOSITORY_DIR = Path(os.getenv('JARVIS_REPOSITORY_DIR', ROOT.parent.parent / 'repository')).resolve()
 INDEX_DIR = ROOT / 'data' / 'index'      # generated graphs, one json per repository
 
 

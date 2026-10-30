@@ -52,8 +52,18 @@ namespace JarvisVR
     private GraphDto _graph;
     private HealthDto _health;
     private ReposDto _repos;
-    private JarvisSpatialButton _repoPrev, _repoNext;
-    private bool _switching;
+    private RepoTreeDto _repoTree;
+    private RepoFileDto _openFile;
+    private JarvisSpatialPanel _repoPanel, _codePanel;
+    private JarvisSpatialButton _repoBack, _repoHome, _repoPrev, _repoNext;
+    private JarvisSpatialButton _codePrev, _codeClose, _codeNext;
+    private readonly List<GameObject> _repoRows = new List<GameObject>();
+    private string _browserRepo, _browserPath = "";
+    private int _browserPage, _openFilePage;
+    private bool _treeLoading, _switching;
+    private string _browserError;
+    private const int BrowserRowsPerPage = 7;
+    private const int EditorLinesPerPage = 18;
     private bool _serverOnline;
     private string _selected, _mode = "MAP", _pending, _ghostDiff, _testSummary = "No test run yet.";
     private readonly List<string> _log = new List<string>();
@@ -69,6 +79,7 @@ namespace JarvisVR
     {
       _cam = cam;
       JarvisSceneCleanup.HideMetaDemo();
+      // JarvisSceneCleanup.DisableProblematicComponents();  // Disabled to preserve hand/controller visualization
       JarvisLook.Apply(cam);
       _root = new GameObject("JARVIS Spatial Root").transform;
       Recenter();
@@ -91,7 +102,7 @@ namespace JarvisVR
       JarvisAtmosphere.BuildDust(_root, JarvisSpatialFx.Magenta, JarvisPalette.Current.Cyan);
       JarvisCityscape.Build(_root);
       LoadGraph(JarvisGraphModel.Sample());
-      SetMode("MAP");
+      SetMode("REPOS");                 // begin with the repository picker, like an IDE start screen
       Select("service.delete");
 
       gameObject.AddComponent<JarvisSpatialInput>().Initialize(_cam, _graphRoot, ToggleVoice);
@@ -99,7 +110,7 @@ namespace JarvisVR
       Log("workspace ready (sample graph)");
 
       _bridge.GetHealth(h => { _health = h; _serverOnline = h != null && h.ok; RefreshStatus(); }, e => { _serverOnline = false; RefreshStatus(); });
-      _bridge.GetRepos(r => { _repos = r; RefreshRepo(); });
+      FetchRepos();
       if (!_mock) _bridge.GetGraph(g =>
       {
         if (g == null || g.nodes == null || g.nodes.Count == 0) return;
@@ -129,8 +140,9 @@ namespace JarvisVR
     private static readonly string[] NavModes = { "MAP", "CODE", "FLOW", "ISSUES", "TESTS", "GIT", "AGENT" };
     private static readonly Dictionary<string, string[]> ModePanels = new Dictionary<string, string[]>
     {
+      { "REPOS",  new[] { "repo" } },
       { "MAP",    new[] { "repo", "code", "evidence", "legend" } },
-      { "CODE",   new[] { "code", "evidence", "legend" } },
+      { "CODE",   new[] { "repo", "code", "evidence", "legend" } },
       { "FLOW",   new[] { "activity", "evidence" } },
       { "ISSUES", new[] { "repo", "evidence" } },
       { "TESTS",  new[] { "tests", "code", "legend" } },
@@ -184,14 +196,20 @@ namespace JarvisVR
       JarvisSpatialPanel status = AddPanel("status", "Status", 900, 90, 0f, 0.80f, pal.Cyan);
       status.SetBodyBox(46, 36); status.Body.fontSize = 22;
 
-      JarvisSpatialPanel repo = AddPanel("repo", "Repository", 440, 520, -1.12f, 0.20f, pal.Cyan);
-      repo.SetBodyBox(60, 370); repo.Body.fontSize = 22;
-      _repoPrev = repo.AddButton("< PREV", 20, 448, 190, 54, () => SwitchRepo(-1));
-      _repoNext = repo.AddButton("NEXT >", 230, 448, 190, 54, () => SwitchRepo(+1));
-      _repoPrev.Interactable = _repoNext.Interactable = false;   // enabled once the server lists 2+ repos
+      _repoPanel = AddPanel("repo", "Repositories", 440, 520, -1.12f, 0.20f, pal.Cyan);
+      _repoPanel.SetBodyBox(98, 24); _repoPanel.Body.fontSize = 16;
+      _repoBack = _repoPanel.AddButton("< BACK", 20, 56, 126, 38, NavigateRepoBack);
+      _repoHome = _repoPanel.AddButton("ROOT", 154, 56, 100, 38, OpenRepoRoot);
+      _repoPrev = _repoPanel.AddButton("< PAGE", 20, 454, 190, 48, () => ChangeRepoPage(-1));
+      _repoNext = _repoPanel.AddButton("PAGE >", 230, 454, 190, 48, () => ChangeRepoPage(+1));
+      _repoBack.Interactable = _repoHome.Interactable = _repoPrev.Interactable = _repoNext.Interactable = false;
 
-      JarvisSpatialPanel code = AddPanel("code", "Code inspector", 560, 520, 1.18f, 0.20f, pal.Cyan);
-      code.SetBodyBox(60, 450); code.UseMono(20);
+      _codePanel = AddPanel("code", "Code inspector", 560, 520, 1.18f, 0.20f, pal.Cyan);
+      _codePanel.SetBodyBox(60, 370); _codePanel.UseMono(17);
+      _codePrev = _codePanel.AddButton("< PREVIOUS", 18, 454, 166, 48, () => ChangeEditorPage(-1));
+      _codeClose = _codePanel.AddButton("CLOSE FILE", 192, 454, 166, 48, CloseOpenFile);
+      _codeNext = _codePanel.AddButton("NEXT >", 366, 454, 176, 48, () => ChangeEditorPage(+1));
+      _codePrev.gameObject.SetActive(false); _codeClose.gameObject.SetActive(false); _codeNext.gameObject.SetActive(false);
 
       JarvisSpatialPanel evidence = AddPanel("evidence", "Evidence", 560, 250, 1.18f, -0.46f, pal.Violet);
       evidence.SetBodyBox(60, 180); evidence.Body.fontSize = 22;
@@ -246,6 +264,7 @@ namespace JarvisVR
     {
       if (mode != _mode && _panels.ContainsKey("menu")) _panels["menu"].Show(false);
       _mode = mode;
+      if (_graphRoot != null) _graphRoot.gameObject.SetActive(mode != "REPOS" && mode != "CODE");
       string[] visible = ModePanels.ContainsKey(mode) ? ModePanels[mode] : ModePanels["MAP"];
       int shown = 0;
       foreach (string key in new[] { "repo", "code", "evidence", "tests", "activity", "legend", "ghost", "approval" })
@@ -619,50 +638,284 @@ namespace JarvisVR
       _panels["status"].SetBody(repo + "  ·  " + branch + "  ·  " + changed + " changed  ·  " + server + "  ·  " + _mode);
     }
 
-    private void SwitchRepo(int delta)
+    private void FetchRepos()
     {
-      if (_switching || _repos == null || _repos.repos.Count < 2) return;
-      int cur = Mathf.Max(0, _repos.repos.FindIndex(r => r.name == _repos.active));
-      string next = _repos.repos[(cur + delta + _repos.repos.Count) % _repos.repos.Count].name;
-      _switching = true;
-      Log("loading repository " + next + " ...");
-      _bridge.SelectRepo(next, ok =>
+      if (_bridge == null) return;
+      _browserError = null;
+      RefreshRepoBrowser();
+      _bridge.GetRepos(r =>
       {
-        if (!ok) { _switching = false; Say("Could not open " + next + "."); return; }
-        _repos.active = next;
+        _repos = r;
+        _browserError = null;
+        RefreshRepoBrowser();
+      }, error =>
+      {
+        _browserError = error;
+        RefreshRepoBrowser();
+      });
+    }
+
+    private void OpenRepo(string name)
+    {
+      if (string.IsNullOrEmpty(name) || _switching || _bridge == null) return;
+      if (_repos != null && _repos.active == name)
+      {
+        _openFile = null;
+        _browserRepo = name;
+        SetMode("REPOS");
+        LoadRepoFolder("");
+        return;
+      }
+
+      _switching = true;
+      Say("Opening repository " + name + "...");
+      _bridge.SelectRepo(name, ok =>
+      {
+        _switching = false;
+        if (!ok) { Say("Could not open repository " + name + ". Check the server log."); return; }
+        if (_repos != null) _repos.active = name;
+        _browserRepo = name;
+        _browserPath = "";
+        _browserPage = 0;
+        _repoTree = null;
+        _openFile = null;
+        SetMode("REPOS");
+        // Load the file tree independently: browsing must not depend on graph indexing succeeding.
+        LoadRepoFolder("");
         _bridge.GetHealth(h => { _health = h; RefreshStatus(); }, e => { });
         _bridge.GetGraph(g =>
         {
-          _switching = false;
-          if (g == null || g.nodes == null) return;
-          LoadGraph(g);
-          if (g.nodes.Count > 0) Select(g.nodes[0].id);
-          Log("repository " + next + ": " + g.nodes.Count + " nodes");
+          if (g != null && g.nodes != null)
+          {
+            LoadGraph(g);
+            if (g.nodes.Count > 0) Select(g.nodes[0].id);
+            Log("repository " + name + ": " + g.nodes.Count + " graph nodes");
+          }
           RefreshStatus();
         });
       });
     }
 
+    private void LoadRepoFolder(string path)
+    {
+      if (string.IsNullOrEmpty(_browserRepo) || _bridge == null) return;
+      _browserPath = path ?? "";
+      _browserPage = 0;
+      _treeLoading = true;
+      RefreshRepoBrowser();
+      _bridge.GetTree(_browserRepo, _browserPath, tree =>
+      {
+        _treeLoading = false;
+        _repoTree = tree;
+        RefreshRepoBrowser();
+      }, error =>
+      {
+        _treeLoading = false;
+        _repoTree = null;
+        Say("Could not load folder: " + error);
+        RefreshRepoBrowser();
+      });
+    }
+
+    private void ReturnToRepoList()
+    {
+      _browserRepo = null;
+      _browserPath = "";
+      _repoTree = null;
+      _browserPage = 0;
+      _treeLoading = false;
+      _openFile = null;
+      if (_codePrev != null)
+      {
+        _codePrev.gameObject.SetActive(false);
+        _codeClose.gameObject.SetActive(false);
+        _codeNext.gameObject.SetActive(false);
+      }
+      SetMode("REPOS");
+      RefreshRepoBrowser();
+    }
+
+    private void OpenRepoRoot()
+    {
+      if (!string.IsNullOrEmpty(_browserRepo)) LoadRepoFolder("");
+      else FetchRepos();
+    }
+
+    private void NavigateRepoBack()
+    {
+      if (string.IsNullOrEmpty(_browserRepo)) return;
+      if (string.IsNullOrEmpty(_browserPath)) { ReturnToRepoList(); return; }
+      string path = _browserPath.TrimEnd('/');
+      int slash = path.LastIndexOf('/');
+      LoadRepoFolder(slash >= 0 ? path.Substring(0, slash) : "");
+    }
+
+    private void ChangeRepoPage(int delta)
+    {
+      int count = _browserRepo == null
+        ? (_repos != null && _repos.repos != null ? _repos.repos.Count : 0)
+        : (_repoTree != null && _repoTree.entries != null ? _repoTree.entries.Count : 0);
+      int pages = Mathf.Max(1, Mathf.CeilToInt(count / (float)BrowserRowsPerPage));
+      _browserPage = Mathf.Clamp(_browserPage + delta, 0, pages - 1);
+      RefreshRepoBrowser();
+    }
+
     private void RefreshRepo()
     {
-      if (!_panels.ContainsKey("repo") || _graph == null) return;
-      bool many = _repos != null && _repos.repos.Count > 1;
-      if (_repoPrev != null) _repoPrev.Interactable = _repoNext.Interactable = many && !_switching;
-      var sb = new StringBuilder();
-      if (_repos != null && !string.IsNullOrEmpty(_repos.active))
-        sb.Append("<b>").Append(_repos.active).Append("</b>  (").Append(_repos.repos.Count).Append(" in /repository)\n");
-      int lines = _repos != null ? 1 : 0;
-      foreach (ClusterView cv in _clusters.Values)
+      RefreshRepoBrowser();
+    }
+
+    private void ClearRepoRows()
+    {
+      foreach (GameObject row in _repoRows) if (row != null) Destroy(row);
+      _repoRows.Clear();
+    }
+
+    private void AddRepoRow(string label, int index, Action action, Color? accent = null)
+    {
+      float y = 126f + index * 42f;
+      JarvisSpatialButton button = _repoPanel.AddButton(label, 18f, y, 404f, 38f, action, 0f, accent);
+      _repoRows.Add(button.gameObject);
+    }
+
+    private void RefreshRepoBrowser()
+    {
+      if (_repoPanel == null) return;
+      ClearRepoRows();
+      bool inRepo = !string.IsNullOrEmpty(_browserRepo);
+      _repoBack.Interactable = inRepo;
+      if (_repoHome.Label != null) _repoHome.Label.text = inRepo ? "ROOT" : "REFRESH";
+      _repoHome.Interactable = inRepo ? !string.IsNullOrEmpty(_browserPath) : true;
+
+      var entries = new List<RepoTreeEntryDto>();
+      int count;
+      if (!inRepo)
       {
-        if (lines++ > 11) break;
-        sb.Append("<b>").Append(cv.Name).Append("/</b>\n");
-        foreach (string file in cv.Members.Select(m => m.Dto.file).Where(f => !string.IsNullOrEmpty(f)).Distinct())
+        _repoPanel.SetTitle("Repositories");
+        if (_repos == null || _repos.repos == null)
         {
-          if (lines++ > 11) break;
-          sb.Append("   ").Append(Path.GetFileName(file)).Append('\n');
+          _repoPanel.SetBody(string.IsNullOrEmpty(_browserError)
+            ? "Connecting to repository server..."
+            : "Server error: " + _browserError + "\nTap RELOAD to retry.");
+          count = 0;
+        }
+        else
+        {
+          _repoPanel.SetBody(_repos.repos.Count + " repositories  ·  select one to browse");
+          count = _repos.repos.Count;
+          int start = _browserPage * BrowserRowsPerPage;
+          int end = Mathf.Min(count, start + BrowserRowsPerPage);
+          for (int i = start; i < end; i++)
+          {
+            RepoInfoDto info = _repos.repos[i];
+            string repoName = info.name;
+            string branch = string.IsNullOrEmpty(info.branch) ? "" : "  ·  " + info.branch;
+            int fileCount = info.files;
+            AddRepoRow("REPO  " + repoName + branch + "  ·  " + fileCount + " files", i - start,
+              () => OpenRepo(repoName), repoName == _repos.active ? JarvisPalette.Current.Green : (Color?)null);
+          }
         }
       }
-      _panels["repo"].SetBody(sb.ToString());
+      else
+      {
+        string suffix = string.IsNullOrEmpty(_browserPath) ? "/" : "/" + _browserPath;
+        string title = _browserRepo + suffix;
+        if (title.Length > 34) title = "…" + title.Substring(title.Length - 33);
+        _repoPanel.SetTitle(title);
+        if (_treeLoading)
+        {
+          _repoPanel.SetBody("Loading folder contents...");
+          count = 0;
+        }
+        else if (_repoTree == null || _repoTree.entries == null)
+        {
+          _repoPanel.SetBody("No folder data. Use BACK to return to repositories.");
+          count = 0;
+        }
+        else
+        {
+          _repoPanel.SetBody(_repoTree.entries.Count + " items  ·  folders first  ·  select to open");
+          entries = _repoTree.entries;
+          count = entries.Count;
+          int start = _browserPage * BrowserRowsPerPage;
+          int end = Mathf.Min(count, start + BrowserRowsPerPage);
+          for (int i = start; i < end; i++)
+          {
+            RepoTreeEntryDto entry = entries[i];
+            string path = entry.path;
+            bool directory = entry.type == "directory";
+            string label = directory ? "FOLDER  " + entry.name + "/" : "FILE  " + entry.name;
+            Action openEntry = directory ? new Action(() => LoadRepoFolder(path)) : new Action(() => OpenRepoFile(path));
+            AddRepoRow(label, i - start, openEntry,
+              directory ? JarvisPalette.Current.Cyan : (Color?)null);
+          }
+        }
+      }
+
+      int pageCount = Mathf.Max(1, Mathf.CeilToInt(count / (float)BrowserRowsPerPage));
+      _repoPrev.Interactable = _browserPage > 0;
+      _repoNext.Interactable = _browserPage < pageCount - 1;
+      if (_repoPrev.Label != null) _repoPrev.Label.text = "< PAGE " + Mathf.Max(1, _browserPage) + "/" + pageCount;
+      if (_repoNext.Label != null) _repoNext.Label.text = "PAGE " + Mathf.Min(pageCount, _browserPage + 2) + "/" + pageCount + " >";
+    }
+
+    private void OpenRepoFile(string path)
+    {
+      if (string.IsNullOrEmpty(_browserRepo) || _bridge == null) return;
+      Say("Opening " + path + "...");
+      _bridge.GetFile(_browserRepo, path, file =>
+      {
+        if (file == null || file.status != "ok") { Say("Could not open " + path + "."); return; }
+        _openFile = file;
+        _openFilePage = 0;
+        SetMode("CODE");
+        RefreshOpenFile();
+        Log("opened " + path);
+      }, error => Say("Could not open file: " + error));
+    }
+
+    private void ChangeEditorPage(int delta)
+    {
+      if (_openFile == null) return;
+      string[] lines = (_openFile.content ?? "").Split('\n');
+      int pages = Mathf.Max(1, Mathf.CeilToInt(lines.Length / (float)EditorLinesPerPage));
+      _openFilePage = Mathf.Clamp(_openFilePage + delta, 0, pages - 1);
+      RefreshOpenFile();
+    }
+
+    private static string EscapeRichText(string value)
+    {
+      return (value ?? "").Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
+    }
+
+    private void RefreshOpenFile()
+    {
+      if (_codePanel == null || _openFile == null) return;
+      _codePanel.SetTitle(_openFile.path);
+      string[] lines = (_openFile.content ?? "").Split('\n');
+      int pages = Mathf.Max(1, Mathf.CeilToInt(lines.Length / (float)EditorLinesPerPage));
+      int first = _openFilePage * EditorLinesPerPage;
+      int last = Mathf.Min(lines.Length, first + EditorLinesPerPage);
+      var sb = new StringBuilder();
+      sb.Append("<color=#").Append(Hex(JarvisPalette.Current.TextMuted)).Append(">READ-ONLY VIEW  ·  ")
+        .Append(lines.Length).Append(" lines  ·  page ").Append(_openFilePage + 1).Append('/').Append(pages).Append("</color>\n\n");
+      for (int i = first; i < last; i++)
+      {
+        sb.Append("<color=#").Append(Hex(JarvisPalette.Current.TextMuted)).Append('>')
+          .Append(i + 1).Append("</color>  ").Append(EscapeRichText(lines[i].TrimEnd('\r'))).Append('\n');
+      }
+      if (_openFile.truncated) sb.Append("\n<color=#").Append(Hex(JarvisPalette.Current.Amber)).Append(">File truncated at 512 KB.</color>");
+      _codePanel.SetBody(sb.ToString());
+      _codePrev.gameObject.SetActive(true); _codeClose.gameObject.SetActive(true); _codeNext.gameObject.SetActive(true);
+      _codePrev.Interactable = _openFilePage > 0;
+      _codeNext.Interactable = _openFilePage < pages - 1;
+    }
+
+    private void CloseOpenFile()
+    {
+      _openFile = null;
+      _codePrev.gameObject.SetActive(false); _codeClose.gameObject.SetActive(false); _codeNext.gameObject.SetActive(false);
+      RefreshCode();
     }
 
     private void RefreshActivity() { if (_panels.ContainsKey("activity")) _panels["activity"].SetBody(string.Join("\n", _log)); }
@@ -686,6 +939,8 @@ namespace JarvisVR
 
     private void RefreshCode()
     {
+      if (_openFile != null) { RefreshOpenFile(); return; }
+      if (_codePrev != null) { _codePrev.gameObject.SetActive(false); _codeClose.gameObject.SetActive(false); _codeNext.gameObject.SetActive(false); }
       if (!_panels.ContainsKey("code") || string.IsNullOrEmpty(_selected) || !_nodes.TryGetValue(_selected, out NodeView n)) return;
       JarvisPalette pal = JarvisPalette.Current;
       if (!_source.TryGetValue(_selected, out SourceResponse s))

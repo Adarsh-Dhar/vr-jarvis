@@ -3,7 +3,7 @@ import ast
 import json
 import re
 import subprocess
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from . import config
 
@@ -14,6 +14,7 @@ EXTS = JS_EXT | {'.py'}
 MAX_FILE_BYTES = 400_000
 MAX_NODES = 400          # keep the VR scene readable
 MAX_FN_LINES = 400
+MAX_BROWSER_FILE_BYTES = 512_000
 
 _FN = re.compile(r'^\s*(?:export\s+)?(?:default\s+)?(?:async\s+)?function\s*\*?\s*([A-Za-z_$][\w$]*)')
 _ARROW = re.compile(r'^\s*(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*(?::[^=]+)?=\s*(?:async\s+)?'
@@ -27,7 +28,7 @@ def list_repos():
     root = config.REPOSITORY_DIR
     if not root.is_dir():
         return []
-    return sorted(d.name for d in root.iterdir() if d.is_dir() and not d.name.startswith('.'))
+    return sorted(d.name for d in root.iterdir() if d.is_dir() and not d.is_symlink() and not d.name.startswith('.'))
 
 
 def _source_files(repo):
@@ -194,3 +195,97 @@ def activate(name):
     graph_tools.GRAPH_PATH = path
     graph_tools._graph.cache_clear()
     return graph
+
+
+# ---------------------------------------------------------------------------
+# Read-only IDE browser API. Keep this separate from the AST index: the tree
+# exposes ordinary files too, while the graph intentionally indexes only code.
+
+BROWSER_SKIP_DIRS = SKIP_DIRS | {'.cache', '.pytest_cache', '.mypy_cache', '.ruff_cache'}
+
+
+def _browser_repo(name: str) -> Path:
+    """Resolve a direct child repository without following repository symlinks."""
+    root = config.REPOSITORY_DIR.resolve()
+    if not name or name not in list_repos():
+        raise KeyError(name)
+    candidate = root / name
+    if candidate.is_symlink():
+        raise ValueError('Repository symlinks are not browsable.')
+    resolved = candidate.resolve(strict=True)
+    if resolved.parent != root or not resolved.is_dir():
+        raise ValueError('Invalid repository path.')
+    return resolved
+
+
+def _browser_target(repo: Path, relative_path: str) -> Path:
+    """Resolve a repository-relative POSIX path and reject traversal/symlinks."""
+    relative_path = relative_path or ''
+    if '\x00' in relative_path or '\\' in relative_path:
+        raise ValueError('Invalid path.')
+    rel = PurePosixPath(relative_path)
+    if rel.is_absolute() or any(part in ('..', '.') for part in rel.parts):
+        if relative_path not in ('', '.'):
+            raise ValueError('Path must stay inside the repository.')
+    target = repo
+    for part in rel.parts:
+        if part in ('', '.'):
+            continue
+        target = target / part
+        if target.is_symlink():
+            raise ValueError('Symbolic links are not browsable.')
+    resolved = target.resolve(strict=True)
+    if resolved != repo and repo not in resolved.parents:
+        raise ValueError('Path must stay inside the repository.')
+    return resolved
+
+
+def list_tree(name: str, relative_path: str = '') -> dict:
+    """List direct children of a repository folder, directories first."""
+    repo = _browser_repo(name)
+    folder = _browser_target(repo, relative_path)
+    if not folder.is_dir():
+        raise NotADirectoryError(relative_path)
+    entries = []
+    for item in folder.iterdir():
+        if item.is_symlink():
+            continue
+        if item.is_dir():
+            if item.name in BROWSER_SKIP_DIRS:
+                continue
+            entry_type, size = 'directory', 0
+        elif item.is_file():
+            try:
+                size = item.stat().st_size
+            except OSError:
+                continue
+            entry_type = 'file'
+        else:
+            continue
+        rel = item.relative_to(repo).as_posix()
+        entries.append({'name': item.name, 'path': rel, 'type': entry_type, 'size': size})
+    entries.sort(key=lambda e: (e['type'] != 'directory', e['name'].lower()))
+    return {'repo': name, 'path': relative_path or '', 'entries': entries}
+
+
+def read_browser_file(name: str, relative_path: str) -> dict:
+    """Read a bounded UTF-8 text file for the VR editor; never writes to disk."""
+    repo = _browser_repo(name)
+    if not relative_path:
+        raise ValueError('A file path is required.')
+    target = _browser_target(repo, relative_path)
+    if not target.is_file():
+        raise FileNotFoundError(relative_path)
+    size = target.stat().st_size
+    with target.open('rb') as handle:
+        raw = handle.read(MAX_BROWSER_FILE_BYTES + 1)
+    if b'\x00' in raw[:8192]:
+        raise ValueError('Binary files cannot be opened in the code viewer.')
+    truncated = len(raw) > MAX_BROWSER_FILE_BYTES or size > MAX_BROWSER_FILE_BYTES
+    raw = raw[:MAX_BROWSER_FILE_BYTES]
+    content = raw.decode('utf-8-sig', errors='replace')
+    return {
+        'status': 'ok', 'repo': name, 'path': target.relative_to(repo).as_posix(),
+        'content': content, 'size': size, 'total_lines': content.count('\n') + (1 if content else 0),
+        'truncated': truncated,
+    }

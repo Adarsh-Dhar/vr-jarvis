@@ -108,6 +108,19 @@ namespace JarvisVR
       m.Valid = _cam != null;
       if (m.Valid) { m.Ray = _cam.ScreenPointToRay(Input.mousePosition); m.Down = Input.GetMouseButton(0); }
       if (Input.GetKeyDown(KeyCode.Space) && _toggleVoice != null) _toggleVoice();
+
+      // XR Simulator fallback: if hands are not tracked, use mouse ray for hand slots too
+      bool anyHandValid = _slots[0].Valid || _slots[1].Valid;
+      if (!anyHandValid && _cam != null)
+      {
+        for (int i = 0; i < 2; i++)
+        {
+          Slot s = _slots[i];
+          s.Valid = true;
+          s.Ray = _cam.ScreenPointToRay(Input.mousePosition);
+          s.Down = Input.GetMouseButton(0);
+        }
+      }
 #endif
       foreach (Slot s in _slots) Process(s);
       UpdateTwoHandScale();
@@ -120,14 +133,14 @@ namespace JarvisVR
       if (!s.Valid)
       {
         if (s.HoverFx != null) { s.HoverFx.Hovered = false; s.HoverFx = null; }
-        Release(s, null);
+        Release(s);
         return;
       }
 
       JarvisSpatialButton hoverBtn = null; JarvisGraphNode hoverNode = null; JarvisSpatialGrab hoverGrab = null;
       JarvisNodeFx hoverFx = null; JarvisSpatialResize hoverResize = null;
       float dist = 1.5f; bool hasHit = false;
-      if (Physics.Raycast(s.Ray, out RaycastHit hit, 6f, ~0, QueryTriggerInteraction.Ignore))
+      if (TryRaycastTarget(s.Ray, out RaycastHit hit))
       {
         hasHit = true; dist = hit.distance;
         hoverBtn = hit.collider.GetComponentInParent<JarvisSpatialButton>();
@@ -165,7 +178,18 @@ namespace JarvisVR
 
       if (s.Down && !s.WasDown)
       {
-        if (hoverBtn != null && hoverBtn.Interactable) { s.Btn = hoverBtn; s.Btn.SetPressed(true); s.BtnTime = Time.unscaledTime; s.BtnFired = false; }
+        if (hoverBtn != null && hoverBtn.Interactable)
+        {
+          s.Btn = hoverBtn; s.Btn.SetPressed(true); s.BtnTime = Time.unscaledTime; s.BtnFired = false;
+          // Activate normal buttons on press-down. Waiting for a perfectly stable release
+          // ray made hand pinch and controller clicks feel unresponsive in VR. Deliberate
+          // hold actions (for example approval) still wait for HoldSeconds below.
+          if (s.Btn.HoldSeconds <= 0f)
+          {
+            s.BtnFired = true;
+            FireButton(s.Btn);
+          }
+        }
         else if (hoverNode != null)
         {
           s.Node = hoverNode; s.NodeDist = dist; s.NodeStart = s.NodeLast = s.Ray.GetPoint(dist); s.NodeDragging = false;
@@ -197,7 +221,9 @@ namespace JarvisVR
             if (p >= 1f)
             {
               s.BtnFired = true; s.Btn.SetProgress(0f); JarvisAudio.SetCharge(0f);
-              JarvisAudio.Play(JarvisAudio.Cue.ApproveClick); s.Btn.SetPressed(false); s.Btn.Focus(); s.Btn.Click();
+              JarvisAudio.Play(JarvisAudio.Cue.ApproveClick);
+              s.Btn.SetPressed(false);
+              FireButton(s.Btn, false);
             }
           }
         }
@@ -218,17 +244,79 @@ namespace JarvisVR
           s.Resize.Panel.UserScale = Mathf.Clamp(s.ResizeStartScale * d / s.ResizeStartDistance, 0.5f, 2.2f);
         }
       }
-      else if (s.WasDown) Release(s, hoverBtn);
+      else if (s.WasDown) Release(s);
     }
 
-    private void Release(Slot s, JarvisSpatialButton hoverBtn)
+    /// <summary>
+    /// Resolve the nearest hit while allowing a button to win over its own panel's backing
+    /// collider. Raycast() returns only one hit; the panel glass/root box can overlap the
+    /// button's depth by a few millimetres and otherwise swallow the click.
+    /// </summary>
+    private static bool TryRaycastTarget(Ray ray, out RaycastHit selected)
+    {
+      RaycastHit[] hits = Physics.RaycastAll(ray, 6f, ~0, QueryTriggerInteraction.Ignore);
+      if (hits == null || hits.Length == 0) { selected = default; return false; }
+      Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+      selected = hits[0];
+
+      // 1) Buttons take priority over their own panel's backing collider. This also avoids
+      // unrelated non-interactive scene colliders swallowing a UI click.
+      JarvisSpatialPanel firstPanel = selected.collider != null
+        ? selected.collider.GetComponentInParent<JarvisSpatialPanel>() : null;
+      for (int i = 0; i < hits.Length; i++)
+      {
+        Collider collider = hits[i].collider;
+        if (collider == null) continue;
+        JarvisSpatialButton button = collider.GetComponentInParent<JarvisSpatialButton>();
+        if (button == null || !button.Interactable) continue;
+        JarvisSpatialPanel buttonPanel = button.GetComponentInParent<JarvisSpatialPanel>();
+        if (buttonPanel != null && (firstPanel == null || buttonPanel == firstPanel || i == 0 || hits[i].distance - hits[0].distance <= 0.025f))
+        {
+          selected = hits[i];
+          return true;
+        }
+      }
+
+      // 2) Otherwise route to the nearest explicit spatial interaction target.
+      for (int i = 0; i < hits.Length; i++)
+      {
+        Collider collider = hits[i].collider;
+        if (collider == null) continue;
+        if (collider.GetComponentInParent<JarvisGraphNode>() != null ||
+            collider.GetComponentInParent<JarvisSpatialGrab>() != null ||
+            collider.GetComponentInParent<JarvisSpatialResize>() != null)
+        {
+          selected = hits[i];
+          return true;
+        }
+        JarvisSpatialPanel panel = collider.GetComponentInParent<JarvisSpatialPanel>();
+        if (panel != null)
+        {
+          selected = hits[i];
+          return true;
+        }
+      }
+
+      // Keep the reticle visible on the nearest collider even when it is not actionable.
+      return true;
+    }
+
+    private static void FireButton(JarvisSpatialButton button, bool playCue = true)
+    {
+      if (button == null || !button.Interactable) return;
+      if (playCue) JarvisAudio.Play(JarvisAudio.Cue.SelectTick);
+      button.Focus();
+      Debug.Log("JARVIS input: clicked " + button.name);
+      button.Click();
+    }
+
+    private void Release(Slot s)
     {
       if (s.Btn != null)
       {
         s.Btn.SetPressed(false);
         s.Btn.SetProgress(0f);
         if (s.Btn.HoldSeconds > 0f) JarvisAudio.SetCharge(0f);
-        else if (hoverBtn == s.Btn) { JarvisAudio.Play(JarvisAudio.Cue.SelectTick); s.Btn.Focus(); s.Btn.Click(); }
       }
       if (s.Node != null && !s.NodeDragging && !s.NodeHeld) s.Node.Select();
       s.Btn = null; s.Node = null; s.Grab = null; s.Resize = null; s.NodeDragging = false; s.NodeHeld = false;

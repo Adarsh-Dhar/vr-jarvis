@@ -68,7 +68,12 @@ namespace JarvisVR
     }
 
     public void SetProgress(float p) { if (Fill != null) { Fill.fillAmount = Mathf.Clamp01(p); Fill.enabled = p > 0.001f; } }
-    public void Click() { if (_disabled) return; if (OnClick != null) OnClick(); }
+    public void Click()
+    {
+      if (_disabled || OnClick == null) return;
+      try { OnClick(); }
+      catch (Exception ex) { Debug.LogException(ex, this); }
+    }
   }
 
   /// <summary>Grab handle: pinch and drag moves Target.</summary>

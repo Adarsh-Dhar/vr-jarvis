@@ -14,7 +14,9 @@ namespace JarvisVR
     void GetSource(string nodeId, Action<SourceResponse> ok);
     void GetHealth(Action<HealthDto> ok, Action<string> fail);
     void GetGraph(Action<GraphDto> ok);
-    void GetRepos(Action<ReposDto> ok);
+    void GetRepos(Action<ReposDto> ok, Action<string> fail);
+    void GetTree(string repo, string path, Action<RepoTreeDto> ok, Action<string> fail);
+    void GetFile(string repo, string path, Action<RepoFileDto> ok, Action<string> fail);
     void SelectRepo(string name, Action<bool> done);
   }
 
@@ -51,7 +53,7 @@ namespace JarvisVR
       StartCoroutine(After(0.15f, () => ok(new HealthDto { ok = true, cached_tests = true, repo = "demo-repo (mock)", branch = "main", changed = 3 })));
     }
 
-    public void GetRepos(Action<ReposDto> ok)
+    public void GetRepos(Action<ReposDto> ok, Action<string> fail)
     {
       var r = new ReposDto { active = "demo-repo (mock)" };
       r.repos.Add(new RepoInfoDto { name = "demo-repo (mock)", branch = "main", files = 7 });
@@ -59,6 +61,46 @@ namespace JarvisVR
     }
 
     public void SelectRepo(string name, Action<bool> done) { StartCoroutine(After(0.1f, () => done(true))); }
+
+    public void GetTree(string repo, string path, Action<RepoTreeDto> ok, Action<string> fail)
+    {
+      var tree = new RepoTreeDto { repo = repo, path = path ?? "" };
+      string folder = (path ?? "").Trim('/');
+      if (folder == "")
+      {
+        AddDir(tree, "auth"); AddDir(tree, "db"); AddDir(tree, "routes"); AddDir(tree, "services"); AddDir(tree, "tests");
+        AddFile(tree, "README.md", 650);
+      }
+      else if (folder == "auth") { AddFile(tree, "requireAuth.ts", 320); AddFile(tree, "owner.ts", 250); }
+      else if (folder == "db") { AddFile(tree, "users.repo.ts", 410); }
+      else if (folder == "routes") { AddFile(tree, "account.ts", 720); }
+      else if (folder == "services") { AddFile(tree, "account.ts", 540); }
+      else if (folder == "tests") { AddFile(tree, "account.test.ts", 380); }
+      else { fail("Folder not found in mock repository: " + folder); return; }
+      StartCoroutine(After(0.08f, () => ok(tree)));
+    }
+
+    private static void AddDir(RepoTreeDto tree, string name) => tree.entries.Add(new RepoTreeEntryDto
+      { name = name, path = string.IsNullOrEmpty(tree.path) ? name : tree.path + "/" + name, type = "directory" });
+    private static void AddFile(RepoTreeDto tree, string name, long size) => tree.entries.Add(new RepoTreeEntryDto
+      { name = name, path = string.IsNullOrEmpty(tree.path) ? name : tree.path + "/" + name, type = "file", size = size });
+
+    public void GetFile(string repo, string path, Action<RepoFileDto> ok, Action<string> fail)
+    {
+      string normalized = (path ?? "").Replace('\\', '/');
+      SourceResponse source = null;
+      foreach (SourceResponse candidate in Sources.Values)
+        if (candidate.file == normalized) { source = candidate; break; }
+      string content = source != null ? source.source : normalized == "README.md"
+        ? "# Demo repository\n\nThis is a read-only mock file browser.\n\nOpen a source file from the repository tree to inspect it."
+        : null;
+      if (content == null) { fail("Mock file not found: " + normalized); return; }
+      StartCoroutine(After(0.08f, () => ok(new RepoFileDto
+      {
+        status = "ok", repo = repo, path = normalized, content = content,
+        size = content.Length, total_lines = content.Split('\n').Length, truncated = false
+      })));
+    }
 
     public void GetGraph(Action<GraphDto> ok) { StartCoroutine(After(0.2f, () => ok(JarvisGraphModel.Sample()))); }
 

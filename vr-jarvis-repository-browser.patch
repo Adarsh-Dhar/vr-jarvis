@@ -1,0 +1,1031 @@
+diff --git a/README.md b/README.md
+index ad249c8755c94dd736ff4bc59ae261b0e51a8452..ecb4e8095ed497d7e2f9ac33e6720610a293a00a 100644
+--- a/README.md
++++ b/README.md
+@@ -1 +1,29 @@
+ # vr-jarvis
++
++## Repository browser
++
++The spatial VR workspace opens on a repository picker. Select a repository to open its folder tree, select folders to navigate, and select a file to inspect it in the code panel. Use **BACK** to move up one directory, **ROOT** to return to the repository root, and the page controls to browse long lists.
++
++The code panel is currently **read-only**: it shows source with line numbers and page controls; editing and saving files are not implemented yet.
++
++The server reads direct child folders of the project-root `repository/` directory by default. Override this with `JARVIS_REPOSITORY_DIR`.
++
++## Run the real repository browser
++
++From the project root, install the Python dependencies and start the server:
++
++```bash
++pip install -r requirements.txt
++export GOOGLE_API_KEY="<your-key>"
++uvicorn server.jarvis_server:app --host 0.0.0.0 --port 8000
++```
++
++In Unity, open the `ui/` project, choose **JARVIS → Use real server**, then enter Play mode. The `ui/ProjectSettings` configuration enables both legacy and new input handling.
++
++For the Unity Editor, aim at a button with the pointer and click in the Game view. On Quest, point with tracked hands and pinch the index finger, or aim a Touch controller and press its trigger. Normal buttons activate on press-down; deliberate hold actions still require their configured hold time. A successful click is written to the Unity Console as `JARVIS input: clicked ...`.
++
++When running on Quest, `127.0.0.1` refers to the headset. Set the `jarvis.server` PlayerPrefs value to the PC's LAN address (for example, `http://192.168.1.20:8000`) so the headset can reach the backend.
++
++## Mock UI mode
++
++Choose **JARVIS → Use mock data** to test the repository list, folders, file viewer, and button interaction without starting the backend. The mock contains a single sample repository.
+diff --git a/repository/README.md b/repository/README.md
+index 96d1c2ba6718349e3b1b8eb7fb2774b61199b667..b90f52852ef743d56c3d95c12efc3b7585d22615 100644
+--- a/repository/README.md
++++ b/repository/README.md
+@@ -11,7 +11,7 @@ repository/
+ 
+ The server lists every direct sub-folder, indexes the source files into a graph
+ (functions/classes = nodes, calls = edges, test files = tests) and sends that graph to the
+-VR UI. In VR, use the PREV / NEXT buttons on the Repository panel to switch repos.
++VR UI. In VR, the workspace opens on a repository picker. Select a repo to browse its folders, select a folder to open it, and select a file to view its source in the read-only code panel. Use BACK to go up one level, ROOT to return to the repo root, and the page controls to browse long lists.
+ 
+ Supported source files: `.py`, `.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`, `.cjs`.
+ Skipped folders: `.git`, `node_modules`, `dist`, `build`, `venv`, `__pycache__`, ...
+@@ -20,3 +20,5 @@ Optional: put a hand-written graph next to a repo as `repository/<repo-name>.gra
+ and it is used instead of the automatic index (the demo repo does this).
+ 
+ Override the location with `JARVIS_REPOSITORY_DIR`; pick the start repo with `JARVIS_REPO=<folder name>`.
++
++For interaction testing: in the Unity Editor, click a button in the Game view while the pointer is over it. In Quest, use an index-finger pinch with hand tracking or the controller trigger. Normal buttons activate on press-down; hold-to-approve actions still require the full hold duration. Successful activations are logged in the Unity Console.
+diff --git a/server/ai_agents/config.py b/server/ai_agents/config.py
+index 73b832140f0daff194bbb8980a6b916ca5ab406f..b114db9acf8736bdad368c34f1e0faa42a8ff09b 100644
+--- a/server/ai_agents/config.py
++++ b/server/ai_agents/config.py
+@@ -7,7 +7,7 @@ ROOT = Path(__file__).parent
+ MODEL = os.getenv('JARVIS_MODEL', 'gemini-3.5-flash')
+ 
+ # Every folder inside REPOSITORY_DIR is one code repository the VR UI can show.
+-REPOSITORY_DIR = Path(os.getenv('JARVIS_REPOSITORY_DIR', ROOT.parent / 'repository')).resolve()
++REPOSITORY_DIR = Path(os.getenv('JARVIS_REPOSITORY_DIR', ROOT.parent.parent / 'repository')).resolve()
+ INDEX_DIR = ROOT / 'data' / 'index'      # generated graphs, one json per repository
+ 
+ 
+diff --git a/server/ai_agents/repository.py b/server/ai_agents/repository.py
+index 9c3b0afafb5e15ca476a478b2fcb207aaf6ace57..74fa98f9564e8441772d007901968ec2f08a41c1 100644
+--- a/server/ai_agents/repository.py
++++ b/server/ai_agents/repository.py
+@@ -3,7 +3,7 @@ import ast
+ import json
+ import re
+ import subprocess
+-from pathlib import Path
++from pathlib import Path, PurePosixPath
+ 
+ from . import config
+ 
+@@ -14,6 +14,7 @@ EXTS = JS_EXT | {'.py'}
+ MAX_FILE_BYTES = 400_000
+ MAX_NODES = 400          # keep the VR scene readable
+ MAX_FN_LINES = 400
++MAX_BROWSER_FILE_BYTES = 512_000
+ 
+ _FN = re.compile(r'^\s*(?:export\s+)?(?:default\s+)?(?:async\s+)?function\s*\*?\s*([A-Za-z_$][\w$]*)')
+ _ARROW = re.compile(r'^\s*(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*(?::[^=]+)?=\s*(?:async\s+)?'
+@@ -27,7 +28,7 @@ def list_repos():
+     root = config.REPOSITORY_DIR
+     if not root.is_dir():
+         return []
+-    return sorted(d.name for d in root.iterdir() if d.is_dir() and not d.name.startswith('.'))
++    return sorted(d.name for d in root.iterdir() if d.is_dir() and not d.is_symlink() and not d.name.startswith('.'))
+ 
+ 
+ def _source_files(repo):
+@@ -194,3 +195,97 @@ def activate(name):
+     graph_tools.GRAPH_PATH = path
+     graph_tools._graph.cache_clear()
+     return graph
++
++
++# ---------------------------------------------------------------------------
++# Read-only IDE browser API. Keep this separate from the AST index: the tree
++# exposes ordinary files too, while the graph intentionally indexes only code.
++
++BROWSER_SKIP_DIRS = SKIP_DIRS | {'.cache', '.pytest_cache', '.mypy_cache', '.ruff_cache'}
++
++
++def _browser_repo(name: str) -> Path:
++    """Resolve a direct child repository without following repository symlinks."""
++    root = config.REPOSITORY_DIR.resolve()
++    if not name or name not in list_repos():
++        raise KeyError(name)
++    candidate = root / name
++    if candidate.is_symlink():
++        raise ValueError('Repository symlinks are not browsable.')
++    resolved = candidate.resolve(strict=True)
++    if resolved.parent != root or not resolved.is_dir():
++        raise ValueError('Invalid repository path.')
++    return resolved
++
++
++def _browser_target(repo: Path, relative_path: str) -> Path:
++    """Resolve a repository-relative POSIX path and reject traversal/symlinks."""
++    relative_path = relative_path or ''
++    if '\x00' in relative_path or '\\' in relative_path:
++        raise ValueError('Invalid path.')
++    rel = PurePosixPath(relative_path)
++    if rel.is_absolute() or any(part in ('..', '.') for part in rel.parts):
++        if relative_path not in ('', '.'):
++            raise ValueError('Path must stay inside the repository.')
++    target = repo
++    for part in rel.parts:
++        if part in ('', '.'):
++            continue
++        target = target / part
++        if target.is_symlink():
++            raise ValueError('Symbolic links are not browsable.')
++    resolved = target.resolve(strict=True)
++    if resolved != repo and repo not in resolved.parents:
++        raise ValueError('Path must stay inside the repository.')
++    return resolved
++
++
++def list_tree(name: str, relative_path: str = '') -> dict:
++    """List direct children of a repository folder, directories first."""
++    repo = _browser_repo(name)
++    folder = _browser_target(repo, relative_path)
++    if not folder.is_dir():
++        raise NotADirectoryError(relative_path)
++    entries = []
++    for item in folder.iterdir():
++        if item.is_symlink():
++            continue
++        if item.is_dir():
++            if item.name in BROWSER_SKIP_DIRS:
++                continue
++            entry_type, size = 'directory', 0
++        elif item.is_file():
++            try:
++                size = item.stat().st_size
++            except OSError:
++                continue
++            entry_type = 'file'
++        else:
++            continue
++        rel = item.relative_to(repo).as_posix()
++        entries.append({'name': item.name, 'path': rel, 'type': entry_type, 'size': size})
++    entries.sort(key=lambda e: (e['type'] != 'directory', e['name'].lower()))
++    return {'repo': name, 'path': relative_path or '', 'entries': entries}
++
++
++def read_browser_file(name: str, relative_path: str) -> dict:
++    """Read a bounded UTF-8 text file for the VR editor; never writes to disk."""
++    repo = _browser_repo(name)
++    if not relative_path:
++        raise ValueError('A file path is required.')
++    target = _browser_target(repo, relative_path)
++    if not target.is_file():
++        raise FileNotFoundError(relative_path)
++    size = target.stat().st_size
++    with target.open('rb') as handle:
++        raw = handle.read(MAX_BROWSER_FILE_BYTES + 1)
++    if b'\x00' in raw[:8192]:
++        raise ValueError('Binary files cannot be opened in the code viewer.')
++    truncated = len(raw) > MAX_BROWSER_FILE_BYTES or size > MAX_BROWSER_FILE_BYTES
++    raw = raw[:MAX_BROWSER_FILE_BYTES]
++    content = raw.decode('utf-8-sig', errors='replace')
++    return {
++        'status': 'ok', 'repo': name, 'path': target.relative_to(repo).as_posix(),
++        'content': content, 'size': size, 'total_lines': content.count('\n') + (1 if content else 0),
++        'truncated': truncated,
++    }
+diff --git a/server/jarvis_server.py b/server/jarvis_server.py
+index 4de453be332a9f517e3c9b5b6bf68a27e971e39d..5faf3706bc87f7984ddfda808651f6b5677245e8 100644
+--- a/server/jarvis_server.py
++++ b/server/jarvis_server.py
+@@ -111,6 +111,32 @@ async def select_repo(body: RepoBody):
+     return {'active': body.name, 'nodes': len(g['nodes']), 'edges': len(g['edges'])}
+ 
+ 
++@app.get('/repos/{repo_name}/tree', dependencies=[Depends(auth)])
++async def repository_tree(repo_name: str, path: str = ''):
++    try:
++        return await asyncio.to_thread(repository.list_tree, repo_name, path)
++    except KeyError:
++        raise HTTPException(status_code=404, detail='unknown repository: ' + repo_name)
++    except FileNotFoundError:
++        raise HTTPException(status_code=404, detail='folder not found: ' + path)
++    except NotADirectoryError:
++        raise HTTPException(status_code=400, detail='path is not a folder: ' + path)
++    except ValueError as exc:
++        raise HTTPException(status_code=400, detail=str(exc))
++
++
++@app.get('/repos/{repo_name}/file', dependencies=[Depends(auth)])
++async def repository_file(repo_name: str, path: str):
++    try:
++        return await asyncio.to_thread(repository.read_browser_file, repo_name, path)
++    except KeyError:
++        raise HTTPException(status_code=404, detail='unknown repository: ' + repo_name)
++    except FileNotFoundError:
++        raise HTTPException(status_code=404, detail='file not found: ' + path)
++    except ValueError as exc:
++        raise HTTPException(status_code=400, detail=str(exc))
++
++
+ @app.get('/source/{node_id}', dependencies=[Depends(auth)])
+ async def source(node_id: str, context: int = 0):
+     return get_source(node_id, SimpleNamespace(state={}), min(max(context, 0), 20))
+diff --git a/server/tests/test_repository_browser.py b/server/tests/test_repository_browser.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..0d830d2df5b112e3484f47274305b9b4238d4fb6
+--- /dev/null
++++ b/server/tests/test_repository_browser.py
+@@ -0,0 +1,102 @@
++from importlib.util import module_from_spec, spec_from_file_location
++from pathlib import Path
++import os
++import sys
++import types
++
++import pytest
++
++# Import this focused module without ai_agents/__init__.py, which intentionally
++# boots the full ADK agent graph and therefore needs the optional google-adk package.
++_AGENT_DIR = Path(__file__).resolve().parents[1] / "ai_agents"
++_PACKAGE = "_jarvis_repository_browser_test"
++_package_module = types.ModuleType(_PACKAGE)
++_package_module.__path__ = [str(_AGENT_DIR)]
++sys.modules.setdefault(_PACKAGE, _package_module)
++_spec = spec_from_file_location(_PACKAGE + ".repository", _AGENT_DIR / "repository.py")
++repository = module_from_spec(_spec)
++sys.modules[_spec.name] = repository
++_spec.loader.exec_module(repository)
++
++
++def _make_repo(tmp_path, monkeypatch):
++    root = tmp_path / "repositories"
++    repo = root / "sample"
++    (repo / "src" / "nested").mkdir(parents=True)
++    (repo / "src" / "nested" / "hello.ts").write_text("export const answer = 42;\n", encoding="utf-8")
++    (repo / "README.md").write_text("# Sample\n", encoding="utf-8")
++    (repo / "node_modules").mkdir()
++    (repo / "node_modules" / "ignored.js").write_text("ignored", encoding="utf-8")
++    monkeypatch.setattr(repository.config, "REPOSITORY_DIR", root)
++    return root, repo
++
++
++def test_tree_lists_directories_first_and_skips_dependency_folders(tmp_path, monkeypatch):
++    _make_repo(tmp_path, monkeypatch)
++
++    result = repository.list_tree("sample", "")
++
++    assert result["repo"] == "sample"
++    assert [item["name"] for item in result["entries"]] == ["src", "README.md"]
++    assert result["entries"][0]["type"] == "directory"
++
++
++def test_nested_file_can_be_read(tmp_path, monkeypatch):
++    _make_repo(tmp_path, monkeypatch)
++
++    result = repository.read_browser_file("sample", "src/nested/hello.ts")
++
++    assert result["status"] == "ok"
++    assert result["path"] == "src/nested/hello.ts"
++    assert result["content"] == "export const answer = 42;\n"
++    assert result["total_lines"] == 2
++    assert result["truncated"] is False
++
++
++@pytest.mark.parametrize("bad_path", ["../outside", "/etc/passwd", "src/../../outside", "src\\\\nested"])
++def test_tree_rejects_paths_outside_repository(tmp_path, monkeypatch, bad_path):
++    _make_repo(tmp_path, monkeypatch)
++
++    with pytest.raises((ValueError, FileNotFoundError)):
++        repository.list_tree("sample", bad_path)
++
++
++def test_binary_files_are_not_opened(tmp_path, monkeypatch):
++    _, repo = _make_repo(tmp_path, monkeypatch)
++    (repo / "image.bin").write_bytes(b"\x00\x01\x02")
++
++    with pytest.raises(ValueError, match="Binary files"):
++        repository.read_browser_file("sample", "image.bin")
++
++
++def test_symlink_is_not_browsable(tmp_path, monkeypatch):
++    _, repo = _make_repo(tmp_path, monkeypatch)
++    outside = tmp_path / "outside"
++    outside.mkdir()
++    (outside / "secret.txt").write_text("secret", encoding="utf-8")
++    (repo / "linked").symlink_to(outside, target_is_directory=True)
++
++    result = repository.list_tree("sample", "")
++    assert "linked" not in [item["name"] for item in result["entries"]]
++    with pytest.raises((ValueError, FileNotFoundError)):
++        repository.read_browser_file("sample", "linked/secret.txt")
++
++
++def test_browser_limits_large_files(tmp_path, monkeypatch):
++    _, repo = _make_repo(tmp_path, monkeypatch)
++    (repo / "large.txt").write_text("0123456789abcdef", encoding="utf-8")
++    monkeypatch.setattr(repository, "MAX_BROWSER_FILE_BYTES", 8)
++
++    result = repository.read_browser_file("sample", "large.txt")
++
++    assert result["content"] == "01234567"
++    assert result["size"] == 16
++    assert result["truncated"] is True
++
++
++def test_default_repository_directory_is_project_root_repository():
++    if "JARVIS_REPOSITORY_DIR" in os.environ:
++        pytest.skip("custom repository directory is configured")
++
++    project_root = Path(__file__).resolve().parents[2]
++    assert repository.config.REPOSITORY_DIR == (project_root / "repository").resolve()
+diff --git a/ui/Assets/ShowcaseSamples/JarvisVR/Runtime/JarvisBridge.cs b/ui/Assets/ShowcaseSamples/JarvisVR/Runtime/JarvisBridge.cs
+index be44919667918508a5d043e8167a96599d03247a..2b7088d11f2a35250224eed88c17645a5efb1d8d 100644
+--- a/ui/Assets/ShowcaseSamples/JarvisVR/Runtime/JarvisBridge.cs
++++ b/ui/Assets/ShowcaseSamples/JarvisVR/Runtime/JarvisBridge.cs
+@@ -36,6 +36,19 @@ [Serializable] public class GraphDto
+   }
+   [Serializable] public class RepoInfoDto { public string name, branch; public int files; }
+   [Serializable] public class ReposDto { public string active; public System.Collections.Generic.List<RepoInfoDto> repos = new System.Collections.Generic.List<RepoInfoDto>(); }
++  [Serializable] public class RepoTreeEntryDto { public string name, path, type; public long size; }
++  [Serializable] public class RepoTreeDto
++  {
++    public string repo, path;
++    public System.Collections.Generic.List<RepoTreeEntryDto> entries = new System.Collections.Generic.List<RepoTreeEntryDto>();
++  }
++  [Serializable] public class RepoFileDto
++  {
++    public string status, repo, path, content, error;
++    public long size;
++    public int total_lines;
++    public bool truncated;
++  }
+   [Serializable] internal class RepoSelectRequest { public string name; }
+   [Serializable] public class HealthDto { public bool ok, cached_tests; public string repo, branch; public int changed; }
+ 
+@@ -65,8 +78,29 @@ public void Approve(bool approved, Action<ApproveResponse> ok, Action<string> fa
+     public void GetHealth(Action<HealthDto> ok, Action<string> fail) =>
+       StartCoroutine(Send("GET", "/health", null, b => ok(JsonUtility.FromJson<HealthDto>(b)), fail));
+ 
+-    public void GetRepos(Action<ReposDto> ok) =>
+-      StartCoroutine(Send("GET", "/repos", null, b => ok(JsonUtility.FromJson<ReposDto>(b)), e => Debug.LogWarning("JARVIS repos: " + e)));
++    public void GetRepos(Action<ReposDto> ok, Action<string> fail) =>
++      StartCoroutine(Send("GET", "/repos", null, b => ok(JsonUtility.FromJson<ReposDto>(b)), fail));
++
++    public void GetTree(string repo, string path, Action<RepoTreeDto> ok, Action<string> fail)
++    {
++      string url = "/repos/" + UnityWebRequest.EscapeURL(repo) + "/tree";
++      if (!string.IsNullOrEmpty(path)) url += "?path=" + UnityWebRequest.EscapeURL(path);
++      StartCoroutine(Send("GET", url, null, b =>
++      {
++        try { ok(JsonUtility.FromJson<RepoTreeDto>(b)); }
++        catch (Exception ex) { fail("Invalid repository tree response: " + ex.Message); }
++      }, fail));
++    }
++
++    public void GetFile(string repo, string path, Action<RepoFileDto> ok, Action<string> fail)
++    {
++      string url = "/repos/" + UnityWebRequest.EscapeURL(repo) + "/file?path=" + UnityWebRequest.EscapeURL(path);
++      StartCoroutine(Send("GET", url, null, b =>
++      {
++        try { ok(JsonUtility.FromJson<RepoFileDto>(b)); }
++        catch (Exception ex) { fail("Invalid file response: " + ex.Message); }
++      }, fail));
++    }
+ 
+     public void SelectRepo(string name, Action<bool> done) =>
+       StartCoroutine(Send("POST", "/repos/select", JsonUtility.ToJson(new RepoSelectRequest { name = name }), b => done(true),
+diff --git a/ui/Assets/ShowcaseSamples/JarvisVR/Runtime/JarvisMockBackend.cs b/ui/Assets/ShowcaseSamples/JarvisVR/Runtime/JarvisMockBackend.cs
+index 64ec331e881559986399cfdc1261445ac28abb0f..2f6b9eebcafc680d228fac6a9f098de781dd3e2f 100644
+--- a/ui/Assets/ShowcaseSamples/JarvisVR/Runtime/JarvisMockBackend.cs
++++ b/ui/Assets/ShowcaseSamples/JarvisVR/Runtime/JarvisMockBackend.cs
+@@ -14,7 +14,9 @@ public interface IJarvisBackend
+     void GetSource(string nodeId, Action<SourceResponse> ok);
+     void GetHealth(Action<HealthDto> ok, Action<string> fail);
+     void GetGraph(Action<GraphDto> ok);
+-    void GetRepos(Action<ReposDto> ok);
++    void GetRepos(Action<ReposDto> ok, Action<string> fail);
++    void GetTree(string repo, string path, Action<RepoTreeDto> ok, Action<string> fail);
++    void GetFile(string repo, string path, Action<RepoFileDto> ok, Action<string> fail);
+     void SelectRepo(string name, Action<bool> done);
+   }
+ 
+@@ -51,7 +53,7 @@ public void GetHealth(Action<HealthDto> ok, Action<string> fail)
+       StartCoroutine(After(0.15f, () => ok(new HealthDto { ok = true, cached_tests = true, repo = "demo-repo (mock)", branch = "main", changed = 3 })));
+     }
+ 
+-    public void GetRepos(Action<ReposDto> ok)
++    public void GetRepos(Action<ReposDto> ok, Action<string> fail)
+     {
+       var r = new ReposDto { active = "demo-repo (mock)" };
+       r.repos.Add(new RepoInfoDto { name = "demo-repo (mock)", branch = "main", files = 7 });
+@@ -60,6 +62,46 @@ public void GetRepos(Action<ReposDto> ok)
+ 
+     public void SelectRepo(string name, Action<bool> done) { StartCoroutine(After(0.1f, () => done(true))); }
+ 
++    public void GetTree(string repo, string path, Action<RepoTreeDto> ok, Action<string> fail)
++    {
++      var tree = new RepoTreeDto { repo = repo, path = path ?? "" };
++      string folder = (path ?? "").Trim('/');
++      if (folder == "")
++      {
++        AddDir(tree, "auth"); AddDir(tree, "db"); AddDir(tree, "routes"); AddDir(tree, "services"); AddDir(tree, "tests");
++        AddFile(tree, "README.md", 650);
++      }
++      else if (folder == "auth") { AddFile(tree, "requireAuth.ts", 320); AddFile(tree, "owner.ts", 250); }
++      else if (folder == "db") { AddFile(tree, "users.repo.ts", 410); }
++      else if (folder == "routes") { AddFile(tree, "account.ts", 720); }
++      else if (folder == "services") { AddFile(tree, "account.ts", 540); }
++      else if (folder == "tests") { AddFile(tree, "account.test.ts", 380); }
++      else { fail("Folder not found in mock repository: " + folder); return; }
++      StartCoroutine(After(0.08f, () => ok(tree)));
++    }
++
++    private static void AddDir(RepoTreeDto tree, string name) => tree.entries.Add(new RepoTreeEntryDto
++      { name = name, path = string.IsNullOrEmpty(tree.path) ? name : tree.path + "/" + name, type = "directory" });
++    private static void AddFile(RepoTreeDto tree, string name, long size) => tree.entries.Add(new RepoTreeEntryDto
++      { name = name, path = string.IsNullOrEmpty(tree.path) ? name : tree.path + "/" + name, type = "file", size = size });
++
++    public void GetFile(string repo, string path, Action<RepoFileDto> ok, Action<string> fail)
++    {
++      string normalized = (path ?? "").Replace('\\', '/');
++      SourceResponse source = null;
++      foreach (SourceResponse candidate in Sources.Values)
++        if (candidate.file == normalized) { source = candidate; break; }
++      string content = source != null ? source.source : normalized == "README.md"
++        ? "# Demo repository\n\nThis is a read-only mock file browser.\n\nOpen a source file from the repository tree to inspect it."
++        : null;
++      if (content == null) { fail("Mock file not found: " + normalized); return; }
++      StartCoroutine(After(0.08f, () => ok(new RepoFileDto
++      {
++        status = "ok", repo = repo, path = normalized, content = content,
++        size = content.Length, total_lines = content.Split('\n').Length, truncated = false
++      })));
++    }
++
+     public void GetGraph(Action<GraphDto> ok) { StartCoroutine(After(0.2f, () => ok(JarvisGraphModel.Sample()))); }
+ 
+     public void GetSource(string nodeId, Action<SourceResponse> ok)
+diff --git a/ui/Assets/ShowcaseSamples/JarvisVR/Runtime/JarvisSpatialInput.cs b/ui/Assets/ShowcaseSamples/JarvisVR/Runtime/JarvisSpatialInput.cs
+index ecfaab7bcacb2fcc6a20c782f2bda6c5e06f7af0..baa6e46d0f5371773ddd38dfbf904c1a5e7c26a8 100644
+--- a/ui/Assets/ShowcaseSamples/JarvisVR/Runtime/JarvisSpatialInput.cs
++++ b/ui/Assets/ShowcaseSamples/JarvisVR/Runtime/JarvisSpatialInput.cs
+@@ -120,14 +120,14 @@ private void Process(Slot s)
+       if (!s.Valid)
+       {
+         if (s.HoverFx != null) { s.HoverFx.Hovered = false; s.HoverFx = null; }
+-        Release(s, null);
++        Release(s);
+         return;
+       }
+ 
+       JarvisSpatialButton hoverBtn = null; JarvisGraphNode hoverNode = null; JarvisSpatialGrab hoverGrab = null;
+       JarvisNodeFx hoverFx = null; JarvisSpatialResize hoverResize = null;
+       float dist = 1.5f; bool hasHit = false;
+-      if (Physics.Raycast(s.Ray, out RaycastHit hit, 6f, ~0, QueryTriggerInteraction.Ignore))
++      if (TryRaycastTarget(s.Ray, out RaycastHit hit))
+       {
+         hasHit = true; dist = hit.distance;
+         hoverBtn = hit.collider.GetComponentInParent<JarvisSpatialButton>();
+@@ -165,7 +165,18 @@ private void Process(Slot s)
+ 
+       if (s.Down && !s.WasDown)
+       {
+-        if (hoverBtn != null && hoverBtn.Interactable) { s.Btn = hoverBtn; s.Btn.SetPressed(true); s.BtnTime = Time.unscaledTime; s.BtnFired = false; }
++        if (hoverBtn != null && hoverBtn.Interactable)
++        {
++          s.Btn = hoverBtn; s.Btn.SetPressed(true); s.BtnTime = Time.unscaledTime; s.BtnFired = false;
++          // Activate normal buttons on press-down. Waiting for a perfectly stable release
++          // ray made hand pinch and controller clicks feel unresponsive in VR. Deliberate
++          // hold actions (for example approval) still wait for HoldSeconds below.
++          if (s.Btn.HoldSeconds <= 0f)
++          {
++            s.BtnFired = true;
++            FireButton(s.Btn);
++          }
++        }
+         else if (hoverNode != null)
+         {
+           s.Node = hoverNode; s.NodeDist = dist; s.NodeStart = s.NodeLast = s.Ray.GetPoint(dist); s.NodeDragging = false;
+@@ -197,7 +208,9 @@ private void Process(Slot s)
+             if (p >= 1f)
+             {
+               s.BtnFired = true; s.Btn.SetProgress(0f); JarvisAudio.SetCharge(0f);
+-              JarvisAudio.Play(JarvisAudio.Cue.ApproveClick); s.Btn.SetPressed(false); s.Btn.Focus(); s.Btn.Click();
++              JarvisAudio.Play(JarvisAudio.Cue.ApproveClick);
++              s.Btn.SetPressed(false);
++              FireButton(s.Btn, false);
+             }
+           }
+         }
+@@ -218,17 +231,79 @@ private void Process(Slot s)
+           s.Resize.Panel.UserScale = Mathf.Clamp(s.ResizeStartScale * d / s.ResizeStartDistance, 0.5f, 2.2f);
+         }
+       }
+-      else if (s.WasDown) Release(s, hoverBtn);
++      else if (s.WasDown) Release(s);
++    }
++
++    /// <summary>
++    /// Resolve the nearest hit while allowing a button to win over its own panel's backing
++    /// collider. Raycast() returns only one hit; the panel glass/root box can overlap the
++    /// button's depth by a few millimetres and otherwise swallow the click.
++    /// </summary>
++    private static bool TryRaycastTarget(Ray ray, out RaycastHit selected)
++    {
++      RaycastHit[] hits = Physics.RaycastAll(ray, 6f, ~0, QueryTriggerInteraction.Ignore);
++      if (hits == null || hits.Length == 0) { selected = default; return false; }
++      Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
++      selected = hits[0];
++
++      // 1) Buttons take priority over their own panel's backing collider. This also avoids
++      // unrelated non-interactive scene colliders swallowing a UI click.
++      JarvisSpatialPanel firstPanel = selected.collider != null
++        ? selected.collider.GetComponentInParent<JarvisSpatialPanel>() : null;
++      for (int i = 0; i < hits.Length; i++)
++      {
++        Collider collider = hits[i].collider;
++        if (collider == null) continue;
++        JarvisSpatialButton button = collider.GetComponentInParent<JarvisSpatialButton>();
++        if (button == null || !button.Interactable) continue;
++        JarvisSpatialPanel buttonPanel = button.GetComponentInParent<JarvisSpatialPanel>();
++        if (buttonPanel != null && (firstPanel == null || buttonPanel == firstPanel || i == 0 || hits[i].distance - hits[0].distance <= 0.025f))
++        {
++          selected = hits[i];
++          return true;
++        }
++      }
++
++      // 2) Otherwise route to the nearest explicit spatial interaction target.
++      for (int i = 0; i < hits.Length; i++)
++      {
++        Collider collider = hits[i].collider;
++        if (collider == null) continue;
++        if (collider.GetComponentInParent<JarvisGraphNode>() != null ||
++            collider.GetComponentInParent<JarvisSpatialGrab>() != null ||
++            collider.GetComponentInParent<JarvisSpatialResize>() != null)
++        {
++          selected = hits[i];
++          return true;
++        }
++        JarvisSpatialPanel panel = collider.GetComponentInParent<JarvisSpatialPanel>();
++        if (panel != null)
++        {
++          selected = hits[i];
++          return true;
++        }
++      }
++
++      // Keep the reticle visible on the nearest collider even when it is not actionable.
++      return true;
++    }
++
++    private static void FireButton(JarvisSpatialButton button, bool playCue = true)
++    {
++      if (button == null || !button.Interactable) return;
++      if (playCue) JarvisAudio.Play(JarvisAudio.Cue.SelectTick);
++      button.Focus();
++      Debug.Log("JARVIS input: clicked " + button.name);
++      button.Click();
+     }
+ 
+-    private void Release(Slot s, JarvisSpatialButton hoverBtn)
++    private void Release(Slot s)
+     {
+       if (s.Btn != null)
+       {
+         s.Btn.SetPressed(false);
+         s.Btn.SetProgress(0f);
+         if (s.Btn.HoldSeconds > 0f) JarvisAudio.SetCharge(0f);
+-        else if (hoverBtn == s.Btn) { JarvisAudio.Play(JarvisAudio.Cue.SelectTick); s.Btn.Focus(); s.Btn.Click(); }
+       }
+       if (s.Node != null && !s.NodeDragging && !s.NodeHeld) s.Node.Select();
+       s.Btn = null; s.Node = null; s.Grab = null; s.Resize = null; s.NodeDragging = false; s.NodeHeld = false;
+diff --git a/ui/Assets/ShowcaseSamples/JarvisVR/Runtime/JarvisSpatialPanel.cs b/ui/Assets/ShowcaseSamples/JarvisVR/Runtime/JarvisSpatialPanel.cs
+index e95db6c8c3208e4fbe927f1cce4e0331acbfe8db..c55af8a47a7b654f873e9174a4a8804e17cc7ca3 100644
+--- a/ui/Assets/ShowcaseSamples/JarvisVR/Runtime/JarvisSpatialPanel.cs
++++ b/ui/Assets/ShowcaseSamples/JarvisVR/Runtime/JarvisSpatialPanel.cs
+@@ -68,7 +68,12 @@ private void Refresh()
+     }
+ 
+     public void SetProgress(float p) { if (Fill != null) { Fill.fillAmount = Mathf.Clamp01(p); Fill.enabled = p > 0.001f; } }
+-    public void Click() { if (_disabled) return; if (OnClick != null) OnClick(); }
++    public void Click()
++    {
++      if (_disabled || OnClick == null) return;
++      try { OnClick(); }
++      catch (Exception ex) { Debug.LogException(ex, this); }
++    }
+   }
+ 
+   /// <summary>Grab handle: pinch and drag moves Target.</summary>
+diff --git a/ui/Assets/ShowcaseSamples/JarvisVR/Runtime/JarvisSpatialWorkspace.cs b/ui/Assets/ShowcaseSamples/JarvisVR/Runtime/JarvisSpatialWorkspace.cs
+index 087446ea6754b1a6476ecc608264ea0bb9c47698..c0540e8c86f9af0854b0a0ca1c76e2eba638cd07 100644
+--- a/ui/Assets/ShowcaseSamples/JarvisVR/Runtime/JarvisSpatialWorkspace.cs
++++ b/ui/Assets/ShowcaseSamples/JarvisVR/Runtime/JarvisSpatialWorkspace.cs
+@@ -52,8 +52,18 @@ private sealed class EdgeView { public GraphEdgeDto Dto; public NodeView From, T
+     private GraphDto _graph;
+     private HealthDto _health;
+     private ReposDto _repos;
+-    private JarvisSpatialButton _repoPrev, _repoNext;
+-    private bool _switching;
++    private RepoTreeDto _repoTree;
++    private RepoFileDto _openFile;
++    private JarvisSpatialPanel _repoPanel, _codePanel;
++    private JarvisSpatialButton _repoBack, _repoHome, _repoPrev, _repoNext;
++    private JarvisSpatialButton _codePrev, _codeClose, _codeNext;
++    private readonly List<GameObject> _repoRows = new List<GameObject>();
++    private string _browserRepo, _browserPath = "";
++    private int _browserPage, _openFilePage;
++    private bool _treeLoading, _switching;
++    private string _browserError;
++    private const int BrowserRowsPerPage = 7;
++    private const int EditorLinesPerPage = 18;
+     private bool _serverOnline;
+     private string _selected, _mode = "MAP", _pending, _ghostDiff, _testSummary = "No test run yet.";
+     private readonly List<string> _log = new List<string>();
+@@ -91,7 +101,7 @@ public void Initialize(Camera cam)
+       JarvisAtmosphere.BuildDust(_root, JarvisSpatialFx.Magenta, JarvisPalette.Current.Cyan);
+       JarvisCityscape.Build(_root);
+       LoadGraph(JarvisGraphModel.Sample());
+-      SetMode("MAP");
++      SetMode("REPOS");                 // begin with the repository picker, like an IDE start screen
+       Select("service.delete");
+ 
+       gameObject.AddComponent<JarvisSpatialInput>().Initialize(_cam, _graphRoot, ToggleVoice);
+@@ -99,7 +109,7 @@ public void Initialize(Camera cam)
+       Log("workspace ready (sample graph)");
+ 
+       _bridge.GetHealth(h => { _health = h; _serverOnline = h != null && h.ok; RefreshStatus(); }, e => { _serverOnline = false; RefreshStatus(); });
+-      _bridge.GetRepos(r => { _repos = r; RefreshRepo(); });
++      FetchRepos();
+       if (!_mock) _bridge.GetGraph(g =>
+       {
+         if (g == null || g.nodes == null || g.nodes.Count == 0) return;
+@@ -129,8 +139,9 @@ private void Recenter()
+     private static readonly string[] NavModes = { "MAP", "CODE", "FLOW", "ISSUES", "TESTS", "GIT", "AGENT" };
+     private static readonly Dictionary<string, string[]> ModePanels = new Dictionary<string, string[]>
+     {
++      { "REPOS",  new[] { "repo" } },
+       { "MAP",    new[] { "repo", "code", "evidence", "legend" } },
+-      { "CODE",   new[] { "code", "evidence", "legend" } },
++      { "CODE",   new[] { "repo", "code", "evidence", "legend" } },
+       { "FLOW",   new[] { "activity", "evidence" } },
+       { "ISSUES", new[] { "repo", "evidence" } },
+       { "TESTS",  new[] { "tests", "code", "legend" } },
+@@ -184,14 +195,20 @@ private void BuildPanels()
+       JarvisSpatialPanel status = AddPanel("status", "Status", 900, 90, 0f, 0.80f, pal.Cyan);
+       status.SetBodyBox(46, 36); status.Body.fontSize = 22;
+ 
+-      JarvisSpatialPanel repo = AddPanel("repo", "Repository", 440, 520, -1.12f, 0.20f, pal.Cyan);
+-      repo.SetBodyBox(60, 370); repo.Body.fontSize = 22;
+-      _repoPrev = repo.AddButton("< PREV", 20, 448, 190, 54, () => SwitchRepo(-1));
+-      _repoNext = repo.AddButton("NEXT >", 230, 448, 190, 54, () => SwitchRepo(+1));
+-      _repoPrev.Interactable = _repoNext.Interactable = false;   // enabled once the server lists 2+ repos
+-
+-      JarvisSpatialPanel code = AddPanel("code", "Code inspector", 560, 520, 1.18f, 0.20f, pal.Cyan);
+-      code.SetBodyBox(60, 450); code.UseMono(20);
++      _repoPanel = AddPanel("repo", "Repositories", 440, 520, -1.12f, 0.20f, pal.Cyan);
++      _repoPanel.SetBodyBox(98, 24); _repoPanel.Body.fontSize = 16;
++      _repoBack = _repoPanel.AddButton("< BACK", 20, 56, 126, 38, NavigateRepoBack);
++      _repoHome = _repoPanel.AddButton("ROOT", 154, 56, 100, 38, OpenRepoRoot);
++      _repoPrev = _repoPanel.AddButton("< PAGE", 20, 454, 190, 48, () => ChangeRepoPage(-1));
++      _repoNext = _repoPanel.AddButton("PAGE >", 230, 454, 190, 48, () => ChangeRepoPage(+1));
++      _repoBack.Interactable = _repoHome.Interactable = _repoPrev.Interactable = _repoNext.Interactable = false;
++
++      _codePanel = AddPanel("code", "Code inspector", 560, 520, 1.18f, 0.20f, pal.Cyan);
++      _codePanel.SetBodyBox(60, 370); _codePanel.UseMono(17);
++      _codePrev = _codePanel.AddButton("< PREVIOUS", 18, 454, 166, 48, () => ChangeEditorPage(-1));
++      _codeClose = _codePanel.AddButton("CLOSE FILE", 192, 454, 166, 48, CloseOpenFile);
++      _codeNext = _codePanel.AddButton("NEXT >", 366, 454, 176, 48, () => ChangeEditorPage(+1));
++      _codePrev.gameObject.SetActive(false); _codeClose.gameObject.SetActive(false); _codeNext.gameObject.SetActive(false);
+ 
+       JarvisSpatialPanel evidence = AddPanel("evidence", "Evidence", 560, 250, 1.18f, -0.46f, pal.Violet);
+       evidence.SetBodyBox(60, 180); evidence.Body.fontSize = 22;
+@@ -246,6 +263,7 @@ private void SetMode(string mode)
+     {
+       if (mode != _mode && _panels.ContainsKey("menu")) _panels["menu"].Show(false);
+       _mode = mode;
++      if (_graphRoot != null) _graphRoot.gameObject.SetActive(mode != "REPOS" && mode != "CODE");
+       string[] visible = ModePanels.ContainsKey(mode) ? ModePanels[mode] : ModePanels["MAP"];
+       int shown = 0;
+       foreach (string key in new[] { "repo", "code", "evidence", "tests", "activity", "legend", "ghost", "approval" })
+@@ -619,50 +637,284 @@ private void RefreshStatus()
+       _panels["status"].SetBody(repo + "  ·  " + branch + "  ·  " + changed + " changed  ·  " + server + "  ·  " + _mode);
+     }
+ 
+-    private void SwitchRepo(int delta)
++    private void FetchRepos()
++    {
++      if (_bridge == null) return;
++      _browserError = null;
++      RefreshRepoBrowser();
++      _bridge.GetRepos(r =>
++      {
++        _repos = r;
++        _browserError = null;
++        RefreshRepoBrowser();
++      }, error =>
++      {
++        _browserError = error;
++        RefreshRepoBrowser();
++      });
++    }
++
++    private void OpenRepo(string name)
+     {
+-      if (_switching || _repos == null || _repos.repos.Count < 2) return;
+-      int cur = Mathf.Max(0, _repos.repos.FindIndex(r => r.name == _repos.active));
+-      string next = _repos.repos[(cur + delta + _repos.repos.Count) % _repos.repos.Count].name;
++      if (string.IsNullOrEmpty(name) || _switching || _bridge == null) return;
++      if (_repos != null && _repos.active == name)
++      {
++        _openFile = null;
++        _browserRepo = name;
++        SetMode("REPOS");
++        LoadRepoFolder("");
++        return;
++      }
++
+       _switching = true;
+-      Log("loading repository " + next + " ...");
+-      _bridge.SelectRepo(next, ok =>
++      Say("Opening repository " + name + "...");
++      _bridge.SelectRepo(name, ok =>
+       {
+-        if (!ok) { _switching = false; Say("Could not open " + next + "."); return; }
+-        _repos.active = next;
++        _switching = false;
++        if (!ok) { Say("Could not open repository " + name + ". Check the server log."); return; }
++        if (_repos != null) _repos.active = name;
++        _browserRepo = name;
++        _browserPath = "";
++        _browserPage = 0;
++        _repoTree = null;
++        _openFile = null;
++        SetMode("REPOS");
++        // Load the file tree independently: browsing must not depend on graph indexing succeeding.
++        LoadRepoFolder("");
+         _bridge.GetHealth(h => { _health = h; RefreshStatus(); }, e => { });
+         _bridge.GetGraph(g =>
+         {
+-          _switching = false;
+-          if (g == null || g.nodes == null) return;
+-          LoadGraph(g);
+-          if (g.nodes.Count > 0) Select(g.nodes[0].id);
+-          Log("repository " + next + ": " + g.nodes.Count + " nodes");
++          if (g != null && g.nodes != null)
++          {
++            LoadGraph(g);
++            if (g.nodes.Count > 0) Select(g.nodes[0].id);
++            Log("repository " + name + ": " + g.nodes.Count + " graph nodes");
++          }
+           RefreshStatus();
+         });
+       });
+     }
+ 
++    private void LoadRepoFolder(string path)
++    {
++      if (string.IsNullOrEmpty(_browserRepo) || _bridge == null) return;
++      _browserPath = path ?? "";
++      _browserPage = 0;
++      _treeLoading = true;
++      RefreshRepoBrowser();
++      _bridge.GetTree(_browserRepo, _browserPath, tree =>
++      {
++        _treeLoading = false;
++        _repoTree = tree;
++        RefreshRepoBrowser();
++      }, error =>
++      {
++        _treeLoading = false;
++        _repoTree = null;
++        Say("Could not load folder: " + error);
++        RefreshRepoBrowser();
++      });
++    }
++
++    private void ReturnToRepoList()
++    {
++      _browserRepo = null;
++      _browserPath = "";
++      _repoTree = null;
++      _browserPage = 0;
++      _treeLoading = false;
++      _openFile = null;
++      if (_codePrev != null)
++      {
++        _codePrev.gameObject.SetActive(false);
++        _codeClose.gameObject.SetActive(false);
++        _codeNext.gameObject.SetActive(false);
++      }
++      SetMode("REPOS");
++      RefreshRepoBrowser();
++    }
++
++    private void OpenRepoRoot()
++    {
++      if (!string.IsNullOrEmpty(_browserRepo)) LoadRepoFolder("");
++      else FetchRepos();
++    }
++
++    private void NavigateRepoBack()
++    {
++      if (string.IsNullOrEmpty(_browserRepo)) return;
++      if (string.IsNullOrEmpty(_browserPath)) { ReturnToRepoList(); return; }
++      string path = _browserPath.TrimEnd('/');
++      int slash = path.LastIndexOf('/');
++      LoadRepoFolder(slash >= 0 ? path.Substring(0, slash) : "");
++    }
++
++    private void ChangeRepoPage(int delta)
++    {
++      int count = _browserRepo == null
++        ? (_repos != null && _repos.repos != null ? _repos.repos.Count : 0)
++        : (_repoTree != null && _repoTree.entries != null ? _repoTree.entries.Count : 0);
++      int pages = Mathf.Max(1, Mathf.CeilToInt(count / (float)BrowserRowsPerPage));
++      _browserPage = Mathf.Clamp(_browserPage + delta, 0, pages - 1);
++      RefreshRepoBrowser();
++    }
++
+     private void RefreshRepo()
+     {
+-      if (!_panels.ContainsKey("repo") || _graph == null) return;
+-      bool many = _repos != null && _repos.repos.Count > 1;
+-      if (_repoPrev != null) _repoPrev.Interactable = _repoNext.Interactable = many && !_switching;
+-      var sb = new StringBuilder();
+-      if (_repos != null && !string.IsNullOrEmpty(_repos.active))
+-        sb.Append("<b>").Append(_repos.active).Append("</b>  (").Append(_repos.repos.Count).Append(" in /repository)\n");
+-      int lines = _repos != null ? 1 : 0;
+-      foreach (ClusterView cv in _clusters.Values)
++      RefreshRepoBrowser();
++    }
++
++    private void ClearRepoRows()
++    {
++      foreach (GameObject row in _repoRows) if (row != null) Destroy(row);
++      _repoRows.Clear();
++    }
++
++    private void AddRepoRow(string label, int index, Action action, Color? accent = null)
++    {
++      float y = 126f + index * 42f;
++      JarvisSpatialButton button = _repoPanel.AddButton(label, 18f, y, 404f, 38f, action, 0f, accent);
++      _repoRows.Add(button.gameObject);
++    }
++
++    private void RefreshRepoBrowser()
++    {
++      if (_repoPanel == null) return;
++      ClearRepoRows();
++      bool inRepo = !string.IsNullOrEmpty(_browserRepo);
++      _repoBack.Interactable = inRepo;
++      if (_repoHome.Label != null) _repoHome.Label.text = inRepo ? "ROOT" : "REFRESH";
++      _repoHome.Interactable = inRepo ? !string.IsNullOrEmpty(_browserPath) : true;
++
++      var entries = new List<RepoTreeEntryDto>();
++      int count;
++      if (!inRepo)
++      {
++        _repoPanel.SetTitle("Repositories");
++        if (_repos == null || _repos.repos == null)
++        {
++          _repoPanel.SetBody(string.IsNullOrEmpty(_browserError)
++            ? "Connecting to repository server..."
++            : "Server error: " + _browserError + "\nTap RELOAD to retry.");
++          count = 0;
++        }
++        else
++        {
++          _repoPanel.SetBody(_repos.repos.Count + " repositories  ·  select one to browse");
++          count = _repos.repos.Count;
++          int start = _browserPage * BrowserRowsPerPage;
++          int end = Mathf.Min(count, start + BrowserRowsPerPage);
++          for (int i = start; i < end; i++)
++          {
++            RepoInfoDto info = _repos.repos[i];
++            string repoName = info.name;
++            string branch = string.IsNullOrEmpty(info.branch) ? "" : "  ·  " + info.branch;
++            int fileCount = info.files;
++            AddRepoRow("REPO  " + repoName + branch + "  ·  " + fileCount + " files", i - start,
++              () => OpenRepo(repoName), repoName == _repos.active ? JarvisPalette.Current.Green : (Color?)null);
++          }
++        }
++      }
++      else
+       {
+-        if (lines++ > 11) break;
+-        sb.Append("<b>").Append(cv.Name).Append("/</b>\n");
+-        foreach (string file in cv.Members.Select(m => m.Dto.file).Where(f => !string.IsNullOrEmpty(f)).Distinct())
++        string suffix = string.IsNullOrEmpty(_browserPath) ? "/" : "/" + _browserPath;
++        string title = _browserRepo + suffix;
++        if (title.Length > 34) title = "…" + title.Substring(title.Length - 33);
++        _repoPanel.SetTitle(title);
++        if (_treeLoading)
++        {
++          _repoPanel.SetBody("Loading folder contents...");
++          count = 0;
++        }
++        else if (_repoTree == null || _repoTree.entries == null)
++        {
++          _repoPanel.SetBody("No folder data. Use BACK to return to repositories.");
++          count = 0;
++        }
++        else
+         {
+-          if (lines++ > 11) break;
+-          sb.Append("   ").Append(Path.GetFileName(file)).Append('\n');
++          _repoPanel.SetBody(_repoTree.entries.Count + " items  ·  folders first  ·  select to open");
++          entries = _repoTree.entries;
++          count = entries.Count;
++          int start = _browserPage * BrowserRowsPerPage;
++          int end = Mathf.Min(count, start + BrowserRowsPerPage);
++          for (int i = start; i < end; i++)
++          {
++            RepoTreeEntryDto entry = entries[i];
++            string path = entry.path;
++            bool directory = entry.type == "directory";
++            string label = directory ? "FOLDER  " + entry.name + "/" : "FILE  " + entry.name;
++            Action openEntry = directory ? new Action(() => LoadRepoFolder(path)) : new Action(() => OpenRepoFile(path));
++            AddRepoRow(label, i - start, openEntry,
++              directory ? JarvisPalette.Current.Cyan : (Color?)null);
++          }
+         }
+       }
+-      _panels["repo"].SetBody(sb.ToString());
++
++      int pageCount = Mathf.Max(1, Mathf.CeilToInt(count / (float)BrowserRowsPerPage));
++      _repoPrev.Interactable = _browserPage > 0;
++      _repoNext.Interactable = _browserPage < pageCount - 1;
++      if (_repoPrev.Label != null) _repoPrev.Label.text = "< PAGE " + Mathf.Max(1, _browserPage) + "/" + pageCount;
++      if (_repoNext.Label != null) _repoNext.Label.text = "PAGE " + Mathf.Min(pageCount, _browserPage + 2) + "/" + pageCount + " >";
++    }
++
++    private void OpenRepoFile(string path)
++    {
++      if (string.IsNullOrEmpty(_browserRepo) || _bridge == null) return;
++      Say("Opening " + path + "...");
++      _bridge.GetFile(_browserRepo, path, file =>
++      {
++        if (file == null || file.status != "ok") { Say("Could not open " + path + "."); return; }
++        _openFile = file;
++        _openFilePage = 0;
++        SetMode("CODE");
++        RefreshOpenFile();
++        Log("opened " + path);
++      }, error => Say("Could not open file: " + error));
++    }
++
++    private void ChangeEditorPage(int delta)
++    {
++      if (_openFile == null) return;
++      string[] lines = (_openFile.content ?? "").Split('\n');
++      int pages = Mathf.Max(1, Mathf.CeilToInt(lines.Length / (float)EditorLinesPerPage));
++      _openFilePage = Mathf.Clamp(_openFilePage + delta, 0, pages - 1);
++      RefreshOpenFile();
++    }
++
++    private static string EscapeRichText(string value)
++    {
++      return (value ?? "").Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
++    }
++
++    private void RefreshOpenFile()
++    {
++      if (_codePanel == null || _openFile == null) return;
++      _codePanel.SetTitle(_openFile.path);
++      string[] lines = (_openFile.content ?? "").Split('\n');
++      int pages = Mathf.Max(1, Mathf.CeilToInt(lines.Length / (float)EditorLinesPerPage));
++      int first = _openFilePage * EditorLinesPerPage;
++      int last = Mathf.Min(lines.Length, first + EditorLinesPerPage);
++      var sb = new StringBuilder();
++      sb.Append("<color=#").Append(Hex(JarvisPalette.Current.TextMuted)).Append(">READ-ONLY VIEW  ·  ")
++        .Append(lines.Length).Append(" lines  ·  page ").Append(_openFilePage + 1).Append('/').Append(pages).Append("</color>\n\n");
++      for (int i = first; i < last; i++)
++      {
++        sb.Append("<color=#").Append(Hex(JarvisPalette.Current.TextMuted)).Append('>')
++          .Append(i + 1).Append("</color>  ").Append(EscapeRichText(lines[i].TrimEnd('\r'))).Append('\n');
++      }
++      if (_openFile.truncated) sb.Append("\n<color=#").Append(Hex(JarvisPalette.Current.Amber)).Append(">File truncated at 512 KB.</color>");
++      _codePanel.SetBody(sb.ToString());
++      _codePrev.gameObject.SetActive(true); _codeClose.gameObject.SetActive(true); _codeNext.gameObject.SetActive(true);
++      _codePrev.Interactable = _openFilePage > 0;
++      _codeNext.Interactable = _openFilePage < pages - 1;
++    }
++
++    private void CloseOpenFile()
++    {
++      _openFile = null;
++      _codePrev.gameObject.SetActive(false); _codeClose.gameObject.SetActive(false); _codeNext.gameObject.SetActive(false);
++      RefreshCode();
+     }
+ 
+     private void RefreshActivity() { if (_panels.ContainsKey("activity")) _panels["activity"].SetBody(string.Join("\n", _log)); }
+@@ -686,6 +938,8 @@ private void RefreshEvidence()
+ 
+     private void RefreshCode()
+     {
++      if (_openFile != null) { RefreshOpenFile(); return; }
++      if (_codePrev != null) { _codePrev.gameObject.SetActive(false); _codeClose.gameObject.SetActive(false); _codeNext.gameObject.SetActive(false); }
+       if (!_panels.ContainsKey("code") || string.IsNullOrEmpty(_selected) || !_nodes.TryGetValue(_selected, out NodeView n)) return;
+       JarvisPalette pal = JarvisPalette.Current;
+       if (!_source.TryGetValue(_selected, out SourceResponse s))

@@ -111,6 +111,32 @@ async def select_repo(body: RepoBody):
     return {'active': body.name, 'nodes': len(g['nodes']), 'edges': len(g['edges'])}
 
 
+@app.get('/repos/{repo_name}/tree', dependencies=[Depends(auth)])
+async def repository_tree(repo_name: str, path: str = ''):
+    try:
+        return await asyncio.to_thread(repository.list_tree, repo_name, path)
+    except KeyError:
+        raise HTTPException(status_code=404, detail='unknown repository: ' + repo_name)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail='folder not found: ' + path)
+    except NotADirectoryError:
+        raise HTTPException(status_code=400, detail='path is not a folder: ' + path)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.get('/repos/{repo_name}/file', dependencies=[Depends(auth)])
+async def repository_file(repo_name: str, path: str):
+    try:
+        return await asyncio.to_thread(repository.read_browser_file, repo_name, path)
+    except KeyError:
+        raise HTTPException(status_code=404, detail='unknown repository: ' + repo_name)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail='file not found: ' + path)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
 @app.get('/source/{node_id}', dependencies=[Depends(auth)])
 async def source(node_id: str, context: int = 0):
     return get_source(node_id, SimpleNamespace(state={}), min(max(context, 0), 20))

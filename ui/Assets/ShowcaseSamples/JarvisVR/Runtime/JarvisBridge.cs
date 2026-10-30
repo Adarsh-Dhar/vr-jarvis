@@ -36,6 +36,19 @@ namespace JarvisVR
   }
   [Serializable] public class RepoInfoDto { public string name, branch; public int files; }
   [Serializable] public class ReposDto { public string active; public System.Collections.Generic.List<RepoInfoDto> repos = new System.Collections.Generic.List<RepoInfoDto>(); }
+  [Serializable] public class RepoTreeEntryDto { public string name, path, type; public long size; }
+  [Serializable] public class RepoTreeDto
+  {
+    public string repo, path;
+    public System.Collections.Generic.List<RepoTreeEntryDto> entries = new System.Collections.Generic.List<RepoTreeEntryDto>();
+  }
+  [Serializable] public class RepoFileDto
+  {
+    public string status, repo, path, content, error;
+    public long size;
+    public int total_lines;
+    public bool truncated;
+  }
   [Serializable] internal class RepoSelectRequest { public string name; }
   [Serializable] public class HealthDto { public bool ok, cached_tests; public string repo, branch; public int changed; }
 
@@ -65,8 +78,29 @@ namespace JarvisVR
     public void GetHealth(Action<HealthDto> ok, Action<string> fail) =>
       StartCoroutine(Send("GET", "/health", null, b => ok(JsonUtility.FromJson<HealthDto>(b)), fail));
 
-    public void GetRepos(Action<ReposDto> ok) =>
-      StartCoroutine(Send("GET", "/repos", null, b => ok(JsonUtility.FromJson<ReposDto>(b)), e => Debug.LogWarning("JARVIS repos: " + e)));
+    public void GetRepos(Action<ReposDto> ok, Action<string> fail) =>
+      StartCoroutine(Send("GET", "/repos", null, b => ok(JsonUtility.FromJson<ReposDto>(b)), fail));
+
+    public void GetTree(string repo, string path, Action<RepoTreeDto> ok, Action<string> fail)
+    {
+      string url = "/repos/" + UnityWebRequest.EscapeURL(repo) + "/tree";
+      if (!string.IsNullOrEmpty(path)) url += "?path=" + UnityWebRequest.EscapeURL(path);
+      StartCoroutine(Send("GET", url, null, b =>
+      {
+        try { ok(JsonUtility.FromJson<RepoTreeDto>(b)); }
+        catch (Exception ex) { fail("Invalid repository tree response: " + ex.Message); }
+      }, fail));
+    }
+
+    public void GetFile(string repo, string path, Action<RepoFileDto> ok, Action<string> fail)
+    {
+      string url = "/repos/" + UnityWebRequest.EscapeURL(repo) + "/file?path=" + UnityWebRequest.EscapeURL(path);
+      StartCoroutine(Send("GET", url, null, b =>
+      {
+        try { ok(JsonUtility.FromJson<RepoFileDto>(b)); }
+        catch (Exception ex) { fail("Invalid file response: " + ex.Message); }
+      }, fail));
+    }
 
     public void SelectRepo(string name, Action<bool> done) =>
       StartCoroutine(Send("POST", "/repos/select", JsonUtility.ToJson(new RepoSelectRequest { name = name }), b => done(true),

@@ -11,7 +11,7 @@ repository/
 
 The server lists every direct sub-folder, indexes the source files into a graph
 (functions/classes = nodes, calls = edges, test files = tests) and sends that graph to the
-VR UI. In VR, use the PREV / NEXT buttons on the Repository panel to switch repos.
+VR UI. In VR, the workspace opens on a repository picker. Select a repo to browse its folders, select a folder to open it, and select a file to view its source in the read-only code panel. Use BACK to go up one level, ROOT to return to the repo root, and the page controls to browse long lists.
 
 Supported source files: `.py`, `.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`, `.cjs`.
 Skipped folders: `.git`, `node_modules`, `dist`, `build`, `venv`, `__pycache__`, ...
@@ -20,3 +20,5 @@ Optional: put a hand-written graph next to a repo as `repository/<repo-name>.gra
 and it is used instead of the automatic index (the demo repo does this).
 
 Override the location with `JARVIS_REPOSITORY_DIR`; pick the start repo with `JARVIS_REPO=<folder name>`.
+
+For interaction testing: in the Unity Editor, click a button in the Game view while the pointer is over it. In Quest, use an index-finger pinch with hand tracking or the controller trigger. Normal buttons activate on press-down; hold-to-approve actions still require the full hold duration. Successful activations are logged in the Unity Console.
