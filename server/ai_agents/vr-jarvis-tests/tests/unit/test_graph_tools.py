@@ -98,10 +98,10 @@ def test_evidence_is_recorded_without_duplicates(env, ctx):
 
 
 def test_search_symbols(env, ctx):
-    r = gt.search_symbols('validate session', ctx)
+    r = gt.search_graph_symbols('validate session', ctx)
     assert r['matches'][0]['id'] == 'auth.validateSession'
-    assert len(gt.search_symbols('a', ctx, limit=3)['matches']) <= 3
-    assert gt.search_symbols('zzzzqqq', ctx)['matches'] == []
+    assert len(gt.search_graph_symbols('a', ctx, limit=3)['matches']) <= 3
+    assert gt.search_graph_symbols('zzzzqqq', ctx)['matches'] == []
 
 
 def test_get_cluster(env, ctx):

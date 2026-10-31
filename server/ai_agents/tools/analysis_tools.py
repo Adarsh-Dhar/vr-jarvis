@@ -448,53 +448,32 @@ def analyze_code_complexity(file_path: str, tool_context: ToolContext) -> dict:
 
 
 @safe
-def detect_code_duplication(tool_context: ToolContext) -> dict:
-    """Identify duplicate or similar code."""
+def detect_code_duplication(tool_context: ToolContext, directory: Optional[str] = None) -> dict:
+    """Identify duplicate or similar code (repeated lines) inside one repository."""
     try:
-        from .repository_tools import list_files, read_file
         from pathlib import Path
-        
-        # Get all Python files
-        files_result = list_files(tool_context, directory='.', pattern='.py', recursive=True)
-        if files_result.get('status') != 'ok':
-            return files_result
-        
-        # Simple duplicate detection based on line similarity
+        from ._common import repo_root
+        root = Path(directory).resolve() if directory else repo_root()
+        skip = {'__pycache__', 'node_modules', 'venv', '.venv', 'target', 'dist', 'build'}
         code_blocks = {}
         duplicates = []
-        
-        for file_info in files_result['files']:
-            if file_info['type'] == 'file':
-                file_path = file_info['path']
-                file_result = read_file(file_path, tool_context)
-                
-                if file_result.get('status') == 'ok':
-                    content = file_result['content']
-                    lines = content.splitlines()
-                    
-                    # Look for repeated line patterns
-                    for i, line in enumerate(lines):
-                        if len(line.strip()) > 10:  # Ignore short lines
-                            if line.strip() in code_blocks:
-                                code_blocks[line.strip()].append({
-                                    'file': file_path,
-                                    'line': i + 1
-                                })
-                                if len(code_blocks[line.strip()]) >= 3:
-                                    duplicates.append({
-                                        'code': line.strip()[:100],
-                                        'occurrences': code_blocks[line.strip()],
-                                        'count': len(code_blocks[line.strip()])
-                                    })
-                            else:
-                                code_blocks[line.strip()] = [{
-                                    'file': file_path,
-                                    'line': i + 1
-                                }]
-        
+        for file_path in sorted(root.rglob('*.py')):
+            parts = file_path.relative_to(root).parts
+            if any(p.startswith('.') or p in skip for p in parts):
+                continue
+            rel = str(Path(*parts))
+            for i, line in enumerate(file_path.read_text(errors='replace').splitlines()):
+                key = line.strip()
+                if len(key) <= 10:      # ignore short lines
+                    continue
+                code_blocks.setdefault(key, []).append({'file': rel, 'line': i + 1})
+                if len(code_blocks[key]) == 3:
+                    duplicates.append({'code': key[:100], 'occurrences': code_blocks[key]})
+        for d in duplicates:
+            d['count'] = len(d['occurrences'])
         return {
             'status': 'ok',
-            'duplicates': duplicates[:20],  # Limit to 20
+            'duplicates': duplicates[:20],  # limit to 20
             'note': 'Simple line-based detection - advanced detection requires diff algorithms'
         }
     except Exception as e:

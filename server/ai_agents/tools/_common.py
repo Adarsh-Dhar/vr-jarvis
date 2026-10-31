@@ -10,3 +10,12 @@ def record_evidence(tool_context, node_ids):
             seen.remove(node_id)
         seen.append(node_id)
     tool_context.state['evidence'] = seen[-MAX_EVIDENCE:]
+
+
+def repo_root():
+    """Directory of the repository the tools currently work on (config.REPO_ROOT).
+    Falls back to the working directory if that folder does not exist."""
+    from pathlib import Path
+    from .. import config
+    root = Path(config.REPO_ROOT)
+    return root if root.is_dir() else Path.cwd()

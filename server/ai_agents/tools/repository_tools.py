@@ -340,12 +340,14 @@ def search_files(
 def search_code(
     tool_context: ToolContext,
     query: str,
-    file_pattern: Optional[str] = None
+    file_pattern: Optional[str] = None,
+    directory: Optional[str] = None
 ) -> dict:
-    """Search source code across repositories."""
+    """Search source code in one repository (default: the active repository)."""
     try:
         # Use grep to search for code patterns
-        cwd = Path.cwd()
+        from ._common import repo_root
+        cwd = Path(directory).resolve() if directory else repo_root()
         matches = []
         
         # Build grep command

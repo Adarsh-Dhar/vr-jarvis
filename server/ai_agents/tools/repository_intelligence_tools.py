@@ -16,6 +16,8 @@ def detect_languages(repository_path: str, tool_context: ToolContext) -> dict:
         path = Path(repository_path)
         if not path.is_absolute():
             path = Path.cwd() / path
+        if not path.is_dir():
+            return {'status': 'error', 'error': f'Repository path not found: {repository_path}'}
         
         # Simple language detection by file extension
         language_extensions = {
@@ -111,6 +113,24 @@ def detect_frameworks(repository_path: str, tool_context: ToolContext) -> dict:
         # Check for Rust
         if (path / 'Cargo.toml').exists():
             frameworks.append({'name': 'Rust project', 'evidence': 'Cargo.toml'})
+
+        # Named frameworks, from the dependencies the manifests declare
+        known = {
+            'spring-boot': 'Spring Boot', 'django': 'Django', 'flask': 'Flask', 'fastapi': 'FastAPI',
+            'react': 'React', 'next': 'Next.js', 'vue': 'Vue', 'express': 'Express',
+            '@angular/core': 'Angular', '@nestjs/core': 'NestJS',
+        }
+        for manifest in ('pom.xml', 'build.gradle', 'package.json', 'requirements.txt', 'pyproject.toml'):
+            f = path / manifest
+            if not f.exists():
+                continue
+            text = f.read_text(errors='replace').lower()
+            for key, name in known.items():
+                quoted = ('"' + key + '"', "'" + key + "'")
+                hit = key in text if manifest in ('pom.xml', 'build.gradle', 'requirements.txt', 'pyproject.toml') \
+                    else any(q in text for q in quoted)
+                if hit and not any(x['name'] == name for x in frameworks):
+                    frameworks.append({'name': name, 'evidence': manifest})
         
         return {
             'status': 'ok',
@@ -132,7 +152,7 @@ def analyze_repository_structure(
     """Analyze repository structure."""
     try:
         from .repository_tools import list_files
-        return list_files(repository_path, tool_context)
+        return list_files(tool_context, directory=repository_path, recursive=True)
     except Exception as e:
         return {
             'status': 'error',
@@ -150,21 +170,41 @@ def identify_entry_points(
         path = Path(repository_path)
         if not path.is_absolute():
             path = Path.cwd() / path
-        
+
         entry_points = []
-        
-        # Common entry point files
+        seen = set()
+
+        def add(rel):
+            if rel not in seen:
+                seen.add(rel)
+                entry_points.append({'file': rel, 'type': 'entry_point'})
+
+        # Conventional entry file names in the repository root
         common_entries = [
             'main.py', 'app.py', 'index.js', 'index.ts', 'main.go', 'main.rs',
             'Main.java', 'Program.cs', 'startup.py'
         ]
-        
         for entry in common_entries:
             if (path / entry).exists():
-                entry_points.append({
-                    'file': entry,
-                    'type': 'entry_point'
-                })
+                add(entry)
+
+        # Files that contain a real entry-point marker, in any sub-folder
+        markers = {
+            '.java': ('static void main', '@SpringBootApplication'),
+            '.c': ('int main(',), '.cpp': ('int main(',), '.cc': ('int main(',),
+            '.rs': ('fn main(',), '.go': ('func main(',),
+            '.py': ("if __name__ == '__main__'", 'if __name__ == "__main__"'),
+        }
+        skip = {'node_modules', 'target', 'build', 'dist', '__pycache__', 'venv', '.venv'}
+        for f in sorted(path.rglob('*')):
+            rel = f.relative_to(path)
+            if not f.is_file() or f.suffix not in markers or any(p.startswith('.') or p in skip for p in rel.parts):
+                continue
+            if f.stat().st_size > 1_000_000:
+                continue
+            text = f.read_text(errors='replace')
+            if any(m in text for m in markers[f.suffix]):
+                add(rel.as_posix())
         
         return {
             'status': 'ok',
@@ -200,6 +240,10 @@ def detect_build_system(repository_path: str, tool_context: ToolContext) -> dict
             build_systems.append('npm')
         if (path / 'setup.py').exists() or (path / 'pyproject.toml').exists():
             build_systems.append('setuptools/pip')
+        if (path / 'Cargo.toml').exists():
+            build_systems.append('cargo')
+        if (path / 'go.mod').exists():
+            build_systems.append('go')
         
         return {
             'status': 'ok',
@@ -391,10 +435,60 @@ def analyze_environment_configuration(repository_path: str, tool_context: ToolCo
 
 @safe
 def analyze_dependencies_manifest(repository_path: str, tool_context: ToolContext) -> dict:
-    """Analyze dependencies manifest."""
+    """Extract declared dependencies from pom.xml, package.json, requirements.txt or Cargo.toml.
+    `repository_path` may be a repository folder (all manifests found) or one manifest file."""
     try:
-        from .analysis_tools import analyze_dependencies
-        return analyze_dependencies(repository_path, tool_context)
+        import json
+        import re
+        import xml.etree.ElementTree as ET
+        path = Path(repository_path)
+        if not path.is_absolute():
+            path = Path.cwd() / path
+        if path.is_file() and path.suffix == '.py':
+            from .analysis_tools import analyze_dependencies
+            return analyze_dependencies(repository_path, tool_context)
+        names = ('pom.xml', 'package.json', 'requirements.txt', 'Cargo.toml')
+        files = [path] if path.is_file() else [path / n for n in names if (path / n).exists()]
+        if not files:
+            return {'status': 'error', 'error': f'No dependency manifest found in {repository_path}'}
+
+        deps = []
+        for f in files:
+            if f.name == 'pom.xml':
+                for el in ET.parse(f).getroot().iter():
+                    if el.tag.split('}')[-1] != 'dependency':
+                        continue
+                    kids = {k.tag.split('}')[-1]: (k.text or '').strip() for k in el}
+                    deps.append({'name': kids.get('artifactId', ''), 'group': kids.get('groupId', ''),
+                                 'version': kids.get('version'), 'scope': kids.get('scope', 'compile'),
+                                 'manifest': f.name})
+            elif f.name == 'package.json':
+                data = json.loads(f.read_text())
+                for section, scope in (('dependencies', 'runtime'), ('devDependencies', 'dev')):
+                    for name, version in (data.get(section) or {}).items():
+                        deps.append({'name': name, 'version': version, 'scope': scope, 'manifest': f.name})
+            elif f.name == 'requirements.txt':
+                for line in f.read_text().splitlines():
+                    line = line.split('#')[0].strip()
+                    if line:
+                        m = re.match(r'([A-Za-z0-9_.\-]+)\s*(.*)', line)
+                        deps.append({'name': m.group(1), 'version': m.group(2) or None,
+                                     'scope': 'runtime', 'manifest': f.name})
+            elif f.name == 'Cargo.toml':
+                try:
+                    import tomllib
+                    data = tomllib.loads(f.read_text())
+                except ImportError:
+                    data = {}
+                for name, spec in (data.get('dependencies') or {}).items():
+                    version = spec if isinstance(spec, str) else spec.get('version')
+                    deps.append({'name': name, 'version': version, 'scope': 'runtime', 'manifest': f.name})
+        return {
+            'status': 'ok',
+            'file_path': repository_path,
+            'manifests': [x.name for x in files],
+            'dependencies': deps
+        }
     except Exception as e:
         return {
             'status': 'error',
@@ -424,9 +518,9 @@ def identify_external_services(repository_path: str, tool_context: ToolContext) 
         
         service_patterns = ['http://', 'https://', 'api.', 'aws.', 's3://', 'redis://', 'mongodb://']
         services = []
-        
+
         for pattern in service_patterns:
-            search_result = search_code(tool_context, query=pattern)
+            search_result = search_code(tool_context, directory=repository_path, query=pattern)
             if search_result.get('status') == 'ok':
                 for match in search_result['matches']:
                     services.append({
@@ -480,10 +574,22 @@ def identify_generated_files(repository_path: str, tool_context: ToolContext) ->
 
 @safe
 def index_repository(repository_path: str, tool_context: ToolContext) -> dict:
-    """Index repository."""
+    """Index repository: build its code graph and make it the active repository."""
     try:
-        from .repository_tools import list_files
-        return list_files(repository_path, tool_context)
+        from ..repository import activate
+        name = Path(repository_path).name
+        try:
+            graph = activate(name)       # builds the code graph and makes this the active repository
+        except KeyError:
+            return {'status': 'error',
+                    'error': f'{name} is not a repository folder directly under the repository directory'}
+        return {
+            'status': 'ok',
+            'repository': name,
+            'node_count': len(graph['nodes']),
+            'edge_count': len(graph['edges']),
+            'test_count': len(graph.get('tests', []))
+        }
     except Exception as e:
         return {
             'status': 'error',
@@ -493,10 +599,22 @@ def index_repository(repository_path: str, tool_context: ToolContext) -> dict:
 
 @safe
 def incremental_index_repository(repository_path: str, tool_context: ToolContext) -> dict:
-    """Incrementally index repository."""
+    """Re-index the repository (full rebuild until true incremental indexing exists)."""
     try:
-        from .repository_tools import list_files
-        return list_files(repository_path, tool_context)
+        from ..repository import activate
+        name = Path(repository_path).name
+        try:
+            graph = activate(name)       # builds the code graph and makes this the active repository
+        except KeyError:
+            return {'status': 'error',
+                    'error': f'{name} is not a repository folder directly under the repository directory'}
+        return {
+            'status': 'ok',
+            'repository': name,
+            'node_count': len(graph['nodes']),
+            'edge_count': len(graph['edges']),
+            'test_count': len(graph.get('tests', []))
+        }
     except Exception as e:
         return {
             'status': 'error',

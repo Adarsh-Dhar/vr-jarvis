@@ -43,7 +43,7 @@ def discover_api_endpoints(
         
         endpoints = []
         for pattern in endpoint_patterns:
-            search_result = search_code(tool_context, query=pattern)
+            search_result = search_code(tool_context, directory=repository_path, query=pattern)
             if search_result.get('status') == 'ok':
                 for match in search_result['matches']:
                     endpoints.append({
@@ -303,7 +303,7 @@ def inspect_http_routes(
         
         for framework, patterns in route_patterns.items():
             for pattern in patterns:
-                result = search_code(tool_context, query=pattern)
+                result = search_code(tool_context, directory=repository_path, query=pattern)
                 if result.get('status') == 'ok':
                     for match in result['matches']:
                         routes.append({
@@ -429,7 +429,7 @@ def inspect_middleware(
         
         for framework, patterns in middleware_patterns.items():
             for pattern in patterns:
-                result = search_code(tool_context, query=pattern)
+                result = search_code(tool_context, directory=repository_path, query=pattern)
                 if result.get('status') == 'ok':
                     for match in result['matches']:
                         middleware_components.append({
@@ -507,7 +507,7 @@ def inspect_authentication(
         for auth_type, patterns in auth_patterns.items():
             matches = []
             for pattern in patterns:
-                result = search_code(tool_context, query=pattern)
+                result = search_code(tool_context, directory=repository_path, query=pattern)
                 if result.get('status') == 'ok':
                     matches.extend(result['matches'])
             auth_findings[auth_type] = matches[:5]
@@ -577,7 +577,7 @@ def inspect_authorization(
         for authz_type, patterns in authz_patterns.items():
             matches = []
             for pattern in patterns:
-                result = search_code(tool_context, query=pattern)
+                result = search_code(tool_context, directory=repository_path, query=pattern)
                 if result.get('status') == 'ok':
                     matches.extend(result['matches'])
             authz_findings[authz_type] = matches[:5]
@@ -646,7 +646,7 @@ def discover_database_schema(
         for orm_type, patterns in orm_patterns.items():
             matches = []
             for pattern in patterns:
-                result = search_code(tool_context, query=pattern)
+                result = search_code(tool_context, directory=repository_path, query=pattern)
                 if result.get('status') == 'ok':
                     matches.extend(result['matches'])
             schema_findings[orm_type] = matches[:5]
@@ -792,7 +792,7 @@ def analyze_database_queries(
         for query_type, patterns in sql_patterns.items():
             matches = []
             for pattern in patterns:
-                result = search_code(tool_context, query=pattern)
+                result = search_code(tool_context, directory=repository_path, query=pattern)
                 if result.get('status') == 'ok':
                     matches.extend(result['matches'])
             query_findings[query_type] = matches[:5]
@@ -1380,7 +1380,7 @@ def inspect_sql_queries(
         for query_type, patterns in sql_patterns.items():
             matches = []
             for pattern in patterns:
-                result = search_code(tool_context, query=pattern)
+                result = search_code(tool_context, directory=repository_path, query=pattern)
                 if result.get('status') == 'ok':
                     matches.extend(result['matches'])
             query_findings[query_type] = matches[:5]
@@ -1532,7 +1532,7 @@ def inspect_orm_models(
         for orm_type, patterns in orm_patterns.items():
             matches = []
             for pattern in patterns:
-                result = search_code(tool_context, query=pattern)
+                result = search_code(tool_context, directory=repository_path, query=pattern)
                 if result.get('status') == 'ok':
                     matches.extend(result['matches'])
             orm_findings[orm_type] = matches[:5]
@@ -1618,7 +1618,7 @@ def inspect_orm_relationships(
         for rel_type, patterns in relationship_patterns.items():
             matches = []
             for pattern in patterns:
-                result = search_code(tool_context, query=pattern)
+                result = search_code(tool_context, directory=repository_path, query=pattern)
                 if result.get('status') == 'ok':
                     matches.extend(result['matches'])
             relationship_findings[rel_type] = matches[:5]
@@ -1774,7 +1774,7 @@ def trace_migrations(
         for mig_type, patterns in migration_patterns.items():
             matches = []
             for pattern in patterns:
-                result = search_code(tool_context, query=pattern)
+                result = search_code(tool_context, directory=repository_path, query=pattern)
                 if result.get('status') == 'ok':
                     matches.extend(result['matches'])
             migration_findings[mig_type] = matches[:5]
@@ -1852,9 +1852,9 @@ def map_api_to_database(
         # Search for API endpoints
         endpoint_patterns = ['@app.route', '@api.route', '@bp.route', 'router.get', 'router.post', 'app.get', 'app.post']
         endpoint_matches = []
-        
+
         for pattern in endpoint_patterns:
-            result = search_code(tool_context, query=pattern)
+            result = search_code(tool_context, directory=repository_path, query=pattern)
             if result.get('status') == 'ok':
                 endpoint_matches.extend(result['matches'])
         

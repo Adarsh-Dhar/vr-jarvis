@@ -2,7 +2,7 @@ from google.adk.agents import LlmAgent
 
 from ..config import MODEL
 from ..tools.graph_tools import (find_tests_for_node, get_callees, get_callers, get_cluster,
-                                 get_dependents, get_node, get_source, search_symbols, trace_path)
+                                 get_dependents, get_node, get_source, search_graph_symbols, trace_path)
 from ..tools.repository_tools import (list_files, read_file, search_code, search_symbols as repo_search_symbols)
 from ..tools.navigation_tools import (get_symbol_definition, get_symbol_references, get_symbol_hover_info,
                                        get_call_hierarchy, get_type_hierarchy)
@@ -19,7 +19,7 @@ Context:
 
 Process:
 1. If a node is selected and the question is about it, start from that node. Otherwise call
-   search_symbols or repo_search_symbols to find relevant nodes.
+   search_graph_symbols or repo_search_symbols to find relevant nodes.
 2. Expand with get_callers, get_callees, get_dependents or trace_path as the question needs.
 3. Call get_source or read_file on every node you make a behavioural claim about.
 4. Use navigation tools (get_symbol_definition, get_symbol_references, get_call_hierarchy) for detailed code understanding.
@@ -45,7 +45,7 @@ investigator = LlmAgent(
                  'and reading source. Use for explaining flows, finding where something happens, and '
                  'understanding a selected function.'),
     instruction=INSTRUCTION,
-    tools=[search_symbols, get_node, get_callers, get_callees, get_dependents, trace_path,
+    tools=[search_graph_symbols, get_node, get_callers, get_callees, get_dependents, trace_path,
            get_cluster, get_source, find_tests_for_node,
            list_files, read_file, search_code, repo_search_symbols,
            get_symbol_definition, get_symbol_references, get_symbol_hover_info,

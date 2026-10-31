@@ -163,9 +163,15 @@ def trace_return_value_flow(
         
         if ref_result.get('status') != 'ok':
             return ref_result
-        
-        # Filter for function calls
-        call_sites = [ref for ref in ref_result['references'] if ref.get('type') == 'call']
+
+        # Python: exact call sites from the AST; other languages: textual matches
+        from .navigation_tools import _python_call_sites
+        from ._common import repo_root
+        py_sites = _python_call_sites(function_id, repo_root())
+        if py_sites:
+            call_sites = [{'file': s['file'], 'line': s['line'], 'type': 'call', 'caller': s['caller']} for s in py_sites]
+        else:
+            call_sites = [ref for ref in ref_result['references'] if ref.get('type') == 'call']
         
         return {
             'status': 'ok',

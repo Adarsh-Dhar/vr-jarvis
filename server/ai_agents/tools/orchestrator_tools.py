@@ -135,7 +135,7 @@ def create_investigation_plan(user_query: str, tool_context: ToolContext) -> dic
                 {'step': 3, 'agent': 'code_understanding', 'action': 'generate_explanation'}
             ],
             'find_definition': [
-                {'step': 1, 'agent': 'code_understanding', 'action': 'search_symbols'},
+                {'step': 1, 'agent': 'code_understanding', 'action': 'search_graph_symbols'},
                 {'step': 2, 'agent': 'code_understanding', 'action': 'get_definition'},
                 {'step': 3, 'agent': 'repository_intelligence', 'action': 'get_context'}
             ],

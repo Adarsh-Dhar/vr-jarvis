@@ -160,7 +160,7 @@ def scan_security_vulnerabilities(
         
         vulnerabilities = []
         for pattern, vuln_type in vuln_patterns:
-            search_result = search_code(tool_context, query=pattern)
+            search_result = search_code(tool_context, directory=repository_path, query=pattern)
             if search_result.get('status') == 'ok':
                 for match in search_result['matches']:
                     vulnerabilities.append({
@@ -267,7 +267,7 @@ def analyze_authentication(
         
         auth_mechanisms = []
         for pattern, auth_type in auth_patterns:
-            search_result = search_code(tool_context, query=pattern)
+            search_result = search_code(tool_context, directory=repository_path, query=pattern)
             if search_result.get('status') == 'ok':
                 for match in search_result['matches']:
                     auth_mechanisms.append({
@@ -313,7 +313,7 @@ def analyze_authorization(
         
         authorization_mechanisms = []
         for pattern, authz_type in authz_patterns:
-            search_result = search_code(tool_context, query=pattern)
+            search_result = search_code(tool_context, directory=repository_path, query=pattern)
             if search_result.get('status') == 'ok':
                 for match in search_result['matches']:
                     authorization_mechanisms.append({
@@ -358,7 +358,7 @@ def analyze_permissions(
         
         permissions = []
         for pattern, perm_type in perm_patterns:
-            search_result = search_code(tool_context, query=pattern)
+            search_result = search_code(tool_context, directory=repository_path, query=pattern)
             if search_result.get('status') == 'ok':
                 for match in search_result['matches']:
                     permissions.append({
@@ -405,7 +405,7 @@ def analyze_input_validation(
         
         validations = []
         for pattern, val_type in validation_patterns:
-            search_result = search_code(tool_context, query=pattern)
+            search_result = search_code(tool_context, directory=repository_path, query=pattern)
             if search_result.get('status') == 'ok':
                 for match in search_result['matches']:
                     validations.append({
@@ -452,7 +452,7 @@ def analyze_injection_risks(
         
         injection_risks = []
         for pattern, risk_type in injection_patterns:
-            search_result = search_code(tool_context, query=pattern)
+            search_result = search_code(tool_context, directory=repository_path, query=pattern)
             if search_result.get('status') == 'ok':
                 for match in search_result['matches']:
                     injection_risks.append({
@@ -494,13 +494,14 @@ def analyze_cryptography(
             ('SHA256', 'SHA-256 hash'),
             ('MD5', 'MD5 hash (weak)'),
             ('sha1', 'SHA-1 hash (weak)'),
+            (' ^ ord(', 'XOR cipher (weak)'),
             ('encrypt(', 'encryption function'),
             ('decrypt(', 'decryption function')
         ]
         
         crypto_usage = []
         for pattern, crypto_type in crypto_patterns:
-            search_result = search_code(tool_context, query=pattern)
+            search_result = search_code(tool_context, directory=repository_path, query=pattern)
             if search_result.get('status') == 'ok':
                 for match in search_result['matches']:
                     crypto_usage.append({
@@ -569,7 +570,7 @@ def trace_sensitive_data(
         
         sensitive_data = []
         for pattern, data_type in sensitive_patterns:
-            search_result = search_code(tool_context, query=pattern)
+            search_result = search_code(tool_context, directory=repository_path, query=pattern)
             if search_result.get('status') == 'ok':
                 for match in search_result['matches']:
                     sensitive_data.append({
@@ -616,7 +617,7 @@ def analyze_attack_surface(
         
         attack_surface = []
         for pattern, surface_type in attack_patterns:
-            search_result = search_code(tool_context, query=pattern)
+            search_result = search_code(tool_context, directory=repository_path, query=pattern)
             if search_result.get('status') == 'ok':
                 for match in search_result['matches']:
                     attack_surface.append({
@@ -790,7 +791,7 @@ def detect_code_smells(
         
         code_smells = []
         for pattern, smell_type in smell_patterns:
-            search_result = search_code(tool_context, query=pattern)
+            search_result = search_code(tool_context, directory=repository_path, query=pattern)
             if search_result.get('status') == 'ok':
                 for match in search_result['matches']:
                     code_smells.append({
@@ -831,7 +832,7 @@ def detect_duplicates(
     """Detect duplicate code."""
     try:
         from .analysis_tools import detect_code_duplication
-        return detect_code_duplication(tool_context)
+        return detect_code_duplication(tool_context, directory=repository_path)
     except Exception as e:
         return {
             'status': 'error',
@@ -860,7 +861,7 @@ def detect_anti_patterns(
         
         anti_patterns = []
         for pattern, pattern_type in anti_pattern_patterns:
-            search_result = search_code(tool_context, query=pattern)
+            search_result = search_code(tool_context, directory=repository_path, query=pattern)
             if search_result.get('status') == 'ok':
                 for match in search_result['matches']:
                     anti_patterns.append({
@@ -949,7 +950,7 @@ def analyze_testability(
         
         test_count = 0
         for pattern, test_type in test_patterns:
-            search_result = search_code(tool_context, query=pattern)
+            search_result = search_code(tool_context, directory=repository_path, query=pattern)
             if search_result.get('status') == 'ok':
                 test_count += len(search_result['matches'])
         
@@ -988,7 +989,7 @@ def analyze_violations(
         
         violations = []
         for pattern, violation_type in violation_patterns:
-            search_result = search_code(tool_context, query=pattern)
+            search_result = search_code(tool_context, directory=repository_path, query=pattern)
             if search_result.get('status') == 'ok':
                 for match in search_result['matches']:
                     violations.append({
@@ -1033,7 +1034,7 @@ def identify_technical_debt(
         
         technical_debt = []
         for pattern, debt_type in debt_patterns:
-            search_result = search_code(tool_context, query=pattern)
+            search_result = search_code(tool_context, directory=repository_path, query=pattern)
             if search_result.get('status') == 'ok':
                 for match in search_result['matches']:
                     technical_debt.append({

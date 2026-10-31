@@ -20,7 +20,6 @@ from .repository_tools import (
     read_file_range,
     search_files,
     search_code,
-    search_symbols,
     get_file_metadata,
     get_repository_metadata,
     watch_repository,

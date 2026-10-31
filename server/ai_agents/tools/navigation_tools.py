@@ -10,6 +10,7 @@ import ast
 import subprocess
 from google.adk.tools import ToolContext
 from ._safe import safe
+from ._common import repo_root
 
 
 def _is_python_file(file_path: str) -> bool:
@@ -57,11 +58,38 @@ def _find_symbol_in_python(symbol_name: str, file_path: str) -> Optional[Dict]:
     return None
 
 
+def _python_call_sites(symbol_name: str, root: Path) -> List[Dict]:
+    """Every call to `symbol_name` (f(), obj.f()) in Python files under root, with the caller."""
+    skip = {'__pycache__', 'node_modules', 'venv', '.venv'}
+    sites = []
+    for py in sorted(root.rglob('*.py')):
+        if any(p.startswith('.') or p in skip for p in py.relative_to(root).parts):
+            continue
+        tree = _parse_python_ast(str(py))
+        if not tree:
+            continue
+        funcs = [n for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            f = node.func
+            name = f.id if isinstance(f, ast.Name) else f.attr if isinstance(f, ast.Attribute) else None
+            if name != symbol_name:
+                continue
+            inner = None
+            for fn in funcs:
+                if fn.lineno <= node.lineno <= fn.end_lineno and (inner is None or fn.lineno >= inner.lineno):
+                    inner = fn
+            sites.append({'file': str(py), 'line': node.lineno, 'caller': inner.name if inner else '<module>'})
+    sites.sort(key=lambda x: (x['file'], x['line']))
+    return sites
+
+
 @safe
 def get_symbol_definition(symbol_name: str, tool_context: ToolContext) -> dict:
     """Find where a symbol is defined."""
     try:
-        cwd = Path.cwd()
+        cwd = repo_root()
         
         # First try to find in Python files using AST
         for py_file in cwd.rglob('*.py'):
@@ -120,7 +148,7 @@ def get_symbol_definition(symbol_name: str, tool_context: ToolContext) -> dict:
 def get_symbol_references(symbol_name: str, tool_context: ToolContext) -> dict:
     """Find every reference to a symbol."""
     try:
-        cwd = Path.cwd()
+        cwd = repo_root()
         references = []
         
         # Use grep to find all references
@@ -234,7 +262,7 @@ def get_call_hierarchy(
 ) -> dict:
     """Retrieve incoming and outgoing calls."""
     try:
-        cwd = Path.cwd()
+        cwd = repo_root()
         incoming_calls = []
         outgoing_calls = []
         
@@ -251,25 +279,29 @@ def get_call_hierarchy(
         definition_line = def_result['definition']['line']
         
         if direction in ['both', 'incoming']:
-            # Find calls to this symbol
-            result = subprocess.run(
-                ['grep', '-rn', '--include=*.py', '--include=*.js', symbol_name, str(cwd)],
-                capture_output=True,
-                text=True
-            )
-            if result.returncode == 0:
-                for line in result.stdout.splitlines():
-                    parts = line.split(':', 2)
-                    if len(parts) >= 2:
-                        file_path = parts[0]
-                        line_num = int(parts[1])
-                        # Skip the definition itself
-                        if file_path != definition_file or line_num != definition_line:
-                            incoming_calls.append({
-                                'from': f'caller_at_{line_num}',
-                                'file': file_path,
-                                'line': line_num
-                            })
+            if _is_python_file(definition_file):
+                # AST: resolves the enclosing function of every call site
+                for site in _python_call_sites(symbol_name, cwd):
+                    incoming_calls.append({'from': site['caller'], 'file': site['file'], 'line': site['line']})
+            else:
+                result = subprocess.run(
+                    ['grep', '-rnw', '--include=*.js', '--include=*.ts', symbol_name, str(cwd)],
+                    capture_output=True,
+                    text=True
+                )
+                if result.returncode == 0:
+                    for line in result.stdout.splitlines():
+                        parts = line.split(':', 2)
+                        if len(parts) >= 2:
+                            file_path = parts[0]
+                            line_num = int(parts[1])
+                            # Skip the definition itself
+                            if file_path != definition_file or line_num != definition_line:
+                                incoming_calls.append({
+                                    'from': f'caller_at_{line_num}',
+                                    'file': file_path,
+                                    'line': line_num
+                                })
         
         if direction in ['both', 'outgoing']:
             # For Python, parse the function body to find calls
@@ -576,7 +608,7 @@ def find_implementations(symbol_name: str, tool_context: ToolContext) -> dict:
     """Find implementations of interfaces, traits and abstract methods."""
     try:
         # For Python, look for classes that implement methods matching the symbol
-        cwd = Path.cwd()
+        cwd = repo_root()
         implementations = []
         
         for py_file in cwd.rglob('*.py'):

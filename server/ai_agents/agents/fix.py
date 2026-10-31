@@ -5,7 +5,7 @@ from ..config import MODEL
 from ..tools.control_tools import exit_loop
 from ..tools.exec_tools import read_test_results, run_tests, run_typecheck
 from ..tools.git_tools import apply_patch_to_worktree, create_worktree, get_worktree_diff
-from ..tools.graph_tools import find_tests_for_node, get_callers, get_source, search_symbols
+from ..tools.graph_tools import find_tests_for_node, get_callers, get_source, search_graph_symbols
 from ..tools.repository_tools import (list_files, read_file, search_code, search_symbols as repo_search_symbols)
 from ..tools.navigation_tools import (get_symbol_definition, get_symbol_references, get_symbol_hover_info,
                                        get_call_hierarchy)
@@ -21,7 +21,7 @@ Selected node (may be empty): {selection}
 Impact context from the last impact analysis (may be empty): {impact_context}
 
 Process:
-1. Locate the code to change with search_symbols, repo_search_symbols or the selected node.
+1. Locate the code to change with search_graph_symbols, repo_search_symbols or the selected node.
 2. Read it and its neighbours with get_source, read_file and get_callers so you follow the repo's conventions.
 3. Use navigation tools (get_symbol_definition, get_symbol_references) to understand the code structure.
 4. Call create_worktree, then write a minimal unified diff that includes a regression test, and
@@ -36,7 +36,7 @@ Return a JSON object with keys: summary, files (list of paths), diff (from get_w
 tests_added (list of test file paths), assumptions (list), claims (list of objects with text, node_ids,
 confidence).
 ''',
-    tools=[search_symbols, get_source, get_callers, find_tests_for_node,
+    tools=[search_graph_symbols, get_source, get_callers, find_tests_for_node,
            create_worktree, apply_patch_to_worktree, get_worktree_diff,
            list_files, read_file, search_code, repo_search_symbols,
            get_symbol_definition, get_symbol_references, get_symbol_hover_info,

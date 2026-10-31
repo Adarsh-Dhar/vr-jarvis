@@ -618,7 +618,7 @@ def discover_framework_routes(
         routes = []
         
         for pattern in patterns:
-            search_result = search_code(tool_context, query=pattern)
+            search_result = search_code(tool_context, directory=repository_path, query=pattern)
             if search_result.get('status') == 'ok':
                 for match in search_result['matches']:
                     routes.append({
@@ -669,7 +669,7 @@ def analyze_framework_lifecycle(
         lifecycle_hooks = []
         
         for pattern in patterns:
-            search_result = search_code(tool_context, query=pattern)
+            search_result = search_code(tool_context, directory=repository_path, query=pattern)
             if search_result.get('status') == 'ok':
                 for match in search_result['matches']:
                     lifecycle_hooks.append({
@@ -719,7 +719,7 @@ def discover_framework_components(
         components = []
         
         for pattern in patterns:
-            search_result = search_code(tool_context, query=pattern)
+            search_result = search_code(tool_context, directory=repository_path, query=pattern)
             if search_result.get('status') == 'ok':
                 for match in search_result['matches']:
                     components.append({
@@ -766,7 +766,7 @@ def analyze_framework_dependency_injection(
         di_instances = []
         
         for pattern in patterns:
-            search_result = search_code(tool_context, query=pattern)
+            search_result = search_code(tool_context, directory=repository_path, query=pattern)
             if search_result.get('status') == 'ok':
                 for match in search_result['matches']:
                     di_instances.append({
@@ -816,7 +816,7 @@ def discover_framework_middleware(
         middleware = []
         
         for pattern in patterns:
-            search_result = search_code(tool_context, query=pattern)
+            search_result = search_code(tool_context, directory=repository_path, query=pattern)
             if search_result.get('status') == 'ok':
                 for match in search_result['matches']:
                     middleware.append({
@@ -863,7 +863,7 @@ def analyze_framework_event_handling(
         events = []
         
         for pattern in patterns:
-            search_result = search_code(tool_context, query=pattern)
+            search_result = search_code(tool_context, directory=repository_path, query=pattern)
             if search_result.get('status') == 'ok':
                 for match in search_result['matches']:
                     events.append({
@@ -910,7 +910,7 @@ def analyze_framework_component_relationships(
         relationships = []
         
         for pattern in patterns:
-            search_result = search_code(tool_context, query=pattern)
+            search_result = search_code(tool_context, directory=repository_path, query=pattern)
             if search_result.get('status') == 'ok':
                 for match in search_result['matches']:
                     relationships.append({
@@ -958,7 +958,7 @@ def analyze_framework_orm_integration(
         orm_usage = []
         
         for pattern in patterns:
-            search_result = search_code(tool_context, query=pattern)
+            search_result = search_code(tool_context, directory=repository_path, query=pattern)
             if search_result.get('status') == 'ok':
                 for match in search_result['matches']:
                     orm_usage.append({
@@ -1007,7 +1007,7 @@ def analyze_framework_configuration(
         config_items = []
         
         for pattern in patterns:
-            search_result = search_code(tool_context, query=pattern)
+            search_result = search_code(tool_context, directory=repository_path, query=pattern)
             if search_result.get('status') == 'ok':
                 for match in search_result['matches']:
                     config_items.append({
@@ -1054,7 +1054,7 @@ def analyze_framework_runtime_instrumentation(
         instrumentation = []
         
         for pattern in patterns:
-            search_result = search_code(tool_context, query=pattern)
+            search_result = search_code(tool_context, directory=repository_path, query=pattern)
             if search_result.get('status') == 'ok':
                 for match in search_result['matches']:
                     instrumentation.append({
