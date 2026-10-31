@@ -8,7 +8,7 @@ def _emit(tool_context, command):
     return {'status': 'ok', 'queued': command['type']}
 
 
-def highlight_path(node_ids: list[str], tool_context: ToolContext, color: str = 'amber') -> dict:
+def highlight_vr_path(node_ids: list[str], tool_context: ToolContext, color: str = 'amber') -> dict:
     '''Light up these nodes and the edges between them in the VR scene.'''
     return _emit(tool_context, {'type': 'highlight_path', 'node_ids': node_ids, 'color': color})
 

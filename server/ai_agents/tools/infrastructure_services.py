@@ -185,7 +185,7 @@ def set_permission_level(
 
 
 @safe
-def request_approval(
+def request_sensitive_approval(
     operation: str,
     description: str,
     tool_context: ToolContext

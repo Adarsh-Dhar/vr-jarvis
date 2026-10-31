@@ -18,40 +18,59 @@ from test_orchestrator import TestOrchestrator
 def test_all_tools():
     """Test all registered tools"""
     test_root = Path(__file__).parent.parent
-    
+
     # Initialize registry
     registry = TestRegistry(test_root)
     registry.load_test_definitions()
-    
+
     print("=" * 60)
     print("JARVIS Tool Testing")
     print("=" * 60)
     print(f"\nLoaded {len(registry.get_all_tests())} test definitions")
-    
-    # Get all tools
-    all_tools = set()
+
+    # Get all tools from test registry
+    tested_tools = set()
     for test_def in registry.get_all_tests().values():
         tool = test_def.get('tool')
         if tool:
-            all_tools.add(tool)
-    
-    print(f"Found {len(all_tools)} unique tools to test")
+            tested_tools.add(tool)
+
+    # Get all exported tools from the tools module
+    try:
+        from ai_agents import tools
+        exported_tools = set(tools.__all__)
+    except ImportError as e:
+        print(f"Warning: Could not import tools module: {e}")
+        exported_tools = set()
+
+    print(f"Found {len(tested_tools)} unique tools with test specs")
+    print(f"Found {len(exported_tools)} total exported tools")
+
+    # Find untested tools
+    untested_tools = exported_tools - tested_tools
+    if untested_tools:
+        print(f"\n{len(untested_tools)} exported tools have no test specs:")
+        for tool in sorted(untested_tools):
+            print(f"  - {tool}")
+    else:
+        print("\nAll exported tools have test specs!")
+
     print("\nTools to test:")
-    for tool in sorted(all_tools):
+    for tool in sorted(tested_tools):
         print(f"  - {tool}")
-    
+
     # Initialize orchestrator
     orchestrator = TestOrchestrator(test_root, registry)
-    
+
     # Run all tests
     print("\n" + "=" * 60)
     print("Running all tests...")
     print("=" * 60)
-    
+
     run_result = orchestrator.run_test_suite(
         parallel=True
     )
-    
+
     # Print results
     print("\n" + "=" * 60)
     print("Test Results")
@@ -65,27 +84,27 @@ def test_all_tools():
     success_rate = run_result.get('success_rate', 0)
     print(f"Success Rate: {success_rate:.2%}")
     print(f"Duration: {run_result.get('duration', 0):.2f}s")
-    
+
     if run_result.get('failed_tests'):
         print("\nFailed Tests:")
         for test_id in run_result['failed_tests']:
             print(f"  - {test_id}")
-    
+
     if run_result.get('error_tests'):
         print("\nError Tests:")
         for test_id in run_result['error_tests']:
             print(f"  - {test_id}")
-    
+
     # Generate report
     from report_generator import ReportGenerator
     report_gen = ReportGenerator(test_root)
     json_path = report_gen.generate_report(run_result)
     html_path = report_gen.generate_html_report(run_result)
-    
+
     print(f"\nReports generated:")
     print(f"  JSON: {json_path}")
     print(f"  HTML: {html_path}")
-    
+
     # Return exit code
     return 0 if summary['failed'] == 0 and summary['errors'] == 0 else 1
 

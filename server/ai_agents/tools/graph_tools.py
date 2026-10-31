@@ -62,7 +62,7 @@ def _walk(start, adjacency, neighbor_key, max_depth, edge_types=None):
 
 
 @safe
-def search_symbols(query: str, tool_context: ToolContext, limit: int = 8) -> dict:
+def search_graph_symbols(query: str, tool_context: ToolContext, limit: int = 8) -> dict:
     '''Find code symbols whose name, id or file path matches the query words.
     Returns up to `limit` matches with id, name, file and cluster. Use this first
     when you do not yet know a node id.'''

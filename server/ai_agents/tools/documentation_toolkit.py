@@ -48,7 +48,7 @@ def search_documentation(
 
 
 @safe
-def generate_documentation(
+def generate_code_documentation(
     element_id: str,
     tool_context: ToolContext,
     format: str = 'markdown'

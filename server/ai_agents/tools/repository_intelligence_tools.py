@@ -509,7 +509,7 @@ def detect_repository_changes(repository_path: str, tool_context: ToolContext) -
     """Detect repository changes."""
     try:
         from .git_tools import list_changed_nodes
-        return list_changed_nodes(repository_path, tool_context)
+        return list_changed_nodes(tool_context)
     except Exception as e:
         return {
             'status': 'error',

@@ -149,26 +149,146 @@ class TestOrchestrator:
     
     def _run_yaml_test(self, test_def: Dict) -> Dict:
         """Run a YAML-defined test"""
+        import sys
+        import importlib
+
         start_time = time.time()
-        
-        # For now, simulate test execution
-        # In real implementation, this would call the actual tool
-        result = {
+
+        # Import the tools module
+        try:
+            sys.path.insert(0, str(Path(__file__).parent.parent.parent / 'server'))
+            from ai_agents import tools
+        except ImportError as e:
+            return {
+                'status': 'error',
+                'test_id': test_def['test_id'],
+                'error': f'Failed to import tools module: {e}',
+                'duration_ms': int((time.time() - start_time) * 1000)
+            }
+
+        # Get the tool function
+        tool_name = test_def.get('tool')
+        if not tool_name:
+            return {
+                'status': 'error',
+                'test_id': test_def['test_id'],
+                'error': 'No tool specified in test definition',
+                'duration_ms': int((time.time() - start_time) * 1000)
+            }
+
+        tool_func = getattr(tools, tool_name, None)
+        if not tool_func or not callable(tool_func):
+            return {
+                'status': 'error',
+                'test_id': test_def['test_id'],
+                'error': f'Tool {tool_name} not found or not callable',
+                'duration_ms': int((time.time() - start_time) * 1000)
+            }
+
+        # Create a mock ToolContext
+        class MockToolContext:
+            def __init__(self):
+                self.state = {}
+
+        tool_context = MockToolContext()
+
+        # Call the tool with the specified input
+        try:
+            input_args = test_def.get('input', {})
+            output = tool_func(**input_args, tool_context=tool_context)
+        except Exception as e:
+            return {
+                'status': 'error',
+                'test_id': test_def['test_id'],
+                'error': f'Tool execution failed: {e}',
+                'duration_ms': int((time.time() - start_time) * 1000)
+            }
+
+        # Check the output against expected
+        expected = test_def.get('expected', {})
+        failed = False
+        failures = []
+
+        if expected:
+            for key, expected_value in expected.items():
+                if key not in output:
+                    failures.append(f'Missing key in output: {key}')
+                    failed = True
+                elif output[key] != expected_value:
+                    failures.append(f'Key {key}: expected {expected_value}, got {output[key]}')
+                    failed = True
+
+        # Check must_not constraints
+        must_not = test_def.get('must_not', [])
+        for constraint in must_not:
+            for key, forbidden_value in constraint.items():
+                if key in output and output[key] == forbidden_value:
+                    failures.append(f'Forbidden value found: {key}={forbidden_value}')
+                    failed = True
+
+        # Run checks
+        checks = test_def.get('checks', [])
+        check_results = []
+        for check in checks:
+            check_type = check.get('type')
+            if check_type == 'schema_validity':
+                # Basic schema check - ensure output has required fields
+                required_fields = check.get('required_fields', [])
+                for field in required_fields:
+                    if field not in output:
+                        check_results.append(f'FAIL: Missing required field {field}')
+                        failed = True
+                    else:
+                        check_results.append(f'PASS: Field {field} present')
+            elif check_type == 'performance':
+                max_duration = check.get('max_duration_ms', 10000)
+                duration = int((time.time() - start_time) * 1000)
+                if duration > max_duration:
+                    check_results.append(f'FAIL: Duration {duration}ms exceeds max {max_duration}ms')
+                    failed = True
+                else:
+                    check_results.append(f'PASS: Duration {duration}ms within limit')
+            else:
+                check_results.append(f'INFO: Unknown check type {check_type}')
+
+        duration_ms = int((time.time() - start_time) * 1000)
+
+        if failed:
+            return {
+                'status': 'failed',
+                'test_id': test_def['test_id'],
+                'duration_ms': duration_ms,
+                'output': output,
+                'expected': expected,
+                'failures': failures,
+                'check_results': check_results
+            }
+
+        return {
             'status': 'passed',
             'test_id': test_def['test_id'],
-            'duration_ms': int((time.time() - start_time) * 1000),
-            'expected': test_def.get('expected'),
-            'checks': test_def.get('checks', [])
+            'duration_ms': duration_ms,
+            'output': output,
+            'expected': expected,
+            'check_results': check_results
         }
-        
-        return result
     
     def _run_python_test(self, test_def: Dict) -> Dict:
         """Run a Python test file"""
         import subprocess
-        
+
+        # Check if pytest is available
+        pytest_check = subprocess.run(['python3', '-c', 'import pytest'], capture_output=True)
+        if pytest_check.returncode != 0:
+            return {
+                'status': 'error',
+                'test_id': test_def['test_id'],
+                'error': 'pytest is not installed. Please install it with: pip install pytest pyyaml',
+                'duration_ms': 0
+            }
+
         start_time = time.time()
-        
+
         # Run pytest on the file
         result = subprocess.run(
             ['python3', '-m', 'pytest', test_def['file'], '-v'],
@@ -176,7 +296,7 @@ class TestOrchestrator:
             text=True,
             cwd=str(self.test_root.parent)
         )
-        
+
         return {
             'status': 'passed' if result.returncode == 0 else 'failed',
             'test_id': test_def['test_id'],

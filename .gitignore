@@ -70,3 +70,4 @@ ai_agents/demo_repo/
 ai_agents/work/
 ai_agents/data/project_memory.json
 .env
+jarvis-tests/test-reports/

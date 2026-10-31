@@ -65,7 +65,7 @@ def scan_secrets(
 
 
 @safe
-def analyze_dependencies(
+def scan_dependency_vulnerabilities(
     repository_path: str,
     tool_context: ToolContext
 ) -> dict:
@@ -832,22 +832,6 @@ def detect_duplicates(
     try:
         from .analysis_tools import detect_code_duplication
         return detect_code_duplication(tool_context)
-    except Exception as e:
-        return {
-            'status': 'error',
-            'error': str(e)
-        }
-
-
-@safe
-def detect_dead_code(
-    repository_path: str,
-    tool_context: ToolContext
-) -> dict:
-    """Detect unused code."""
-    try:
-        from .analysis_tools import detect_dead_code
-        return detect_dead_code(repository_path, tool_context)
     except Exception as e:
         return {
             'status': 'error',
