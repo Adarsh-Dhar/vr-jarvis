@@ -1,0 +1,30 @@
+test_id: E2E-API-001
+name: End-to-End - Trace API Request
+category: end_to_end
+layer: 6
+test_type: END_TO_END
+description: Complete API request lifecycle trace
+
+scenario:
+  name: trace_api_request
+  task: "Trace a POST /api/users request through all service layers to the database"
+
+fixture:
+  api: simple_flask_api
+  database: test.db
+
+expected_outcome:
+  request_lifecycle:
+    entry_point: "UserController.createUser"
+    middleware: []
+    business_logic: "UserRepository.save"
+    database_operation: "INSERT INTO users"
+  complete_trace: true
+  evidence_cited: true
+
+checks:
+  - complete_lifecycle
+  - all_layers_traced
+  - evidence_cited
+
+severity: high

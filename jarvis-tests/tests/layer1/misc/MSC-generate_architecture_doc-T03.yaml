@@ -1,0 +1,21 @@
+test_id: MSC-generate_architecture_doc-T03
+name: Output Validation test for generate_architecture_doc
+category: misc
+tool: generate_architecture_doc
+layer: 1
+test_type: T03
+description: Output Validation test for generate_architecture_doc
+fixture: simple-python
+input:
+  repository_path: /path/to/repo
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

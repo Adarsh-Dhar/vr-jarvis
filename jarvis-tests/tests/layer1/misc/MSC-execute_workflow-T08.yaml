@@ -1,0 +1,21 @@
+test_id: MSC-execute_workflow-T08
+name: Malformed Input test for execute_workflow
+category: misc
+tool: execute_workflow
+layer: 1
+test_type: T08
+description: Malformed Input test for execute_workflow
+fixture: corrupted-inputs
+input:
+  workflow_id: placeholder
+  tool_context: placeholder
+expected:
+  status: error
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

@@ -1,0 +1,24 @@
+test_id: MSC-send_message_to_agent-T13
+name: Performance test for send_message_to_agent
+category: misc
+tool: send_message_to_agent
+layer: 2
+test_type: T13
+description: Performance test for send_message_to_agent
+fixture: simple-python
+input:
+  agent_id: placeholder
+  message: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+- type: performance
+  max_duration_ms: 3000
+performance:
+  max_duration_ms: 3000
+severity: medium

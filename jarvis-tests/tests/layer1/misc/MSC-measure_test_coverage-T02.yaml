@@ -1,0 +1,21 @@
+test_id: MSC-measure_test_coverage-T02
+name: Input Validation test for measure_test_coverage
+category: misc
+tool: measure_test_coverage
+layer: 1
+test_type: T02
+description: Input Validation test for measure_test_coverage
+fixture: simple-python
+input:
+  repository_path: /path/to/repo
+  tool_context: placeholder
+expected:
+  status: error
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

@@ -1,0 +1,23 @@
+test_id: MSC-create_sandbox-T01
+name: Happy Path test for create_sandbox
+category: misc
+tool: create_sandbox
+layer: 1
+test_type: T01
+description: Happy Path test for create_sandbox
+fixture: simple-python
+input:
+  sandbox_id: placeholder
+  configuration: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not:
+- error
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

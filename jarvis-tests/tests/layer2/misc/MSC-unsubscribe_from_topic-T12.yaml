@@ -1,0 +1,21 @@
+test_id: MSC-unsubscribe_from_topic-T12
+name: Security test for unsubscribe_from_topic
+category: misc
+tool: unsubscribe_from_topic
+layer: 2
+test_type: T12
+description: Security test for unsubscribe_from_topic
+fixture: simple-python
+input:
+  topic: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

@@ -1,0 +1,23 @@
+test_id: MSC-run_agents_sequentially-T13
+name: Performance test for run_agents_sequentially
+category: misc
+tool: run_agents_sequentially
+layer: 2
+test_type: T13
+description: Performance test for run_agents_sequentially
+fixture: simple-python
+input:
+  task_ids: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+- type: performance
+  max_duration_ms: 3000
+performance:
+  max_duration_ms: 3000
+severity: medium

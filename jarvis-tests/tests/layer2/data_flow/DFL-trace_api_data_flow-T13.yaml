@@ -1,0 +1,23 @@
+test_id: DFL-trace_api_data_flow-T13
+name: Performance test for trace_api_data_flow
+category: data_flow
+tool: trace_api_data_flow
+layer: 2
+test_type: T13
+description: Performance test for trace_api_data_flow
+fixture: simple-python
+input:
+  endpoint: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+- type: performance
+  max_duration_ms: 5000
+performance:
+  max_duration_ms: 5000
+severity: medium

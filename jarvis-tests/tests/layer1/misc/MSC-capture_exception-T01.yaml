@@ -1,0 +1,22 @@
+test_id: MSC-capture_exception-T01
+name: Happy Path test for capture_exception
+category: misc
+tool: capture_exception
+layer: 1
+test_type: T01
+description: Happy Path test for capture_exception
+fixture: simple-python
+input:
+  application_id: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not:
+- error
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

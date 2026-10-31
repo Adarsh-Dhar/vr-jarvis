@@ -1,0 +1,23 @@
+test_id: MSC-grant_permission-T15
+name: Recovery test for grant_permission
+category: misc
+tool: grant_permission
+layer: 2
+test_type: T15
+description: Recovery test for grant_permission
+fixture: simple-python
+input:
+  tool_name: placeholder
+  agent_id: placeholder
+  permission_level: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: high

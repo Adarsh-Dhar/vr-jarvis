@@ -1,0 +1,22 @@
+test_id: MSC-extract_language_symbols-T09
+name: Dependency Failure test for extract_language_symbols
+category: misc
+tool: extract_language_symbols
+layer: 1
+test_type: T09
+description: Dependency Failure test for extract_language_symbols
+fixture: simple-python
+input:
+  file_path: main.py
+  language: python
+  tool_context: placeholder
+expected:
+  status: error
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: high

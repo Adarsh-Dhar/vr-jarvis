@@ -1,0 +1,21 @@
+test_id: MSC-git_log-T08
+name: Malformed Input test for git_log
+category: misc
+tool: git_log
+layer: 1
+test_type: T08
+description: Malformed Input test for git_log
+fixture: corrupted-inputs
+input:
+  repository_path: /path/to/repo
+  tool_context: placeholder
+expected:
+  status: error
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

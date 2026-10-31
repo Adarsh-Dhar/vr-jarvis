@@ -1,0 +1,24 @@
+test_id: MSC-package_get_version-T13
+name: Performance test for package_get_version
+category: misc
+tool: package_get_version
+layer: 2
+test_type: T13
+description: Performance test for package_get_version
+fixture: simple-python
+input:
+  registry: placeholder
+  package: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+- type: performance
+  max_duration_ms: 3000
+performance:
+  max_duration_ms: 3000
+severity: medium

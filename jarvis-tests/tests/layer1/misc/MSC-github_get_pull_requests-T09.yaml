@@ -1,0 +1,22 @@
+test_id: MSC-github_get_pull_requests-T09
+name: Dependency Failure test for github_get_pull_requests
+category: misc
+tool: github_get_pull_requests
+layer: 1
+test_type: T09
+description: Dependency Failure test for github_get_pull_requests
+fixture: simple-python
+input:
+  owner: placeholder
+  repo: placeholder
+  tool_context: placeholder
+expected:
+  status: error
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: high

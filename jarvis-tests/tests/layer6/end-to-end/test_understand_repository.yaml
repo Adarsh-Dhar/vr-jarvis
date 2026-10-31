@@ -1,0 +1,39 @@
+test_id: E2E-REPO-001
+name: End-to-End - Understand Repository
+category: end_to_end
+layer: 6
+test_type: END_TO_END
+description: Complete repository understanding investigation
+
+scenario:
+  name: understand_repository
+  task: "Understand this repository: identify languages, frameworks, entry points, and architecture"
+
+fixture:
+  repository: simple-python
+
+expected_steps:
+  - detect_languages
+  - detect_frameworks
+  - identify_entry_points
+  - analyze_repository_structure
+  - build_dependency_graph
+
+expected_outcome:
+  repository_overview:
+    languages: ["python"]
+    frameworks: []
+    entry_points: ["main.py"]
+    architecture: "monolithic"
+    dependencies: []
+  evidence_cited: true
+  complete_analysis: true
+
+checks:
+  - correct_language_detection
+  - correct_entry_points
+  - architecture_documented
+  - evidence_cited
+  - no_hallucinations
+
+severity: critical

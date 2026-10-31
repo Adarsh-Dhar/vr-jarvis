@@ -1,0 +1,45 @@
+test_id: STRESS-RES-001
+name: Stress - Resource Limits
+category: stress
+layer: 7
+test_type: STRESS
+description: Test system behavior under resource constraints
+
+scenarios:
+  - name: low_memory
+    constraint: memory_limit_512mb
+    expected:
+      behavior: graceful_degradation
+      no_crash: true
+
+  - name: cpu_constrained
+    constraint: cpu_limit_1_core
+    expected:
+      behavior: slower_but_functional
+      no_timeout: true
+
+  - name: disk_io_limited
+    constraint: disk_io_limit_10mbps
+    expected:
+      behavior: slower_io
+      no_data_corruption: true
+
+  - name: network_limited
+    constraint: network_limit_1mbps
+    expected:
+      behavior: throttled_transfers
+      no_connection_loss: true
+
+metrics:
+  - memory_usage
+  - cpu_usage
+  - disk_io
+  - network_io
+  - response_time
+
+checks:
+  - no_crash
+  - no_data_corruption
+  - functional_under_constraints
+
+severity: high

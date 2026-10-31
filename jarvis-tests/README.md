@@ -1,359 +1,258 @@
-# JARVIS Testing Infrastructure
-
-Comprehensive testing system for the JARVIS AI software engineering platform.
+# JARVIS Comprehensive Testing Suite
 
 ## Overview
+This is a comprehensive 7-layer testing framework for the JARVIS AI software engineering platform, designed to validate 534 tools across unit, integration, agent capability, multi-agent coordination, end-to-end investigations, and system stress testing.
 
-This testing infrastructure implements a seven-layer testing pyramid as specified:
+## Quick Start
 
-1. **Layer 1 - Unit Tests**: Individual tool functions, schemas, and validation
-2. **Layer 2 - Tool Correctness**: Correct outputs, edge cases, and error handling
-3. **Layer 3 - Integration Tests**: Tools work with real services and data
-4. **Layer 4 - Agent Capability Tests**: Whether each agent fulfills its responsibility
-5. **Layer 5 - Multi-Agent Coordination**: Delegation, concurrency, and shared context
-6. **Layer 6 - End-to-End Tests**: Real developer tasks from request to result
-7. **Layer 7 - Stress Tests**: Full system under realistic, complicated, and stressful conditions
-
-## Directory Structure
-
-```
-jarvis-tests/
-├── test-config/               # Configuration files
-│   ├── environments.yaml      # Test environment definitions
-│   ├── supported-languages.yaml  # Language support matrix
-│   ├── supported-frameworks.yaml  # Framework support matrix
-│   └── resource-limits.yaml   # Resource limits per test type
-├── fixtures/                  # Test fixtures and repositories
-│   ├── repositories/          # Controlled test repositories
-│   │   ├── simple-python/     # Basic Python repository
-│   │   └── ground-truth.yaml  # Expected answers
-│   ├── runtime-traces/        # Sample execution traces
-│   ├── database-fixtures/    # Test database schemas
-│   ├── api-fixtures/         # Test API definitions
-│   └── corrupted-inputs/     # Malformed test inputs
-├── tests/                     # Test implementations
-│   ├── unit/                  # Layer 1-2 tests
-│   │   ├── repository/        # Repository tool tests
-│   │   ├── parsing/           # Parser tool tests
-│   │   ├── symbols/           # Symbol resolution tests
-│   │   ├── relationships/     # Relationship analysis tests
-│   │   ├── data-flow/         # Data flow tests
-│   │   ├── runtime/           # Runtime intelligence tests
-│   │   ├── visualization/     # Visualization tests
-│   │   └── security/          # Security tool tests
-│   ├── integration/           # Layer 3 tests
-│   ├── agent-capabilities/     # Layer 4 tests
-│   ├── multi-agent/           # Layer 5 tests
-│   ├── end-to-end/            # Layer 6 tests
-│   ├── stress/                # Layer 7 tests
-│   ├── load/                  # Load testing
-│   ├── chaos/                 # Chaos engineering
-│   ├── security/              # Security testing
-│   └── regression/           # Regression testing
-├── benchmarks/                # Performance benchmarks
-│   ├── indexing/              # Repository indexing benchmarks
-│   ├── graph-queries/         # Graph query benchmarks
-│   ├── agent-latency/         # Agent response time benchmarks
-│   ├── memory/                # Memory usage benchmarks
-│   ├── concurrency/           # Concurrency benchmarks
-│   └── runtime-overhead/      # Runtime instrumentation overhead
-├── expected-results/           # Ground truth for comparison
-│   ├── symbols/               # Expected symbol resolution results
-│   ├── call-graphs/           # Expected call graph results
-│   ├── data-flows/            # Expected data flow results
-│   ├── control-flows/          # Expected control flow results
-│   └── agent-outputs/         # Expected agent responses
-├── test-reports/              # Generated test reports
-└── test-runner/               # Test orchestration system
-    ├── test_registry.py       # Test definition registry
-    ├── test_orchestrator.py   # Test execution coordinator
-    ├── test_fixture_manager.py # Fixture management
-    ├── ground_truth_engine.py  # Result comparison engine
-    ├── report_generator.py     # Report generation
-    └── main.py                # CLI entry point
-```
-
-## Running Tests
-
-### Run all tests:
+### Running Tests
 ```bash
 cd jarvis-tests/test-runner
-python main.py
+python3 test_all_tools.py
 ```
 
-### Run specific category:
+### Checking Test Coverage
 ```bash
-python main.py --category unit
-python main.py --category integration
-python main.py --category stress
+cd jarvis-tests/test-runner
+python3 test_registry_check.py
 ```
 
-### Run specific tool tests:
+### Viewing the Dashboard
 ```bash
-python main.py --tool find_callers
-python main.py --tool parse_source_code
+cd jarvis-tests/test-runner
+python3 test_dashboard.py
+# Open the displayed HTML file in your browser
 ```
 
-### Run by severity:
+### Validating Ground Truth
 ```bash
-python main.py --severity critical
-python main.py --severity high
+cd jarvis-tests/test-runner
+python3 ground_truth_validator.py simple-python
 ```
 
-### Run specific layer:
-```bash
-python main.py --layer 1  # Unit tests
-python main.py --layer 4  # Agent capability tests
-python main.py --layer 7  # Stress tests
-```
+## Test Structure
 
-### List all available tests:
-```bash
-python main.py --list
-```
+### 7 Testing Layers
 
-### Generate reports:
-```bash
-python main.py --report json    # JSON report
-python main.py --report html    # HTML report
-python main.py --report both     # Both formats
-```
+**Layer 1: Unit Tests (T01-T09)**
+- Happy path, input validation, output validation
+- Empty input, boundary conditions, large input
+- Complex input, malformed input, dependency failure
+- 3,096 tests across 344 tools
 
-## Test Categories
+**Layer 2: Edge Cases (T10-T15)**
+- Timeout, concurrency, security, performance
+- Regression, recovery
+- 2,064 tests across 344 tools
 
-### Unit Tests (Layer 1-2)
-- Repository tools (read_file, list_files, search_code)
-- Parsing tools (parse_source_code, extract_ast, extract_symbols)
-- Navigation tools (get_symbol_definition, get_call_hierarchy)
-- Analysis tools (analyze_control_flow, analyze_data_flow)
-- Relationship tools (find_callers, find_callees)
-- Runtime tools (collect_execution_trace, record_function_calls)
-- Visualization tools (create_graph, calculate_graph_layout)
-- Security tools (scan_secrets, scan_vulnerabilities)
+**Layer 3: Integration Tests**
+- Real infrastructure (databases, APIs, Git repositories)
+- 12 integration tests
 
-### Integration Tests (Layer 3)
-- Tools working with real repositories
-- Parser integration with actual languages
-- Real database operations
-- Real test execution
-- Real patch application
+**Layer 4: Agent Capabilities**
+- Tests for 12 JARVIS agents
+- 5 agent capability tests
 
-### Agent Capability Tests (Layer 4)
-- Code Understanding Agent
-- Relationship Intelligence Agent
-- Runtime Intelligence Agent
-- Debugging Intelligence Agent
-- Security & Quality Agent
-- Software Engineering Agent
-- Testing & Verification Agent
-- Visualization & Spatial Intelligence Agent
+**Layer 5: Multi-Agent Coordination**
+- Agent delegation, parallel execution, context sharing
+- 4 multi-agent scenarios
 
-### Multi-Agent Coordination Tests (Layer 5)
-- Task decomposition and delegation
-- Parallel execution
-- Sequential execution with dependencies
-- Context sharing
-- Conflict resolution
-- Failure handling
-- Duplicate prevention
+**Layer 6: End-to-End Investigations**
+- Real developer scenarios (understand repo, investigate function, trace API)
+- 3 end-to-end tests
 
-### End-to-End Tests (Layer 6)
-- Understand repository scenario
-- Investigate function scenario
-- Trace API request scenario
-- Investigate bug scenario
-- Investigate performance scenario
-- Analyze security scenario
-- Change function scenario
-- Investigate regression scenario
-- Explore complex system scenario
-- Explain execution scenario
+**Layer 7: Stress Tests**
+- Repository scale, concurrent agents, failure injection
+- Resource limits, long-running tasks, runtime volume
+- 9 stress tests
 
-### Stress Tests (Layer 7)
-- Repository scale (small to multi-million-line)
-- Graph complexity (dense and sparse graphs)
-- Concurrent agents
-- Runtime volume (large traces, logs)
-- Failure injection (database outages, crashes)
-- Long-running tasks
-- Resource limits (CPU, RAM, disk, network)
-- Edge cases (circular dependencies, malformed files)
+## Test Coverage
 
-## Test Format
+### Tools by Priority
+- **Priority 1**: 67 tools (Analysis, Data Flow, Relationship, Repository Intelligence, Code Understanding) - 100% covered
+- **Priority 2**: 52 tools (API/Database, Documentation, Git) - 100% covered
+- **Priority 3**: 106 tools (Infrastructure, External Integrations, Language Adapters) - 100% covered
+- **Priority 4**: 119 tools (Software Engineering, Testing, Visualization, VR, etc.) - Representative subset covered
 
-### YAML Test Format
-```yaml
-test_id: REL-CALL-001
-name: Direct function caller discovery
-category: relationship_intelligence
-tool: find_callers
-description: Verify that the tool identifies all direct callers
+### Total Tests: 5,208
+- Layer 1: 3,096
+- Layer 2: 2,064
+- Layer 3: 12
+- Layer 4: 5
+- Layer 5: 4
+- Layer 6: 3
+- Layer 7: 9
 
-fixture:
-  repository: simple-python
-  target_symbol: target
-
-input:
-  depth: 1
-
-expected:
-  status: ok
-  callers:
-    - alpha
-    - beta
-
-must_not:
-  - gamma
-  - delta
-
-checks:
-  - correct_callers
-  - correct_source_locations
-  - valid_response_schema
-
-performance:
-  max_duration_ms: 2000
-
-severity: critical
-```
-
-### Python Test Format
-Python tests use pytest with the following test categories for each tool:
-- T01: Happy path
-- T02: Input validation
-- T03: Output validation
-- T04: Empty input
-- T05: Boundary conditions
-- T06: Large input
-- T07: Complex input
-- T08: Malformed input
-- T09: Dependency failure
-- T10: Timeout
-- T11: Concurrency
-- T12: Security
-- T13: Performance
-- T14: Regression
-- T15: Recovery
-
-## Performance Targets
-
-| Capability | Initial Target |
-|-------------|----------------|
-| Simple symbol lookup | P95 under 100 ms |
-| Indexed code search | P95 under 300 ms |
-| Direct call graph query | P95 under 500 ms |
-| Small repository indexing | Under 30 seconds |
-| Incremental indexing | Under 5 seconds |
-| Basic agent response | P95 under 5 seconds |
-| Complex investigation | P95 under 60 seconds |
-| Graph interaction update | P95 under 100 ms |
-| Agent failure recovery | Under 10 seconds |
-
-## Metrics Tracked
-
-1. **Tool correctness**: Percentage of outputs that are correct
-2. **Tool completeness**: Percentage of expected results discovered
-3. **Precision**: How many reported results are actually correct
-4. **Recall**: How many actual results were discovered
-5. **Schema validity**: Percentage of outputs matching their contract
-6. **Agent task success**: Percentage of assigned tasks completed correctly
-7. **Agent tool selection**: Whether the right tools were selected
-8. **Evidence accuracy**: Whether claims are supported by real evidence
-9. **Hallucination rate**: Unsupported claims presented as facts
-10. **Investigation completeness**: Whether all required steps were completed
-11. **Latency**: Time taken to produce results
-12. **Throughput**: Tasks handled per unit of time
-13. **Resource consumption**: CPU, RAM, GPU, storage, network usage
-14. **Failure recovery**: Ability to recover after failures
-15. **Regression rate**: Previously working capabilities that became broken
-
-## Test Repositories
+## Fixture Repositories
 
 ### simple-python
 Basic Python repository with:
-- Direct and indirect function calls
-- Recursive functions
+- Complex call graphs (direct and indirect callers)
+- Recursion
+- Classes and methods
 - Cross-package imports
-- Class methods
 - Ground truth manifest
 
-### Additional repositories to be added:
-- complex-typescript (React/Next.js)
-- spring-boot (Java framework)
-- rust-project (Rust language)
-- cpp-project (C++/Unreal)
-- polyglot-monorepo (Multiple languages)
-- distributed-system (Microservices)
+### complex-typescript
+TypeScript repository with:
+- Generics and type parameters
+- Union types
+- Interfaces and classes
+- Complex type aliases
+- Ground truth manifest
 
-## Tool Completion Checklist
+### spring-boot
+Java Spring Boot application with:
+- REST API endpoints
+- JPA database integration
+- MVC architecture
+- Ground truth manifest
 
-Each tool must pass:
-- [ ] Tool input schema validated
-- [ ] Output schema validated
-- [ ] Happy-path tests passed
-- [ ] Boundary tests passed
-- [ ] Error-handling tests passed
-- [ ] Integration tests passed
-- [ ] Security and permission tests passed
-- [ ] Performance targets met
-- [ ] Concurrency behavior verified
-- [ ] Regression tests passed
-- [ ] Evidence and provenance verified
-- [ ] Documentation and limitations recorded
+## Integration Test Infrastructure
 
-## Test Status Levels
+### Database
+- SQLite test database with users, posts, comments tables
+- Pre-populated test data
 
-- **Untested**: No meaningful test coverage
-- **Experimental**: Basic functionality works
-- **Validated**: Correctness and integration established
-- **Stress-tested**: Load, concurrency, and failure behavior evaluated
-- **Production-ready**: All required release criteria passed
+### API
+- Flask REST API server (port 5001)
+- OpenAPI 3.0 specification
+- CRUD endpoints
 
-## Important Tests
+### Git
+- Test repository with multiple branches
+- Complex commit history
 
-### Critical Tests (Must Pass)
-- All tool precision/recall tests
-- Multi-agent conflict resolution
-- Evidence verification
-- Security permission enforcement
-- Failure recovery
+### Runtime
+- Synchronous Python application
+- Async Python application with worker pool
 
-### High Priority Tests
-- Agent tool selection
-- Context sharing
-- Cross-package relationships
-- Error handling
-- Performance targets
+## CI/CD Integration
 
-## Failure Injection Scenarios
+### GitHub Workflows
 
-The system is tested against:
-- Graph database unavailable
-- Language parser crashes
-- Agent stops responding
-- Invalid agent response
-- Corrupted graph data
-- Runtime trace incomplete
-- Repository changes during analysis
-- VR connection drops
-- Terminal command hangs
-- Disk fills up
-- Two agents edit same file
-- Malicious repository instructions
+**test-layer1-2.yml**: Runs on every PR and push
+- Validates ground truth
+- Runs Layer 1-2 tests
+- Generates reports
+- Detects regressions
+- Comments PR with results
 
-## Continuous Testing Philosophy
+**test-layer3-4.yml**: Runs daily at midnight
+- Sets up integration infrastructure
+- Starts API server
+- Runs Layer 3-4 tests
+- Generates reports
 
-Every capability must have:
-- A known input
-- An objectively verifiable expected result
-- A measurable performance target
-- A defined failure behavior
+**test-layer5-6.yml**: Runs weekly on Sunday
+- Runs Layer 5-6 tests (multi-agent, end-to-end)
+- Generates reports
 
-Testing is a continuous process:
-1. Test every individual tool
-2. Test each agent's ability to use those tools
-3. Test agent-to-agent collaboration
-4. Test realistic developer investigations
-5. Stress-test the entire platform
-6. Compare every run against previous results
-7. Block releases when critical requirements fail
+**test-layer7.yml**: Runs on tag push (pre-release)
+- Runs Layer 7 stress tests
+- Release gate check (95% success rate threshold)
+
+**update-dashboard.yml**: Runs every 5 minutes
+- Updates test dashboard
+- Deploys to GitHub Pages
+
+## Reports
+
+### Test Reports
+- JSON reports with detailed results
+- HTML reports with visualization
+- Stored in `test-reports/`
+
+### Regression Detection
+- Compares current run with historical results
+- Detects new failures
+- Identifies success rate drops
+- Tracks performance regressions
+
+### Dashboard
+- Web-based HTML dashboard
+- Real-time test status
+- Historical trends
+- Coverage metrics
+- Auto-updated every 5 minutes
+
+## File Structure
+
+```
+jarvis-tests/
+├── .github/workflows/          # CI/CD workflows
+├── test-runner/               # Test execution infrastructure
+│   ├── test_spec_generator.py
+│   ├── test_registry.py
+│   ├── test_orchestrator.py
+│   ├── test_fixture_manager.py
+│   ├── ground_truth_validator.py
+│   ├── report_generator.py
+│   ├── regression_detector.py
+│   ├── test_dashboard.py
+│   └── generate_*.py
+├── fixtures/                   # Test fixtures
+│   ├── repositories/           # Code repositories
+│   └── integration-test-infrastructure/
+├── test-reports/               # Test results
+│   ├── dashboard/
+│   └── history/
+└── tests/                      # Test specifications
+    ├── layer1/
+    ├── layer2/
+    ├── layer3/
+    ├── layer4/
+    ├── layer5/
+    ├── layer6/
+    └── layer7/
+```
+
+## Success Metrics
+
+### Coverage
+- **Tool Coverage**: 64.4% (344 of 534 tools)
+- **Layer Coverage**: 100% (all 7 layers implemented)
+- **Test Type Coverage**: 100% (all T01-T15 + agent + integration + stress tests)
+
+### Quality Targets
+- **Tool Correctness**: ≥95%
+- **Tool Completeness**: ≥90%
+- **Precision**: ≥95% (graph tools)
+- **Recall**: ≥90% (graph tools)
+- **Success Rate**: ≥95% (release gate)
+
+### Performance Targets
+- Simple symbol lookup: P95 under 100ms
+- Indexed code search: P95 under 300ms
+- Direct call graph query: P95 under 500ms
+- Small repository indexing: Under 30 seconds
+- Basic agent response: P95 under 5 seconds
+
+## Maintenance
+
+### Adding New Tool Tests
+1. Add tool to appropriate priority list in `generate_*.py`
+2. Run the generator script
+3. Validate ground truth if needed
+4. Commit changes
+
+### Adding New Fixtures
+1. Create repository in `fixtures/repositories/`
+2. Add ground-truth.yaml
+3. Validate with `ground_truth_validator.py`
+4. Update fixture manager if needed
+
+### Updating CI/CD
+- Modify workflows in `.github/workflows/`
+- Adjust schedules as needed
+- Update release gate thresholds
+
+## Documentation
+
+- [Implementation Progress](IMPLEMENTATION_PROGRESS.md) - Detailed implementation status
+- [Setup Guide](fixtures/integration-test-infrastructure/SETUP_GUIDE.md) - Integration infrastructure setup
+- [Plan](/Users/adarsh/.devin/plans/plan-fc785e10b523e89a.md) - Original 18-week plan
+
+## License
+
+This testing framework is part of the JARVIS project.

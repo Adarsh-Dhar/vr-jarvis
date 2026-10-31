@@ -1,0 +1,21 @@
+test_id: COD-explain_condition-T02
+name: Input Validation test for explain_condition
+category: code_understanding
+tool: explain_condition
+layer: 1
+test_type: T02
+description: Input Validation test for explain_condition
+fixture: simple-python
+input:
+  condition_id: placeholder
+  tool_context: placeholder
+expected:
+  status: error
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

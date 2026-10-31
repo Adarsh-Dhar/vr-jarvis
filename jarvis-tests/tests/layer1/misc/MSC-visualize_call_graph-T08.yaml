@@ -1,0 +1,21 @@
+test_id: MSC-visualize_call_graph-T08
+name: Malformed Input test for visualize_call_graph
+category: misc
+tool: visualize_call_graph
+layer: 1
+test_type: T08
+description: Malformed Input test for visualize_call_graph
+fixture: corrupted-inputs
+input:
+  function_id: placeholder
+  tool_context: placeholder
+expected:
+  status: error
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

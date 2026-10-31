@@ -1,0 +1,21 @@
+test_id: MSC-git_log-T09
+name: Dependency Failure test for git_log
+category: misc
+tool: git_log
+layer: 1
+test_type: T09
+description: Dependency Failure test for git_log
+fixture: simple-python
+input:
+  repository_path: /path/to/repo
+  tool_context: placeholder
+expected:
+  status: error
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: high

@@ -1,0 +1,22 @@
+test_id: MSC-unsubscribe_from_topic-T01
+name: Happy Path test for unsubscribe_from_topic
+category: misc
+tool: unsubscribe_from_topic
+layer: 1
+test_type: T01
+description: Happy Path test for unsubscribe_from_topic
+fixture: simple-python
+input:
+  topic: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not:
+- error
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

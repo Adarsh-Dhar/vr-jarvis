@@ -1,0 +1,14 @@
+{
+  "name": "complex-typescript",
+  "version": "1.0.0",
+  "description": "Complex TypeScript fixture for JARVIS testing",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "test": "jest"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  }
+}

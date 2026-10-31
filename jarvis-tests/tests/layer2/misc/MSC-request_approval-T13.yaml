@@ -1,0 +1,23 @@
+test_id: MSC-request_approval-T13
+name: Performance test for request_approval
+category: misc
+tool: request_approval
+layer: 2
+test_type: T13
+description: Performance test for request_approval
+fixture: simple-python
+input:
+  action_summary: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+- type: performance
+  max_duration_ms: 3000
+performance:
+  max_duration_ms: 3000
+severity: medium

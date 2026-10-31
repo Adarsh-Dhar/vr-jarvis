@@ -1,0 +1,23 @@
+test_id: INT-INSPECT_HTTP_ROUTES-001
+name: Integration test for inspect_http_routes
+category: integration
+tool: inspect_http_routes
+layer: 3
+test_type: INTEGRATION
+description: Inspect HTTP routes
+fixture:
+  type: api
+  path: integration-test-infrastructure/apis/simple_flask_api.py
+input:
+  repository_path: integration-test-infrastructure/apis/simple_flask_api.py
+expected:
+  status: ok
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+- type: integration_connectivity
+performance:
+  max_duration_ms: 5000
+severity: high
+requires_infrastructure: true

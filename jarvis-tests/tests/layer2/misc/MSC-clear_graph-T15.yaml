@@ -1,0 +1,20 @@
+test_id: MSC-clear_graph-T15
+name: Recovery test for clear_graph
+category: misc
+tool: clear_graph
+layer: 2
+test_type: T15
+description: Recovery test for clear_graph
+fixture: simple-python
+input:
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: high

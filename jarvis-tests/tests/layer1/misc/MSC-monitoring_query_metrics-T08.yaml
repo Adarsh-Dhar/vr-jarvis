@@ -1,0 +1,21 @@
+test_id: MSC-monitoring_query_metrics-T08
+name: Malformed Input test for monitoring_query_metrics
+category: misc
+tool: monitoring_query_metrics
+layer: 1
+test_type: T08
+description: Malformed Input test for monitoring_query_metrics
+fixture: corrupted-inputs
+input:
+  query: test
+  tool_context: placeholder
+expected:
+  status: error
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

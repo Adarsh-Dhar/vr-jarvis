@@ -1,0 +1,20 @@
+test_id: MSC-list_supported_languages-T09
+name: Dependency Failure test for list_supported_languages
+category: misc
+tool: list_supported_languages
+layer: 1
+test_type: T09
+description: Dependency Failure test for list_supported_languages
+fixture: simple-python
+input:
+  tool_context: placeholder
+expected:
+  status: error
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: high

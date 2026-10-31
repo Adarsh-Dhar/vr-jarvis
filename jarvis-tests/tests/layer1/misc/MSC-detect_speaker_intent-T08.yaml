@@ -1,0 +1,21 @@
+test_id: MSC-detect_speaker_intent-T08
+name: Malformed Input test for detect_speaker_intent
+category: misc
+tool: detect_speaker_intent
+layer: 1
+test_type: T08
+description: Malformed Input test for detect_speaker_intent
+fixture: corrupted-inputs
+input:
+  text: placeholder
+  tool_context: placeholder
+expected:
+  status: error
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

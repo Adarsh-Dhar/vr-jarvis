@@ -1,0 +1,35 @@
+name: JARVIS Tests - Layer 7 (Pre-Release)
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  test-layer7:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+    - uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+    - run: |
+        cd jarvis-tests/test-runner
+        pip install pyyaml
+        python3 test_all_tools.py --layers 7
+        python3 report_generator.py --json test-reports/latest.json --html
+    - name: Release gate check
+      run: |
+        cd jarvis-tests/test-runner
+        python3 -c "
+import json
+with open('test-reports/latest.json') as f:
+    data = json.load(f)
+success_rate = data.get('success_rate', 0)
+if success_rate < 0.95:
+    print(f'Success rate {success_rate:.2%} below 95% threshold')
+    exit(1)
+print(f'Success rate {success_rate:.2%} meets 95% threshold')
+"

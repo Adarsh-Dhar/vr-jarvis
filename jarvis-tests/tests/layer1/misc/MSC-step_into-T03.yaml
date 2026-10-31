@@ -1,0 +1,20 @@
+test_id: MSC-step_into-T03
+name: Output Validation test for step_into
+category: misc
+tool: step_into
+layer: 1
+test_type: T03
+description: Output Validation test for step_into
+fixture: simple-python
+input:
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

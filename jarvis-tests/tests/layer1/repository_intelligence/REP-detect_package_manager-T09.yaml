@@ -1,0 +1,21 @@
+test_id: REP-detect_package_manager-T09
+name: Dependency Failure test for detect_package_manager
+category: repository_intelligence
+tool: detect_package_manager
+layer: 1
+test_type: T09
+description: Dependency Failure test for detect_package_manager
+fixture: simple-python
+input:
+  repository_path: /path/to/repo
+  tool_context: placeholder
+expected:
+  status: error
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 10000
+severity: high

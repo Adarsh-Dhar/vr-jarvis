@@ -1,0 +1,24 @@
+test_id: INT-DISCOVER_API_ENDPOINTS-001
+name: Integration test for discover_api_endpoints
+category: integration
+tool: discover_api_endpoints
+layer: 3
+test_type: INTEGRATION
+description: Discover API endpoints from Flask app
+fixture:
+  type: api
+  path: integration-test-infrastructure/apis/simple_flask_api.py
+  url: http://localhost:5001
+input:
+  repository_path: integration-test-infrastructure/apis/simple_flask_api.py
+expected:
+  status: ok
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+- type: integration_connectivity
+performance:
+  max_duration_ms: 5000
+severity: high
+requires_infrastructure: true

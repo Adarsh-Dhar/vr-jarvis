@@ -1,0 +1,22 @@
+test_id: MSC-database_execute-T08
+name: Malformed Input test for database_execute
+category: misc
+tool: database_execute
+layer: 1
+test_type: T08
+description: Malformed Input test for database_execute
+fixture: corrupted-inputs
+input:
+  connection_string: placeholder
+  statement: placeholder
+  tool_context: placeholder
+expected:
+  status: error
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

@@ -1,0 +1,21 @@
+test_id: MSC-get_ci_logs-T14
+name: Regression test for get_ci_logs
+category: misc
+tool: get_ci_logs
+layer: 2
+test_type: T14
+description: Regression test for get_ci_logs
+fixture: simple-python
+input:
+  pipeline_id: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: high

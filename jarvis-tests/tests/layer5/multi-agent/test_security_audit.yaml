@@ -1,0 +1,54 @@
+test_id: MULTI-SEC-001
+name: Multi-Agent - Security Audit
+category: multi_agent
+layer: 5
+test_type: MULTI_AGENT_COORDINATION
+description: Multi-agent security audit scenario
+
+scenario:
+  name: security_audit
+  task: "Perform a security audit of the authentication system"
+
+agent_sequence:
+  - agent: orchestrator
+    action: create_investigation_plan
+    output: audit_plan
+
+  - agent: repository_intelligence
+    action: identify_entry_points
+    input: audit_plan
+    output: entry_points
+
+  - agent: code_understanding
+    action: explain_function
+    input: entry_points
+    output: auth_code
+
+  - agent: security_quality
+    action: analyze_authentication
+    input: auth_code
+    output: auth_analysis
+
+  - agent: security_quality
+    action: trace_sensitive_data
+    input: auth_code
+    output: data_flow
+
+  - agent: documentation_toolkit
+    action: generate_security_report
+    input: auth_analysis
+    output: security_report
+
+expected_outcomes:
+  - security_vulnerabilities_identified
+  - sensitive_data_traced
+  - report_generated
+  - recommendations_provided
+
+checks:
+  - correct_delegation
+  - context_sharing
+  - complete_audit
+  - actionable_report
+
+severity: critical

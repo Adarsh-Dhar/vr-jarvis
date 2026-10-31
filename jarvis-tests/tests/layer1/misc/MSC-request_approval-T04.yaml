@@ -1,0 +1,21 @@
+test_id: MSC-request_approval-T04
+name: Empty Input test for request_approval
+category: misc
+tool: request_approval
+layer: 1
+test_type: T04
+description: Empty Input test for request_approval
+fixture: simple-python
+input:
+  action_summary: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: high

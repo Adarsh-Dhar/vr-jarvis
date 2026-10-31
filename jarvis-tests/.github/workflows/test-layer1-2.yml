@@ -1,0 +1,77 @@
+name: JARVIS Tests - Layer 1-2
+
+on:
+  pull_request:
+    branches: [ main, develop ]
+  push:
+    branches: [ main, develop ]
+
+jobs:
+  test-layer1-2:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+
+    - name: Install dependencies
+      run: |
+        cd jarvis-tests/test-runner
+        pip install pyyaml
+
+    - name: Validate ground truth
+      run: |
+        cd jarvis-tests/test-runner
+        python3 ground_truth_validator.py simple-python
+        python3 ground_truth_validator.py complex-typescript
+        python3 ground_truth_validator.py spring-boot
+
+    - name: Run Layer 1-2 tests
+      run: |
+        cd jarvis-tests/test-runner
+        python3 test_all_tools.py --layers 1 2
+
+    - name: Generate report
+      run: |
+        cd jarvis-tests/test-runner
+        python3 report_generator.py --json test-reports/latest.json --html
+
+    - name: Detect regressions
+      run: |
+        cd jarvis-tests/test-runner
+        python3 regression_detector.py --json test-reports/latest.json
+
+    - name: Upload test results
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: test-results
+        path: jarvis-tests/test-reports/
+
+    - name: Upload reports
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: test-reports
+        path: jarvis-tests/test-reports/*.html
+
+    - name: Comment PR with results
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const fs = require('fs');
+          const report = fs.readFileSync('jarvis-tests/test-reports/latest.json', 'utf8');
+          const data = JSON.parse(report);
+          const rate = (data.success_rate * 100).toFixed(2);
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: `## Test Results\n\n**Success Rate**: ${rate}%\n**Total Tests**: ${data.summary.total}\n**Passed**: ${data.summary.passed}\n**Failed**: ${data.summary.failed}\n**Errors**: ${data.summary.errors}\n\nDuration: ${data.duration.toFixed(2)}s`
+          });

@@ -1,0 +1,41 @@
+test_id: STRESS-SCALE-001
+name: Stress - Repository Scale
+category: stress
+layer: 7
+test_type: STRESS
+description: Test system behavior with repositories of different sizes
+
+scenarios:
+  - name: small_repository
+    loc: 1000
+    files: 10
+    expected:
+      indexing_time: "less than 5s"
+      search_time: "less than 100ms"
+
+  - name: medium_repository
+    loc: 100000
+    files: 100
+    expected:
+      indexing_time: "less than 30s"
+      search_time: "less than 300ms"
+
+  - name: large_repository
+    loc: 1000000
+    files: 1000
+    expected:
+      indexing_time: "less than 120s"
+      search_time: "less than 1000ms"
+
+metrics:
+  - indexing_time
+  - search_time
+  - memory_usage
+  - cpu_usage
+
+checks:
+  - performance_within_limits
+  - no_memory_leak
+  - stable_performance
+
+severity: high

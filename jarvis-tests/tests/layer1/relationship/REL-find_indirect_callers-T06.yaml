@@ -1,0 +1,21 @@
+test_id: REL-find_indirect_callers-T06
+name: Large Input test for find_indirect_callers
+category: relationship
+tool: find_indirect_callers
+layer: 1
+test_type: T06
+description: Large Input test for find_indirect_callers
+fixture: polyglot-monorepo
+input:
+  function_id: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: medium

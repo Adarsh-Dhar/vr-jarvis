@@ -1,0 +1,22 @@
+test_id: MSC-answer_code_question-T12
+name: Security test for answer_code_question
+category: misc
+tool: answer_code_question
+layer: 2
+test_type: T12
+description: Security test for answer_code_question
+fixture: simple-python
+input:
+  question: placeholder
+  context: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

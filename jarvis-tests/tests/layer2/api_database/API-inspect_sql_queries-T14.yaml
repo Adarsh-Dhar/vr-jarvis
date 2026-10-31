@@ -1,0 +1,21 @@
+test_id: API-inspect_sql_queries-T14
+name: Regression test for inspect_sql_queries
+category: api_database
+tool: inspect_sql_queries
+layer: 2
+test_type: T14
+description: Regression test for inspect_sql_queries
+fixture: simple-python
+input:
+  repository_path: /path/to/repo
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 5000
+severity: high

@@ -1,0 +1,22 @@
+test_id: MSC-subscribe_to_topic-T06
+name: Large Input test for subscribe_to_topic
+category: misc
+tool: subscribe_to_topic
+layer: 1
+test_type: T06
+description: Large Input test for subscribe_to_topic
+fixture: polyglot-monorepo
+input:
+  topic: placeholder
+  callback: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: medium

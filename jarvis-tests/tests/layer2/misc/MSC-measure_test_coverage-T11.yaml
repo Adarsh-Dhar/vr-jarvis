@@ -1,0 +1,21 @@
+test_id: MSC-measure_test_coverage-T11
+name: Concurrency test for measure_test_coverage
+category: misc
+tool: measure_test_coverage
+layer: 2
+test_type: T11
+description: Concurrency test for measure_test_coverage
+fixture: simple-python
+input:
+  repository_path: /path/to/repo
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: high

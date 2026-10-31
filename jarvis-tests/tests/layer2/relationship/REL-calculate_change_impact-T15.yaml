@@ -1,0 +1,21 @@
+test_id: REL-calculate_change_impact-T15
+name: Recovery test for calculate_change_impact
+category: relationship
+tool: calculate_change_impact
+layer: 2
+test_type: T15
+description: Recovery test for calculate_change_impact
+fixture: simple-python
+input:
+  element_id: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: high

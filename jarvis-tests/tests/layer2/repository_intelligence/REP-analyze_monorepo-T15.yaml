@@ -1,0 +1,21 @@
+test_id: REP-analyze_monorepo-T15
+name: Recovery test for analyze_monorepo
+category: repository_intelligence
+tool: analyze_monorepo
+layer: 2
+test_type: T15
+description: Recovery test for analyze_monorepo
+fixture: simple-python
+input:
+  repository_path: /path/to/repo
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 10000
+severity: high

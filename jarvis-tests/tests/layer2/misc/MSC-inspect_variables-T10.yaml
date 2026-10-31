@@ -1,0 +1,20 @@
+test_id: MSC-inspect_variables-T10
+name: Timeout test for inspect_variables
+category: misc
+tool: inspect_variables
+layer: 2
+test_type: T10
+description: Timeout test for inspect_variables
+fixture: simple-python
+input:
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: high

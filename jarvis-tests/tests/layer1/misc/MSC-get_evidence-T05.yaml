@@ -1,0 +1,21 @@
+test_id: MSC-get_evidence-T05
+name: Boundary Conditions test for get_evidence
+category: misc
+tool: get_evidence
+layer: 1
+test_type: T05
+description: Boundary Conditions test for get_evidence
+fixture: simple-python
+input:
+  investigation_id: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: high

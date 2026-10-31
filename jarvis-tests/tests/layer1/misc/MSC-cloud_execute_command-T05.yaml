@@ -1,0 +1,23 @@
+test_id: MSC-cloud_execute_command-T05
+name: Boundary Conditions test for cloud_execute_command
+category: misc
+tool: cloud_execute_command
+layer: 1
+test_type: T05
+description: Boundary Conditions test for cloud_execute_command
+fixture: simple-python
+input:
+  instance_id: placeholder
+  command: placeholder
+  provider: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: high

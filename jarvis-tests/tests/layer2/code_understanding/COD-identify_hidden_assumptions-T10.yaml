@@ -1,0 +1,21 @@
+test_id: COD-identify_hidden_assumptions-T10
+name: Timeout test for identify_hidden_assumptions
+category: code_understanding
+tool: identify_hidden_assumptions
+layer: 2
+test_type: T10
+description: Timeout test for identify_hidden_assumptions
+fixture: simple-python
+input:
+  function_id: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: high

@@ -1,0 +1,22 @@
+test_id: MSC-move_file-T06
+name: Large Input test for move_file
+category: misc
+tool: move_file
+layer: 1
+test_type: T06
+description: Large Input test for move_file
+fixture: polyglot-monorepo
+input:
+  source: placeholder
+  destination: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: medium

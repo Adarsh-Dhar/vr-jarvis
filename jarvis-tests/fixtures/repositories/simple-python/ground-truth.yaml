@@ -131,7 +131,7 @@ functions:
     line: 61
     callers: []
     callees:
-      - name: target_method
+      - name: ExampleClass.target_method
         line: 62
         type: direct
     complexity: 1
@@ -142,7 +142,7 @@ functions:
     line: 66
     callers: []
     callees:
-      - name: target_method
+      - name: ExampleClass.target_method
         line: 67
         type: direct
     complexity: 1
@@ -291,13 +291,13 @@ call_graph:
 
 dependency_graph:
   edges:
-    - from: main
-      to: subpackage
+    - from: main.py
+      to: subpackage/helper.py
       type: import
-    - from: helper_with_imports
+    - from: subpackage/helper.py
       to: os
       type: import
-    - from: helper_with_imports
+    - from: subpackage/helper.py
       to: json
       type: import
 

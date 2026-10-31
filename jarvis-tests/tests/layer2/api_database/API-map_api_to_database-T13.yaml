@@ -1,0 +1,23 @@
+test_id: API-map_api_to_database-T13
+name: Performance test for map_api_to_database
+category: api_database
+tool: map_api_to_database
+layer: 2
+test_type: T13
+description: Performance test for map_api_to_database
+fixture: simple-python
+input:
+  repository_path: /path/to/repo
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+- type: performance
+  max_duration_ms: 5000
+performance:
+  max_duration_ms: 5000
+severity: medium

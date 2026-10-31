@@ -1,0 +1,24 @@
+test_id: MSC-cloud_get_instance_logs-T13
+name: Performance test for cloud_get_instance_logs
+category: misc
+tool: cloud_get_instance_logs
+layer: 2
+test_type: T13
+description: Performance test for cloud_get_instance_logs
+fixture: simple-python
+input:
+  instance_id: placeholder
+  provider: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+- type: performance
+  max_duration_ms: 3000
+performance:
+  max_duration_ms: 3000
+severity: medium

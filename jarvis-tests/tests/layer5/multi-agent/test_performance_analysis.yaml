@@ -1,0 +1,48 @@
+test_id: MULTI-PERF-001
+name: Multi-Agent - Performance Analysis
+category: multi_agent
+layer: 5
+test_type: MULTI_AGENT_COORDINATION
+description: Multi-agent performance analysis scenario
+
+scenario:
+  name: performance_analysis
+  task: "Identify performance bottlenecks in the data processing pipeline"
+
+agent_sequence:
+  - agent: orchestrator
+    action: classify_request
+    output: performance_task
+
+  - agent: runtime_intelligence
+    action: record_function_calls
+    output: execution_data
+
+  - agent: data_flow_intelligence
+    action: trace_database_reads
+    input: execution_data
+    output: data_flow
+
+  - agent: relationship_intelligence
+    action: find_shared_dependencies
+    input: data_flow
+    output: dependencies
+
+  - agent: security_quality
+    action: calculate_complexity
+    input: dependencies
+    output: complexity
+
+expected_outcomes:
+  - performance_bottlenecks_identified
+  - database_operations_analyzed
+  - complex_functions_flagged
+  - recommendations_provided
+
+checks:
+  - parallel_execution
+  - context_sharing
+  - correct_analysis
+  - actionable_recommendations
+
+severity: high

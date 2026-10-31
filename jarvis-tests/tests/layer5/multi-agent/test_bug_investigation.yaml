@@ -1,0 +1,67 @@
+test_id: MULTI-BUG-001
+name: Multi-Agent - Bug Investigation
+category: multi_agent
+layer: 5
+test_type: MULTI_AGENT_COORDINATION
+description: Multi-agent bug investigation scenario
+
+scenario:
+  name: bug_investigation
+  task: "Investigate why authentication fails intermittently"
+
+agent_sequence:
+  - agent: orchestrator
+    action: understand_user_intent
+    output: investigation_plan
+
+  - agent: repository_intelligence
+    action: detect_frameworks
+    input: investigation_plan
+    output: framework_info
+
+  - agent: code_understanding
+    action: explain_function
+    input: framework_info
+    output: auth_logic
+
+  - agent: relationship_intelligence
+    action: trace_call_chain
+    input: auth_logic
+    output: call_graph
+
+  - agent: runtime_intelligence
+    action: collect_execution_trace
+    input: call_graph
+    output: execution_trace
+
+  - agent: debugging_intelligence
+    action: identify_root_cause
+    input: execution_trace
+    output: root_cause
+
+  - agent: software_engineering
+    action: edit_file
+    input: root_cause
+    output: fix
+
+  - agent: testing_verification
+    action: run_unit_tests
+    input: fix
+    output: test_results
+
+expected_outcomes:
+  - agents_execute_in_correct_order
+  - context_shared_between_agents
+  - parallel_execution_where_possible
+  - root_cause_correctly_identified
+  - fix_applied_successfully
+  - tests_pass
+
+checks:
+  - agent_order_correct
+  - context_shared
+  - parallel_execution
+  - correct_result
+  - no_duplicate_work
+
+severity: critical

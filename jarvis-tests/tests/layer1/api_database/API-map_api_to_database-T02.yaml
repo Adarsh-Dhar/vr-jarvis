@@ -1,0 +1,21 @@
+test_id: API-map_api_to_database-T02
+name: Input Validation test for map_api_to_database
+category: api_database
+tool: map_api_to_database
+layer: 1
+test_type: T02
+description: Input Validation test for map_api_to_database
+fixture: simple-python
+input:
+  repository_path: /path/to/repo
+  tool_context: placeholder
+expected:
+  status: error
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 5000
+severity: critical

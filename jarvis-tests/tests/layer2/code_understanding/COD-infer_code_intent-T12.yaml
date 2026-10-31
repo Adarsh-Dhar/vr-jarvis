@@ -1,0 +1,21 @@
+test_id: COD-infer_code_intent-T12
+name: Security test for infer_code_intent
+category: code_understanding
+tool: infer_code_intent
+layer: 2
+test_type: T12
+description: Security test for infer_code_intent
+fixture: simple-python
+input:
+  function_id: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

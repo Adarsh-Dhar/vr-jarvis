@@ -1,0 +1,23 @@
+test_id: MSC-check_approval_status-T13
+name: Performance test for check_approval_status
+category: misc
+tool: check_approval_status
+layer: 2
+test_type: T13
+description: Performance test for check_approval_status
+fixture: simple-python
+input:
+  approval_id: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+- type: performance
+  max_duration_ms: 3000
+performance:
+  max_duration_ms: 3000
+severity: medium

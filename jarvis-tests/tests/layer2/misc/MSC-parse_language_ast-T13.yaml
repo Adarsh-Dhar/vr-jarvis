@@ -1,0 +1,24 @@
+test_id: MSC-parse_language_ast-T13
+name: Performance test for parse_language_ast
+category: misc
+tool: parse_language_ast
+layer: 2
+test_type: T13
+description: Performance test for parse_language_ast
+fixture: simple-python
+input:
+  file_path: main.py
+  language: python
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+- type: performance
+  max_duration_ms: 3000
+performance:
+  max_duration_ms: 3000
+severity: medium

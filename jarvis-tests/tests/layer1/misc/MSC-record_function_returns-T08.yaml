@@ -1,0 +1,22 @@
+test_id: MSC-record_function_returns-T08
+name: Malformed Input test for record_function_returns
+category: misc
+tool: record_function_returns
+layer: 1
+test_type: T08
+description: Malformed Input test for record_function_returns
+fixture: corrupted-inputs
+input:
+  application_id: placeholder
+  function_id: placeholder
+  tool_context: placeholder
+expected:
+  status: error
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

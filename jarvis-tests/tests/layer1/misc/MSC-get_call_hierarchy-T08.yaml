@@ -1,0 +1,21 @@
+test_id: MSC-get_call_hierarchy-T08
+name: Malformed Input test for get_call_hierarchy
+category: misc
+tool: get_call_hierarchy
+layer: 1
+test_type: T08
+description: Malformed Input test for get_call_hierarchy
+fixture: corrupted-inputs
+input:
+  symbol_name: placeholder
+  tool_context: placeholder
+expected:
+  status: error
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

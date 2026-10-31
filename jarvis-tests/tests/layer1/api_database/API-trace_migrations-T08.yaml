@@ -1,0 +1,21 @@
+test_id: API-trace_migrations-T08
+name: Malformed Input test for trace_migrations
+category: api_database
+tool: trace_migrations
+layer: 1
+test_type: T08
+description: Malformed Input test for trace_migrations
+fixture: corrupted-inputs
+input:
+  repository_path: /path/to/repo
+  tool_context: placeholder
+expected:
+  status: error
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 5000
+severity: critical

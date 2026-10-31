@@ -1,0 +1,23 @@
+test_id: MSC-package_search-T01
+name: Happy Path test for package_search
+category: misc
+tool: package_search
+layer: 1
+test_type: T01
+description: Happy Path test for package_search
+fixture: simple-python
+input:
+  registry: placeholder
+  query: test
+  tool_context: placeholder
+expected:
+  status: ok
+must_not:
+- error
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

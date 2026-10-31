@@ -1,0 +1,23 @@
+test_id: MSC-discover_framework_middleware-T01
+name: Happy Path test for discover_framework_middleware
+category: misc
+tool: discover_framework_middleware
+layer: 1
+test_type: T01
+description: Happy Path test for discover_framework_middleware
+fixture: simple-python
+input:
+  repository_path: /path/to/repo
+  framework: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not:
+- error
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

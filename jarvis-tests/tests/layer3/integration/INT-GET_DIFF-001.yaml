@@ -1,0 +1,25 @@
+test_id: INT-GET_DIFF-001
+name: Integration test for get_diff
+category: integration
+tool: get_diff
+layer: 3
+test_type: INTEGRATION
+description: Get git diff between branches
+fixture:
+  type: git
+  path: integration-test-infrastructure/git-repos/simple-repo
+input:
+  repository_path: integration-test-infrastructure/git-repos/simple-repo
+  ref1: main
+  ref2: feature/new-feature
+expected:
+  status: ok
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+- type: integration_connectivity
+performance:
+  max_duration_ms: 5000
+severity: high
+requires_infrastructure: true

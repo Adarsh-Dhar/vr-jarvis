@@ -1,0 +1,21 @@
+test_id: API-analyze_database_queries-T09
+name: Dependency Failure test for analyze_database_queries
+category: api_database
+tool: analyze_database_queries
+layer: 1
+test_type: T09
+description: Dependency Failure test for analyze_database_queries
+fixture: simple-python
+input:
+  repository_path: /path/to/repo
+  tool_context: placeholder
+expected:
+  status: error
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 5000
+severity: high

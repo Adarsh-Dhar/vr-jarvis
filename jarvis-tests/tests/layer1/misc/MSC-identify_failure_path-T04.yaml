@@ -1,0 +1,21 @@
+test_id: MSC-identify_failure_path-T04
+name: Empty Input test for identify_failure_path
+category: misc
+tool: identify_failure_path
+layer: 1
+test_type: T04
+description: Empty Input test for identify_failure_path
+fixture: simple-python
+input:
+  error_id: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: high

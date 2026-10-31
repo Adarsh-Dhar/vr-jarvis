@@ -1,0 +1,22 @@
+test_id: MSC-list_permissions-T13
+name: Performance test for list_permissions
+category: misc
+tool: list_permissions
+layer: 2
+test_type: T13
+description: Performance test for list_permissions
+fixture: simple-python
+input:
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+- type: performance
+  max_duration_ms: 3000
+performance:
+  max_duration_ms: 3000
+severity: medium

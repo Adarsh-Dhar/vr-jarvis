@@ -1,0 +1,21 @@
+test_id: API-trace_api_call-T02
+name: Input Validation test for trace_api_call
+category: api_database
+tool: trace_api_call
+layer: 1
+test_type: T02
+description: Input Validation test for trace_api_call
+fixture: simple-python
+input:
+  endpoint: placeholder
+  tool_context: placeholder
+expected:
+  status: error
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 5000
+severity: critical

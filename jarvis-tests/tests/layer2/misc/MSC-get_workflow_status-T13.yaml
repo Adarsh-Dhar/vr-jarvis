@@ -1,0 +1,23 @@
+test_id: MSC-get_workflow_status-T13
+name: Performance test for get_workflow_status
+category: misc
+tool: get_workflow_status
+layer: 2
+test_type: T13
+description: Performance test for get_workflow_status
+fixture: simple-python
+input:
+  workflow_id: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+- type: performance
+  max_duration_ms: 3000
+performance:
+  max_duration_ms: 3000
+severity: medium

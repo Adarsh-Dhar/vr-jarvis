@@ -1,0 +1,21 @@
+test_id: COD-explain_class-T04
+name: Empty Input test for explain_class
+category: code_understanding
+tool: explain_class
+layer: 1
+test_type: T04
+description: Empty Input test for explain_class
+fixture: simple-python
+input:
+  class_id: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: high

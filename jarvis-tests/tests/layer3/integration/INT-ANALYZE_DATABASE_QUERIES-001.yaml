@@ -1,0 +1,23 @@
+test_id: INT-ANALYZE_DATABASE_QUERIES-001
+name: Integration test for analyze_database_queries
+category: integration
+tool: analyze_database_queries
+layer: 3
+test_type: INTEGRATION
+description: Analyze database queries
+fixture:
+  type: database
+  path: integration-test-infrastructure/databases/test.db
+input:
+  database_path: integration-test-infrastructure/databases/test.db
+expected:
+  status: ok
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+- type: integration_connectivity
+performance:
+  max_duration_ms: 5000
+severity: high
+requires_infrastructure: true

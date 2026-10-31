@@ -1,0 +1,21 @@
+test_id: MSC-read_documentation-T02
+name: Input Validation test for read_documentation
+category: misc
+tool: read_documentation
+layer: 1
+test_type: T02
+description: Input Validation test for read_documentation
+fixture: simple-python
+input:
+  doc_path: placeholder
+  tool_context: placeholder
+expected:
+  status: error
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

@@ -1,0 +1,50 @@
+test_id: AGT-DBG-001
+name: Debugging Intelligence Agent - Identify Root Cause
+category: agent_capabilities
+tool: identify_root_cause
+layer: 4
+test_type: AGENT_CAPABILITY
+description: >
+  Test whether the Debugging Intelligence Agent can identify the root cause
+  from a stack trace and available evidence.
+
+task:
+  agent: debugging_intelligence
+  input: |
+    Given this stack trace:
+    Traceback (most recent call last):
+      File "app.py", line 45, in process_request
+        result = validate_input(data)
+      File "validator.py", line 12, in validate_input
+        return json.loads(raw_data)
+    json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+
+    Identify the likely root cause and provide supporting evidence.
+
+expected:
+  tool_selection:
+    - analyze_stack_trace
+    - trace_error_propagation
+    - identify_failure_path
+    - inspect_variables
+    - get_source
+  actions:
+    - Parse stack trace
+    - Trace error propagation
+    - Identify failure path
+    - Inspect code at failure point
+    - Identify root cause
+  output_requirements:
+    - Correct root cause identified
+    - Failure path traced correctly
+    - Supporting code evidence provided
+    - No hallucinated causes
+
+checks:
+  - correct_tool_selection
+  - correct_root_cause
+  - complete_failure_path
+  - evidence_support
+  - no_hallucinations
+
+severity: critical

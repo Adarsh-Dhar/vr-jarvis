@@ -1,0 +1,43 @@
+test_id: AGT-CODE-001
+name: Code Understanding Agent - Explain Function
+category: agent_capabilities
+tool: explain_function
+layer: 4
+test_type: AGENT_CAPABILITY
+description: >
+  Test whether the Code Understanding Agent can explain a function
+  including its inputs, outputs, dependencies, and failure conditions.
+
+task:
+  agent: code_understanding
+  input: "Explain how the authenticateUser() function works, including its inputs, outputs, dependencies and failure conditions."
+
+expected:
+  tool_selection:
+    - parse_function
+    - extract_function_signature
+    - find_callers
+    - find_callees
+    - analyze_control_flow
+  actions:
+    - Find the function definition
+    - Retrieve its parameters and return type
+    - Identify its callees
+    - Analyze its control flow
+    - Identify exceptions and failure paths
+  output_requirements:
+    - Complete explanation with source references
+    - Correct parameter descriptions
+    - Correct return type
+    - All callees identified
+    - No invented functions or relationships
+    - Correct source locations cited
+
+checks:
+  - correct_tool_selection
+  - correct_call_order
+  - complete_explanation
+  - no_hallucinations
+  - correct_citations
+
+severity: critical

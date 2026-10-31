@@ -1,0 +1,23 @@
+test_id: MSC-register_framework_adapter-T04
+name: Empty Input test for register_framework_adapter
+category: misc
+tool: register_framework_adapter
+layer: 1
+test_type: T04
+description: Empty Input test for register_framework_adapter
+fixture: simple-python
+input:
+  framework: placeholder
+  language: python
+  adapter_config: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: high

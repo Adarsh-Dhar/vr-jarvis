@@ -1,0 +1,22 @@
+test_id: MSC-publish_message-T02
+name: Input Validation test for publish_message
+category: misc
+tool: publish_message
+layer: 1
+test_type: T02
+description: Input Validation test for publish_message
+fixture: simple-python
+input:
+  topic: placeholder
+  message: placeholder
+  tool_context: placeholder
+expected:
+  status: error
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

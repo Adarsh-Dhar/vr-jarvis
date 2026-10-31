@@ -1,0 +1,21 @@
+test_id: COD-identify_hidden_assumptions-T09
+name: Dependency Failure test for identify_hidden_assumptions
+category: code_understanding
+tool: identify_hidden_assumptions
+layer: 1
+test_type: T09
+description: Dependency Failure test for identify_hidden_assumptions
+fixture: simple-python
+input:
+  function_id: placeholder
+  tool_context: placeholder
+expected:
+  status: error
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: high

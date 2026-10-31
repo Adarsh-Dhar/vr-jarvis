@@ -1,0 +1,23 @@
+test_id: REL-find_downstream_dependencies-T13
+name: Performance test for find_downstream_dependencies
+category: relationship
+tool: find_downstream_dependencies
+layer: 2
+test_type: T13
+description: Performance test for find_downstream_dependencies
+fixture: simple-python
+input:
+  module_id: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+- type: performance
+  max_duration_ms: 3000
+performance:
+  max_duration_ms: 3000
+severity: medium

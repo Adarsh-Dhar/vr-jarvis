@@ -1,0 +1,22 @@
+test_id: MSC-manage_conversation-T05
+name: Boundary Conditions test for manage_conversation
+category: misc
+tool: manage_conversation
+layer: 1
+test_type: T05
+description: Boundary Conditions test for manage_conversation
+fixture: simple-python
+input:
+  user_message: placeholder
+  context: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: high

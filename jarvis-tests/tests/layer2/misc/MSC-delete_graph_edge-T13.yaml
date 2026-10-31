@@ -1,0 +1,24 @@
+test_id: MSC-delete_graph_edge-T13
+name: Performance test for delete_graph_edge
+category: misc
+tool: delete_graph_edge
+layer: 2
+test_type: T13
+description: Performance test for delete_graph_edge
+fixture: simple-python
+input:
+  from_id: placeholder
+  to_id: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+- type: performance
+  max_duration_ms: 3000
+performance:
+  max_duration_ms: 3000
+severity: medium

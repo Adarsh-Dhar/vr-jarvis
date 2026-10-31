@@ -1,0 +1,44 @@
+test_id: STRESS-LONG-001
+name: Stress - Long Running Tasks
+category: stress
+layer: 7
+test_type: STRESS
+description: Test system behavior with long-running investigations
+
+scenarios:
+  - name: seconds_scale
+    duration: 30s
+    expected:
+      behavior: successful_completion
+      no_timeout: true
+      progress_updates: true
+
+  - name: minutes_scale
+    duration: 300s
+    expected:
+      behavior: successful_completion
+      no_timeout: true
+      progress_updates: true
+      memory_stable: true
+
+  - name: large_indexing
+    operation: repository_indexing
+    repository_size: large
+    expected:
+      behavior: successful_completion
+      no_timeout: true
+      progress_visible: true
+
+metrics:
+  - duration
+  - memory_usage_over_time
+  - cpu_usage_over_time
+  - progress_updates
+
+checks:
+  - no_timeout
+  - memory_stable
+  - progress_visible
+  - successful_completion
+
+severity: high

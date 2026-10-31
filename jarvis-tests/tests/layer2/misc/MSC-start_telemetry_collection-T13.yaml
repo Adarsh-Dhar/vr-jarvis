@@ -1,0 +1,24 @@
+test_id: MSC-start_telemetry_collection-T13
+name: Performance test for start_telemetry_collection
+category: misc
+tool: start_telemetry_collection
+layer: 2
+test_type: T13
+description: Performance test for start_telemetry_collection
+fixture: simple-python
+input:
+  collection_id: placeholder
+  metrics: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+- type: performance
+  max_duration_ms: 3000
+performance:
+  max_duration_ms: 3000
+severity: medium

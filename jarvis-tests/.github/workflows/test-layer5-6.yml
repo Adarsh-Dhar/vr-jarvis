@@ -1,0 +1,21 @@
+name: JARVIS Tests - Layer 5-6
+
+on:
+  schedule:
+    - cron: '0 0 * * 0'  # Weekly on Sunday
+  workflow_dispatch:
+
+jobs:
+  test-layer5-6:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+    - uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+    - run: |
+        cd jarvis-tests/test-runner
+        pip install pyyaml
+        python3 test_all_tools.py --layers 5 6
+        python3 report_generator.py --json test-reports/latest.json --html

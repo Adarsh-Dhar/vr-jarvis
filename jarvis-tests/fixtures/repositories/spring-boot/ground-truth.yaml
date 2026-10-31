@@ -1,0 +1,255 @@
+# Ground Truth Manifest for spring-boot repository
+# Contains the correct answers for all expected analysis results
+
+repository:
+  name: spring-boot
+  language: java
+  version: "17"
+  framework: spring-boot
+  framework_version: "3.1.0"
+  build_system: maven
+  files:
+    - pom.xml
+    - src/main/java/com/example/demo/DemoApplication.java
+    - src/main/java/com/example/demo/User.java
+    - src/main/java/com/example/demo/UserRepository.java
+    - src/main/java/com/example/demo/UserController.java
+    - src/main/resources/application.properties
+
+functions:
+  DemoApplication.main:
+    file: src/main/java/com/example/demo/DemoApplication.java
+    line: 9
+    callers: []
+    callees: []  # Framework call
+    complexity: 1
+    returns: void
+    is_static: true
+
+  User.User:
+    file: src/main/java/com/example/demo/User.java
+    line: 24
+    callers: []
+    callees: []
+    complexity: 1
+    returns: void
+    is_constructor: true
+
+  User.User__String_String:
+    file: src/main/java/com/example/demo/User.java
+    line: 28
+    callers: []
+    callees: []
+    complexity: 1
+    returns: void
+    is_constructor: true
+
+  User.getId:
+    file: src/main/java/com/example/demo/User.java
+    line: 33
+    callers: []
+    callees: []
+    complexity: 1
+    returns: Long
+
+  User.setId:
+    file: src/main/java/com/example/demo/User.java
+    line: 37
+    callers: []
+    callees: []
+    complexity: 1
+    returns: void
+
+  User.getName:
+    file: src/main/java/com/example/demo/User.java
+    line: 41
+    callers: []
+    callees: []
+    complexity: 1
+    returns: String
+
+  User.setName:
+    file: src/main/java/com/example/demo/User.java
+    line: 45
+    callers: []
+    callees: []
+    complexity: 1
+    returns: void
+
+  User.getEmail:
+    file: src/main/java/com/example/demo/User.java
+    line: 49
+    callers: []
+    callees: []
+    complexity: 1
+    returns: String
+
+  User.setEmail:
+    file: src/main/java/com/example/demo/User.java
+    line: 53
+    callers: []
+    callees: []
+    complexity: 1
+    returns: void
+
+  UserController.getAllUsers:
+    file: src/main/java/com/example/demo/UserController.java
+    line: 15
+    callers: []
+    callees: []  # Uses JpaRepository.findAll (framework method)
+    complexity: 1
+    returns: List<User>
+
+  UserController.getUserById:
+    file: src/main/java/com/example/demo/UserController.java
+    line: 19
+    callers: []
+    callees: []  # Uses JpaRepository.findById (framework method)
+    complexity: 1
+    returns: User
+
+  UserController.createUser:
+    file: src/main/java/com/example/demo/UserController.java
+    line: 24
+    callers: []
+    callees: []  # Uses JpaRepository.save (framework method)
+    complexity: 1
+    returns: User
+
+  UserController.searchUsers:
+    file: src/main/java/com/example/demo/UserController.java
+    line: 29
+    callers: []
+    callees: []  # Uses custom UserRepository method
+    complexity: 1
+    returns: List<User>
+
+  UserController.getUserByEmail:
+    file: src/main/java/com/example/demo/UserController.java
+    line: 34
+    callers: []
+    callees: []  # Uses custom UserRepository method
+    complexity: 1
+    returns: User
+
+classes:
+  DemoApplication:
+    file: src/main/java/com/example/demo/DemoApplication.java
+    line: 5
+    annotations:
+      - SpringBootApplication
+    methods:
+      - main
+    base_classes: []
+    implements: []
+
+  User:
+    file: src/main/java/com/example/demo/User.java
+    line: 6
+    annotations:
+      - Entity
+    fields:
+      - id
+      - name
+      - email
+    methods:
+      - User()  # constructor
+      - User(String, String)  # constructor
+      - getId
+      - setId
+      - getName
+      - setName
+      - getEmail
+      - setEmail
+    base_classes: []
+    implements: []
+
+  UserController:
+    file: src/main/java/com/example/demo/UserController.java
+    line: 6
+    annotations:
+      - RestController
+      - RequestMapping
+    dependencies:
+      - name: UserRepository
+        type: field
+        injection: autowired
+    methods:
+      - getAllUsers
+      - getUserById
+      - createUser
+      - searchUsers
+      - getUserByEmail
+    base_classes: []
+    implements: []
+
+interfaces:
+  UserRepository:
+    file: src/main/java/com/example/demo/UserRepository.java
+    line: 6
+    annotations:
+      - Repository
+    extends:
+      - JpaRepository<User, Long>
+    methods:
+      - findByName
+      - findByEmail
+
+api_endpoints:
+  - path: /api/users
+    method: GET
+    controller: UserController
+    method: getAllUsers
+    line: 15
+  - path: /api/users/{id}
+    method: GET
+    controller: UserController
+    method: getUserById
+    line: 19
+  - path: /api/users
+    method: POST
+    controller: UserController
+    method: createUser
+    line: 24
+  - path: /api/users/search
+    method: GET
+    controller: UserController
+    method: searchUsers
+    line: 29
+  - path: /api/users/by-email
+    method: GET
+    controller: UserController
+    method: getUserByEmail
+    line: 34
+
+call_graph:
+  edges: []  # Spring Boot framework calls are not tracked in ground truth
+
+dependency_graph:
+  edges:
+    - from: src/main/java/com/example/demo/DemoApplication.java
+      to: src/main/java/com/example/demo/UserController.java
+      type: same_package
+    - from: src/main/java/com/example/demo/UserController.java
+      to: src/main/java/com/example/demo/UserRepository.java
+      type: same_package
+    - from: src/main/java/com/example/demo/UserController.java
+      to: src/main/java/com/example/demo/User.java
+      type: same_package
+
+database_schema:
+  tables:
+    - name: user
+      columns:
+        - name: id
+          type: BIGINT
+          primary_key: true
+          auto_increment: true
+        - name: name
+          type: VARCHAR
+        - name: email
+          type: VARCHAR
+
+expected_vulnerabilities: []
+expected_bugs: []
+known_issues: []

@@ -1,0 +1,22 @@
+test_id: MSC-database_query-T15
+name: Recovery test for database_query
+category: misc
+tool: database_query
+layer: 2
+test_type: T15
+description: Recovery test for database_query
+fixture: simple-python
+input:
+  connection_string: placeholder
+  query: test
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: high

@@ -1,0 +1,23 @@
+test_id: MSC-speech_to_text-T13
+name: Performance test for speech_to_text
+category: misc
+tool: speech_to_text
+layer: 2
+test_type: T13
+description: Performance test for speech_to_text
+fixture: simple-python
+input:
+  audio_data: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+- type: performance
+  max_duration_ms: 3000
+performance:
+  max_duration_ms: 3000
+severity: medium

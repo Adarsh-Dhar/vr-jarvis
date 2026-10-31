@@ -1,0 +1,23 @@
+test_id: COD-identify_hidden_assumptions-T13
+name: Performance test for identify_hidden_assumptions
+category: code_understanding
+tool: identify_hidden_assumptions
+layer: 2
+test_type: T13
+description: Performance test for identify_hidden_assumptions
+fixture: simple-python
+input:
+  function_id: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+- type: performance
+  max_duration_ms: 3000
+performance:
+  max_duration_ms: 3000
+severity: medium

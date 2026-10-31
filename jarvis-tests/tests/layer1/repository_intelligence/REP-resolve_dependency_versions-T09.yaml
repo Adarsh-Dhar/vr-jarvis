@@ -1,0 +1,21 @@
+test_id: REP-resolve_dependency_versions-T09
+name: Dependency Failure test for resolve_dependency_versions
+category: repository_intelligence
+tool: resolve_dependency_versions
+layer: 1
+test_type: T09
+description: Dependency Failure test for resolve_dependency_versions
+fixture: simple-python
+input:
+  repository_path: /path/to/repo
+  tool_context: placeholder
+expected:
+  status: error
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 10000
+severity: high

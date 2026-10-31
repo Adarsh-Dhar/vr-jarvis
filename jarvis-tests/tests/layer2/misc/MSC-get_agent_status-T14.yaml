@@ -1,0 +1,21 @@
+test_id: MSC-get_agent_status-T14
+name: Regression test for get_agent_status
+category: misc
+tool: get_agent_status
+layer: 2
+test_type: T14
+description: Regression test for get_agent_status
+fixture: simple-python
+input:
+  task_id: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: high

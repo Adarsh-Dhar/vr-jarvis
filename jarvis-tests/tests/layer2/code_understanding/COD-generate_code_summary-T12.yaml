@@ -1,0 +1,21 @@
+test_id: COD-generate_code_summary-T12
+name: Security test for generate_code_summary
+category: code_understanding
+tool: generate_code_summary
+layer: 2
+test_type: T12
+description: Security test for generate_code_summary
+fixture: simple-python
+input:
+  element_id: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

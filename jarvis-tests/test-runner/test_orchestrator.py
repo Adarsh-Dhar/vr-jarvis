@@ -26,11 +26,13 @@ class TestOrchestrator:
         categories: Optional[List[str]] = None,
         tools: Optional[List[str]] = None,
         severity: Optional[str] = None,
+        layers: Optional[List[int]] = None,
+        test_types: Optional[List[str]] = None,
         parallel: bool = True
     ) -> Dict:
         """Run a test suite with specified filters"""
         # Determine which tests to run
-        test_ids = self._select_tests(categories, tools, severity)
+        test_ids = self._select_tests(categories, tools, severity, layers, test_types)
         
         # Initialize run metadata
         self.current_run = {
@@ -74,26 +76,36 @@ class TestOrchestrator:
         self,
         categories: Optional[List[str]],
         tools: Optional[List[str]],
-        severity: Optional[str]
+        severity: Optional[str],
+        layers: Optional[List[int]],
+        test_types: Optional[List[str]]
     ) -> List[str]:
         """Select test IDs based on filters"""
         selected = set()
-        
+
         if categories:
             for category in categories:
                 selected.update(self.registry.get_tests_by_category(category))
-        
+
         if tools:
             for tool in tools:
                 selected.update(self.registry.get_tests_by_tool(tool))
-        
+
         if severity:
             selected.update(self.registry.get_tests_by_severity(severity))
-        
+
+        if layers:
+            for layer in layers:
+                selected.update(self.registry.get_tests_by_layer(layer))
+
+        if test_types:
+            for test_type in test_types:
+                selected.update(self.registry.get_tests_by_test_type(test_type))
+
         if not selected:
             # No filters, return all tests
             selected = set(self.registry.get_all_tests().keys())
-        
+
         return list(selected)
     
     def _run_tests_parallel(self, test_ids: List[str]):

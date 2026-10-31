@@ -1,0 +1,21 @@
+test_id: MSC-discover_tools-T05
+name: Boundary Conditions test for discover_tools
+category: misc
+tool: discover_tools
+layer: 1
+test_type: T05
+description: Boundary Conditions test for discover_tools
+fixture: simple-python
+input:
+  module_path: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: high

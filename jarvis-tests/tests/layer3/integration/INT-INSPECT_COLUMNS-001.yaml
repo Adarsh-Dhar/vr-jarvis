@@ -1,0 +1,23 @@
+test_id: INT-INSPECT_COLUMNS-001
+name: Integration test for inspect_columns
+category: integration
+tool: inspect_columns
+layer: 3
+test_type: INTEGRATION
+description: Inspect table columns
+fixture:
+  type: database
+  path: integration-test-infrastructure/databases/test.db
+input:
+  database_path: integration-test-infrastructure/databases/test.db
+expected:
+  status: ok
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+- type: integration_connectivity
+performance:
+  max_duration_ms: 5000
+severity: high
+requires_infrastructure: true

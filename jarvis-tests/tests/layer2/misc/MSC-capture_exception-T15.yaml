@@ -1,0 +1,21 @@
+test_id: MSC-capture_exception-T15
+name: Recovery test for capture_exception
+category: misc
+tool: capture_exception
+layer: 2
+test_type: T15
+description: Recovery test for capture_exception
+fixture: simple-python
+input:
+  application_id: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: high

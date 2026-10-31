@@ -1,0 +1,23 @@
+test_id: REP-analyze_project_configuration-T13
+name: Performance test for analyze_project_configuration
+category: repository_intelligence
+tool: analyze_project_configuration
+layer: 2
+test_type: T13
+description: Performance test for analyze_project_configuration
+fixture: simple-python
+input:
+  repository_path: /path/to/repo
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+- type: performance
+  max_duration_ms: 10000
+performance:
+  max_duration_ms: 10000
+severity: medium

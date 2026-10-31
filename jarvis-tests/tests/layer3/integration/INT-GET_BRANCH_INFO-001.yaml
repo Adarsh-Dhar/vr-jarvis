@@ -1,0 +1,23 @@
+test_id: INT-GET_BRANCH_INFO-001
+name: Integration test for get_branch_info
+category: integration
+tool: get_branch_info
+layer: 3
+test_type: INTEGRATION
+description: Get git branch information
+fixture:
+  type: git
+  path: integration-test-infrastructure/git-repos/simple-repo
+input:
+  repository_path: integration-test-infrastructure/git-repos/simple-repo
+expected:
+  status: ok
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+- type: integration_connectivity
+performance:
+  max_duration_ms: 5000
+severity: high
+requires_infrastructure: true

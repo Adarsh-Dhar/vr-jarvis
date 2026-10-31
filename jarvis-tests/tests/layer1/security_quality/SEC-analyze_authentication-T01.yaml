@@ -1,0 +1,22 @@
+test_id: SEC-analyze_authentication-T01
+name: Happy Path test for analyze_authentication
+category: security_quality
+tool: analyze_authentication
+layer: 1
+test_type: T01
+description: Happy Path test for analyze_authentication
+fixture: simple-python
+input:
+  repository_path: /path/to/repo
+  tool_context: placeholder
+expected:
+  status: ok
+must_not:
+- error
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 5000
+severity: critical

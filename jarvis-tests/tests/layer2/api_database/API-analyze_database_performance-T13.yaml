@@ -1,0 +1,23 @@
+test_id: API-analyze_database_performance-T13
+name: Performance test for analyze_database_performance
+category: api_database
+tool: analyze_database_performance
+layer: 2
+test_type: T13
+description: Performance test for analyze_database_performance
+fixture: simple-python
+input:
+  connection_string: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+- type: performance
+  max_duration_ms: 5000
+performance:
+  max_duration_ms: 5000
+severity: medium

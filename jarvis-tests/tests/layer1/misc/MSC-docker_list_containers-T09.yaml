@@ -1,0 +1,20 @@
+test_id: MSC-docker_list_containers-T09
+name: Dependency Failure test for docker_list_containers
+category: misc
+tool: docker_list_containers
+layer: 1
+test_type: T09
+description: Dependency Failure test for docker_list_containers
+fixture: simple-python
+input:
+  tool_context: placeholder
+expected:
+  status: error
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: high

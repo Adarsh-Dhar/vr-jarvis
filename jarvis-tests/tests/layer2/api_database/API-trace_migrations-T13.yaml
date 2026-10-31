@@ -1,0 +1,23 @@
+test_id: API-trace_migrations-T13
+name: Performance test for trace_migrations
+category: api_database
+tool: trace_migrations
+layer: 2
+test_type: T13
+description: Performance test for trace_migrations
+fixture: simple-python
+input:
+  repository_path: /path/to/repo
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+- type: performance
+  max_duration_ms: 5000
+performance:
+  max_duration_ms: 5000
+severity: medium

@@ -1,0 +1,23 @@
+test_id: SEC-analyze_permissions-T13
+name: Performance test for analyze_permissions
+category: security_quality
+tool: analyze_permissions
+layer: 2
+test_type: T13
+description: Performance test for analyze_permissions
+fixture: simple-python
+input:
+  repository_path: /path/to/repo
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+- type: performance
+  max_duration_ms: 5000
+performance:
+  max_duration_ms: 5000
+severity: medium

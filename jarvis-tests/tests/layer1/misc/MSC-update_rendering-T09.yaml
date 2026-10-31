@@ -1,0 +1,22 @@
+test_id: MSC-update_rendering-T09
+name: Dependency Failure test for update_rendering
+category: misc
+tool: update_rendering
+layer: 1
+test_type: T09
+description: Dependency Failure test for update_rendering
+fixture: simple-python
+input:
+  graph_id: placeholder
+  updates: placeholder
+  tool_context: placeholder
+expected:
+  status: error
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: high

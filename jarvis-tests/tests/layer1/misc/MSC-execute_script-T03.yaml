@@ -1,0 +1,21 @@
+test_id: MSC-execute_script-T03
+name: Output Validation test for execute_script
+category: misc
+tool: execute_script
+layer: 1
+test_type: T03
+description: Output Validation test for execute_script
+fixture: simple-python
+input:
+  script_path: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

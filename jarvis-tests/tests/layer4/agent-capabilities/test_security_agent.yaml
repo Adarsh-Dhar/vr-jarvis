@@ -1,0 +1,42 @@
+test_id: AGT-SEC-001
+name: Security & Quality Agent - Analyze Authentication
+category: agent_capabilities
+tool: analyze_authentication
+layer: 4
+test_type: AGENT_CAPABILITY
+description: >
+  Test whether the Security & Quality Agent can analyze authentication
+  implementation and identify security weaknesses.
+
+task:
+  agent: security_quality
+  input: "Analyze the authentication implementation in this codebase. Identify any security weaknesses and provide recommendations."
+
+expected:
+  tool_selection:
+    - analyze_authentication
+    - analyze_authorization
+    - analyze_permissions
+    - trace_sensitive_data
+    - analyze_injection_risks
+  actions:
+    - Find authentication code
+    - Analyze authentication mechanism
+    - Check authorization
+    - Trace sensitive data flow
+    - Identify injection risks
+  output_requirements:
+    - Authentication mechanism identified
+    - Security weaknesses documented
+    - Recommendations provided
+    - No false positives
+    - Evidence cited
+
+checks:
+  - correct_tool_selection
+  - correct_weakness_identification
+  - actionable_recommendations
+  - evidence_support
+  - no_false_positives
+
+severity: critical

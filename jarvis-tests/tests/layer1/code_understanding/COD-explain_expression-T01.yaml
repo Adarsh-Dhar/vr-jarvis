@@ -1,0 +1,24 @@
+test_id: COD-explain_expression-T01
+name: Happy Path test for explain_expression
+category: code_understanding
+tool: explain_expression
+layer: 1
+test_type: T01
+description: Happy Path test for explain_expression
+fixture: simple-python
+input:
+  expression: placeholder
+  file_path: main.py
+  line: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not:
+- error
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

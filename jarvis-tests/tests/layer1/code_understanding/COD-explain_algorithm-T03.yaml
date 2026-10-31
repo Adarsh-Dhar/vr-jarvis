@@ -1,0 +1,21 @@
+test_id: COD-explain_algorithm-T03
+name: Output Validation test for explain_algorithm
+category: code_understanding
+tool: explain_algorithm
+layer: 1
+test_type: T03
+description: Output Validation test for explain_algorithm
+fixture: simple-python
+input:
+  function_id: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

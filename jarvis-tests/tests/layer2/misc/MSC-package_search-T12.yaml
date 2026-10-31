@@ -1,0 +1,22 @@
+test_id: MSC-package_search-T12
+name: Security test for package_search
+category: misc
+tool: package_search
+layer: 2
+test_type: T12
+description: Security test for package_search
+fixture: simple-python
+input:
+  registry: placeholder
+  query: test
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

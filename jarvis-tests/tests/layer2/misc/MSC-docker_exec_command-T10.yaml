@@ -1,0 +1,22 @@
+test_id: MSC-docker_exec_command-T10
+name: Timeout test for docker_exec_command
+category: misc
+tool: docker_exec_command
+layer: 2
+test_type: T10
+description: Timeout test for docker_exec_command
+fixture: simple-python
+input:
+  container_id: placeholder
+  command: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: high

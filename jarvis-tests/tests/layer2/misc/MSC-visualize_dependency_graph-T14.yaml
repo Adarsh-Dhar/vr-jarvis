@@ -1,0 +1,21 @@
+test_id: MSC-visualize_dependency_graph-T14
+name: Regression test for visualize_dependency_graph
+category: misc
+tool: visualize_dependency_graph
+layer: 2
+test_type: T14
+description: Regression test for visualize_dependency_graph
+fixture: simple-python
+input:
+  component_id: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: high

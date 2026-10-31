@@ -1,0 +1,24 @@
+test_id: MSC-answer_code_question-T13
+name: Performance test for answer_code_question
+category: misc
+tool: answer_code_question
+layer: 2
+test_type: T13
+description: Performance test for answer_code_question
+fixture: simple-python
+input:
+  question: placeholder
+  context: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+- type: performance
+  max_duration_ms: 3000
+performance:
+  max_duration_ms: 3000
+severity: medium

@@ -1,0 +1,23 @@
+test_id: MSC-set_vr_environment-T13
+name: Performance test for set_vr_environment
+category: misc
+tool: set_vr_environment
+layer: 2
+test_type: T13
+description: Performance test for set_vr_environment
+fixture: simple-python
+input:
+  environment_id: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+- type: performance
+  max_duration_ms: 3000
+performance:
+  max_duration_ms: 3000
+severity: medium

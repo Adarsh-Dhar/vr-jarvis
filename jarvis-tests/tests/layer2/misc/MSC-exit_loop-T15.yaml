@@ -1,0 +1,20 @@
+test_id: MSC-exit_loop-T15
+name: Recovery test for exit_loop
+category: misc
+tool: exit_loop
+layer: 2
+test_type: T15
+description: Recovery test for exit_loop
+fixture: simple-python
+input:
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: high

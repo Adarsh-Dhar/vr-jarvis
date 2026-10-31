@@ -1,0 +1,21 @@
+test_id: MSC-record_function_calls-T12
+name: Security test for record_function_calls
+category: misc
+tool: record_function_calls
+layer: 2
+test_type: T12
+description: Security test for record_function_calls
+fixture: simple-python
+input:
+  application_id: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

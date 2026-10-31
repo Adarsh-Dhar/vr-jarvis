@@ -1,0 +1,22 @@
+test_id: MSC-resolve_language_types-T02
+name: Input Validation test for resolve_language_types
+category: misc
+tool: resolve_language_types
+layer: 1
+test_type: T02
+description: Input Validation test for resolve_language_types
+fixture: simple-python
+input:
+  file_path: main.py
+  language: python
+  tool_context: placeholder
+expected:
+  status: error
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

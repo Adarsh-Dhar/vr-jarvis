@@ -1,0 +1,23 @@
+test_id: COD-compare_implementations-T01
+name: Happy Path test for compare_implementations
+category: code_understanding
+tool: compare_implementations
+layer: 1
+test_type: T01
+description: Happy Path test for compare_implementations
+fixture: simple-python
+input:
+  function1_id: placeholder
+  function2_id: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not:
+- error
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

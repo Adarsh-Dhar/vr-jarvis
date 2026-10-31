@@ -1,0 +1,21 @@
+test_id: MSC-get_imports-T03
+name: Output Validation test for get_imports
+category: misc
+tool: get_imports
+layer: 1
+test_type: T03
+description: Output Validation test for get_imports
+fixture: simple-python
+input:
+  file_path: main.py
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

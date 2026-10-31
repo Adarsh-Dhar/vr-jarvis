@@ -1,0 +1,23 @@
+test_id: MSC-set_edge_style-T09
+name: Dependency Failure test for set_edge_style
+category: misc
+tool: set_edge_style
+layer: 1
+test_type: T09
+description: Dependency Failure test for set_edge_style
+fixture: simple-python
+input:
+  src: placeholder
+  dst: placeholder
+  style: placeholder
+  tool_context: placeholder
+expected:
+  status: error
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: high

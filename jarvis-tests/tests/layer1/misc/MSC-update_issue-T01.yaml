@@ -1,0 +1,24 @@
+test_id: MSC-update_issue-T01
+name: Happy Path test for update_issue
+category: misc
+tool: update_issue
+layer: 1
+test_type: T01
+description: Happy Path test for update_issue
+fixture: simple-python
+input:
+  tracker: placeholder
+  issue_id: placeholder
+  updates: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not:
+- error
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

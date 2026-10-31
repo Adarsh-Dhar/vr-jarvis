@@ -1,0 +1,20 @@
+test_id: MSC-list_voice_commands-T14
+name: Regression test for list_voice_commands
+category: misc
+tool: list_voice_commands
+layer: 2
+test_type: T14
+description: Regression test for list_voice_commands
+fixture: simple-python
+input:
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: high

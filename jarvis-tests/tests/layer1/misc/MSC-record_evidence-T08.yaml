@@ -1,0 +1,21 @@
+test_id: MSC-record_evidence-T08
+name: Malformed Input test for record_evidence
+category: misc
+tool: record_evidence
+layer: 1
+test_type: T08
+description: Malformed Input test for record_evidence
+fixture: corrupted-inputs
+input:
+  tool_context: placeholder
+  node_ids: placeholder
+expected:
+  status: error
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

@@ -1,0 +1,21 @@
+test_id: MSC-generate_investigation_report-T05
+name: Boundary Conditions test for generate_investigation_report
+category: misc
+tool: generate_investigation_report
+layer: 1
+test_type: T05
+description: Boundary Conditions test for generate_investigation_report
+fixture: simple-python
+input:
+  investigation_id: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: high

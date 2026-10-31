@@ -1,0 +1,22 @@
+test_id: MSC-search_prs-T11
+name: Concurrency test for search_prs
+category: misc
+tool: search_prs
+layer: 2
+test_type: T11
+description: Concurrency test for search_prs
+fixture: simple-python
+input:
+  repository: placeholder
+  query: test
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: high

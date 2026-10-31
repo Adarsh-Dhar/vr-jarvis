@@ -1,0 +1,21 @@
+test_id: MSC-generate_investigation_report-T09
+name: Dependency Failure test for generate_investigation_report
+category: misc
+tool: generate_investigation_report
+layer: 1
+test_type: T09
+description: Dependency Failure test for generate_investigation_report
+fixture: simple-python
+input:
+  investigation_id: placeholder
+  tool_context: placeholder
+expected:
+  status: error
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: high

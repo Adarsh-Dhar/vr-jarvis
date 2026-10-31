@@ -1,0 +1,21 @@
+test_id: MSC-generate_architecture_doc-T09
+name: Dependency Failure test for generate_architecture_doc
+category: misc
+tool: generate_architecture_doc
+layer: 1
+test_type: T09
+description: Dependency Failure test for generate_architecture_doc
+fixture: simple-python
+input:
+  repository_path: /path/to/repo
+  tool_context: placeholder
+expected:
+  status: error
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: high

@@ -1,0 +1,21 @@
+test_id: ANL-analyze_code_complexity-T08
+name: Malformed Input test for analyze_code_complexity
+category: analysis
+tool: analyze_code_complexity
+layer: 1
+test_type: T08
+description: Malformed Input test for analyze_code_complexity
+fixture: corrupted-inputs
+input:
+  file_path: /nonexistent/path.py
+  tool_context: placeholder
+expected:
+  status: error
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 2000
+severity: critical

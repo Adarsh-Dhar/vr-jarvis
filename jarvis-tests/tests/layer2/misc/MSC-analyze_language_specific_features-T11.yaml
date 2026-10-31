@@ -1,0 +1,22 @@
+test_id: MSC-analyze_language_specific_features-T11
+name: Concurrency test for analyze_language_specific_features
+category: misc
+tool: analyze_language_specific_features
+layer: 2
+test_type: T11
+description: Concurrency test for analyze_language_specific_features
+fixture: simple-python
+input:
+  file_path: main.py
+  language: python
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: high

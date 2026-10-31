@@ -1,0 +1,23 @@
+test_id: MSC-run_compiler-T13
+name: Performance test for run_compiler
+category: misc
+tool: run_compiler
+layer: 2
+test_type: T13
+description: Performance test for run_compiler
+fixture: simple-python
+input:
+  source_files: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+- type: performance
+  max_duration_ms: 3000
+performance:
+  max_duration_ms: 3000
+severity: medium

@@ -1,0 +1,23 @@
+test_id: MSC-docker_inspect_container-T13
+name: Performance test for docker_inspect_container
+category: misc
+tool: docker_inspect_container
+layer: 2
+test_type: T13
+description: Performance test for docker_inspect_container
+fixture: simple-python
+input:
+  container_id: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+- type: performance
+  max_duration_ms: 3000
+performance:
+  max_duration_ms: 3000
+severity: medium

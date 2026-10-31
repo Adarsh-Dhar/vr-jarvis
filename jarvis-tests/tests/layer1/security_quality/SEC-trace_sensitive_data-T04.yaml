@@ -1,0 +1,21 @@
+test_id: SEC-trace_sensitive_data-T04
+name: Empty Input test for trace_sensitive_data
+category: security_quality
+tool: trace_sensitive_data
+layer: 1
+test_type: T04
+description: Empty Input test for trace_sensitive_data
+fixture: simple-python
+input:
+  repository_path: /path/to/repo
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 5000
+severity: high

@@ -1,0 +1,22 @@
+test_id: MSC-set_haptic_feedback-T08
+name: Malformed Input test for set_haptic_feedback
+category: misc
+tool: set_haptic_feedback
+layer: 1
+test_type: T08
+description: Malformed Input test for set_haptic_feedback
+fixture: corrupted-inputs
+input:
+  intensity: placeholder
+  duration: placeholder
+  tool_context: placeholder
+expected:
+  status: error
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

@@ -1,0 +1,21 @@
+test_id: MSC-apply_patch_to_worktree-T02
+name: Input Validation test for apply_patch_to_worktree
+category: misc
+tool: apply_patch_to_worktree
+layer: 1
+test_type: T02
+description: Input Validation test for apply_patch_to_worktree
+fixture: simple-python
+input:
+  diff: placeholder
+  tool_context: placeholder
+expected:
+  status: error
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

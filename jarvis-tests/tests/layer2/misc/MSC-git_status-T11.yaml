@@ -1,0 +1,21 @@
+test_id: MSC-git_status-T11
+name: Concurrency test for git_status
+category: misc
+tool: git_status
+layer: 2
+test_type: T11
+description: Concurrency test for git_status
+fixture: simple-python
+input:
+  repository_path: /path/to/repo
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: high

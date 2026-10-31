@@ -1,0 +1,22 @@
+test_id: MSC-publish_message-T05
+name: Boundary Conditions test for publish_message
+category: misc
+tool: publish_message
+layer: 1
+test_type: T05
+description: Boundary Conditions test for publish_message
+fixture: simple-python
+input:
+  topic: placeholder
+  message: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: high

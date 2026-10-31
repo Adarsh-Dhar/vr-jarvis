@@ -1,0 +1,21 @@
+test_id: MSC-database_get_schema-T09
+name: Dependency Failure test for database_get_schema
+category: misc
+tool: database_get_schema
+layer: 1
+test_type: T09
+description: Dependency Failure test for database_get_schema
+fixture: simple-python
+input:
+  connection_string: placeholder
+  tool_context: placeholder
+expected:
+  status: error
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: high

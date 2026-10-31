@@ -1,0 +1,22 @@
+test_id: MSC-filter_graph-T09
+name: Dependency Failure test for filter_graph
+category: misc
+tool: filter_graph
+layer: 1
+test_type: T09
+description: Dependency Failure test for filter_graph
+fixture: simple-python
+input:
+  graph_id: placeholder
+  filters: placeholder
+  tool_context: placeholder
+expected:
+  status: error
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: high

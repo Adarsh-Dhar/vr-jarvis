@@ -1,0 +1,22 @@
+test_id: MSC-manage_conversation-T07
+name: Complex Input test for manage_conversation
+category: misc
+tool: manage_conversation
+layer: 1
+test_type: T07
+description: Complex Input test for manage_conversation
+fixture: polyglot-monorepo
+input:
+  user_message: placeholder
+  context: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: high

@@ -1,0 +1,23 @@
+test_id: INT-COLLECT_EXECUTION_TRACE-001
+name: Integration test for collect_execution_trace
+category: integration
+tool: collect_execution_trace
+layer: 3
+test_type: INTEGRATION
+description: Collect execution trace from running application
+fixture:
+  type: runtime
+  path: integration-test-infrastructure/runtime/sample_app.py
+input:
+  program_path: integration-test-infrastructure/runtime/sample_app.py
+expected:
+  status: ok
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+- type: integration_connectivity
+performance:
+  max_duration_ms: 5000
+severity: high
+requires_infrastructure: true

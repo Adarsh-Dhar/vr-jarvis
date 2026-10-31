@@ -1,0 +1,21 @@
+test_id: DFL-identify_data_sinks-T06
+name: Large Input test for identify_data_sinks
+category: data_flow
+tool: identify_data_sinks
+layer: 1
+test_type: T06
+description: Large Input test for identify_data_sinks
+fixture: polyglot-monorepo
+input:
+  variable_id: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 5000
+severity: medium

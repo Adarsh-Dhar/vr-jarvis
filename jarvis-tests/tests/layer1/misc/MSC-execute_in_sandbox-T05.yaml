@@ -1,0 +1,22 @@
+test_id: MSC-execute_in_sandbox-T05
+name: Boundary Conditions test for execute_in_sandbox
+category: misc
+tool: execute_in_sandbox
+layer: 1
+test_type: T05
+description: Boundary Conditions test for execute_in_sandbox
+fixture: simple-python
+input:
+  sandbox_id: placeholder
+  command: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: high

@@ -13,13 +13,15 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 class TestRegistry:
     """Central registry for all JARVIS tests"""
-    
+
     def __init__(self, test_root: Path):
         self.test_root = test_root
         self.tests: Dict[str, Dict] = {}
         self.tests_by_category: Dict[str, List[str]] = {}
         self.tests_by_tool: Dict[str, List[str]] = {}
         self.tests_by_severity: Dict[str, List[str]] = {}
+        self.tests_by_layer: Dict[int, List[str]] = {}
+        self.tests_by_test_type: Dict[str, List[str]] = {}
         
     def load_test_definitions(self):
         """Load all test definitions from YAML and Python files"""
@@ -58,22 +60,36 @@ class TestRegistry:
         self._index_test(test_id, self.tests[test_id])
     
     def _index_test(self, test_id: str, test_def: Dict):
-        """Index test by category, tool, and severity"""
+        """Index test by category, tool, severity, layer, and test_type"""
         category = test_def.get('category', 'unknown')
         if category not in self.tests_by_category:
             self.tests_by_category[category] = []
         self.tests_by_category[category].append(test_id)
-        
+
         tool = test_def.get('tool')
         if tool:
             if tool not in self.tests_by_tool:
                 self.tests_by_tool[tool] = []
             self.tests_by_tool[tool].append(test_id)
-        
+
         severity = test_def.get('severity', 'medium')
         if severity not in self.tests_by_severity:
             self.tests_by_severity[severity] = []
         self.tests_by_severity[severity].append(test_id)
+
+        # Index by layer
+        layer = test_def.get('layer')
+        if layer is not None:
+            if layer not in self.tests_by_layer:
+                self.tests_by_layer[layer] = []
+            self.tests_by_layer[layer].append(test_id)
+
+        # Index by test type
+        test_type = test_def.get('test_type')
+        if test_type:
+            if test_type not in self.tests_by_test_type:
+                self.tests_by_test_type[test_type] = []
+            self.tests_by_test_type[test_type].append(test_id)
     
     def get_test(self, test_id: str) -> Optional[Dict]:
         """Get a test definition by ID"""
@@ -102,3 +118,11 @@ class TestRegistry:
     def get_high_priority_tests(self) -> List[str]:
         """Get all high priority tests"""
         return self.get_tests_by_severity('high')
+
+    def get_tests_by_layer(self, layer: int) -> List[str]:
+        """Get all test IDs in a specific layer"""
+        return self.tests_by_layer.get(layer, [])
+
+    def get_tests_by_test_type(self, test_type: str) -> List[str]:
+        """Get all test IDs of a specific test type"""
+        return self.tests_by_test_type.get(test_type, [])

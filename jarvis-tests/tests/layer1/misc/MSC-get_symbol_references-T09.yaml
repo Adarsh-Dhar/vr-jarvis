@@ -1,0 +1,21 @@
+test_id: MSC-get_symbol_references-T09
+name: Dependency Failure test for get_symbol_references
+category: misc
+tool: get_symbol_references
+layer: 1
+test_type: T09
+description: Dependency Failure test for get_symbol_references
+fixture: simple-python
+input:
+  symbol_name: placeholder
+  tool_context: placeholder
+expected:
+  status: error
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: high

@@ -1,0 +1,42 @@
+test_id: AGT-DATA-001
+name: Data Flow Intelligence Agent - Trace Variable
+category: agent_capabilities
+tool: trace_variable_origin
+layer: 4
+test_type: AGENT_CAPABILITY
+description: >
+  Test whether the Data Flow Intelligence Agent can trace a variable
+  through transformations, identifying its origin, modifications, and sinks.
+
+task:
+  agent: data_flow_intelligence
+  input: "Trace the variable 'user_data' through the request lifecycle. Identify where it originates, how it's modified, and where it's stored."
+
+expected:
+  tool_selection:
+    - trace_variable_origin
+    - trace_variable_modifications
+    - trace_transformations
+    - trace_database_writes
+    - identify_data_sinks
+  actions:
+    - Find variable origin
+    - Track all modifications
+    - Identify transformations
+    - Trace to storage
+    - Identify data sinks
+  output_requirements:
+    - Complete origin trace
+    - All modifications identified
+    - All transformations documented
+    - Storage locations identified
+    - No missing data flow paths
+
+checks:
+  - correct_tool_selection
+  - complete_trace
+  - no_missed_modifications
+  - correct_sink_identification
+  - evidence_support
+
+severity: critical

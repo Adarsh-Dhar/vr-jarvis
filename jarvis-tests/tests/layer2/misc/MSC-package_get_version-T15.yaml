@@ -1,0 +1,22 @@
+test_id: MSC-package_get_version-T15
+name: Recovery test for package_get_version
+category: misc
+tool: package_get_version
+layer: 2
+test_type: T15
+description: Recovery test for package_get_version
+fixture: simple-python
+input:
+  registry: placeholder
+  package: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: high

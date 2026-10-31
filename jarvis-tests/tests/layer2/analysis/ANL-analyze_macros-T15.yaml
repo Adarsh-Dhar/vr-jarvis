@@ -1,0 +1,21 @@
+test_id: ANL-analyze_macros-T15
+name: Recovery test for analyze_macros
+category: analysis
+tool: analyze_macros
+layer: 2
+test_type: T15
+description: Recovery test for analyze_macros
+fixture: simple-python
+input:
+  file_path: main.py
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 2000
+severity: high

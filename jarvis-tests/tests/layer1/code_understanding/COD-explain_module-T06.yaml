@@ -1,0 +1,21 @@
+test_id: COD-explain_module-T06
+name: Large Input test for explain_module
+category: code_understanding
+tool: explain_module
+layer: 1
+test_type: T06
+description: Large Input test for explain_module
+fixture: polyglot-monorepo
+input:
+  module_path: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: medium

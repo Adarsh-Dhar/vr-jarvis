@@ -1,0 +1,46 @@
+test_id: STRESS-LANG-001
+name: Stress - Language Diversity
+category: stress
+layer: 7
+test_type: STRESS
+description: Test system behavior with multi-language repositories
+
+scenarios:
+  - name: single_language
+    languages: [python]
+    expected:
+      parsing_success: true
+      indexing_success: true
+
+  - name: dual_language
+    languages: [python, javascript]
+    expected:
+      parsing_success: true
+      cross_language_analysis: true
+
+  - name: multi_language
+    languages: [python, javascript, typescript, go, rust]
+    expected:
+      parsing_success: true
+      cross_language_analysis: true
+      performance_acceptable: true
+
+  - name: polyglot_monorepo
+    languages: [python, javascript, typescript, go, rust, java, cpp]
+    expected:
+      parsing_success: true
+      cross_language_analysis: true
+      indexing_complete: true
+
+metrics:
+  - parsing_time
+  - indexing_time
+  - cross_language_analysis_accuracy
+  - memory_usage
+
+checks:
+  - all_languages_parsed
+  - cross_language_relationships_found
+  - performance_acceptable
+
+severity: high

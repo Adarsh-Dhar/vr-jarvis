@@ -1,0 +1,21 @@
+test_id: MSC-stop_application-T11
+name: Concurrency test for stop_application
+category: misc
+tool: stop_application
+layer: 2
+test_type: T11
+description: Concurrency test for stop_application
+fixture: simple-python
+input:
+  application_id: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: high

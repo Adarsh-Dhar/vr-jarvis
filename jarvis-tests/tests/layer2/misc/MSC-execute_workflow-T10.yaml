@@ -1,0 +1,21 @@
+test_id: MSC-execute_workflow-T10
+name: Timeout test for execute_workflow
+category: misc
+tool: execute_workflow
+layer: 2
+test_type: T10
+description: Timeout test for execute_workflow
+fixture: simple-python
+input:
+  workflow_id: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: high

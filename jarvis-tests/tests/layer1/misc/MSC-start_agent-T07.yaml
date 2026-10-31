@@ -1,0 +1,22 @@
+test_id: MSC-start_agent-T07
+name: Complex Input test for start_agent
+category: misc
+tool: start_agent
+layer: 1
+test_type: T07
+description: Complex Input test for start_agent
+fixture: polyglot-monorepo
+input:
+  agent_id: placeholder
+  agent_config: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: high

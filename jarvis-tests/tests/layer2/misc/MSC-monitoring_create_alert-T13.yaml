@@ -1,0 +1,23 @@
+test_id: MSC-monitoring_create_alert-T13
+name: Performance test for monitoring_create_alert
+category: misc
+tool: monitoring_create_alert
+layer: 2
+test_type: T13
+description: Performance test for monitoring_create_alert
+fixture: simple-python
+input:
+  condition: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+- type: performance
+  max_duration_ms: 3000
+performance:
+  max_duration_ms: 3000
+severity: medium

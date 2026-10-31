@@ -1,0 +1,24 @@
+test_id: REL-find_all_paths_between_symbols-T13
+name: Performance test for find_all_paths_between_symbols
+category: relationship
+tool: find_all_paths_between_symbols
+layer: 2
+test_type: T13
+description: Performance test for find_all_paths_between_symbols
+fixture: simple-python
+input:
+  from_id: placeholder
+  to_id: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+- type: performance
+  max_duration_ms: 3000
+performance:
+  max_duration_ms: 3000
+severity: medium

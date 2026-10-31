@@ -1,0 +1,21 @@
+test_id: DFL-identify_data_sinks-T10
+name: Timeout test for identify_data_sinks
+category: data_flow
+tool: identify_data_sinks
+layer: 2
+test_type: T10
+description: Timeout test for identify_data_sinks
+fixture: simple-python
+input:
+  variable_id: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 5000
+severity: high

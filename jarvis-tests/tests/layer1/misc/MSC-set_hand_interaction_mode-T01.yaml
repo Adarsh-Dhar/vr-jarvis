@@ -1,0 +1,22 @@
+test_id: MSC-set_hand_interaction_mode-T01
+name: Happy Path test for set_hand_interaction_mode
+category: misc
+tool: set_hand_interaction_mode
+layer: 1
+test_type: T01
+description: Happy Path test for set_hand_interaction_mode
+fixture: simple-python
+input:
+  mode: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not:
+- error
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

@@ -1,0 +1,85 @@
+test_id: AGT-ALL-001
+name: Multi-Agent Coordination - Bug Investigation
+category: agent_capabilities
+layer: 4
+test_type: MULTI_AGENT_COORDINATION
+description: >
+  Test multi-agent coordination for a bug investigation scenario.
+  Verify correct delegation, parallel execution, context sharing, and result aggregation.
+
+scenario: bug_investigation
+task: "Find why authentication fails intermittently, identify the root cause, fix it and verify the fix."
+
+expected_coordination:
+  orchestrator:
+    action: create_investigation_plan
+    delegates_to:
+      - repository_intelligence
+      - code_understanding
+      - relationship_intelligence
+      - runtime_intelligence
+      - debugging_intelligence
+      - security_quality
+      - software_engineering
+      - testing_verification
+
+  agents:
+    - name: repository_intelligence
+      tools: [detect_languages, detect_frameworks, identify_entry_points]
+      output: repository_overview
+
+    - name: code_understanding
+      tools: [explain_function, parse_function, extract_function_signature]
+      input: repository_overview
+      output: authentication_logic
+
+    - name: relationship_intelligence
+      tools: [find_callers, find_callees, trace_call_chain]
+      input: authentication_logic
+      output: connected_functions
+
+    - name: runtime_intelligence
+      tools: [collect_execution_trace, record_function_calls]
+      input: connected_functions
+      output: failing_executions
+
+    - name: debugging_intelligence
+      tools: [identify_root_cause, trace_error_propagation]
+      input: failing_executions
+      output: root_cause
+
+    - name: security_quality
+      tools: [analyze_authentication, analyze_injection_risks]
+      input: root_cause
+      output: security_risks
+
+    - name: software_engineering
+      tools: [edit_file, run_tests]
+      input: root_cause
+      output: fix_applied
+
+    - name: testing_verification
+      tools: [run_unit_tests, verify_compilation]
+      input: fix_applied
+      output: verification_results
+
+  context_sharing:
+    - repository_overview → code_understanding
+    - authentication_logic → relationship_intelligence
+    - connected_functions → runtime_intelligence
+    - failing_executions → debugging_intelligence
+    - root_cause → security_quality
+    - root_cause → software_engineering
+    - fix_applied → testing_verification
+
+checks:
+  - correct_delegation
+  - parallel_execution_where_possible
+  - sequential_execution_where_necessary
+  - context_sharing
+  - correct_task_dependencies
+  - agent_failure_handling
+  - duplicate_task_prevention
+  - contradictory_findings_resolution
+
+severity: critical

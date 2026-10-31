@@ -1,0 +1,21 @@
+test_id: MSC-attach_runtime_profiler-T02
+name: Input Validation test for attach_runtime_profiler
+category: misc
+tool: attach_runtime_profiler
+layer: 1
+test_type: T02
+description: Input Validation test for attach_runtime_profiler
+fixture: simple-python
+input:
+  application_id: placeholder
+  tool_context: placeholder
+expected:
+  status: error
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

@@ -1,0 +1,21 @@
+test_id: REL-find_interface_implementations-T09
+name: Dependency Failure test for find_interface_implementations
+category: relationship
+tool: find_interface_implementations
+layer: 1
+test_type: T09
+description: Dependency Failure test for find_interface_implementations
+fixture: simple-python
+input:
+  interface_id: placeholder
+  tool_context: placeholder
+expected:
+  status: error
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: high

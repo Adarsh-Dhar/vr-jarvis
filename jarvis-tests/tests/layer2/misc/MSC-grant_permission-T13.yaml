@@ -1,0 +1,25 @@
+test_id: MSC-grant_permission-T13
+name: Performance test for grant_permission
+category: misc
+tool: grant_permission
+layer: 2
+test_type: T13
+description: Performance test for grant_permission
+fixture: simple-python
+input:
+  tool_name: placeholder
+  agent_id: placeholder
+  permission_level: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+- type: performance
+  max_duration_ms: 3000
+performance:
+  max_duration_ms: 3000
+severity: medium

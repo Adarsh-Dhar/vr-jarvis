@@ -1,0 +1,22 @@
+test_id: MSC-github_get_issues-T02
+name: Input Validation test for github_get_issues
+category: misc
+tool: github_get_issues
+layer: 1
+test_type: T02
+description: Input Validation test for github_get_issues
+fixture: simple-python
+input:
+  owner: placeholder
+  repo: placeholder
+  tool_context: placeholder
+expected:
+  status: error
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

@@ -1,0 +1,57 @@
+name: JARVIS Tests - Layer 3-4
+
+on:
+  schedule:
+    - cron: '0 0 * * *'  # Daily at midnight UTC
+  workflow_dispatch:
+
+jobs:
+  test-layer3-4:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+
+    - name: Install dependencies
+      run: |
+        cd jarvis-tests/test-runner
+        pip install pyyaml
+
+    - name: Setup integration infrastructure
+      run: |
+        cd jarvis-tests/fixtures/integration-test-infrastructure
+        ./setup.sh
+
+    - name: Start Flask API server
+      run: |
+        cd jarvis-tests/fixtures/integration-test-infrastructure
+        python3 apis/simple_flask_api.py &
+        sleep 5
+
+    - name: Run Layer 3-4 tests
+      run: |
+        cd jarvis-tests/test-runner
+        python3 test_all_tools.py --layers 3 4
+
+    - name: Generate report
+      run: |
+        cd jarvis-tests/test-runner
+        python3 report_generator.py --json test-reports/latest.json --html
+
+    - name: Detect regressions
+      run: |
+        cd jarvis-tests/test-runner
+        python3 regression_detector.py --json test-reports/latest.json
+
+    - name: Upload results
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: layer3-4-results
+        path: jarvis-tests/test-reports/

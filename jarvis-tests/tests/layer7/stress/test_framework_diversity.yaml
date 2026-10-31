@@ -1,0 +1,46 @@
+test_id: STRESS-FRM-001
+name: Stress - Framework Diversity
+category: stress
+layer: 7
+test_type: STRESS
+description: Test system behavior with multiple frameworks
+
+scenarios:
+  - name: single_framework
+    frameworks: [flask]
+    expected:
+      framework_detection: true
+      route_discovery: true
+
+  - name: multiple_frameworks
+    frameworks: [flask, django, fastapi]
+    expected:
+      framework_detection: true
+      route_discovery: true
+      no_conflicts: true
+
+  - name: framework_versions
+    frameworks: [react_16, react_17, react_18]
+    expected:
+      version_detection: true
+      compatibility_analysis: true
+
+  - name: mixed_paradigms
+    frameworks: [express, nextjs, spring_boot]
+    expected:
+      framework_detection: true
+      cross_framework_analysis: true
+
+metrics:
+  - detection_time
+  - analysis_time
+  - memory_usage
+  - framework_conflicts
+
+checks:
+  - all_frameworks_detected
+  - no_false_positives
+  - no_conflicts
+  - correct_version_detection
+
+severity: medium

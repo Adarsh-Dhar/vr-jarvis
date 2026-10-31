@@ -1,0 +1,23 @@
+test_id: MSC-delete_file-T13
+name: Performance test for delete_file
+category: misc
+tool: delete_file
+layer: 2
+test_type: T13
+description: Performance test for delete_file
+fixture: simple-python
+input:
+  file_path: main.py
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+- type: performance
+  max_duration_ms: 3000
+performance:
+  max_duration_ms: 3000
+severity: medium

@@ -1,0 +1,21 @@
+test_id: COD-trace_function_logic-T07
+name: Complex Input test for trace_function_logic
+category: code_understanding
+tool: trace_function_logic
+layer: 1
+test_type: T07
+description: Complex Input test for trace_function_logic
+fixture: polyglot-monorepo
+input:
+  function_id: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: high

@@ -1,0 +1,21 @@
+test_id: REL-analyze_architecture_boundaries-T11
+name: Concurrency test for analyze_architecture_boundaries
+category: relationship
+tool: analyze_architecture_boundaries
+layer: 2
+test_type: T11
+description: Concurrency test for analyze_architecture_boundaries
+fixture: simple-python
+input:
+  scope: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: high

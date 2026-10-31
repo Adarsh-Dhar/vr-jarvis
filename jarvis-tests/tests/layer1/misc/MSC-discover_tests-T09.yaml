@@ -1,0 +1,21 @@
+test_id: MSC-discover_tests-T09
+name: Dependency Failure test for discover_tests
+category: misc
+tool: discover_tests
+layer: 1
+test_type: T09
+description: Dependency Failure test for discover_tests
+fixture: simple-python
+input:
+  repository_path: /path/to/repo
+  tool_context: placeholder
+expected:
+  status: error
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: high

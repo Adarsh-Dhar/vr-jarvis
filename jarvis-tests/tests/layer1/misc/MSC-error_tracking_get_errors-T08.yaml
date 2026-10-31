@@ -1,0 +1,21 @@
+test_id: MSC-error_tracking_get_errors-T08
+name: Malformed Input test for error_tracking_get_errors
+category: misc
+tool: error_tracking_get_errors
+layer: 1
+test_type: T08
+description: Malformed Input test for error_tracking_get_errors
+fixture: corrupted-inputs
+input:
+  service: placeholder
+  tool_context: placeholder
+expected:
+  status: error
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

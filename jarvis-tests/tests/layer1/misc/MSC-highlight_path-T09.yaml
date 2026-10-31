@@ -1,0 +1,22 @@
+test_id: MSC-highlight_path-T09
+name: Dependency Failure test for highlight_path
+category: misc
+tool: highlight_path
+layer: 1
+test_type: T09
+description: Dependency Failure test for highlight_path
+fixture: simple-python
+input:
+  graph_id: placeholder
+  path: placeholder
+  tool_context: placeholder
+expected:
+  status: error
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: high

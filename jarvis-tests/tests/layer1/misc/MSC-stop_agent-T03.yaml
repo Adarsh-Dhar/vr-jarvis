@@ -1,0 +1,21 @@
+test_id: MSC-stop_agent-T03
+name: Output Validation test for stop_agent
+category: misc
+tool: stop_agent
+layer: 1
+test_type: T03
+description: Output Validation test for stop_agent
+fixture: simple-python
+input:
+  agent_id: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

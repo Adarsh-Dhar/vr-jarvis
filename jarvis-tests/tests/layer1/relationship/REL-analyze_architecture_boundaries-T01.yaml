@@ -1,0 +1,22 @@
+test_id: REL-analyze_architecture_boundaries-T01
+name: Happy Path test for analyze_architecture_boundaries
+category: relationship
+tool: analyze_architecture_boundaries
+layer: 1
+test_type: T01
+description: Happy Path test for analyze_architecture_boundaries
+fixture: simple-python
+input:
+  scope: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not:
+- error
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

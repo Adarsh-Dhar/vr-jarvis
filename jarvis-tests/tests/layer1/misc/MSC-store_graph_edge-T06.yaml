@@ -1,0 +1,23 @@
+test_id: MSC-store_graph_edge-T06
+name: Large Input test for store_graph_edge
+category: misc
+tool: store_graph_edge
+layer: 1
+test_type: T06
+description: Large Input test for store_graph_edge
+fixture: polyglot-monorepo
+input:
+  from_id: placeholder
+  to_id: placeholder
+  edge_data: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: medium

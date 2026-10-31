@@ -1,0 +1,23 @@
+test_id: MSC-attach_runtime_profiler-T13
+name: Performance test for attach_runtime_profiler
+category: misc
+tool: attach_runtime_profiler
+layer: 2
+test_type: T13
+description: Performance test for attach_runtime_profiler
+fixture: simple-python
+input:
+  application_id: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+- type: performance
+  max_duration_ms: 3000
+performance:
+  max_duration_ms: 3000
+severity: medium

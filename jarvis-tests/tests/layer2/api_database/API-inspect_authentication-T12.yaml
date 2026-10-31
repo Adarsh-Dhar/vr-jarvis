@@ -1,0 +1,21 @@
+test_id: API-inspect_authentication-T12
+name: Security test for inspect_authentication
+category: api_database
+tool: inspect_authentication
+layer: 2
+test_type: T12
+description: Security test for inspect_authentication
+fixture: simple-python
+input:
+  repository_path: /path/to/repo
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 5000
+severity: critical

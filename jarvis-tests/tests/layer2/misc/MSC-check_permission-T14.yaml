@@ -1,0 +1,23 @@
+test_id: MSC-check_permission-T14
+name: Regression test for check_permission
+category: misc
+tool: check_permission
+layer: 2
+test_type: T14
+description: Regression test for check_permission
+fixture: simple-python
+input:
+  tool_name: placeholder
+  agent_id: placeholder
+  operation: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: high

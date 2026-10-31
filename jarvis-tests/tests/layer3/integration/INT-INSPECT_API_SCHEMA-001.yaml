@@ -1,0 +1,24 @@
+test_id: INT-INSPECT_API_SCHEMA-001
+name: Integration test for inspect_api_schema
+category: integration
+tool: inspect_api_schema
+layer: 3
+test_type: INTEGRATION
+description: Inspect OpenAPI schema
+fixture:
+  type: api
+  path: integration-test-infrastructure/apis/openapi.yaml
+input:
+  schema_path: integration-test-infrastructure/apis/openapi.yaml
+  schema_type: openapi
+expected:
+  status: ok
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+- type: integration_connectivity
+performance:
+  max_duration_ms: 5000
+severity: high
+requires_infrastructure: true

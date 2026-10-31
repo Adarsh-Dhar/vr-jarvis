@@ -1,0 +1,21 @@
+test_id: MSC-visualize_dependency_graph-T08
+name: Malformed Input test for visualize_dependency_graph
+category: misc
+tool: visualize_dependency_graph
+layer: 1
+test_type: T08
+description: Malformed Input test for visualize_dependency_graph
+fixture: corrupted-inputs
+input:
+  component_id: placeholder
+  tool_context: placeholder
+expected:
+  status: error
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

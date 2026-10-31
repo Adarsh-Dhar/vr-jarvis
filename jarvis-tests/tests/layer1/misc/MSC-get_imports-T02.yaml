@@ -1,0 +1,21 @@
+test_id: MSC-get_imports-T02
+name: Input Validation test for get_imports
+category: misc
+tool: get_imports
+layer: 1
+test_type: T02
+description: Input Validation test for get_imports
+fixture: simple-python
+input:
+  file_path: main.py
+  tool_context: placeholder
+expected:
+  status: error
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

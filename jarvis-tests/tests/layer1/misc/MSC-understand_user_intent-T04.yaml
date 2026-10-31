@@ -1,0 +1,21 @@
+test_id: MSC-understand_user_intent-T04
+name: Empty Input test for understand_user_intent
+category: misc
+tool: understand_user_intent
+layer: 1
+test_type: T04
+description: Empty Input test for understand_user_intent
+fixture: simple-python
+input:
+  user_query: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: high

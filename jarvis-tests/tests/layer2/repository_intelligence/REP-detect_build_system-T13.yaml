@@ -1,0 +1,23 @@
+test_id: REP-detect_build_system-T13
+name: Performance test for detect_build_system
+category: repository_intelligence
+tool: detect_build_system
+layer: 2
+test_type: T13
+description: Performance test for detect_build_system
+fixture: simple-python
+input:
+  repository_path: /path/to/repo
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+- type: performance
+  max_duration_ms: 10000
+performance:
+  max_duration_ms: 10000
+severity: medium

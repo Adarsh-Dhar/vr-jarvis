@@ -1,0 +1,24 @@
+test_id: MSC-save_finding-T13
+name: Performance test for save_finding
+category: misc
+tool: save_finding
+layer: 2
+test_type: T13
+description: Performance test for save_finding
+fixture: simple-python
+input:
+  summary: placeholder
+  node_ids: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+- type: performance
+  max_duration_ms: 3000
+performance:
+  max_duration_ms: 3000
+severity: medium

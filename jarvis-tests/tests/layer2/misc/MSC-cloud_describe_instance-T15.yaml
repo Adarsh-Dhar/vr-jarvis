@@ -1,0 +1,22 @@
+test_id: MSC-cloud_describe_instance-T15
+name: Recovery test for cloud_describe_instance
+category: misc
+tool: cloud_describe_instance
+layer: 2
+test_type: T15
+description: Recovery test for cloud_describe_instance
+fixture: simple-python
+input:
+  instance_id: placeholder
+  provider: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: high

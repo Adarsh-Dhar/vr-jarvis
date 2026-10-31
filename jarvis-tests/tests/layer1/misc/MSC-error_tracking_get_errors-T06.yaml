@@ -1,0 +1,21 @@
+test_id: MSC-error_tracking_get_errors-T06
+name: Large Input test for error_tracking_get_errors
+category: misc
+tool: error_tracking_get_errors
+layer: 1
+test_type: T06
+description: Large Input test for error_tracking_get_errors
+fixture: polyglot-monorepo
+input:
+  service: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: medium

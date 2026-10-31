@@ -1,0 +1,23 @@
+test_id: MSC-get_graph_node-T13
+name: Performance test for get_graph_node
+category: misc
+tool: get_graph_node
+layer: 2
+test_type: T13
+description: Performance test for get_graph_node
+fixture: simple-python
+input:
+  node_id: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+- type: performance
+  max_duration_ms: 3000
+performance:
+  max_duration_ms: 3000
+severity: medium

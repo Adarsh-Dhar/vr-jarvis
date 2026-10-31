@@ -1,0 +1,24 @@
+test_id: MSC-create_workflow-T13
+name: Performance test for create_workflow
+category: misc
+tool: create_workflow
+layer: 2
+test_type: T13
+description: Performance test for create_workflow
+fixture: simple-python
+input:
+  workflow_name: placeholder
+  steps: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+- type: performance
+  max_duration_ms: 3000
+performance:
+  max_duration_ms: 3000
+severity: medium

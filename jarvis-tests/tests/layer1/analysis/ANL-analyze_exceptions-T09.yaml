@@ -1,0 +1,21 @@
+test_id: ANL-analyze_exceptions-T09
+name: Dependency Failure test for analyze_exceptions
+category: analysis
+tool: analyze_exceptions
+layer: 1
+test_type: T09
+description: Dependency Failure test for analyze_exceptions
+fixture: simple-python
+input:
+  file_path: main.py
+  tool_context: placeholder
+expected:
+  status: error
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 2000
+severity: high

@@ -1,0 +1,23 @@
+test_id: MSC-get_evidence-T13
+name: Performance test for get_evidence
+category: misc
+tool: get_evidence
+layer: 2
+test_type: T13
+description: Performance test for get_evidence
+fixture: simple-python
+input:
+  investigation_id: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+- type: performance
+  max_duration_ms: 3000
+performance:
+  max_duration_ms: 3000
+severity: medium

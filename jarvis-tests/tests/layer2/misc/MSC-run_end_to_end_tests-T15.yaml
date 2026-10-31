@@ -1,0 +1,20 @@
+test_id: MSC-run_end_to_end_tests-T15
+name: Recovery test for run_end_to_end_tests
+category: misc
+tool: run_end_to_end_tests
+layer: 2
+test_type: T15
+description: Recovery test for run_end_to_end_tests
+fixture: simple-python
+input:
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: high

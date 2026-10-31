@@ -1,0 +1,23 @@
+test_id: MSC-trigger_ci_build-T13
+name: Performance test for trigger_ci_build
+category: misc
+tool: trigger_ci_build
+layer: 2
+test_type: T13
+description: Performance test for trigger_ci_build
+fixture: simple-python
+input:
+  pipeline_id: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+- type: performance
+  max_duration_ms: 3000
+performance:
+  max_duration_ms: 3000
+severity: medium

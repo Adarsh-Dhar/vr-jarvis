@@ -1,0 +1,24 @@
+test_id: MSC-register_language_adapter-T13
+name: Performance test for register_language_adapter
+category: misc
+tool: register_language_adapter
+layer: 2
+test_type: T13
+description: Performance test for register_language_adapter
+fixture: simple-python
+input:
+  language: python
+  adapter_config: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+- type: performance
+  max_duration_ms: 3000
+performance:
+  max_duration_ms: 3000
+severity: medium

@@ -1,0 +1,23 @@
+test_id: MSC-remove_graph_edge-T09
+name: Dependency Failure test for remove_graph_edge
+category: misc
+tool: remove_graph_edge
+layer: 1
+test_type: T09
+description: Dependency Failure test for remove_graph_edge
+fixture: simple-python
+input:
+  graph_id: placeholder
+  source_id: placeholder
+  target_id: placeholder
+  tool_context: placeholder
+expected:
+  status: error
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: high

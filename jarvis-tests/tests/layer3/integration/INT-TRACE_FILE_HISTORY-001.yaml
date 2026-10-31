@@ -1,0 +1,24 @@
+test_id: INT-TRACE_FILE_HISTORY-001
+name: Integration test for trace_file_history
+category: integration
+tool: trace_file_history
+layer: 3
+test_type: INTEGRATION
+description: Trace file history in git
+fixture:
+  type: git
+  path: integration-test-infrastructure/git-repos/simple-repo
+input:
+  repository_path: integration-test-infrastructure/git-repos/simple-repo
+  file_path: main.py
+expected:
+  status: ok
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+- type: integration_connectivity
+performance:
+  max_duration_ms: 5000
+severity: high
+requires_infrastructure: true

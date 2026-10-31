@@ -1,0 +1,21 @@
+test_id: MSC-retrieve_knowledge-T14
+name: Regression test for retrieve_knowledge
+category: misc
+tool: retrieve_knowledge
+layer: 2
+test_type: T14
+description: Regression test for retrieve_knowledge
+fixture: simple-python
+input:
+  key: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: high

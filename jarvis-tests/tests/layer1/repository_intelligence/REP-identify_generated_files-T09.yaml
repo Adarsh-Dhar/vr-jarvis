@@ -1,0 +1,21 @@
+test_id: REP-identify_generated_files-T09
+name: Dependency Failure test for identify_generated_files
+category: repository_intelligence
+tool: identify_generated_files
+layer: 1
+test_type: T09
+description: Dependency Failure test for identify_generated_files
+fixture: simple-python
+input:
+  repository_path: /path/to/repo
+  tool_context: placeholder
+expected:
+  status: error
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 10000
+severity: high

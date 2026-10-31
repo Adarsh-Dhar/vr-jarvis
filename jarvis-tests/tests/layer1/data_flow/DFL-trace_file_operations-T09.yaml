@@ -1,0 +1,21 @@
+test_id: DFL-trace_file_operations-T09
+name: Dependency Failure test for trace_file_operations
+category: data_flow
+tool: trace_file_operations
+layer: 1
+test_type: T09
+description: Dependency Failure test for trace_file_operations
+fixture: simple-python
+input:
+  file_path: main.py
+  tool_context: placeholder
+expected:
+  status: error
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 5000
+severity: high

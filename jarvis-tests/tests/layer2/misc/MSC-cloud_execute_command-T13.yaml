@@ -1,0 +1,25 @@
+test_id: MSC-cloud_execute_command-T13
+name: Performance test for cloud_execute_command
+category: misc
+tool: cloud_execute_command
+layer: 2
+test_type: T13
+description: Performance test for cloud_execute_command
+fixture: simple-python
+input:
+  instance_id: placeholder
+  command: placeholder
+  provider: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+- type: performance
+  max_duration_ms: 3000
+performance:
+  max_duration_ms: 3000
+severity: medium

@@ -1,0 +1,21 @@
+test_id: DFL-build_data_flow_graph-T05
+name: Boundary Conditions test for build_data_flow_graph
+category: data_flow
+tool: build_data_flow_graph
+layer: 1
+test_type: T05
+description: Boundary Conditions test for build_data_flow_graph
+fixture: simple-python
+input:
+  scope: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 5000
+severity: high

@@ -1,0 +1,22 @@
+test_id: API-inspect_columns-T15
+name: Recovery test for inspect_columns
+category: api_database
+tool: inspect_columns
+layer: 2
+test_type: T15
+description: Recovery test for inspect_columns
+fixture: simple-python
+input:
+  connection_string: placeholder
+  table: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 5000
+severity: high

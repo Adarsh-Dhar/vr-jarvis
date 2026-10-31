@@ -1,0 +1,22 @@
+test_id: REL-find_all_paths_between_symbols-T08
+name: Malformed Input test for find_all_paths_between_symbols
+category: relationship
+tool: find_all_paths_between_symbols
+layer: 1
+test_type: T08
+description: Malformed Input test for find_all_paths_between_symbols
+fixture: corrupted-inputs
+input:
+  from_id: placeholder
+  to_id: placeholder
+  tool_context: placeholder
+expected:
+  status: error
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

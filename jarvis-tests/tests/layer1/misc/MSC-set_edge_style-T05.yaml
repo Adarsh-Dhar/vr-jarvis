@@ -1,0 +1,23 @@
+test_id: MSC-set_edge_style-T05
+name: Boundary Conditions test for set_edge_style
+category: misc
+tool: set_edge_style
+layer: 1
+test_type: T05
+description: Boundary Conditions test for set_edge_style
+fixture: simple-python
+input:
+  src: placeholder
+  dst: placeholder
+  style: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: high

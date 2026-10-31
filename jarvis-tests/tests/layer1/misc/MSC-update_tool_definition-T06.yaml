@@ -1,0 +1,22 @@
+test_id: MSC-update_tool_definition-T06
+name: Large Input test for update_tool_definition
+category: misc
+tool: update_tool_definition
+layer: 1
+test_type: T06
+description: Large Input test for update_tool_definition
+fixture: polyglot-monorepo
+input:
+  tool_name: placeholder
+  tool_definition: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: medium

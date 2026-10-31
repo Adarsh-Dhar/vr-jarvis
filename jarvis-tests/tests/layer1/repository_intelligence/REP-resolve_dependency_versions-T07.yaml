@@ -1,0 +1,21 @@
+test_id: REP-resolve_dependency_versions-T07
+name: Complex Input test for resolve_dependency_versions
+category: repository_intelligence
+tool: resolve_dependency_versions
+layer: 1
+test_type: T07
+description: Complex Input test for resolve_dependency_versions
+fixture: polyglot-monorepo
+input:
+  repository_path: /path/to/repo
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 10000
+severity: high

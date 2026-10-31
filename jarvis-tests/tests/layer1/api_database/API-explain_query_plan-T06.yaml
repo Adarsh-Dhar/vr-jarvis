@@ -1,0 +1,22 @@
+test_id: API-explain_query_plan-T06
+name: Large Input test for explain_query_plan
+category: api_database
+tool: explain_query_plan
+layer: 1
+test_type: T06
+description: Large Input test for explain_query_plan
+fixture: polyglot-monorepo
+input:
+  query: test
+  connection_string: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 5000
+severity: medium

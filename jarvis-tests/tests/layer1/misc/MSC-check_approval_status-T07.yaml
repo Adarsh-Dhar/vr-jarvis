@@ -1,0 +1,21 @@
+test_id: MSC-check_approval_status-T07
+name: Complex Input test for check_approval_status
+category: misc
+tool: check_approval_status
+layer: 1
+test_type: T07
+description: Complex Input test for check_approval_status
+fixture: polyglot-monorepo
+input:
+  approval_id: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: high

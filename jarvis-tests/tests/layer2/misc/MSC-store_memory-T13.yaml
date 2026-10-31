@@ -1,0 +1,24 @@
+test_id: MSC-store_memory-T13
+name: Performance test for store_memory
+category: misc
+tool: store_memory
+layer: 2
+test_type: T13
+description: Performance test for store_memory
+fixture: simple-python
+input:
+  key: placeholder
+  value: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+- type: performance
+  max_duration_ms: 3000
+performance:
+  max_duration_ms: 3000
+severity: medium

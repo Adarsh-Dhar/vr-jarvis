@@ -1,0 +1,22 @@
+test_id: MSC-set_spatial_audio-T05
+name: Boundary Conditions test for set_spatial_audio
+category: misc
+tool: set_spatial_audio
+layer: 1
+test_type: T05
+description: Boundary Conditions test for set_spatial_audio
+fixture: simple-python
+input:
+  source_id: placeholder
+  position: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: high

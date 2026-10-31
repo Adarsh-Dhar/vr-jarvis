@@ -1,0 +1,21 @@
+test_id: API-trace_transaction-T15
+name: Recovery test for trace_transaction
+category: api_database
+tool: trace_transaction
+layer: 2
+test_type: T15
+description: Recovery test for trace_transaction
+fixture: simple-python
+input:
+  transaction_id: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 5000
+severity: high

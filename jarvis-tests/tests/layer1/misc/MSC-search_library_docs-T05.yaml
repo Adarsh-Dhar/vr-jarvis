@@ -1,0 +1,22 @@
+test_id: MSC-search_library_docs-T05
+name: Boundary Conditions test for search_library_docs
+category: misc
+tool: search_library_docs
+layer: 1
+test_type: T05
+description: Boundary Conditions test for search_library_docs
+fixture: simple-python
+input:
+  library: placeholder
+  query: test
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: high

@@ -1,0 +1,21 @@
+test_id: MSC-cloud_list_instances-T02
+name: Input Validation test for cloud_list_instances
+category: misc
+tool: cloud_list_instances
+layer: 1
+test_type: T02
+description: Input Validation test for cloud_list_instances
+fixture: simple-python
+input:
+  provider: placeholder
+  tool_context: placeholder
+expected:
+  status: error
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

@@ -1,0 +1,324 @@
+# Ground Truth Manifest for complex-typescript repository
+# Contains the correct answers for all expected analysis results
+
+repository:
+  name: complex-typescript
+  language: typescript
+  version: "5.0"
+  files:
+    - package.json
+    - tsconfig.json
+    - src/types.ts
+    - src/main.ts
+
+functions:
+  greet:
+    file: src/main.ts
+    line: 7
+    callers:
+      - name: handleNewUser
+        file: src/main.ts
+        line: 35
+    callees: []
+    complexity: 1
+    returns: string
+
+  createUser:
+    file: src/main.ts
+    line: 12
+    callers:
+      - name: handleNewUser
+        file: src/main.ts
+        line: 34
+    callees: []
+    complexity: 1
+    returns: User
+
+  processTask:
+    file: src/main.ts
+    line: 20
+    callers: []
+    callees: []
+    complexity: 3
+    returns: Task
+
+  handleNewUser:
+    file: src/main.ts
+    line: 29
+    callers: []
+    callees:
+      - name: createUser
+        line: 34
+        type: direct
+      - name: greet
+        line: 35
+        type: direct
+    complexity: 2
+    returns: User
+
+  fetchUserData:
+    file: src/main.ts
+    line: 40
+    callers: []
+    callees: []
+    complexity: 1
+    returns: Promise<User | null>
+    is_async: true
+
+  divide:
+    file: src/main.ts
+    line: 47
+    callers: []
+    callees: []
+    complexity: 2
+    returns: number
+    may_throw: true
+
+  UserService.addUser:
+    file: src/main.ts
+    line: 58
+    callers: []
+    callees: []
+    complexity: 1
+    returns: void
+
+  UserService.getUser:
+    file: src/main.ts
+    line: 62
+    callers: []
+    callees: []
+    complexity: 1
+    returns: User | undefined
+
+  UserService.hasAdmin:
+    file: src/main.ts
+    line: 66
+    callers: []
+    callees:
+      - name: isAdmin
+        file: src/types.ts
+        line: 63
+        type: direct
+    complexity: 3
+    returns: boolean
+
+  withLogging:
+    file: src/main.ts
+    line: 76
+    callers: []
+    callees: []
+    complexity: 2
+    returns: function
+    is_higher_order: true
+
+  add:
+    file: src/main.ts
+    line: 84
+    callers: []
+    callees: []
+    complexity: 1
+    returns: function
+    is_curried: true
+
+  factorial:
+    file: src/main.ts
+    line: 87
+    callers: []
+    callees:
+      - name: factorial
+        line: 90
+        type: direct
+    complexity: 2
+    returns: number
+    is_recursive: true
+
+  configure:
+    file: src/main.ts
+    line: 94
+    callers: []
+    callees: []
+    complexity: 1
+    returns: void
+    has_defaults: true
+
+  GenericRepository.findById:
+    file: src/types.ts
+    line: 28
+    callers: []
+    callees: []
+    complexity: 1
+    returns: Maybe<T>
+
+  GenericRepository.save:
+    file: src/types.ts
+    line: 32
+    callers: []
+    callees: []
+    complexity: 1
+    returns: Promise<Result<T>>
+    is_async: true
+
+  GenericRepository.delete:
+    file: src/types.ts
+    line: 40
+    callers: []
+    callees: []
+    complexity: 1
+    returns: Promise<void>
+    is_async: true
+
+  transform:
+    file: src/types.ts
+    line: 47
+    callers: []
+    callees: []
+    complexity: 1
+    returns: U[]
+    is_generic: true
+
+  fetchWithRetry:
+    file: src/types.ts
+    line: 51
+    callers: []
+    callees: []
+    complexity: 1
+    returns: Promise<Result<T>>
+    is_async: true
+    is_generic: true
+
+  isAdmin:
+    file: src/types.ts
+    line: 63
+    callers:
+      - name: UserService.hasAdmin
+        file: src/main.ts
+        line: 70
+        type: direct
+    callees: []
+    complexity: 1
+    returns: boolean
+    is_type_guard: true
+
+classes:
+  GenericRepository:
+    file: src/types.ts
+    line: 22
+    is_generic: true
+    type_parameters: [T, K]
+    methods:
+      - findById
+      - save
+      - delete
+    base_classes: []
+    implements:
+      - Repository
+
+  UserService:
+    file: src/main.ts
+    line: 55
+    methods:
+      - addUser
+      - getUser
+      - hasAdmin
+    base_classes: []
+    implements: []
+
+interfaces:
+  User:
+    file: src/types.ts
+    line: 5
+    properties:
+      - id
+      - name
+      - email
+
+  Admin:
+    file: src/types.ts
+    line: 10
+    extends: User
+    properties:
+      - permissions
+
+  Repository:
+    file: src/types.ts
+    line: 16
+    is_generic: true
+    type_parameters: [T, K]
+    methods:
+      - findById
+      - save
+      - delete
+
+types:
+  UserRole:
+    file: src/types.ts
+    line: 13
+    kind: union
+    values: ['user', 'admin', 'moderator']
+
+  Maybe:
+    file: src/types.ts
+    line: 15
+    kind: union
+    values: [T, null]
+    is_generic: true
+
+  Result:
+    file: src/types.ts
+    line: 18
+    kind: union
+    is_generic: true
+    type_parameters: [T, E]
+
+  Status:
+    file: src/types.ts
+    line: 69
+    kind: union
+    values: ['pending', 'in_progress', 'completed', 'failed']
+
+  JsonValue:
+    file: src/types.ts
+    line: 97
+    kind: union
+    is_recursive: true
+
+call_graph:
+  edges:
+    - from: handleNewUser
+      to: createUser
+      type: direct
+    - from: handleNewUser
+      to: greet
+      type: direct
+    - from: UserService.hasAdmin
+      to: isAdmin
+      type: direct
+    - from: factorial
+      to: factorial
+      type: direct
+      is_recursive: true
+
+dependency_graph:
+  edges:
+    - from: src/main.ts
+      to: src/types.ts
+      type: import
+
+type_complexity:
+  src/types.ts:
+    num_interfaces: 3
+    num_classes: 1
+    num_type_aliases: 8
+    num_generics: 6
+    complexity: high
+
+  src/main.ts:
+    num_functions: 10
+    num_classes: 1
+    num_async: 2
+    num_recursive: 1
+    complexity: medium
+
+expected_vulnerabilities: []
+expected_bugs: []
+known_issues: []

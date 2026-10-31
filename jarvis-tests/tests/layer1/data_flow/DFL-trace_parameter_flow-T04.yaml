@@ -1,0 +1,22 @@
+test_id: DFL-trace_parameter_flow-T04
+name: Empty Input test for trace_parameter_flow
+category: data_flow
+tool: trace_parameter_flow
+layer: 1
+test_type: T04
+description: Empty Input test for trace_parameter_flow
+fixture: simple-python
+input:
+  function_id: placeholder
+  parameter: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 5000
+severity: high

@@ -1,0 +1,20 @@
+test_id: MSC-list_agents-T02
+name: Input Validation test for list_agents
+category: misc
+tool: list_agents
+layer: 1
+test_type: T02
+description: Input Validation test for list_agents
+fixture: simple-python
+input:
+  tool_context: placeholder
+expected:
+  status: error
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

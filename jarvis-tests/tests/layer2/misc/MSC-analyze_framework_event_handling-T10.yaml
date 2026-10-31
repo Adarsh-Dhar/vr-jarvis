@@ -1,0 +1,22 @@
+test_id: MSC-analyze_framework_event_handling-T10
+name: Timeout test for analyze_framework_event_handling
+category: misc
+tool: analyze_framework_event_handling
+layer: 2
+test_type: T10
+description: Timeout test for analyze_framework_event_handling
+fixture: simple-python
+input:
+  repository_path: /path/to/repo
+  framework: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: high

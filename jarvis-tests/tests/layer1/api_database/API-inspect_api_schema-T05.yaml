@@ -1,0 +1,22 @@
+test_id: API-inspect_api_schema-T05
+name: Boundary Conditions test for inspect_api_schema
+category: api_database
+tool: inspect_api_schema
+layer: 1
+test_type: T05
+description: Boundary Conditions test for inspect_api_schema
+fixture: simple-python
+input:
+  schema_path: openapi.yaml
+  tool_context: placeholder
+  schema_type: openapi
+expected:
+  status: ok
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 5000
+severity: high

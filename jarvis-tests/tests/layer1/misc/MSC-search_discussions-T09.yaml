@@ -1,0 +1,22 @@
+test_id: MSC-search_discussions-T09
+name: Dependency Failure test for search_discussions
+category: misc
+tool: search_discussions
+layer: 1
+test_type: T09
+description: Dependency Failure test for search_discussions
+fixture: simple-python
+input:
+  repository: placeholder
+  query: test
+  tool_context: placeholder
+expected:
+  status: error
+must_not: []
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: high
