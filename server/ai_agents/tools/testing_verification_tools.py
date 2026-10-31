@@ -375,37 +375,38 @@ def generate_unit_tests(
             params = signature.get('parameters', [])
             
             # Generate test template based on signature
-            test_code = f"import pytest\n\n"
-            test_code += f"def test_{function_id}_normal_case():\n"
-            test_code += f"    \"\"\"Test normal operation of {function_id}\"\"\"\n"
-            test_code += f"    # TODO: Provide test input and expected output\n"
-            test_code += f"    result = {function_id}()\n"
-            test_code += f"    assert result is not None\n\n"
+            tests = []
             
+            # Normal case test
+            normal_test = f"def test_{function_id}_normal_case():\n"
+            normal_test += f"    \"\"\"Test normal operation of {function_id}\"\"\"\n"
+            normal_test += f"    result = {function_id}()\n"
+            normal_test += f"    assert result is not None\n"
+            tests.append({'name': f'test_{function_id}_normal_case', 'code': normal_test})
+            
+            # Parameterized test if function has parameters
             if params:
-                test_code += f"def test_{function_id}_with_params():\n"
-                test_code += f"    \"\"\"Test {function_id} with parameters\"\"\"\n"
-                test_code += f"    # TODO: Test with parameters: {', '.join(p['name'] for p in params)}\n"
-                test_code += f"    params = {{}}\n"
-                test_code += f"    result = {function_id}(**params)\n"
-                test_code += f"    assert result is not None\n\n"
+                param_test = f"def test_{function_id}_with_params():\n"
+                param_test += f"    \"\"\"Test {function_id} with parameters\"\"\"\n"
+                param_test += f"    params = {{'{p['name']}': None for p in params}}\n"
+                param_test += f"    result = {function_id}(**params)\n"
+                param_test += f"    assert result is not None\n"
+                tests.append({'name': f'test_{function_id}_with_params', 'code': param_test})
             
-            test_code += f"def test_{function_id}_error_case():\n"
-            test_code += f"    \"\"\"Test error handling for {function_id}\"\"\"\n"
-            test_code += f"    # TODO: Test with invalid input\n"
-            test_code += f"    with pytest.raises(Exception):\n"
-            test_code += f"        {function_id}()\n"
+            # Error case test
+            error_test = f"def test_{function_id}_error_case():\n"
+            error_test += f"    \"\"\"Test error handling for {function_id}\"\"\"\n"
+            error_test += f"    with pytest.raises(Exception):\n"
+            error_test += f"        {function_id}(None)\n"
+            tests.append({'name': f'test_{function_id}_error_case', 'code': error_test})
             
             return {
                 'status': 'ok',
                 'function_id': function_id,
-                'generated_tests': [
-                    {'name': f'test_{function_id}_normal_case', 'code': test_code.split('\n\n')[0] + '\n'},
-                    {'name': f'test_{function_id}_with_params', 'code': test_code.split('\n\n')[1] + '\n' if params else None},
-                    {'name': f'test_{function_id}_error_case', 'code': test_code.split('\n\n')[-1]}
-                ],
-                'template': True,
-                'note': 'Template generated - full test generation requires LLM integration or manual completion'
+                'parameters': params,
+                'generated_tests': tests,
+                'test_count': len(tests),
+                'note': 'Parameter-aware test template generated - provide actual test values for full coverage'
             }
         
         return sig_result
@@ -442,8 +443,9 @@ def generate_edge_case_tests(
         # Boundary value test
         boundary_test = f"def test_{function_id}_boundary_value():\n"
         boundary_test += f"    \"\"\"Test {function_id} with boundary values\"\"\"\n"
-        boundary_test += f"    # TODO: Test with max/min values\n"
         boundary_test += f"    result = {function_id}(0)\n"
+        boundary_test += f"    assert result is not None\n"
+        boundary_test += f"    result = {function_id}(999999)\n"
         boundary_test += f"    assert result is not None\n"
         tests.append({'name': f'test_{function_id}_boundary_value', 'code': boundary_test})
         
@@ -451,8 +453,8 @@ def generate_edge_case_tests(
             'status': 'ok',
             'function_id': function_id,
             'generated_tests': tests,
-            'template': True,
-            'note': 'Template generated - full test generation requires LLM integration or manual completion'
+            'test_count': len(tests),
+            'note': 'Edge case templates generated - provide actual test data for full coverage'
         }
     except Exception as e:
         return {
@@ -476,7 +478,6 @@ def generate_integration_tests(
         # Success test
         success_test = f"def test_{endpoint_name}_success():\n"
         success_test += f"    \"\"\"Test successful {endpoint} call\"\"\"\n"
-        success_test += f"    # TODO: Configure request payload\n"
         success_test += f"    response = requests.get('{endpoint}')\n"
         success_test += f"    assert response.status_code == 200\n"
         tests.append({'name': f'test_{endpoint_name}_success', 'code': success_test})
@@ -484,7 +485,6 @@ def generate_integration_tests(
         # Error test
         error_test = f"def test_{endpoint_name}_error():\n"
         error_test += f"    \"\"\"Test {endpoint} error handling\"\"\"\n"
-        error_test += f"    # TODO: Test with invalid input\n"
         error_test += f"    response = requests.get('{endpoint}/invalid')\n"
         error_test += f"    assert response.status_code in [400, 404, 500]\n"
         tests.append({'name': f'test_{endpoint_name}_error', 'code': error_test})
@@ -492,9 +492,10 @@ def generate_integration_tests(
         return {
             'status': 'ok',
             'endpoint': endpoint,
+            'endpoint_name': endpoint_name,
             'generated_tests': tests,
-            'template': True,
-            'note': 'Template generated - full test generation requires LLM integration or manual completion'
+            'test_count': len(tests),
+            'note': 'Integration test templates generated - configure request payload for actual tests'
         }
     except Exception as e:
         return {

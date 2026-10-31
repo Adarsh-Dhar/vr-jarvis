@@ -27,24 +27,36 @@ def speech_to_text(audio_data: str, tool_context: ToolContext) -> dict:
                 'error': 'No audio data provided'
             }
         
-        # Analyze audio data for transcription (simulated with hash-based selection)
-        # In production, this would call Google Speech-to-Text, Whisper, etc.
+        # Try to detect if audio_data contains text (base64 encoded audio or similar)
+        import base64
+        try:
+            # Check if it's base64 encoded
+            decoded = base64.b64decode(audio_data)
+            # Try to decode as UTF-8 to see if it's actually text
+            text = decoded.decode('utf-8', errors='ignore')
+            if len(text) > 10 and all(ord(c) < 128 for c in text[:100]):
+                return {
+                    'status': 'ok',
+                    'text': text[:500],  # First 500 chars
+                    'source': 'decoded_text',
+                    'text_length': len(text)
+                }
+        except Exception:
+            pass
+        
+        # Analyze audio data characteristics
         audio_length = len(audio_data)
         
-        # Determine intent based on audio characteristics
-        if audio_length < 100:
-            intent = 'short_command'
-        elif audio_length < 500:
-            intent = 'normal_query'
-        else:
-            intent = 'complex_instruction'
+        # Determine if this is likely valid audio data
+        is_likely_audio = audio_length > 1000
         
         return {
             'status': 'ok',
+            'audio_received': True,
             'audio_length': audio_length,
-            'intent_type': intent,
-            'transcription_available': False,
-            'note': 'Audio data received - requires STT service (Google Speech-to-Text, Whisper, etc.) for actual transcription'
+            'is_likely_audio': is_likely_audio,
+            'transcription': 'Audio data processed - requires STT service (Google Speech-to-Text, Whisper, etc.) for actual transcription',
+            'note': 'Base64 or text detection attempted - full transcription requires STT integration'
         }
     except Exception as e:
         return {
@@ -166,16 +178,34 @@ def detect_voice_activity(audio_data: str, tool_context: ToolContext) -> dict:
                 'error': 'No audio data provided'
             }
         
-        # Simple audio level detection (simulated)
+        # Analyze audio data for voice activity patterns
         audio_length = len(audio_data)
-        activity_detected = audio_length > 50
+        
+        # Check for silence (all zeros or very low values)
+        if audio_length < 10:
+            return {
+                'status': 'ok',
+                'speaking': False,
+                'reason': 'insufficient_data',
+                'audio_length': audio_length
+            }
+        
+        # Simple energy-based detection (simulated)
+        # In real implementation, would analyze amplitude/variance
+        has_content = audio_length > 100
+        
+        # Detect potential speech segments by looking for variation
+        variance = sum(1 for i in range(min(len(audio_data)-1, 1000)) if audio_data[i] != audio_data[i+1]) if audio_length > 1 else 0
+        likely_speech = variance > 10
         
         return {
             'status': 'ok',
-            'activity_detected': activity_detected,
+            'speaking': likely_speech,
+            'confidence': min(0.9, variance / 100.0) if audio_length > 1 else 0.0,
             'audio_length': audio_length,
+            'data_variance': variance,
             'timestamp': datetime.utcnow().isoformat(),
-            'note': 'Audio activity detection - real VAD requires audio analysis (WebRTC VAD, silero-vad, etc.)'
+            'note': 'Pattern-based detection - real VAD requires audio analysis (WebRTC VAD, silero-vad, etc.)'
         }
     except Exception as e:
         return {

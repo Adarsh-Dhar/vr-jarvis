@@ -510,8 +510,23 @@ def analyze_cryptography(
                         'line': match['line']
                     })
         
-        # Identify weak cryptography
+        # Identify weak cryptography and provide recommendations
         weak_crypto = [u for u in crypto_usage if 'weak' in u.get('type', '')]
+        strong_crypto = [u for u in crypto_usage if 'weak' not in u.get('type', '')]
+        
+        recommendations = []
+        if weak_crypto:
+            recommendations.append({
+                'type': 'upgrade_weak_hashes',
+                'message': 'Replace MD5/SHA1 with SHA-256 or stronger',
+                'severity': 'high'
+            })
+        if not strong_crypto and crypto_usage:
+            recommendations.append({
+                'type': 'add_encryption',
+                'message': 'Consider adding proper encryption for sensitive data',
+                'severity': 'medium'
+            })
         
         return {
             'status': 'ok',
@@ -520,7 +535,10 @@ def analyze_cryptography(
             'total_usage': len(crypto_usage),
             'weak_usage': weak_crypto,
             'weak_count': len(weak_crypto),
-            'note': 'Pattern-based analysis - review weak algorithms (MD5, SHA1) for security'
+            'strong_usage': strong_crypto,
+            'strong_count': len(strong_crypto),
+            'recommendations': recommendations,
+            'security_score': 'good' if not weak_crypto else 'needs_improvement'
         }
     except Exception as e:
         return {
@@ -779,13 +797,24 @@ def detect_code_smells(
                         'type': smell_type,
                         'pattern': pattern,
                         'file': match['file'],
-                        'line': match['line']
+                        'line': match['line'],
+                        'severity': 'medium' if smell_type in ['global variable', 'wildcard import', 'bare except'] else 'low'
                     })
+        
+        # Categorize smells by severity
+        high_severity = [s for s in code_smells if s.get('severity') == 'high']
+        medium_severity = [s for s in code_smells if s.get('severity') == 'medium']
+        low_severity = [s for s in code_smells if s.get('severity') == 'low']
         
         return {
             'status': 'ok',
             'repository_path': repository_path,
-            'code_smells': code_smells
+            'code_smells': code_smells,
+            'total_smells': len(code_smells),
+            'high_severity': len(high_severity),
+            'medium_severity': len(medium_severity),
+            'low_severity': len(low_severity),
+            'health_score': 'good' if len(code_smells) < 10 else 'needs_attention'
         }
     except Exception as e:
         return {
@@ -1030,11 +1059,20 @@ def identify_technical_debt(
                         'line': match['line']
                     })
         
+        # Categorize debt by priority
+        high_priority = [d for d in technical_debt if 'deprecated' in d.get('type', '') or 'FIXME' in d.get('pattern', '')]
+        medium_priority = [d for d in technical_debt if 'TODO' in d.get('pattern', '') or 'HACK' in d.get('pattern', '')]
+        low_priority = [d for d in technical_debt if d not in high_priority and d not in medium_priority]
+        
         return {
             'status': 'ok',
             'repository_path': repository_path,
             'technical_debt': technical_debt,
-            'debt_count': len(technical_debt)
+            'debt_count': len(technical_debt),
+            'high_priority': len(high_priority),
+            'medium_priority': len(medium_priority),
+            'low_priority': len(low_priority),
+            'debt_score': 'low' if len(technical_debt) < 5 else 'moderate' if len(technical_debt) < 15 else 'high'
         }
     except Exception as e:
         return {

@@ -1616,25 +1616,33 @@ def refactor_function(
         if file_result.get('status') != 'ok':
             return file_result
         
-        # For now, return a plan for refactoring
-        # Real implementation would use AST manipulation
-        refactoring_plans = {
-            'extract_method': 'Extract a portion of the function into a separate method',
-            'inline_method': 'Inline the function into its callers',
-            'rename': 'Rename the function to a more descriptive name',
-            'simplify': 'Simplify complex logic within the function',
-            'add_parameter': 'Add a new parameter to the function'
-        }
+        # Analyze function and provide actionable refactoring steps
+        content = file_result['content']
         
-        plan = refactoring_plans.get(refactoring_type, 'Generic refactoring')
+        # Basic analysis of the function
+        line_count = len(content.splitlines())
+        complexity_indicators = content.count('if ') + content.count('for ') + content.count('while ')
+        
+        refactoring_actions = []
+        if line_count > 50:
+            refactoring_actions.append('Consider splitting function into smaller methods')
+        if complexity_indicators > 10:
+            refactoring_actions.append('High complexity detected - consider simplifying logic')
+        if 'TODO' in content or 'FIXME' in content:
+            refactoring_actions.append('Function contains TODO/FIXME comments - address them')
         
         return {
             'status': 'ok',
             'function_id': function_id,
             'refactoring_type': refactoring_type,
             'file_path': file_path,
-            'refactoring_plan': plan,
-            'note': 'AST-based refactoring requires language-specific parsers'
+            'analysis': {
+                'line_count': line_count,
+                'complexity_indicators': complexity_indicators
+            },
+            'suggested_actions': refactoring_actions,
+            'refactoring_plan': refactoring_plans.get(refactoring_type, 'Generic refactoring'),
+            'note': 'Static analysis provided - actual refactoring requires AST manipulation'
         }
     except Exception as e:
         return {
@@ -1790,16 +1798,37 @@ def implement_interface(
         # Check for existing implementations
         impl_result = find_interface_implementations(interface_id, tool_context)
         
-        # Generate a template for implementing the interface
-        template = f"class {class_name}:\n    # Implementation of {interface_id}\n    # TODO: Implement required methods\n    pass\n"
+        # Analyze interface to extract methods
+        interface_methods = []
+        if def_result.get('status') == 'ok':
+            from .repository_tools import read_file
+            file_result = read_file(def_result['definition']['file'], tool_context)
+            if file_result.get('status') == 'ok':
+                # Simple method extraction from the definition
+                import ast
+                try:
+                    tree = ast.parse(file_result['content'])
+                    for node in ast.walk(tree):
+                        if isinstance(node, ast.FunctionDef):
+                            interface_methods.append(node.name)
+                except Exception:
+                    pass
+        
+        # Generate implementation template with methods
+        if interface_methods:
+            method_stubs = '\n'.join([f"    def {method}(self): pass" for method in interface_methods])
+            template = f"class {class_name}:\n    \"\"\"Implementation of {interface_id}\"\"\"\n{method_stubs}\n"
+        else:
+            template = f"class {class_name}:\n    \"\"\"Implementation of {interface_id}\"\"\"\n    # TODO: Implement required methods\n    pass\n"
         
         return {
             'status': 'ok',
             'interface_id': interface_id,
             'class_name': class_name,
+            'interface_methods': interface_methods,
             'template': template,
             'existing_implementations': impl_result.get('implementations', []) if impl_result.get('status') == 'ok' else [],
-            'note': 'Full implementation requires AST analysis of interface methods'
+            'note': 'Template generated with method stubs - full implementation requires interface method signatures'
         }
     except Exception as e:
         return {
