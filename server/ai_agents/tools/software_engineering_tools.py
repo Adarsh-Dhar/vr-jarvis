@@ -1631,6 +1631,15 @@ def refactor_function(
         if 'TODO' in content or 'FIXME' in content:
             refactoring_actions.append('Function contains TODO/FIXME comments - address them')
         
+        # Define refactoring plans
+        refactoring_plans = {
+            'extract_method': 'Extract a portion of the function into a separate method',
+            'inline_method': 'Inline the function into its callers',
+            'rename': 'Rename the function to a more descriptive name',
+            'simplify': 'Simplify complex logic within the function',
+            'add_parameter': 'Add a new parameter to the function'
+        }
+        
         return {
             'status': 'ok',
             'function_id': function_id,

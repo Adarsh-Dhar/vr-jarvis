@@ -27,36 +27,44 @@ def speech_to_text(audio_data: str, tool_context: ToolContext) -> dict:
                 'error': 'No audio data provided'
             }
         
-        # Try to detect if audio_data contains text (base64 encoded audio or similar)
+        # Try to decode if audio_data is base64 encoded
         import base64
+        decoded_text = None
+        
         try:
-            # Check if it's base64 encoded
             decoded = base64.b64decode(audio_data)
-            # Try to decode as UTF-8 to see if it's actually text
+            # Try UTF-8 decode
             text = decoded.decode('utf-8', errors='ignore')
             if len(text) > 10 and all(ord(c) < 128 for c in text[:100]):
-                return {
-                    'status': 'ok',
-                    'text': text[:500],  # First 500 chars
-                    'source': 'decoded_text',
-                    'text_length': len(text)
-                }
+                decoded_text = text[:500]
         except Exception:
             pass
         
-        # Analyze audio data characteristics
-        audio_length = len(audio_data)
+        # If audio_data is already text, return it
+        if not decoded_text and len(audio_data) > 10 and all(ord(c) < 128 for c in audio_data[:100]):
+            decoded_text = audio_data[:500]
         
-        # Determine if this is likely valid audio data
-        is_likely_audio = audio_length > 1000
+        if decoded_text:
+            return {
+                'status': 'ok',
+                'text': decoded_text,
+                'text_length': len(decoded_text),
+                'source': 'decoded_input'
+            }
+        
+        # Analyze audio characteristics for transcription service requirements
+        audio_length = len(audio_data)
+        sample_rate_estimate = 16000  # Standard speech sample rate
+        duration_estimate = audio_length / (sample_rate_estimate * 2)  # Approximate
         
         return {
             'status': 'ok',
-            'audio_received': True,
+            'audio_data_received': True,
             'audio_length': audio_length,
-            'is_likely_audio': is_likely_audio,
-            'transcription': 'Audio data processed - requires STT service (Google Speech-to-Text, Whisper, etc.) for actual transcription',
-            'note': 'Base64 or text detection attempted - full transcription requires STT integration'
+            'estimated_duration_seconds': duration_estimate,
+            'requires_stt_service': True,
+            'recommended_stt': ['google_speech_to_text', 'openai_whisper', 'azure_speech'],
+            'note': 'Audio received - integrate STT service for transcription'
         }
     except Exception as e:
         return {
@@ -178,35 +186,67 @@ def detect_voice_activity(audio_data: str, tool_context: ToolContext) -> dict:
                 'error': 'No audio data provided'
             }
         
-        # Analyze audio data for voice activity patterns
         audio_length = len(audio_data)
         
-        # Check for silence (all zeros or very low values)
+        # Check for insufficient data
         if audio_length < 10:
             return {
                 'status': 'ok',
-                'speaking': False,
+                'voice_activity_detected': False,
                 'reason': 'insufficient_data',
-                'audio_length': audio_length
+                'audio_length': audio_length,
+                'confidence': 0.0
             }
         
-        # Simple energy-based detection (simulated)
-        # In real implementation, would analyze amplitude/variance
-        has_content = audio_length > 100
-        
-        # Detect potential speech segments by looking for variation
-        variance = sum(1 for i in range(min(len(audio_data)-1, 1000)) if audio_data[i] != audio_data[i+1]) if audio_length > 1 else 0
-        likely_speech = variance > 10
-        
-        return {
-            'status': 'ok',
-            'speaking': likely_speech,
-            'confidence': min(0.9, variance / 100.0) if audio_length > 1 else 0.0,
-            'audio_length': audio_length,
-            'data_variance': variance,
-            'timestamp': datetime.utcnow().isoformat(),
-            'note': 'Pattern-based detection - real VAD requires audio analysis (WebRTC VAD, silero-vad, etc.)'
-        }
+        # Energy-based detection
+        # Calculate signal energy (sum of absolute values)
+        try:
+            # If audio_data is bytes, convert to samples
+            if isinstance(audio_data, bytes):
+                samples = [int(b) for b in audio_data[:1000]]
+            else:
+                samples = [ord(c) for c in audio_data[:1000]]
+            
+            energy = sum(abs(s) for s in samples)
+            avg_energy = energy / len(samples) if samples else 0
+            
+            # Calculate variance to detect speech-like patterns
+            if len(samples) > 1:
+                variance = sum((s - avg_energy) ** 2 for s in samples) / len(samples)
+            else:
+                variance = 0
+            
+            # Voice activity thresholds
+            energy_threshold = 10
+            variance_threshold = 50
+            
+            has_voice = avg_energy > energy_threshold and variance > variance_threshold
+            confidence = min(0.95, (avg_energy / 100.0) + (variance / 1000.0))
+            
+            return {
+                'status': 'ok',
+                'voice_activity_detected': has_voice,
+                'confidence': confidence,
+                'audio_length': audio_length,
+                'average_energy': avg_energy,
+                'variance': variance,
+                'timestamp': datetime.utcnow().isoformat(),
+                'note': 'Energy-based detection - real VAD requires audio analysis (WebRTC VAD, silero-vad, etc.)'
+            }
+        except Exception:
+            # Fallback to simple variance detection
+            variance = sum(1 for i in range(min(len(audio_data)-1, 1000)) if audio_data[i] != audio_data[i+1]) if audio_length > 1 else 0
+            has_voice = variance > 20
+            
+            return {
+                'status': 'ok',
+                'voice_activity_detected': has_voice,
+                'confidence': min(0.8, variance / 100.0),
+                'audio_length': audio_length,
+                'data_variance': variance,
+                'timestamp': datetime.utcnow().isoformat(),
+                'note': 'Fallback variance detection - real VAD requires audio analysis'
+            }
     except Exception as e:
         return {
             'status': 'error',
