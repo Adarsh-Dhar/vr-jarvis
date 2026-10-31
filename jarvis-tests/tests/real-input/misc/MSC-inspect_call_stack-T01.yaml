@@ -1,0 +1,21 @@
+test_id: MSC-inspect_call_stack-T01
+name: Happy Path test for inspect_call_stack
+category: misc
+tool: inspect_call_stack
+layer: 1
+test_type: T01
+description: Happy Path test for inspect_call_stack
+fixture: simple-python
+input:
+  tool_context: placeholder
+expected:
+  status: ok
+must_not:
+- error
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

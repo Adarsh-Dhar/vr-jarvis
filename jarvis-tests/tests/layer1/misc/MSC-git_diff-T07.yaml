@@ -7,9 +7,9 @@ test_type: T07
 description: Complex Input test for git_diff
 fixture: polyglot-monorepo
 input:
-  repository_path: /path/to/repo
+  repository_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/polyglot-monorepo
   tool_context: placeholder
-  file_path: main.py
+  file_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/polyglot-monorepo/main.py
 expected:
   status: ok
 must_not: []

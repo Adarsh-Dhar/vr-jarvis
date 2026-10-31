@@ -1,0 +1,22 @@
+test_id: MSC-record_cpu_usage-T01
+name: Happy Path test for record_cpu_usage
+category: misc
+tool: record_cpu_usage
+layer: 1
+test_type: T01
+description: Happy Path test for record_cpu_usage
+fixture: simple-python
+input:
+  application_id: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not:
+- error
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

@@ -1,0 +1,23 @@
+test_id: MSC-update_index-T01
+name: Happy Path test for update_index
+category: misc
+tool: update_index
+layer: 1
+test_type: T01
+description: Happy Path test for update_index
+fixture: simple-python
+input:
+  repository_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/simple-python
+  changed_files: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not:
+- error
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

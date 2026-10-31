@@ -7,7 +7,7 @@ test_type: T08
 description: Malformed Input test for extract_language_symbols
 fixture: corrupted-inputs
 input:
-  file_path: /nonexistent/path.py
+  file_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/corrupted-inputs/nonexistent.py
   language: python
   tool_context: placeholder
 expected:

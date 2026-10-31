@@ -1,0 +1,33 @@
+test_id: CORE-parse_source_code-T01
+name: Parse main.py into AST
+category: core
+tool: parse_source_code
+layer: 1
+test_type: T01
+description: Happy Path - parse Python file into AST
+fixture: simple-python
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+expected:
+  status: ok
+  language: python
+  ast_not_empty: true
+  file_path_contains: main.py
+must_not:
+  - error
+checks:
+  - type: content_validation
+    required_content:
+      - "python"
+  - type: schema_validity
+    required_fields:
+      - status
+      - file_path
+      - language
+      - ast
+  - type: non_empty_check
+    fields:
+      - ast
+performance:
+  max_duration_ms: 1000
+severity: critical

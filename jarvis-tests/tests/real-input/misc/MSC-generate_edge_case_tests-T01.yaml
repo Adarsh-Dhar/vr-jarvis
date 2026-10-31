@@ -1,0 +1,22 @@
+test_id: MSC-generate_edge_case_tests-T01
+name: Happy Path test for generate_edge_case_tests
+category: misc
+tool: generate_edge_case_tests
+layer: 1
+test_type: T01
+description: Happy Path test for generate_edge_case_tests
+fixture: simple-python
+input:
+  function_id: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not:
+- error
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

@@ -1,0 +1,22 @@
+test_id: MSC-visualize_git_history-T01
+name: Happy Path test for visualize_git_history
+category: misc
+tool: visualize_git_history
+layer: 1
+test_type: T01
+description: Happy Path test for visualize_git_history
+fixture: simple-python
+input:
+  repository_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/simple-python
+  tool_context: placeholder
+expected:
+  status: ok
+must_not:
+- error
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

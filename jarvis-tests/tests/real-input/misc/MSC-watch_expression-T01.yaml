@@ -1,0 +1,22 @@
+test_id: MSC-watch_expression-T01
+name: Happy Path test for watch_expression
+category: misc
+tool: watch_expression
+layer: 1
+test_type: T01
+description: Happy Path test for watch_expression
+fixture: simple-python
+input:
+  expression: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not:
+- error
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

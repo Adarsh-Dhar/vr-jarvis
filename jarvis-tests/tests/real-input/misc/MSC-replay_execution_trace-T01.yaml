@@ -1,0 +1,22 @@
+test_id: MSC-replay_execution_trace-T01
+name: Happy Path test for replay_execution_trace
+category: misc
+tool: replay_execution_trace
+layer: 1
+test_type: T01
+description: Happy Path test for replay_execution_trace
+fixture: simple-python
+input:
+  trace_id: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not:
+- error
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

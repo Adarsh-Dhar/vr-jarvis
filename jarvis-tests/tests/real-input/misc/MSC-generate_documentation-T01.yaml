@@ -1,0 +1,22 @@
+test_id: MSC-generate_documentation-T01
+name: Happy Path test for generate_documentation
+category: misc
+tool: generate_documentation
+layer: 1
+test_type: T01
+description: Happy Path test for generate_documentation
+fixture: simple-python
+input:
+  element_id: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not:
+- error
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

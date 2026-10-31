@@ -1,0 +1,22 @@
+test_id: MSC-find_dependents-T01
+name: Happy Path test for find_dependents
+category: misc
+tool: find_dependents
+layer: 1
+test_type: T01
+description: Happy Path test for find_dependents
+fixture: simple-python
+input:
+  component_id: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not:
+- error
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

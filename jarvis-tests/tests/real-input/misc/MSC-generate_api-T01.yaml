@@ -1,0 +1,23 @@
+test_id: MSC-generate_api-T01
+name: Happy Path test for generate_api
+category: misc
+tool: generate_api
+layer: 1
+test_type: T01
+description: Happy Path test for generate_api
+fixture: simple-python
+input:
+  description: placeholder
+  endpoints: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not:
+- error
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

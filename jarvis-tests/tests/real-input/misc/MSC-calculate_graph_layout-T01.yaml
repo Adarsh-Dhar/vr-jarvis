@@ -1,0 +1,22 @@
+test_id: MSC-calculate_graph_layout-T01
+name: Happy Path test for calculate_graph_layout
+category: misc
+tool: calculate_graph_layout
+layer: 1
+test_type: T01
+description: Happy Path test for calculate_graph_layout
+fixture: simple-python
+input:
+  graph_id: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not:
+- error
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

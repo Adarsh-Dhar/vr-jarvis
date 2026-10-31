@@ -309,10 +309,13 @@ class TestSpecGenerator:
         else:
             return 'simple-python'
 
-    def _generate_input(self, tool_name: str, test_type: str, signature: Optional[Dict] = None) -> Dict:
+    def _generate_input(self, tool_name: str, test_type: str, signature: Optional[Dict] = None, real_input_mode: bool = False) -> Dict:
         """Generate input for a test based on tool signature"""
         if not signature:
             return {}
+
+        if real_input_mode:
+            return self._generate_real_input(tool_name, test_type, signature)
 
         input_data = {}
         category = self._get_tool_category(tool_name)
@@ -346,6 +349,78 @@ class TestSpecGenerator:
                 input_data[param_name] = 'def test(): return True'
             elif param['required'] and param.get('default') is None:
                 # For required params without defaults, provide placeholder
+                input_data[param_name] = 'placeholder'
+
+        return input_data
+
+    def _generate_real_input(self, tool_name: str, test_type: str, signature: Dict) -> Dict:
+        """Generate real inputs based on fixtures and ground truth"""
+        import yaml
+
+        fixture = self._select_fixture(tool_name, test_type)
+        fixture_dir = self.test_root / 'fixtures' / 'repositories' / fixture
+        ground_truth_file = fixture_dir / 'ground-truth.yaml'
+
+        # Load ground truth if available
+        ground_truth = {}
+        if ground_truth_file.exists():
+            with open(ground_truth_file) as f:
+                ground_truth = yaml.safe_load(f)
+
+        input_data = {}
+
+        for param in signature['parameters']:
+            param_name = param['name']
+
+            if param_name == 'file_path':
+                if test_type == 'T08':  # Malformed
+                    input_data[param_name] = str(fixture_dir / 'nonexistent.py')
+                else:
+                    # Use main.py or first Python file
+                    main_file = fixture_dir / 'main.py'
+                    if main_file.exists():
+                        input_data[param_name] = str(main_file)
+                    else:
+                        # Find first .py file
+                        py_files = list(fixture_dir.glob('*.py'))
+                        if py_files:
+                            input_data[param_name] = str(py_files[0])
+                        else:
+                            input_data[param_name] = str(fixture_dir / 'main.py')
+
+            elif param_name == 'repository_path':
+                input_data[param_name] = str(fixture_dir)
+
+            elif param_name == 'symbol':
+                # Use first function from ground truth
+                if ground_truth and 'functions' in ground_truth and ground_truth['functions']:
+                    input_data[param_name] = ground_truth['functions'][0]['name']
+                else:
+                    input_data[param_name] = 'target'
+
+            elif param_name == 'depth':
+                input_data[param_name] = 1 if test_type == 'T01' else 2
+
+            elif param_name == 'query':
+                input_data[param_name] = 'test'
+
+            elif param_name == 'schema_path':
+                input_data[param_name] = str(fixture_dir / 'openapi.yaml')
+
+            elif param_name == 'schema_type':
+                input_data[param_name] = 'openapi'
+
+            elif param_name == 'language':
+                input_data[param_name] = 'python'
+
+            elif param_name == 'max_results':
+                input_data[param_name] = 10
+
+            elif param_name == 'code':
+                input_data[param_name] = 'def test(): return True'
+
+            elif param['required'] and param.get('default') is None:
+                # Still use placeholder for unknown params
                 input_data[param_name] = 'placeholder'
 
         return input_data
@@ -396,7 +471,7 @@ class TestSpecGenerator:
         """Get severity for a test"""
         return SEVERITY_BY_CATEGORY.get(test_type, 'medium')
 
-    def create_spec(self, tool_name: str, test_type: str, signature: Optional[Dict] = None) -> Dict:
+    def create_spec(self, tool_name: str, test_type: str, signature: Optional[Dict] = None, real_input_mode: bool = False) -> Dict:
         """Create a single test specification"""
         test_id = f"{self._category_prefix(tool_name)}-{tool_name}-{test_type}"
 
@@ -409,7 +484,7 @@ class TestSpecGenerator:
             'test_type': test_type,
             'description': self._get_description(test_type, tool_name),
             'fixture': self._select_fixture(tool_name, test_type),
-            'input': self._generate_input(tool_name, test_type, signature),
+            'input': self._generate_input(tool_name, test_type, signature, real_input_mode),
             'expected': self._generate_expected(tool_name, test_type),
             'must_not': self._generate_must_not(tool_name, test_type),
             'checks': self._generate_checks(tool_name, test_type),
@@ -417,7 +492,7 @@ class TestSpecGenerator:
             'severity': self._get_severity(tool_name, test_type)
         }
 
-    def generate_for_tool(self, tool_name: str, test_types: Optional[List[str]] = None) -> List[Dict]:
+    def generate_for_tool(self, tool_name: str, test_types: Optional[List[str]] = None, real_input_mode: bool = False) -> List[Dict]:
         """Generate test specs for a single tool"""
         if test_types is None:
             test_types = list(TEST_CATEGORIES.keys())
@@ -427,7 +502,7 @@ class TestSpecGenerator:
 
         specs = []
         for test_type in test_types:
-            spec = self.create_spec(tool_name, test_type, signature)
+            spec = self.create_spec(tool_name, test_type, signature, real_input_mode)
             specs.append(spec)
 
         return specs

@@ -1,0 +1,22 @@
+test_id: MSC-set_layout_algorithm-T01
+name: Happy Path test for set_layout_algorithm
+category: misc
+tool: set_layout_algorithm
+layer: 1
+test_type: T01
+description: Happy Path test for set_layout_algorithm
+fixture: simple-python
+input:
+  algorithm: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not:
+- error
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

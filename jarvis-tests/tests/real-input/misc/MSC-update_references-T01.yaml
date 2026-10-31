@@ -1,0 +1,23 @@
+test_id: MSC-update_references-T01
+name: Happy Path test for update_references
+category: misc
+tool: update_references
+layer: 1
+test_type: T01
+description: Happy Path test for update_references
+fixture: simple-python
+input:
+  symbol_id: placeholder
+  new_location: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not:
+- error
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

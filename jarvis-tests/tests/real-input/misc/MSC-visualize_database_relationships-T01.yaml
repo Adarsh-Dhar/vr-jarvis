@@ -1,0 +1,22 @@
+test_id: MSC-visualize_database_relationships-T01
+name: Happy Path test for visualize_database_relationships
+category: misc
+tool: visualize_database_relationships
+layer: 1
+test_type: T01
+description: Happy Path test for visualize_database_relationships
+fixture: simple-python
+input:
+  table_name: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not:
+- error
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

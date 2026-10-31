@@ -260,6 +260,60 @@ class TestOrchestrator:
                     failed = True
                 else:
                     check_results.append(f'PASS: Duration {duration}ms within limit')
+            elif check_type == 'content_validation':
+                # Check for required/forbidden content
+                required_content = check.get('required_content', [])
+                forbidden_content = check.get('forbidden_content', [])
+                required_files = check.get('required_files', [])
+
+                for content in required_content:
+                    if content not in str(output):
+                        check_results.append(f'FAIL: Required content not found: {content}')
+                        failed = True
+                    else:
+                        check_results.append(f'PASS: Required content found: {content}')
+
+                for content in forbidden_content:
+                    if content in str(output):
+                        check_results.append(f'FAIL: Forbidden content found: {content}')
+                        failed = True
+                    else:
+                        check_results.append(f'PASS: Forbidden content not found: {content}')
+
+                for filename in required_files:
+                    if filename not in str(output):
+                        check_results.append(f'FAIL: Required file not found: {filename}')
+                        failed = True
+                    else:
+                        check_results.append(f'PASS: Required file found: {filename}')
+
+            elif check_type == 'field_type_validation':
+                # Check field types
+                for field, expected_type in check.items():
+                    if field == 'type':
+                        continue
+                    if field in output:
+                        type_map = {'str': str, 'int': int, 'bool': bool, 'list': list, 'dict': dict}
+                        if expected_type in type_map and not isinstance(output[field], type_map[expected_type]):
+                            check_results.append(f'FAIL: Field {field} has wrong type')
+                            failed = True
+                        else:
+                            check_results.append(f'PASS: Field {field} has correct type')
+
+            elif check_type == 'non_empty_check':
+                # Check fields are not empty
+                fields = check.get('fields', [])
+                for field in fields:
+                    if field in output:
+                        if isinstance(output[field], (str, list, dict)) and len(output[field]) == 0:
+                            check_results.append(f'FAIL: Field {field} is empty')
+                            failed = True
+                        else:
+                            check_results.append(f'PASS: Field {field} is not empty')
+                    else:
+                        check_results.append(f'FAIL: Field {field} missing')
+                        failed = True
+
             else:
                 check_results.append(f'INFO: Unknown check type {check_type}')
 

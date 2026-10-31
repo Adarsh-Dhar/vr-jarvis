@@ -1,0 +1,24 @@
+test_id: MSC-has_cycle-T01
+name: Happy Path test for has_cycle
+category: misc
+tool: has_cycle
+layer: 1
+test_type: T01
+description: Happy Path test for has_cycle
+fixture: simple-python
+input:
+  graph: placeholder
+  node: placeholder
+  visited: placeholder
+  rec_stack: placeholder
+expected:
+  status: ok
+must_not:
+- error
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

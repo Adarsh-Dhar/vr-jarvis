@@ -1,0 +1,31 @@
+test_id: CORE-index_repository-T01
+name: Index simple-python repository
+category: core
+tool: index_repository
+layer: 1
+test_type: T01
+description: Happy Path - index repository for search
+fixture: simple-python
+input:
+  repository_path: fixtures/repositories/simple-python
+expected:
+  status: ok
+  file_count_min: 3
+  known_files_present:
+    - main.py
+    - ground-truth.yaml
+must_not:
+  - error
+checks:
+  - type: content_validation
+    required_files:
+      - main.py
+      - ground-truth.yaml
+  - type: schema_validity
+    required_fields:
+      - status
+      - directory
+      - files
+performance:
+  max_duration_ms: 2000
+severity: critical

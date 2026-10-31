@@ -1,0 +1,23 @@
+test_id: MSC-compare_success_failure-T01
+name: Happy Path test for compare_success_failure
+category: misc
+tool: compare_success_failure
+layer: 1
+test_type: T01
+description: Happy Path test for compare_success_failure
+fixture: simple-python
+input:
+  success_trace_id: placeholder
+  failure_trace_id: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not:
+- error
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

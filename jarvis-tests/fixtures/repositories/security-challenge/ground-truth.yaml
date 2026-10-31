@@ -1,0 +1,93 @@
+# Ground Truth for Security Challenge Fixture
+# This file contains known secrets and vulnerabilities for testing
+
+secrets:
+  - type: api_key
+    file: config.py
+    line: 4
+    value: "sk-1234567890abcdefghijklmnopqrstuvwxyz"
+    pattern: "sk-[a-z0-9]{32}"
+    
+  - type: database_url
+    file: config.py
+    line: 5
+    value: "postgresql://user:secretpassword@localhost/db"
+    pattern: "postgresql://[^:]+:[^@]+@"
+    
+  - type: aws_secret_key
+    file: config.py
+    line: 6
+    value: "aws_secret_key_ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    pattern: "aws_secret_key_[A-Z]{26}"
+
+vulnerabilities:
+  - type: sql_injection
+    file: vulnerable_app.py
+    line: 8
+    function: get_user
+    description: "SQL injection via string concatenation"
+    severity: high
+    
+  - type: xss
+    file: vulnerable_app.py
+    line: 15
+    function: render_user_input
+    description: "XSS via direct HTML rendering"
+    severity: high
+    
+  - type: hardcoded_password
+    file: vulnerable_app.py
+    line: 22
+    function: authenticate
+    description: "Hardcoded password in source code"
+    severity: medium
+    
+  - type: command_injection
+    file: vulnerable_app.py
+    line: 28
+    function: execute_command
+    description: "Command injection via os.system"
+    severity: high
+    
+  - type: weak_encryption
+    file: vulnerable_app.py
+    line: 33
+    function: encrypt_data
+    description: "Weak XOR encryption"
+    severity: low
+
+functions:
+  - name: get_user
+    file: vulnerable_app.py
+    line: 7
+    parameters:
+      - username
+    return_type: list
+    
+  - name: render_user_input
+    file: vulnerable_app.py
+    line: 14
+    parameters:
+      - user_input
+    return_type: str
+    
+  - name: authenticate
+    file: vulnerable_app.py
+    line: 21
+    parameters:
+      - password
+    return_type: bool
+    
+  - name: execute_command
+    file: vulnerable_app.py
+    line: 27
+    parameters:
+      - cmd
+    return_type: None
+    
+  - name: encrypt_data
+    file: vulnerable_app.py
+    line: 32
+    parameters:
+      - data
+    return_type: str

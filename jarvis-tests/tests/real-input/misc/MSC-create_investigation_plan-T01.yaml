@@ -1,0 +1,22 @@
+test_id: MSC-create_investigation_plan-T01
+name: Happy Path test for create_investigation_plan
+category: misc
+tool: create_investigation_plan
+layer: 1
+test_type: T01
+description: Happy Path test for create_investigation_plan
+fixture: simple-python
+input:
+  user_query: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not:
+- error
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

@@ -1,0 +1,23 @@
+test_id: MSC-send_message_to_agent-T01
+name: Happy Path test for send_message_to_agent
+category: misc
+tool: send_message_to_agent
+layer: 1
+test_type: T01
+description: Happy Path test for send_message_to_agent
+fixture: simple-python
+input:
+  agent_id: placeholder
+  message: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not:
+- error
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

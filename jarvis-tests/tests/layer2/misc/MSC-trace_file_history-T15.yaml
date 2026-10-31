@@ -7,8 +7,8 @@ test_type: T15
 description: Recovery test for trace_file_history
 fixture: simple-python
 input:
-  file_path: main.py
-  repository_path: /path/to/repo
+  file_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/simple-python/main.py
+  repository_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/simple-python
   tool_context: placeholder
 expected:
   status: ok

@@ -1,0 +1,76 @@
+# Ground Truth for Rust Project Fixture
+
+functions:
+  - name: main
+    file: src/main.rs
+    line: 7
+    parameters: []
+    return_type: unit
+    
+  - name: calculate_score
+    file: src/main.rs
+    line: 12
+    parameters:
+      - value
+    return_type: i32
+    
+  - name: validate_input
+    file: src/main.rs
+    line: 16
+    parameters:
+      - input
+    return_type: bool
+
+classes:
+  - name: User
+    file: src/models.rs
+    line: 4
+    methods:
+      - new
+      - get_display_name
+      
+  - name: Config
+    file: src/models.rs
+    line: 20
+    methods:
+      - new
+
+modules:
+  - name: utils
+    file: src/utils.rs
+    functions:
+      - process_data
+      - format_result
+      - validate_config
+      
+  - name: models
+    file: src/models.rs
+    structs:
+      - User
+      - Config
+
+call_graph:
+  - caller: main
+    callee: User::new
+    file: src/main.rs
+    line: 9
+    
+  - caller: main
+    callee: process_data
+    file: src/main.rs
+    line: 10
+    
+  - caller: process_data
+    callee: println!
+    file: src/utils.rs
+    line: 5
+
+dependencies:
+  - file: src/main.rs
+    depends_on:
+      - models
+      - utils
+      
+  - file: src/utils.rs
+    depends_on:
+      - models

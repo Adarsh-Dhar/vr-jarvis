@@ -1,0 +1,22 @@
+test_id: MSC-save_scene_state-T01
+name: Happy Path test for save_scene_state
+category: misc
+tool: save_scene_state
+layer: 1
+test_type: T01
+description: Happy Path test for save_scene_state
+fixture: simple-python
+input:
+  state_id: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not:
+- error
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

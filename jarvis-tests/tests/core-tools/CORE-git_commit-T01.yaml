@@ -1,0 +1,28 @@
+test_id: CORE-git_commit-T01
+name: Commit changes in git repository
+category: core
+tool: git_commit
+layer: 1
+test_type: T01
+description: Happy Path - commit changes in test git repository
+fixture: git-test-repo
+input:
+  repository_path: fixtures/integration-test-infrastructure/git-repos/simple-repo
+  message: "Test commit"
+expected:
+  status: ok
+  commit_hash_matches: "^[a-f0-9]{40}$"
+must_not:
+  - error
+checks:
+  - type: content_validation
+    required_content:
+      - "ok"
+  - type: schema_validity
+    required_fields:
+      - status
+      - repository_path
+      - commit_hash
+performance:
+  max_duration_ms: 2000
+severity: critical

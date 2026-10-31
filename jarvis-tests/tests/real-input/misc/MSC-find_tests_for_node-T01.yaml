@@ -1,0 +1,22 @@
+test_id: MSC-find_tests_for_node-T01
+name: Happy Path test for find_tests_for_node
+category: misc
+tool: find_tests_for_node
+layer: 1
+test_type: T01
+description: Happy Path test for find_tests_for_node
+fixture: simple-python
+input:
+  node_id: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not:
+- error
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

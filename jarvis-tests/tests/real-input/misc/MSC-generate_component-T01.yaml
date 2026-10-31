@@ -1,0 +1,23 @@
+test_id: MSC-generate_component-T01
+name: Happy Path test for generate_component
+category: misc
+tool: generate_component
+layer: 1
+test_type: T01
+description: Happy Path test for generate_component
+fixture: simple-python
+input:
+  description: placeholder
+  component_type: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not:
+- error
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

@@ -1,0 +1,23 @@
+test_id: MSC-request_more_evidence-T01
+name: Happy Path test for request_more_evidence
+category: misc
+tool: request_more_evidence
+layer: 1
+test_type: T01
+description: Happy Path test for request_more_evidence
+fixture: simple-python
+input:
+  task_id: placeholder
+  evidence_type: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not:
+- error
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

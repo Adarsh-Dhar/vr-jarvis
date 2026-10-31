@@ -7,9 +7,9 @@ test_type: T11
 description: Concurrency test for git_diff
 fixture: simple-python
 input:
-  repository_path: /path/to/repo
+  repository_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/simple-python
   tool_context: placeholder
-  file_path: main.py
+  file_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

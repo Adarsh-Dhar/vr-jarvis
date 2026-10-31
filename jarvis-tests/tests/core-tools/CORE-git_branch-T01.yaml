@@ -1,0 +1,28 @@
+test_id: CORE-git_branch-T01
+name: List branches in git repository
+category: core
+tool: git_branch
+layer: 1
+test_type: T01
+description: Happy Path - list branches in test git repository
+fixture: git-test-repo
+input:
+  repository_path: fixtures/integration-test-infrastructure/git-repos/simple-repo
+expected:
+  status: ok
+  branch_count_min: 1
+  main_branch_present: true
+must_not:
+  - error
+checks:
+  - type: content_validation
+    required_content:
+      - "main"
+  - type: schema_validity
+    required_fields:
+      - status
+      - repository_path
+      - branches
+performance:
+  max_duration_ms: 1000
+severity: critical

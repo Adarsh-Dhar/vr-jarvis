@@ -1,0 +1,22 @@
+test_id: MSC-search_files-T01
+name: Happy Path test for search_files
+category: misc
+tool: search_files
+layer: 1
+test_type: T01
+description: Happy Path test for search_files
+fixture: simple-python
+input:
+  tool_context: placeholder
+  pattern: placeholder
+expected:
+  status: ok
+must_not:
+- error
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

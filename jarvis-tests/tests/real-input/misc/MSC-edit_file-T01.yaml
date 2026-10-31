@@ -1,0 +1,24 @@
+test_id: MSC-edit_file-T01
+name: Happy Path test for edit_file
+category: misc
+tool: edit_file
+layer: 1
+test_type: T01
+description: Happy Path test for edit_file
+fixture: simple-python
+input:
+  file_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/simple-python/main.py
+  old_content: placeholder
+  new_content: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not:
+- error
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

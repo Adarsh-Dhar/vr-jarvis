@@ -1,0 +1,22 @@
+test_id: MSC-visualize_class_hierarchy-T01
+name: Happy Path test for visualize_class_hierarchy
+category: misc
+tool: visualize_class_hierarchy
+layer: 1
+test_type: T01
+description: Happy Path test for visualize_class_hierarchy
+fixture: simple-python
+input:
+  class_id: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not:
+- error
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

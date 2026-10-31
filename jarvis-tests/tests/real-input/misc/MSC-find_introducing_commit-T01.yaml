@@ -1,0 +1,23 @@
+test_id: MSC-find_introducing_commit-T01
+name: Happy Path test for find_introducing_commit
+category: misc
+tool: find_introducing_commit
+layer: 1
+test_type: T01
+description: Happy Path test for find_introducing_commit
+fixture: simple-python
+input:
+  symbol_id: placeholder
+  repository_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/simple-python
+  tool_context: placeholder
+expected:
+  status: ok
+must_not:
+- error
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

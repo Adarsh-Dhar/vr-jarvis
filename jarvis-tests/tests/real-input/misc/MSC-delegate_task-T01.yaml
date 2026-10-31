@@ -1,0 +1,23 @@
+test_id: MSC-delegate_task-T01
+name: Happy Path test for delegate_task
+category: misc
+tool: delegate_task
+layer: 1
+test_type: T01
+description: Happy Path test for delegate_task
+fixture: simple-python
+input:
+  agent_id: placeholder
+  task: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not:
+- error
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

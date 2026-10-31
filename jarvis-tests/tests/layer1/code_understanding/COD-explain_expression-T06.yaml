@@ -8,7 +8,7 @@ description: Large Input test for explain_expression
 fixture: polyglot-monorepo
 input:
   expression: placeholder
-  file_path: main.py
+  file_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/polyglot-monorepo/main.py
   line: placeholder
   tool_context: placeholder
 expected:

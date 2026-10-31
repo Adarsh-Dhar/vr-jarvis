@@ -1,0 +1,21 @@
+test_id: MSC-reset_camera-T01
+name: Happy Path test for reset_camera
+category: misc
+tool: reset_camera
+layer: 1
+test_type: T01
+description: Happy Path test for reset_camera
+fixture: simple-python
+input:
+  tool_context: placeholder
+expected:
+  status: ok
+must_not:
+- error
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

@@ -1,0 +1,22 @@
+test_id: MSC-find_error_origin-T01
+name: Happy Path test for find_error_origin
+category: misc
+tool: find_error_origin
+layer: 1
+test_type: T01
+description: Happy Path test for find_error_origin
+fixture: simple-python
+input:
+  stack_trace: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not:
+- error
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

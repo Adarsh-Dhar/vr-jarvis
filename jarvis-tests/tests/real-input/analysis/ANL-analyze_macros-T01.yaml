@@ -1,0 +1,22 @@
+test_id: ANL-analyze_macros-T01
+name: Happy Path test for analyze_macros
+category: analysis
+tool: analyze_macros
+layer: 1
+test_type: T01
+description: Happy Path test for analyze_macros
+fixture: simple-python
+input:
+  file_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/simple-python/main.py
+  tool_context: placeholder
+expected:
+  status: ok
+must_not:
+- error
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 2000
+severity: critical

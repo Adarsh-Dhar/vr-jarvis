@@ -1,0 +1,23 @@
+test_id: CORE-read_file-T02
+name: Read non-existent file returns error
+category: core
+tool: read_file
+layer: 1
+test_type: T02
+description: Input validation - non-existent file should return error
+fixture: simple-python
+input:
+  file_path: fixtures/repositories/simple-python/nonexistent.py
+expected:
+  status: error
+  error_contains: "does not exist"
+must_not:
+  - status: ok
+checks:
+  - type: schema_validity
+    required_fields:
+      - status
+      - error
+performance:
+  max_duration_ms: 500
+severity: critical

@@ -1,0 +1,30 @@
+# Ground Truth for Polyglot Monorepo
+
+languages:
+  - python
+  - typescript
+  - rust
+
+services:
+  - name: frontend
+    language: typescript
+    directory: frontend/
+    
+  - name: backend
+    language: python
+    directory: backend/
+    
+  - name: shared
+    language: rust
+    directory: shared/
+
+cross_language_calls:
+  - from: backend
+    to: shared
+    type: ffi
+    description: "Python calls Rust via FFI"
+    
+  - from: frontend
+    to: backend
+    type: http
+    description: "TypeScript calls Python API"

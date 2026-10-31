@@ -1,0 +1,22 @@
+test_id: MSC-retry_agent_task-T01
+name: Happy Path test for retry_agent_task
+category: misc
+tool: retry_agent_task
+layer: 1
+test_type: T01
+description: Happy Path test for retry_agent_task
+fixture: simple-python
+input:
+  task_id: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not:
+- error
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

@@ -1,0 +1,23 @@
+test_id: MSC-manage_environment_variables-T01
+name: Happy Path test for manage_environment_variables
+category: misc
+tool: manage_environment_variables
+layer: 1
+test_type: T01
+description: Happy Path test for manage_environment_variables
+fixture: simple-python
+input:
+  action: placeholder
+  variables: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not:
+- error
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

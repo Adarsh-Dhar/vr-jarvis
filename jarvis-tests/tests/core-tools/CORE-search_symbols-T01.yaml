@@ -1,0 +1,28 @@
+test_id: CORE-search_symbols-T01
+name: Search for target symbol
+category: core
+tool: search_symbols
+layer: 1
+test_type: T01
+description: Happy Path - search for known symbol target in simple-python
+fixture: simple-python
+input:
+  symbol_name: target
+  symbol_type: function
+expected:
+  status: ok
+  symbol_name: target
+  results_not_empty: true
+must_not:
+  - error
+checks:
+  - type: content_validation
+    required_content:
+      - "target"
+  - type: schema_validity
+    required_fields:
+      - status
+      - symbol_name
+performance:
+  max_duration_ms: 1000
+severity: critical

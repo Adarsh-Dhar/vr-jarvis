@@ -7,7 +7,7 @@ test_type: T03
 description: Output Validation test for resolve_language_types
 fixture: simple-python
 input:
-  file_path: main.py
+  file_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/simple-python/main.py
   language: python
   tool_context: placeholder
 expected:

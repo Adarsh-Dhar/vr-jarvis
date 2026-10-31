@@ -1,0 +1,23 @@
+test_id: MSC-show_ghost_diff-T01
+name: Happy Path test for show_ghost_diff
+category: misc
+tool: show_ghost_diff
+layer: 1
+test_type: T01
+description: Happy Path test for show_ghost_diff
+fixture: simple-python
+input:
+  node_id: placeholder
+  diff: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not:
+- error
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

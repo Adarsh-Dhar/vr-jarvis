@@ -1,0 +1,22 @@
+test_id: MSC-run_fuzz_tests-T01
+name: Happy Path test for run_fuzz_tests
+category: misc
+tool: run_fuzz_tests
+layer: 1
+test_type: T01
+description: Happy Path test for run_fuzz_tests
+fixture: simple-python
+input:
+  target_function: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not:
+- error
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

@@ -1,0 +1,34 @@
+test_id: CORE-read_file-T01
+name: Read main.py from simple-python fixture
+category: core
+tool: read_file
+layer: 1
+test_type: T01
+description: Happy Path test for read_file - read a known file from fixture
+fixture: simple-python
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+expected:
+  status: ok
+  file_path_contains: main.py
+  content_contains:
+    - "def alpha():"
+    - "def target():"
+    - "class ExampleClass:"
+  line_count: 93
+must_not:
+  - error
+checks:
+  - type: content_validation
+    required_content:
+      - "Simple Python Test Repository"
+      - "def alpha():"
+      - "def target():"
+  - type: schema_validity
+    required_fields:
+      - status
+      - file_path
+      - content
+performance:
+  max_duration_ms: 500
+severity: critical

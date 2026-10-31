@@ -1,0 +1,32 @@
+test_id: CORE-scan_vulnerabilities-T01
+name: Detect security vulnerabilities in security-challenge fixture
+category: core
+tool: scan_vulnerabilities
+layer: 1
+test_type: T01
+description: Happy Path - detect SQL injection, XSS, and other vulnerabilities
+fixture: security-challenge
+input:
+  repository_path: fixtures/repositories/security-challenge
+expected:
+  status: ok
+  vulnerabilities_found_min: 4
+  known_vulnerabilities_detected:
+    - sql_injection
+    - xss
+    - command_injection
+    - hardcoded_password
+must_not:
+  - error
+checks:
+  - type: content_validation
+    required_content:
+      - "sql_injection"
+      - "xss"
+  - type: schema_validity
+    required_fields:
+      - status
+      - vulnerabilities
+performance:
+  max_duration_ms: 2000
+severity: critical

@@ -1,0 +1,23 @@
+test_id: MSC-refactor_function-T01
+name: Happy Path test for refactor_function
+category: misc
+tool: refactor_function
+layer: 1
+test_type: T01
+description: Happy Path test for refactor_function
+fixture: simple-python
+input:
+  function_id: placeholder
+  refactoring_type: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not:
+- error
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

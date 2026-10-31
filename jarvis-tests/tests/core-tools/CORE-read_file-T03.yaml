@@ -1,0 +1,28 @@
+test_id: CORE-read_file-T03
+name: Output validation - content structure
+category: core
+tool: read_file
+layer: 1
+test_type: T03
+description: Output validation - verify returned content has correct structure
+fixture: simple-python
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+expected:
+  status: ok
+  content_type: string
+  content_not_empty: true
+  file_path_type: string
+must_not:
+  - error
+checks:
+  - type: field_type_validation
+    content_type: str
+    file_path_type: str
+  - type: non_empty_check
+    fields:
+      - content
+      - file_path
+performance:
+  max_duration_ms: 500
+severity: critical

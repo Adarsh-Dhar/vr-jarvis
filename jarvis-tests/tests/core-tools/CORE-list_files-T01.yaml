@@ -1,0 +1,33 @@
+test_id: CORE-list_files-T01
+name: List files in simple-python fixture
+category: core
+tool: list_files
+layer: 1
+test_type: T01
+description: Happy Path - list all files in simple-python fixture
+fixture: simple-python
+input:
+  directory: fixtures/repositories/simple-python
+  recursive: true
+expected:
+  status: ok
+  file_count_min: 3
+  known_files_present:
+    - main.py
+    - ground-truth.yaml
+    - subpackage
+must_not:
+  - error
+checks:
+  - type: content_validation
+    required_files:
+      - main.py
+      - ground-truth.yaml
+  - type: schema_validity
+    required_fields:
+      - status
+      - directory
+      - files
+performance:
+  max_duration_ms: 500
+severity: critical

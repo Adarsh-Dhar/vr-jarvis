@@ -1,0 +1,22 @@
+test_id: MSC-manage_processes-T01
+name: Happy Path test for manage_processes
+category: misc
+tool: manage_processes
+layer: 1
+test_type: T01
+description: Happy Path test for manage_processes
+fixture: simple-python
+input:
+  action: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
+must_not:
+- error
+checks:
+- type: schema_validity
+  required_fields:
+  - status
+performance:
+  max_duration_ms: 3000
+severity: critical

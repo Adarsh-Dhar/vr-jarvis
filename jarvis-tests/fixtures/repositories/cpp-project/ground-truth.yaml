@@ -1,0 +1,71 @@
+# Ground Truth for C++ Project Fixture
+
+functions:
+  - name: main
+    file: src/main.cpp
+    line: 8
+    parameters: []
+    return_type: int
+    
+  - name: calculateScore
+    file: src/main.cpp
+    line: 13
+    parameters:
+      - value
+    return_type: int
+    
+  - name: validateInput
+    file: src/main.cpp
+    line: 17
+    parameters:
+      - input
+    return_type: bool
+
+classes:
+  - name: User
+    file: src/models.h
+    line: 6
+    methods:
+      - User
+      - getName
+      - getAge
+      - getDisplayName
+      
+  - name: Config
+    file: src/models.h
+    line: 20
+    methods:
+      - Config
+      - getKey
+      - getValue
+
+call_graph:
+  - caller: main
+    callee: User::User
+    file: src/main.cpp
+    line: 10
+    
+  - caller: main
+    callee: processUser
+    file: src/main.cpp
+    line: 11
+    
+  - caller: processUser
+    callee: User::getName
+    file: src/utils.cpp
+    line: 5
+
+dependencies:
+  - file: src/main.cpp
+    depends_on:
+      - models.h
+      - utils.h
+      
+  - file: src/utils.cpp
+    depends_on:
+      - models.h
+      - utils.h
+      
+  - file: src/models.cpp
+    depends_on:
+      - models.h
