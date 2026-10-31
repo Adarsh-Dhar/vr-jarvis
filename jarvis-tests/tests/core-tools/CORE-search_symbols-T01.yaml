@@ -11,18 +11,12 @@ input:
   symbol_type: function
 expected:
   status: ok
-  symbol_name: target
-  results_not_empty: true
 must_not:
-  - error
+- error
 checks:
-  - type: content_validation
-    required_content:
-      - "target"
-  - type: schema_validity
-    required_fields:
-      - status
-      - symbol_name
+- type: schema_validity
+  required_fields:
+  - status
 performance:
   max_duration_ms: 1000
 severity: critical

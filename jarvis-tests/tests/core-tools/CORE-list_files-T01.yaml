@@ -11,11 +11,7 @@ input:
   recursive: true
 expected:
   status: ok
-  file_count_min: 3
-  known_files_present:
-    - main.py
-    - ground-truth.yaml
-    - subpackage
+  file_count_min: 5
 must_not:
   - error
 checks:

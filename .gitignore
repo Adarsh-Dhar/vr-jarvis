@@ -71,3 +71,4 @@ ai_agents/work/
 ai_agents/data/project_memory.json
 .env
 jarvis-tests/test-reports/
+server/ai_agents/work/

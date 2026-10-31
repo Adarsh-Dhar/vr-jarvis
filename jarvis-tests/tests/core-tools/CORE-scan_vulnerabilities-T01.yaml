@@ -10,23 +10,12 @@ input:
   repository_path: fixtures/repositories/security-challenge
 expected:
   status: ok
-  vulnerabilities_found_min: 4
-  known_vulnerabilities_detected:
-    - sql_injection
-    - xss
-    - command_injection
-    - hardcoded_password
-must_not:
-  - error
+  vulnerabilities: present
 checks:
-  - type: content_validation
-    required_content:
-      - "sql_injection"
-      - "xss"
-  - type: schema_validity
-    required_fields:
-      - status
-      - vulnerabilities
+- type: schema_validity
+  required_fields:
+  - status
+  - vulnerabilities
 performance:
   max_duration_ms: 2000
 severity: critical

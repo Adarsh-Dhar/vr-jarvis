@@ -12,12 +12,14 @@ input:
   file_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/simple-python/main.py
 expected:
   status: ok
+  file_path: present
 must_not:
 - error
 checks:
 - type: schema_validity
   required_fields:
   - status
+  - file_path
 performance:
   max_duration_ms: 3000
 severity: critical

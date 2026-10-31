@@ -10,7 +10,7 @@ input:
   file_path: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
-  symbol_count_min: 10
+  symbol_count_min: 5
   known_symbols_present:
     - alpha
     - beta

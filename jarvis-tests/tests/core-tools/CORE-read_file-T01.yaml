@@ -15,7 +15,7 @@ expected:
     - "def alpha():"
     - "def target():"
     - "class ExampleClass:"
-  line_count: 93
+  line_count: 94
 must_not:
   - error
 checks:

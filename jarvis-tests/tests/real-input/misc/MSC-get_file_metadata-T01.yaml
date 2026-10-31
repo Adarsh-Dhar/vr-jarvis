@@ -11,12 +11,14 @@ input:
   tool_context: placeholder
 expected:
   status: ok
+  file_path: present
 must_not:
 - error
 checks:
 - type: schema_validity
   required_fields:
   - status
+  - file_path
 performance:
   max_duration_ms: 3000
 severity: critical
