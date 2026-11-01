@@ -8,6 +8,7 @@ description: Happy Path test for analyze_code_complexity
 expected:
   file_path: present
   status: ok
+  file_path_contains: main.py
 fixture: simple-python
 input:
   file_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/simple-python/main.py
@@ -23,3 +24,7 @@ severity: critical
 test_id: ANL-analyze_code_complexity-T01
 test_type: T01
 tool: analyze_code_complexity
+expected_complexity:
+  cyclomatic: 1
+  cognitive: 0
+  lines_of_code: 1

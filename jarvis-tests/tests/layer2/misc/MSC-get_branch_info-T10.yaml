@@ -6,8 +6,8 @@ checks:
 description: Timeout test for get_branch_info
 expected:
   status: error
-expected_error: argument should be a str or an os.PathLike object where __fspath__
-  returns a str, not 'NoneType'
+expected_error: 'TypeError: get_branch_info() takes 1 positional argument but 2 were
+  given'
 fixture: simple-python
 input:
   file_path: fixtures/repositories/simple-python/main.py

@@ -1,23 +1,22 @@
+test_id: API-inspect_orm_models-T01
+name: Happy Path test for inspect_orm_models
 category: api_database
-checks:
-- required_fields:
-  - status
-  type: schema_validity
+tool: inspect_orm_models
+layer: 1
+test_type: T01
 description: Happy Path test for inspect_orm_models
-expected:
-  status: ok
 fixture: simple-python
 input:
-  file_path: fixtures/repositories/simple-python/main.py
   repository_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/simple-python
-  tool_context: fixtures/repositories/simple-python/main.py
-layer: 1
+  tool_context: placeholder
+expected:
+  status: ok
 must_not:
 - error
-name: Happy Path test for inspect_orm_models
+checks:
+- type: schema_validity
+  required_fields:
+  - status
 performance:
   max_duration_ms: 5000
 severity: critical
-test_id: API-inspect_orm_models-T01
-test_type: T01
-tool: inspect_orm_models

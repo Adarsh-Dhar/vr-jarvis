@@ -10,7 +10,7 @@ fixture: polyglot-monorepo
 input:
   file_path: fixtures/repositories/polyglot-monorepo/main.py
   repository_path: fixtures/repositories/polyglot-monorepo
-  symbol_name: placeholder
+  symbol_name: alpha
   tool_context: placeholder
 layer: 1
 must_not: []

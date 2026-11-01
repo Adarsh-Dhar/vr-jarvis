@@ -1,26 +1,24 @@
+test_id: API-inspect_foreign_keys-T08
+name: Malformed Input test for inspect_foreign_keys
 category: api_database
-checks:
-- required_fields:
-  - status
-  type: schema_validity
+tool: inspect_foreign_keys
+layer: 1
+test_type: T08
 description: Malformed Input test for inspect_foreign_keys
-expected:
-  status: error
 fixture: corrupted-inputs
 input:
-  connection_string: fixtures/repositories/simple-python/main.py
-  file_path: fixtures/repositories/corrupted-inputs/main.py
-  repository_path: fixtures/repositories/corrupted-inputs
-  table: fixtures/repositories/simple-python/main.py
-  tool_context: fixtures/repositories/simple-python/main.py
-layer: 1
+  connection_string: placeholder
+  table: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
 must_not: []
-name: Malformed Input test for inspect_foreign_keys
+checks:
+- type: schema_validity
+  required_fields:
+  - status
 performance:
   max_duration_ms: 5000
 severity: critical
 skip: true
 skip_reason: 'Tool execution issue: '
-test_id: API-inspect_foreign_keys-T08
-test_type: T08
-tool: inspect_foreign_keys

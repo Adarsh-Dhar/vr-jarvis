@@ -7,8 +7,8 @@ description: Recovery test for measure_test_coverage
 expected:
   status: ok
 expected_coverage:
-  by_file: {}
   overall: 0.0
+  by_file: {}
 expected_output: '/Library/Developer/CommandLineTools/usr/bin/python3: No module named
   pytest
 

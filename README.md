@@ -43,9 +43,15 @@ uvicorn jarvis_server:app --app-dir server --host 127.0.0.1 --port 8000
 
 ### 4. Unity Configuration
 
-In Unity's `JarvisServerSettings`:
-- Set Token to match `JARVIS_TOKEN`
-- Set Server URL to `http://127.0.0.1:8000` (or LAN IP for Quest)
+The connection settings live in `Assets/ShowcaseSamples/JarvisVR/Resources/JarvisServerSettings.asset`
+(packed into the Quest build). Use the **JARVIS > Server** menu in the Editor:
+
+1. **Generate a new token**, then start the server with the `export JARVIS_TOKEN=...` line it prints (the token must equal `JARVIS_TOKEN`).
+2. **Use this computer** (Editor / XR Simulator, `http://127.0.0.1:8000`) or **Use this computer's LAN IP** (Quest; start uvicorn with `--host 0.0.0.0`).
+3. **Test connection**. The Console should print `JARVIS: CONNECTED ...`.
+
+`/health` needs no token, but every other endpoint does. A wrong token therefore shows "server online" in the
+status bar while questions fail with "Unauthorized".
 
 ## Architecture
 

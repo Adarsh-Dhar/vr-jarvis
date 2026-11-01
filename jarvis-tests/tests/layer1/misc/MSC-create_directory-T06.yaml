@@ -8,7 +8,7 @@ expected:
   status: ok
 fixture: polyglot-monorepo
 input:
-  directory_path: placeholder
+  directory_path: fixtures/repositories/polyglot-monorepo
   file_path: fixtures/repositories/polyglot-monorepo/main.py
   repository_path: fixtures/repositories/polyglot-monorepo
   tool_context: placeholder

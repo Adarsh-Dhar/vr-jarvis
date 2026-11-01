@@ -21,7 +21,7 @@ namespace JarvisVR
         {
             _bridge = gameObject.AddComponent<JarvisBridge>();
             FetchSource(_selectedNode);
-            Debug.Log("JARVIS: workspace built. Server " + PlayerPrefs.GetString("jarvis.server", JarvisBridge.DefaultServerUrl));
+            Debug.Log("JARVIS: workspace built. Server " + JarvisBridge.ResolveUrl());
             StartCoroutine(AutoBrief());
 #if UNITY_EDITOR
             gameObject.AddComponent<JarvisEditorInput>().Initialize(_canvas, _raycaster, _eventSystem, _canvas.worldCamera);

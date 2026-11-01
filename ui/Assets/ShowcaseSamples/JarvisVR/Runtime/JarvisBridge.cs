@@ -64,7 +64,29 @@ namespace JarvisVR
 
     private string _session;
     public bool Busy { get; private set; }
-    private string Url => PlayerPrefs.GetString("jarvis.server", DefaultServerUrl).TrimEnd('/');
+    private static JarvisServerSettings _settings;
+    private static JarvisServerSettings Settings
+    {
+      get { if (_settings == null) _settings = JarvisServerSettings.Load(); return _settings; }
+    }
+
+    /// <summary>Server address. Order: PlayerPrefs "jarvis.server" (Editor override) > JarvisServerSettings asset > DefaultServerUrl.</summary>
+    public static string ResolveUrl()
+    {
+      string v = PlayerPrefs.GetString("jarvis.server", "");
+      if (string.IsNullOrEmpty(v)) v = Settings != null && !string.IsNullOrEmpty(Settings.ServerUrl) ? Settings.ServerUrl : DefaultServerUrl;
+      return v.TrimEnd('/');
+    }
+
+    /// <summary>Shared secret. Order: PlayerPrefs "jarvis.token" > JarvisServerSettings asset. Must equal JARVIS_TOKEN on the server.</summary>
+    public static string ResolveToken()
+    {
+      string t = PlayerPrefs.GetString("jarvis.token", "");
+      if (!string.IsNullOrEmpty(t)) return t;
+      return Settings != null && Settings.Token != null ? Settings.Token : "";
+    }
+
+    private string Url => ResolveUrl();
 
     public void Ask(string text, string selection, Action<AskResponse> ok, Action<string> fail)
     {
@@ -159,11 +181,12 @@ namespace JarvisVR
       {
         if (json != null) { req.uploadHandler = new UploadHandlerRaw(Encoding.UTF8.GetBytes(json)); req.SetRequestHeader("Content-Type", "application/json"); }
         req.downloadHandler = new DownloadHandlerBuffer();
-        if (!string.IsNullOrEmpty(Token)) req.SetRequestHeader("Authorization", "Bearer " + Token);
+        string token = !string.IsNullOrEmpty(Token) ? Token : ResolveToken();
+        if (!string.IsNullOrEmpty(token)) req.SetRequestHeader("Authorization", "Bearer " + token);
         req.timeout = TimeoutSeconds;
         yield return req.SendWebRequest();
         if (req.result != UnityWebRequest.Result.Success)
-          fail(req.responseCode == 401 ? "Unauthorized: token mismatch." : "Cannot reach JARVIS at " + Url + " (" + req.error + ")");
+          fail(req.responseCode == 401 ? "Unauthorized: the token must equal JARVIS_TOKEN on the server (Resources/JarvisServerSettings)." : "Cannot reach JARVIS at " + Url + " (" + req.error + ")");
         else ok(req.downloadHandler.text);
       }
     }

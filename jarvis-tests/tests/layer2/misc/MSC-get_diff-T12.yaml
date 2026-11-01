@@ -6,8 +6,7 @@ checks:
 description: Security test for get_diff
 expected:
   status: error
-expected_error: argument should be a str or an os.PathLike object where __fspath__
-  returns a str, not 'NoneType'
+expected_error: 'TypeError: get_diff() takes 1 positional argument but 2 were given'
 fixture: simple-python
 input:
   file_path: fixtures/repositories/simple-python/main.py

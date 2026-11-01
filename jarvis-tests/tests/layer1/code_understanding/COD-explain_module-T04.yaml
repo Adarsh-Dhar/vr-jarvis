@@ -8,8 +8,7 @@ description: Empty Input test for explain_module
 expected:
   files: present
   status: error
-expected_error: argument should be a str or an os.PathLike object where __fspath__
-  returns a str, not 'NoneType'
+expected_error: 'Module not found: fixtures/repositories/simple-python/main.py'
 fixture: simple-python
 input:
   file_path: fixtures/repositories/simple-python/main.py

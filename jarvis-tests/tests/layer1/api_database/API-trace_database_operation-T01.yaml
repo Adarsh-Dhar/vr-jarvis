@@ -1,24 +1,22 @@
+test_id: API-trace_database_operation-T01
+name: Happy Path test for trace_database_operation
 category: api_database
-checks:
-- required_fields:
-  - status
-  type: schema_validity
+tool: trace_database_operation
+layer: 1
+test_type: T01
 description: Happy Path test for trace_database_operation
-expected:
-  status: ok
 fixture: simple-python
 input:
-  file_path: fixtures/repositories/simple-python/main.py
-  query_id: fixtures/repositories/simple-python/main.py
-  repository_path: fixtures/repositories/simple-python
-  tool_context: fixtures/repositories/simple-python/main.py
-layer: 1
+  query_id: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
 must_not:
 - error
-name: Happy Path test for trace_database_operation
+checks:
+- type: schema_validity
+  required_fields:
+  - status
 performance:
   max_duration_ms: 5000
 severity: critical
-test_id: API-trace_database_operation-T01
-test_type: T01
-tool: trace_database_operation

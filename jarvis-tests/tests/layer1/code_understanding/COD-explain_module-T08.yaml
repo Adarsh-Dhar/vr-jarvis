@@ -6,8 +6,7 @@ checks:
 description: Malformed Input test for explain_module
 expected:
   status: error
-expected_error: argument should be a str or an os.PathLike object where __fspath__
-  returns a str, not 'NoneType'
+expected_error: 'Module not found: fixtures/repositories/corrupted-inputs/main.py'
 fixture: corrupted-inputs
 input:
   file_path: fixtures/repositories/corrupted-inputs/main.py

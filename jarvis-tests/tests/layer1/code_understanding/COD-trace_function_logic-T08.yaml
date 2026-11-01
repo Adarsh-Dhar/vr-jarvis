@@ -9,7 +9,7 @@ expected:
 fixture: corrupted-inputs
 input:
   file_path: fixtures/repositories/corrupted-inputs/main.py
-  function_id: placeholder
+  function_id: alpha
   repository_path: fixtures/repositories/corrupted-inputs
   tool_context: placeholder
 layer: 1

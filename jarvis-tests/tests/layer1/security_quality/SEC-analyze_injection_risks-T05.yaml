@@ -1,22 +1,21 @@
+test_id: SEC-analyze_injection_risks-T05
+name: Boundary Conditions test for analyze_injection_risks
 category: security_quality
-checks:
-- required_fields:
-  - status
-  type: schema_validity
+tool: analyze_injection_risks
+layer: 1
+test_type: T05
 description: Boundary Conditions test for analyze_injection_risks
-expected:
-  status: ok
 fixture: simple-python
 input:
-  file_path: fixtures/repositories/simple-python/main.py
   repository_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/simple-python
-  tool_context: fixtures/repositories/simple-python/main.py
-layer: 1
+  tool_context: placeholder
+expected:
+  status: ok
 must_not: []
-name: Boundary Conditions test for analyze_injection_risks
+checks:
+- type: schema_validity
+  required_fields:
+  - status
 performance:
   max_duration_ms: 5000
 severity: high
-test_id: SEC-analyze_injection_risks-T05
-test_type: T05
-tool: analyze_injection_risks

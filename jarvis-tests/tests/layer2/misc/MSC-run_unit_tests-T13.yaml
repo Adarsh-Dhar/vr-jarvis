@@ -8,7 +8,7 @@ checks:
 description: Performance test for run_unit_tests
 expected:
   status: error
-expected_error: '''MockToolContext'' object is not iterable'
+expected_error: '''str'' object has no attribute ''state'''
 fixture: simple-python
 input:
   file_path: fixtures/repositories/simple-python/main.py

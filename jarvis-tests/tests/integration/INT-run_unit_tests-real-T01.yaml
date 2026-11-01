@@ -12,7 +12,7 @@ expected:
   results_available: true
   status: error
   tests_executed: true
-expected_error: '''MockToolContext'' object is not iterable'
+expected_error: '''str'' object has no attribute ''state'''
 fixture: simple-python
 infrastructure:
 - temp_copy

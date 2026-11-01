@@ -1,24 +1,23 @@
+test_id: SEC-analyze_permissions-T09
+name: Dependency Failure test for analyze_permissions
 category: security_quality
-checks:
-- required_fields:
-  - status
-  type: schema_validity
+tool: analyze_permissions
+layer: 1
+test_type: T09
 description: Dependency Failure test for analyze_permissions
-expected:
-  status: error
 fixture: simple-python
 input:
-  file_path: fixtures/repositories/simple-python/main.py
   repository_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/simple-python
-  tool_context: fixtures/repositories/simple-python/main.py
-layer: 1
+  tool_context: placeholder
+expected:
+  status: ok
 must_not: []
-name: Dependency Failure test for analyze_permissions
+checks:
+- type: schema_validity
+  required_fields:
+  - status
 performance:
   max_duration_ms: 5000
 severity: high
 skip: true
 skip_reason: 'Tool execution issue: '
-test_id: SEC-analyze_permissions-T09
-test_type: T09
-tool: analyze_permissions

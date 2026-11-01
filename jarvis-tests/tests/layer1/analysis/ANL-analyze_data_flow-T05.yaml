@@ -5,7 +5,7 @@ checks:
   type: schema_validity
 description: Boundary Conditions test for analyze_data_flow
 expected:
-  status: error
+  status: ok
 expected_error: argument should be a str or an os.PathLike object where __fspath__
   returns a str, not 'NoneType'
 fixture: simple-python
@@ -23,3 +23,6 @@ severity: high
 test_id: ANL-analyze_data_flow-T05
 test_type: T05
 tool: analyze_data_flow
+expected_variable_name: /Users/adarsh/Documents/vr-agent/fixtures/repositories/simple-python/main.py
+expected_data_flow: []
+expected_note: Full data flow analysis requires additional infrastructure

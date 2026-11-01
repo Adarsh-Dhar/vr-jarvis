@@ -10,7 +10,7 @@ fixture: corrupted-inputs
 input:
   file_path: fixtures/repositories/corrupted-inputs/main.py
   repository_path: fixtures/repositories/corrupted-inputs
-  symbol_name: placeholder
+  symbol_name: alpha
   tool_context: placeholder
 layer: 1
 must_not: []

@@ -7,7 +7,7 @@ description: Happy Path test for find_indirect_callers
 expected:
   status: not_found
 expected_message: Symbol definition not found
-expected_symbol_name: placeholder
+expected_symbol_name: alpha
 fixture: simple-python
 input:
   file_path: fixtures/repositories/simple-python/main.py

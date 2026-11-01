@@ -11,7 +11,7 @@ from datetime import datetime
 # Add server to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from server.ai_agents.tools import repository_tools, code_understanding_tools, relationship_intelligence_tools, repository_intelligence_tools, analysis_tools, testing_verification_tools, software_engineering_tools, git_tools
+from server.ai_agents.tools import repository_tools, code_understanding_tools, relationship_intelligence_tools, repository_intelligence_tools, analysis_tools, testing_verification_tools, software_engineering_tools, git_tools, data_flow_intelligence_tools
 from google.adk.tools import ToolContext
 
 # Absolute paths
@@ -84,6 +84,24 @@ TOOL_FUNCTIONS = {
     'get_diff': git_tools.get_diff,
     'get_branch_info': git_tools.get_branch_info,
     'list_changed_nodes': git_tools.list_changed_nodes,
+    'trace_variable_origin': data_flow_intelligence_tools.trace_variable_origin,
+    'trace_variable_usage': data_flow_intelligence_tools.trace_variable_usage,
+    'trace_variable_modifications': data_flow_intelligence_tools.trace_variable_modifications,
+    'trace_parameter_flow': data_flow_intelligence_tools.trace_parameter_flow,
+    'trace_return_value_flow': data_flow_intelligence_tools.trace_return_value_flow,
+    'trace_transformations': data_flow_intelligence_tools.trace_transformations,
+    'trace_cross_function_flow': data_flow_intelligence_tools.trace_cross_function_flow,
+    'trace_cross_service_flow': data_flow_intelligence_tools.trace_cross_service_flow,
+    'trace_database_reads': data_flow_intelligence_tools.trace_database_reads,
+    'trace_database_writes': data_flow_intelligence_tools.trace_database_writes,
+    'trace_api_data_flow': data_flow_intelligence_tools.trace_api_data_flow,
+    'trace_file_operations': data_flow_intelligence_tools.trace_file_operations,
+    'trace_state_changes': data_flow_intelligence_tools.trace_state_changes,
+    'build_data_flow_graph': data_flow_intelligence_tools.build_data_flow_graph,
+    'identify_data_sinks': data_flow_intelligence_tools.identify_data_sinks,
+    'identify_data_sources': data_flow_intelligence_tools.identify_data_sources,
+    'identify_data_leaks': data_flow_intelligence_tools.identify_data_leaks,
+    'identify_validation_gaps': data_flow_intelligence_tools.identify_validation_gaps,
 }
 
 def execute_tool(tool_name, input_data):

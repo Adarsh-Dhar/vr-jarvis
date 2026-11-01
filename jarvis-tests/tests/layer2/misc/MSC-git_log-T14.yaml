@@ -7,46 +7,46 @@ description: Regression test for git_log
 expected:
   status: ok
 expected_commits:
-- author: Adarsh Ayushman Dhar
+- hash: 3398e23c5489f11e883c1712c8dc421e3a20e5a7
+  message: integration for agent and ui
+  author: Adarsh Ayushman Dhar
   date: '2026-11-01'
-  hash: 99c3b464c776241b33fd90268c643b7bf5081904
+- hash: 99c3b464c776241b33fd90268c643b7bf5081904
   message: agent integration with ui bug fixes
-- author: Adarsh Ayushman Dhar
+  author: Adarsh Ayushman Dhar
   date: '2026-11-01'
-  hash: f220fc2f8e93e7648773a6e63da8c8cad77cf33f
+- hash: f220fc2f8e93e7648773a6e63da8c8cad77cf33f
   message: agents fixes
-- author: Adarsh Ayushman Dhar
+  author: Adarsh Ayushman Dhar
   date: '2026-11-01'
-  hash: 0eb9ec2bff9e46fc72b53fe4c6608fd146307f68
+- hash: 0eb9ec2bff9e46fc72b53fe4c6608fd146307f68
   message: agents built
-- author: Adarsh Ayushman Dhar
+  author: Adarsh Ayushman Dhar
   date: '2026-11-01'
-  hash: 53aadf9b22ec3c12b00f3b84b6c73cb7d7bb80ba
+- hash: 53aadf9b22ec3c12b00f3b84b6c73cb7d7bb80ba
   message: '2'
-- author: Adarsh Ayushman Dhar
-  date: '2026-10-31'
-  hash: 582396a64516fd3a42438a9ff94b19f62ffdef33
+  author: Adarsh Ayushman Dhar
+  date: '2026-11-01'
+- hash: 582396a64516fd3a42438a9ff94b19f62ffdef33
   message: '1'
-- author: Adarsh Ayushman Dhar
+  author: Adarsh Ayushman Dhar
   date: '2026-10-31'
-  hash: 70de57b5317cffd18cde11bb3cf6cd134d5216b0
+- hash: 70de57b5317cffd18cde11bb3cf6cd134d5216b0
   message: code testing fixes
-- author: Adarsh Ayushman Dhar
+  author: Adarsh Ayushman Dhar
   date: '2026-10-31'
-  hash: 25dbbd6027d19488d5647281a4d4aa16bcc54d87
+- hash: 25dbbd6027d19488d5647281a4d4aa16bcc54d87
   message: real tests
-- author: Adarsh Ayushman Dhar
+  author: Adarsh Ayushman Dhar
   date: '2026-10-31'
-  hash: e7397fc60a584597fb4ad051b53b38629ca115f5
+- hash: e7397fc60a584597fb4ad051b53b38629ca115f5
   message: test files
-- author: Adarsh Ayushman Dhar
+  author: Adarsh Ayushman Dhar
   date: '2026-10-31'
-  hash: 6b3333a534463542773a2236f89bb132f3ef4b8c
+- hash: 6b3333a534463542773a2236f89bb132f3ef4b8c
   message: tool completion and testing 1
-- author: Adarsh Ayushman Dhar
+  author: Adarsh Ayushman Dhar
   date: '2026-10-31'
-  hash: cde8f71568fbfb335d7ec4648831bd0311eb0649
-  message: tools fix 8
 expected_repository_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/simple-python
 fixture: simple-python
 input:
