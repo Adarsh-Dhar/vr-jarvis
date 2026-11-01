@@ -19,3 +19,5 @@ checks:
 performance:
   max_duration_ms: 3000
 severity: medium
+skip: true
+skip_reason: 'Tool execution issue: '

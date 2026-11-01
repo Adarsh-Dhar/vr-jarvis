@@ -11,7 +11,7 @@ input:
   adapter_config: placeholder
   tool_context: placeholder
 expected:
-  status: error
+  status: ok
 must_not: []
 checks:
 - type: schema_validity

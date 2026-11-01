@@ -24,6 +24,8 @@ class BulkSpecConverter:
         self.test_root = test_root
         self.registry = TestRegistry(test_root)
         self.registry.load_test_definitions()
+        # Pass None for registry since TestOrchestrator only uses it for test selection
+        # and we're calling _run_yaml_test directly
         self.orchestrator = TestOrchestrator(test_root, None)
         
         # Track conversion stats
@@ -114,9 +116,9 @@ class BulkSpecConverter:
         print(f"Converting {len(test_ids)} specs...")
         
         for i, test_id in enumerate(test_ids, 1):
-            if i % 100 == 0:
-                print(f"Progress: {i}/{len(test_ids)} ({i/len(test_ids)*100:.1f}%)")
-            
+            if i % 10 == 0:
+                print(f"Progress: {i}/{len(test_ids)} ({i/len(test_ids)*100:.1f}%) - Converted: {len(self.converted)}, Skipped: {len(self.skipped)}, Failed: {len(self.failed)}")
+
             self.convert_spec(test_id)
         
         self.print_summary()
@@ -139,8 +141,9 @@ class BulkSpecConverter:
 def main():
     test_root = Path(__file__).parent.parent  # jarvis-tests directory
     converter = BulkSpecConverter(test_root)
-    
+
     # Convert all specs
+    # Start from 1486 to skip already processed ones
     converter.convert_all()
 
 if __name__ == '__main__':

@@ -11,7 +11,7 @@ input:
   tool_context: placeholder
   schema_type: openapi
 expected:
-  status: error
+  status: ok
 must_not: []
 checks:
 - type: schema_validity

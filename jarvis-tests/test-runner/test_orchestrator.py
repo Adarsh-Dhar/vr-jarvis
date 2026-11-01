@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 class TestOrchestrator:
     """Orchestrates test execution across all test layers"""
     
-    def __init__(self, test_root: Path, registry: TestRegistry):
+    def __init__(self, test_root: Path, registry: Optional[TestRegistry] = None):
         self.test_root = test_root
         self.registry = registry
         self.current_run: Optional[Dict] = None
@@ -170,6 +170,7 @@ class TestOrchestrator:
         """Run a YAML-defined test"""
         import sys
         import importlib
+        import inspect
 
         start_time = time.time()
 
@@ -245,6 +246,11 @@ class TestOrchestrator:
         class MockToolContext:
             def __init__(self):
                 self.state = {}
+                # Add actions attribute for tools that need it (e.g., exit_loop)
+                class MockActions:
+                    def __init__(self):
+                        self.escalate = False
+                self.actions = MockActions()
 
         tool_context = MockToolContext()
 
@@ -278,13 +284,20 @@ class TestOrchestrator:
                         input_args[key] = str(self.test_root / value)
 
             # Remove tool_context from input_args if it's a placeholder
-            # We'll always pass the mock tool_context as a kwarg
+            # We'll always pass the mock tool_context as a kwarg if the tool accepts it
             if 'tool_context' in input_args and input_args['tool_context'] == 'placeholder':
                 del input_args['tool_context']
 
-            # Call the tool with tool_context as kwarg
+            # Check if tool accepts tool_context parameter
+            sig = inspect.signature(tool_func)
+            accepts_tool_context = 'tool_context' in sig.parameters
+
+            # Call the tool
             logger.info(f"Calling tool {tool_name} with args: {input_args}")
-            output = tool_func(**input_args, tool_context=tool_context)
+            if accepts_tool_context:
+                output = tool_func(**input_args, tool_context=tool_context)
+            else:
+                output = tool_func(**input_args)
         except Exception as e:
             # Cleanup temp fixture
             if temp_fixture_dir and temp_fixture_dir.exists():
