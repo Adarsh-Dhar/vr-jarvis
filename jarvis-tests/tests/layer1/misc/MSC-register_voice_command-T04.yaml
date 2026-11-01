@@ -7,9 +7,9 @@ test_type: T04
 description: Empty Input test for register_voice_command
 fixture: simple-python
 input:
-  command_text: placeholder
-  action: placeholder
-  tool_context: placeholder
+  command_text: fixtures/repositories/simple-python/main.py
+  action: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

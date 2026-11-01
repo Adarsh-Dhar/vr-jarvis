@@ -6,6 +6,7 @@ Factory function to build LlmAgent instances from specifications.
 from typing import List, Callable, Dict, Any, Optional
 from google.adk.agents import LlmAgent
 from ..config import MODEL
+from ..callbacks import log_agent_start, permission_guard
 
 
 class AgentSpec:
@@ -79,6 +80,8 @@ def make_specialist(spec: AgentSpec) -> LlmAgent:
         instruction=spec.instruction_template,
         tools=resolved_tools,
         output_key=spec.output_key,
+        before_agent_callback=log_agent_start,
+        before_tool_callback=permission_guard,
     )
 
     # Store permission ceiling and tool budget in registry for callbacks

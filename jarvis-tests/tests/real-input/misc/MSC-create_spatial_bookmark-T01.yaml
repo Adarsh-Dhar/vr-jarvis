@@ -7,9 +7,9 @@ test_type: T01
 description: Happy Path test for create_spatial_bookmark
 fixture: simple-python
 input:
-  bookmark_id: placeholder
-  description: placeholder
-  tool_context: placeholder
+  bookmark_id: fixtures/repositories/simple-python/main.py
+  description: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not:

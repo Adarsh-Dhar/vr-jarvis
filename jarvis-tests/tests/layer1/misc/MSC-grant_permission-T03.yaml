@@ -7,10 +7,10 @@ test_type: T03
 description: Output Validation test for grant_permission
 fixture: simple-python
 input:
-  tool_name: placeholder
-  agent_id: placeholder
-  permission_level: placeholder
-  tool_context: placeholder
+  tool_name: fixtures/repositories/simple-python/main.py
+  agent_id: fixtures/repositories/simple-python/main.py
+  permission_level: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

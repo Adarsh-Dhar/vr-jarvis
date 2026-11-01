@@ -7,9 +7,9 @@ test_type: T14
 description: Regression test for search_graph
 fixture: simple-python
 input:
-  graph_id: placeholder
+  graph_id: fixtures/repositories/simple-python/main.py
   query: test
-  tool_context: placeholder
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

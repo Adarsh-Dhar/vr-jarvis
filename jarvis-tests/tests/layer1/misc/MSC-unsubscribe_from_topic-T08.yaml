@@ -7,8 +7,8 @@ test_type: T08
 description: Malformed Input test for unsubscribe_from_topic
 fixture: corrupted-inputs
 input:
-  topic: placeholder
-  tool_context: placeholder
+  topic: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

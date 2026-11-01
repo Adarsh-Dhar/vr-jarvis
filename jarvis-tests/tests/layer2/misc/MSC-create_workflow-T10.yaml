@@ -7,9 +7,9 @@ test_type: T10
 description: Timeout test for create_workflow
 fixture: simple-python
 input:
-  workflow_name: placeholder
-  steps: placeholder
-  tool_context: placeholder
+  workflow_name: fixtures/repositories/simple-python/main.py
+  steps: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

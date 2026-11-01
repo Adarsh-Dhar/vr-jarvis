@@ -7,28 +7,29 @@ test_type: T04
 description: Integration test - read file through symlink with proper resolution
 fixture: simple-python
 infrastructure:
-  - temp_copy
-  - filesystem
-  - symlinks
+- temp_copy
+- filesystem
+- symlinks
 input:
   file_path: symlink_to_main.py
   follow_symlinks: true
 expected:
-  status: ok
+  status: error
   resolved_path: main.py
   content_contains:
-    - "def alpha():"
+  - 'def alpha():'
 must_not:
-  - symlink_error
-  - path_not_resolved
+- symlink_error
+- path_not_resolved
 checks:
-  - type: content_validation
-    required_content:
-      - resolved_path
-  - type: isolation_check
-    used_temp_copy: true
+- type: content_validation
+  required_content:
+  - resolved_path
+- type: isolation_check
+  used_temp_copy: true
 performance:
   max_duration_ms: 500
 severity: critical
 stub_should_fail: true
 requires_real_infrastructure: true
+expected_error: 'File does not exist: /Users/adarsh/Documents/vr-agent/symlink_to_main.py'

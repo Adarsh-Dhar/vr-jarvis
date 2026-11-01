@@ -7,8 +7,8 @@ test_type: T13
 description: Performance test for dim_unrelated
 fixture: simple-python
 input:
-  keep_ids: placeholder
-  tool_context: placeholder
+  keep_ids: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

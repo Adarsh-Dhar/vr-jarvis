@@ -7,9 +7,9 @@ test_type: T14
 description: Regression test for save_finding
 fixture: simple-python
 input:
-  summary: placeholder
-  node_ids: placeholder
-  tool_context: placeholder
+  summary: fixtures/repositories/simple-python/main.py
+  node_ids: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

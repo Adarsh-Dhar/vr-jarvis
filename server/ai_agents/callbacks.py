@@ -1,3 +1,5 @@
+import time
+
 from .config import USE_CACHED_TESTS
 from .state import DEFAULT_STATE
 
@@ -22,6 +24,17 @@ def init_state(callback_context):
     for key in PER_TURN_KEYS:
         state[key] = ''
     state['scene_commands'] = []
+    state['task_log'] = []
+    state['calling_agent'] = ''
+    TOOL_BUDGETS.clear()
+    return None
+
+
+def log_agent_start(callback_context):
+    log = list(callback_context.state.get('task_log', []))
+    log.append({'agent': callback_context.agent_name, 'kind': 'start', 'at': time.time()})
+    callback_context.state['task_log'] = log[-60:]
+    callback_context.state['calling_agent'] = callback_context.agent_name   # also needed by P8
     return None
 
 
@@ -50,6 +63,15 @@ TOOL_PERMISSIONS = {
     "git_commit": "write",
     "commit_changes": "write",
     "merge_branch": "write",
+    "search_and_replace": "write",
+    "rename_symbol": "write",
+    "extract_function": "write",
+    "organize_imports": "write",
+    "generate_function": "write",
+    "generate_class": "write",
+    "format_code": "write",
+    "apply_patch_to_worktree": "write",
+    "create_worktree": "write",
     # Execute tools
     "start_application": "execute",
     "stop_application": "execute",

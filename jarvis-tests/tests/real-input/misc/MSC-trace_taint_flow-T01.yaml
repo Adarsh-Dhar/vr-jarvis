@@ -7,8 +7,8 @@ test_type: T01
 description: Happy Path test for trace_taint_flow
 fixture: simple-python
 input:
-  source: placeholder
-  tool_context: placeholder
+  source: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not:

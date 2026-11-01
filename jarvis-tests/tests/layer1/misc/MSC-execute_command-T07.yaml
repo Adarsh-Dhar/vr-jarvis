@@ -7,8 +7,8 @@ test_type: T07
 description: Complex Input test for execute_command
 fixture: polyglot-monorepo
 input:
-  command: placeholder
-  tool_context: placeholder
+  command: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

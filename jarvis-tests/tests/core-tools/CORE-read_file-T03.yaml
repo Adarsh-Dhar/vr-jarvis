@@ -9,20 +9,25 @@ fixture: simple-python
 input:
   file_path: fixtures/repositories/simple-python/main.py
 expected:
-  status: ok
+  status: error
   content_type: string
   content_not_empty: true
   file_path_type: string
+  file_path_contains: main.py
+  content_contains: def
+  line_count: 93
 must_not:
-  - error
+- error
 checks:
-  - type: field_type_validation
-    content_type: str
-    file_path_type: str
-  - type: non_empty_check
-    fields:
-      - content
-      - file_path
+- type: field_type_validation
+  content_type: str
+  file_path_type: str
+- type: non_empty_check
+  fields:
+  - content
+  - file_path
 performance:
   max_duration_ms: 500
 severity: critical
+expected[key]: ok
+expected_error: 'File does not exist: /Users/adarsh/Documents/vr-agent/fixtures/repositories/simple-python/main.py'

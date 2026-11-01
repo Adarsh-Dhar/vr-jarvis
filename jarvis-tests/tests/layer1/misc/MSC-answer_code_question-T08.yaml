@@ -7,9 +7,9 @@ test_type: T08
 description: Malformed Input test for answer_code_question
 fixture: corrupted-inputs
 input:
-  question: placeholder
-  context: placeholder
-  tool_context: placeholder
+  question: fixtures/repositories/simple-python/main.py
+  context: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

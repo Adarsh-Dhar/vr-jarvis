@@ -7,8 +7,8 @@ test_type: T15
 description: Recovery test for read_documentation
 fixture: simple-python
 input:
-  doc_path: placeholder
-  tool_context: placeholder
+  doc_path: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

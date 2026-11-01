@@ -7,9 +7,9 @@ test_type: T06
 description: Large Input test for rename_file
 fixture: polyglot-monorepo
 input:
-  old_path: placeholder
-  new_path: placeholder
-  tool_context: placeholder
+  old_path: fixtures/repositories/simple-python/main.py
+  new_path: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

@@ -7,9 +7,9 @@ test_type: T02
 description: Input Validation test for package_search
 fixture: simple-python
 input:
-  registry: placeholder
+  registry: fixtures/repositories/simple-python/main.py
   query: test
-  tool_context: placeholder
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

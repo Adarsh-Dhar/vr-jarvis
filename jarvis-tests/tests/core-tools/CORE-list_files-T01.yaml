@@ -10,20 +10,54 @@ input:
   directory: fixtures/repositories/simple-python
   recursive: true
 expected:
-  status: ok
+  status: error
   file_count_min: 5
 must_not:
-  - error
+- error
 checks:
-  - type: content_validation
-    required_files:
-      - main.py
-      - ground-truth.yaml
-  - type: schema_validity
-    required_fields:
-      - status
-      - directory
-      - files
+- type: content_validation
+  required_files:
+  - main.py
+  - ground-truth.yaml
+- type: schema_validity
+  required_fields:
+  - status
+  - directory
+  - files
 performance:
   max_duration_ms: 500
 severity: critical
+expected[key]:
+- path: subpackage
+  type: directory
+  size: 0
+- path: ground-truth.yaml
+  type: file
+  size: 6160
+- path: main.py
+  type: file
+  size: 1727
+- path: subpackage/__init__.py
+  type: file
+  size: 47
+- path: subpackage/helper.py
+  type: file
+  size: 272
+expected_directory: /Users/adarsh/Documents/vr-agent/jarvis-tests/test-runner/../fixtures/repositories/simple-python
+expected_files:
+- path: subpackage
+  type: directory
+  size: 0
+- path: ground-truth.yaml
+  type: file
+  size: 6160
+- path: main.py
+  type: file
+  size: 1727
+- path: subpackage/__init__.py
+  type: file
+  size: 47
+- path: subpackage/helper.py
+  type: file
+  size: 272
+expected_error: 'Directory does not exist: /Users/adarsh/Documents/vr-agent/fixtures/repositories/simple-python'

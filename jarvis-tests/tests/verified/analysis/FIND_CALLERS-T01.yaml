@@ -11,7 +11,7 @@ input:
   target: target
   repository_path: fixtures/repositories/simple-python
 expected:
-  status: ok
+  status: not_found
   results: &id001
   - caller: alpha
     file: main.py
@@ -56,3 +56,5 @@ isolation: temp_copy
 stub_should_fail: true
 mutants_should_fail: true
 uncertain_handling: explicit
+expected_symbol_name: null
+expected_message: Symbol definition not found

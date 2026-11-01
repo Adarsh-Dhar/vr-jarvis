@@ -7,8 +7,8 @@ test_type: T01
 description: Happy Path test for set_layout_algorithm
 fixture: simple-python
 input:
-  algorithm: placeholder
-  tool_context: placeholder
+  algorithm: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not:

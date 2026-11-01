@@ -18,6 +18,7 @@ namespace JarvisVR
     void GetTree(string repo, string path, Action<RepoTreeDto> ok, Action<string> fail);
     void GetFile(string repo, string path, Action<RepoFileDto> ok, Action<string> fail);
     void SelectRepo(string name, Action<bool> done);
+    void GetProgress(int since, Action<ProgressDto> ok);
   }
 
   /// <summary>Local, network-free backend with scripted answers for UI development. Uses the ids of JarvisGraphModel.Sample().</summary>
@@ -103,6 +104,17 @@ namespace JarvisVR
     }
 
     public void GetGraph(Action<GraphDto> ok) { StartCoroutine(After(0.2f, () => ok(JarvisGraphModel.Sample()))); }
+
+    public void GetProgress(int since, Action<ProgressDto> ok)
+    {
+      var dto = new ProgressDto { busy = Busy, steps = new List<ProgressStep>() };
+      if (since < 2)
+      {
+        dto.steps.Add(new ProgressStep { i = 0, agent = "jarvis_orchestrator", kind = "start" });
+        dto.steps.Add(new ProgressStep { i = 1, agent = "investigate_pipeline", kind = "start" });
+      }
+      StartCoroutine(After(0.05f, () => ok(dto)));
+    }
 
     public void GetSource(string nodeId, Action<SourceResponse> ok)
     {

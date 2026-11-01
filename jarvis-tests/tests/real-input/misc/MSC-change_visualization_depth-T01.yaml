@@ -7,9 +7,9 @@ test_type: T01
 description: Happy Path test for change_visualization_depth
 fixture: simple-python
 input:
-  visualization_id: placeholder
+  visualization_id: fixtures/repositories/simple-python/main.py
   depth: 1
-  tool_context: placeholder
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not:

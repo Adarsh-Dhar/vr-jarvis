@@ -7,10 +7,10 @@ test_type: T10
 description: Timeout test for explain_class
 fixture: simple-python
 input:
-  class_id: placeholder
-  tool_context: placeholder
+  class_id: ExampleClass
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
-  status: ok
+  status: not_found
 must_not: []
 checks:
 - type: schema_validity
@@ -19,3 +19,5 @@ checks:
 performance:
   max_duration_ms: 3000
 severity: high
+expected_symbol_name: ExampleClass
+expected_message: 'Symbol definition not found: ExampleClass'

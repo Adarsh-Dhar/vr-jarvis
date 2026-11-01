@@ -13,7 +13,7 @@ input:
   ref1: main
   ref2: feature/new-feature
 expected:
-  status: ok
+  status: error
 checks:
 - type: schema_validity
   required_fields:
@@ -23,3 +23,4 @@ performance:
   max_duration_ms: 5000
 severity: high
 requires_infrastructure: true
+expected_error: 'TypeError: get_diff() takes 1 positional argument but 2 were given'

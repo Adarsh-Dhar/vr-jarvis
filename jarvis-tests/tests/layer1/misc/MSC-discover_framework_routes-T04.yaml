@@ -8,8 +8,8 @@ description: Empty Input test for discover_framework_routes
 fixture: simple-python
 input:
   repository_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/simple-python
-  framework: placeholder
-  tool_context: placeholder
+  framework: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

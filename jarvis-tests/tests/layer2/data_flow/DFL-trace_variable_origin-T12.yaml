@@ -7,8 +7,8 @@ test_type: T12
 description: Security test for trace_variable_origin
 fixture: simple-python
 input:
-  variable_id: placeholder
-  tool_context: placeholder
+  variable_id: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

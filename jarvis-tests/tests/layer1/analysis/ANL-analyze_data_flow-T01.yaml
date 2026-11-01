@@ -7,10 +7,10 @@ test_type: T01
 description: Happy Path test for analyze_data_flow
 fixture: simple-python
 input:
-  variable_name: placeholder
-  tool_context: placeholder
+  variable_name: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
-  status: ok
+  status: error
 must_not:
 - error
 checks:
@@ -20,3 +20,5 @@ checks:
 performance:
   max_duration_ms: 2000
 severity: critical
+expected_error: argument should be a str or an os.PathLike object where __fspath__
+  returns a str, not 'NoneType'

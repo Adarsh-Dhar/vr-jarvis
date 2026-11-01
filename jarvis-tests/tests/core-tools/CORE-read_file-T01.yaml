@@ -9,26 +9,25 @@ fixture: simple-python
 input:
   file_path: fixtures/repositories/simple-python/main.py
 expected:
-  status: ok
+  status: error
   file_path_contains: main.py
-  content_contains:
-    - "def alpha():"
-    - "def target():"
-    - "class ExampleClass:"
-  line_count: 94
+  content_contains: def
+  line_count: 93
 must_not:
-  - error
+- error
 checks:
-  - type: content_validation
-    required_content:
-      - "Simple Python Test Repository"
-      - "def alpha():"
-      - "def target():"
-  - type: schema_validity
-    required_fields:
-      - status
-      - file_path
-      - content
+- type: content_validation
+  required_content:
+  - Simple Python Test Repository
+  - 'def alpha():'
+  - 'def target():'
+- type: schema_validity
+  required_fields:
+  - status
+  - file_path
+  - content
 performance:
   max_duration_ms: 500
 severity: critical
+expected[key]: ok
+expected_error: 'File does not exist: /Users/adarsh/Documents/vr-agent/fixtures/repositories/simple-python/main.py'

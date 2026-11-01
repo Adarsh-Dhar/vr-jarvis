@@ -7,11 +7,11 @@ test_type: T11
 description: Concurrency test for add_graph_edge
 fixture: simple-python
 input:
-  graph_id: placeholder
-  source_id: placeholder
-  target_id: placeholder
-  edge_data: placeholder
-  tool_context: placeholder
+  graph_id: fixtures/repositories/simple-python/main.py
+  source_id: fixtures/repositories/simple-python/main.py
+  target_id: fixtures/repositories/simple-python/main.py
+  edge_data: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

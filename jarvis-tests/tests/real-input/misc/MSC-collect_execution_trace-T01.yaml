@@ -7,9 +7,9 @@ test_type: T01
 description: Happy Path test for collect_execution_trace
 fixture: simple-python
 input:
-  application_id: placeholder
-  duration: placeholder
-  tool_context: placeholder
+  application_id: fixtures/repositories/simple-python/main.py
+  duration: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not:

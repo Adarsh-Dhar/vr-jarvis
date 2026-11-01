@@ -7,8 +7,8 @@ test_type: T08
 description: Malformed Input test for speech_to_text
 fixture: corrupted-inputs
 input:
-  audio_data: placeholder
-  tool_context: placeholder
+  audio_data: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

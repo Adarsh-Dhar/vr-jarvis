@@ -8,9 +8,10 @@ description: Concurrency test for analyze_annotations
 fixture: simple-python
 input:
   file_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/simple-python/main.py
-  tool_context: placeholder
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
+  file_path_contains: main.py
 must_not: []
 checks:
 - type: schema_validity
@@ -19,3 +20,10 @@ checks:
 performance:
   max_duration_ms: 2000
 severity: high
+expected_annotations:
+- symbol: static_method
+  decorator: '@staticmethod'
+  line: 65
+- symbol: class_method
+  decorator: '@classmethod'
+  line: 70

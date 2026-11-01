@@ -4,17 +4,15 @@ category: unit
 layer: 1
 test_type: real_input
 description: Find callees of target function in simple-python
-
 input:
-  symbol_id: "simple-python::main::target"
-
+  symbol_id: simple-python::main::target
 expected:
-  status: ok
+  status: not_found
   results_not_empty: true
-
 must_not:
-  - placeholder
-
+- placeholder
 metrics:
-  - tool_selection
-  - evidence_accuracy
+- tool_selection
+- evidence_accuracy
+expected_symbol_name: null
+expected_message: Symbol definition not found

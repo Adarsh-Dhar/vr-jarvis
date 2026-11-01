@@ -7,9 +7,9 @@ test_type: T01
 description: Happy Path test for compare_code_regions
 fixture: simple-python
 input:
-  region1_id: placeholder
-  region2_id: placeholder
-  tool_context: placeholder
+  region1_id: fixtures/repositories/simple-python/main.py
+  region2_id: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not:

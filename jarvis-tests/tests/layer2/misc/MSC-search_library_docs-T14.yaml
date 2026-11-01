@@ -7,9 +7,9 @@ test_type: T14
 description: Regression test for search_library_docs
 fixture: simple-python
 input:
-  library: placeholder
+  library: fixtures/repositories/simple-python/main.py
   query: test
-  tool_context: placeholder
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

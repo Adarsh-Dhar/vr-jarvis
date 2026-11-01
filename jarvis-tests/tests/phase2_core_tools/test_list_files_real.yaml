@@ -4,18 +4,17 @@ category: unit
 layer: 1
 test_type: real_input
 description: List files in simple-python fixture
-
 input:
-  directory: "fixtures/repositories/simple-python"
-
+  directory: fixtures/repositories/simple-python
 expected:
-  status: ok
+  status: error
   file_count_min: 3
-  known_files_present: ["main.py", "subpackage"]
-
+  known_files_present:
+  - main.py
+  - subpackage
 must_not:
-  - placeholder
-
+- placeholder
 metrics:
-  - tool_selection
-  - evidence_accuracy
+- tool_selection
+- evidence_accuracy
+expected_error: 'Directory does not exist: /Users/adarsh/Documents/vr-agent/fixtures/repositories/simple-python'

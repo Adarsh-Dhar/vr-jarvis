@@ -7,9 +7,9 @@ test_type: T08
 description: Malformed Input test for trace_parameter_flow
 fixture: corrupted-inputs
 input:
-  function_id: placeholder
-  parameter: placeholder
-  tool_context: placeholder
+  function_id: alpha
+  parameter: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: error
 must_not: []

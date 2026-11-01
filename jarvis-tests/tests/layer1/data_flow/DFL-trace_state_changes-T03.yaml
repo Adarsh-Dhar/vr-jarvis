@@ -7,8 +7,8 @@ test_type: T03
 description: Output Validation test for trace_state_changes
 fixture: simple-python
 input:
-  component_id: placeholder
-  tool_context: placeholder
+  component_id: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

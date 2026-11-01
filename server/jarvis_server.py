@@ -23,7 +23,7 @@ from ai_agents.tools.graph_tools import get_source
 
 APP, USER = 'jarvis', 'quest'
 TOKEN = os.getenv('JARVIS_TOKEN', '')
-ASK_TIMEOUT = float(os.getenv('JARVIS_ASK_TIMEOUT', '110'))   # keep below the Unity request timeout
+ASK_TIMEOUT = float(os.getenv('JARVIS_ASK_TIMEOUT', '170'))   # keep below the Unity request timeout
 
 sessions = InMemorySessionService()
 runner = Runner(agent=root_agent, app_name=APP, session_service=sessions)
@@ -59,6 +59,17 @@ class AskBody(BaseModel):
     session_id: str
     text: str
     selection: str = ''
+
+
+def _turn_state(body):
+    """Build state delta for a new turn."""
+    from ai_agents.agents.registry import list_agents
+    return {
+        'selection': body.selection,
+        'user_request': body.text,
+        'repo_path': str(config.REPO_ROOT),
+        'available_agents': ', '.join(list_agents()),
+    }
 
 
 class ApproveBody(BaseModel):
@@ -146,50 +157,28 @@ async def source(node_id: str, context: int = 0):
 async def _run_turn_streaming(body):
     """Run turn with streaming progress."""
     message = types.Content(role='user', parts=[types.Part(text=body.text)])
-    
+
     async for event in runner.run_async(user_id=USER, session_id=body.session_id, new_message=message):
         # Stream progress events
-        if event.author == 'agent':
-            yield {
-                "type": "agent_progress",
-                "agent": event.agent_name if hasattr(event, 'agent_name') else "unknown",
-                "content": _s(event.content) if event.content else ""
-            }
-        elif event.is_final_response():
-            yield {
-                "type": "final_response",
-                "content": ' '.join(p.text for p in event.content.parts if getattr(p, 'text', None))
-            }
+        if event.is_final_response():
+            text = ' '.join(p.text for p in (event.content.parts if event.content else []) if getattr(p, 'text', None))
+            yield {'type': 'final_response', 'content': text}
+        elif event.content and event.content.parts:
+            yield {'type': 'agent_progress', 'agent': event.author, 'content': _s(event.content)[:300]}
 
 
-@app.post('/ask', dependencies=[Depends(auth)])
-async def ask(body: AskBody):
+@app.post('/ask/stream', dependencies=[Depends(auth)])
+async def ask_stream(body: AskBody):
     """Stream agent progress as Server-Sent Events."""
-    error = ''
-    reply = ''
-    state = {}
-    
-    async with locks[body.session_id]:
-        await ensure(body.session_id)
-        await set_state(body.session_id, {'selection': body.selection})
-        
-        try:
-            # Streaming response
-            async def event_generator():
-                async for event in _run_turn_streaming(body):
-                    yield f"data: {json.dumps(event)}\n\n"
-            
-            return StreamingResponse(
-                event_generator(),
-                media_type="text/event-stream",
-                headers={"Cache-Control": "no-cache"}
-            )
-        except Exception as exc:
-            error = f'{type(exc).__name__}: {str(exc)[:200]}'
-            return {"error": error}
+    async def gen():
+        async with locks[body.session_id]:      # hold the lock for the whole stream
+            await ensure(body.session_id)
+            await set_state(body.session_id, _turn_state(body))
+            async for ev in _run_turn_streaming(body):
+                yield 'data: ' + json.dumps(ev) + '\n\n'
+    return StreamingResponse(gen(), media_type='text/event-stream', headers={'Cache-Control': 'no-cache'})
 
 
-# Non-streaming fallback for compatibility
 async def _run_turn(body):
     message = types.Content(role='user', parts=[types.Part(text=body.text)])
     reply = ''
@@ -199,14 +188,14 @@ async def _run_turn(body):
     return reply
 
 
-@app.post('/ask/nonstream', dependencies=[Depends(auth)])
-async def ask_nonstream(body: AskBody):
+@app.post('/ask', dependencies=[Depends(auth)])
+async def ask(body: AskBody):
     """Non-streaming endpoint for compatibility."""
     error = ''
     reply = ''
     async with locks[body.session_id]:
         await ensure(body.session_id)
-        await set_state(body.session_id, {'selection': body.selection})
+        await set_state(body.session_id, _turn_state(body))
         try:
             reply = await asyncio.wait_for(_run_turn(body), ASK_TIMEOUT)
         except asyncio.TimeoutError:
@@ -217,7 +206,8 @@ async def ask_nonstream(body: AskBody):
     last = state.get('last_test_run') or {}
     commands = list(state.get('scene_commands', []))
     pending = _s(state.get('pending_approval'))
-    if (not pending and not error and state.get('proposed_patch') and state.get('worktree')
+    has_patch = state.get('proposed_patch') or state.get('result_software_eng')
+    if (not pending and not error and has_patch and state.get('worktree')
             and isinstance(last, dict) and last.get('status') == 'passed'):
         pending = 'Commit the verified patch to a sandbox branch'
         commands.append({'type': 'show_approval_prompt', 'summary': pending})
@@ -285,4 +275,12 @@ async def get_agent_info(agent_name: str):
     if status.get('status') == 'not_found':
         raise HTTPException(status_code=404, detail=f'Agent not found: {agent_name}')
     return status
+
+
+@app.get('/progress/{session_id}', dependencies=[Depends(auth)])
+async def progress(session_id: str, since: int = 0):
+    state = (await ensure(session_id)).state
+    log = list(state.get('task_log', []))
+    return {'busy': locks[session_id].locked(),
+            'steps': [{'i': i, 'agent': e['agent'], 'kind': e['kind']} for i, e in enumerate(log) if i >= since]}
 

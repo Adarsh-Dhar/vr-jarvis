@@ -7,9 +7,9 @@ test_type: T14
 description: Regression test for request_more_evidence
 fixture: simple-python
 input:
-  task_id: placeholder
-  evidence_type: placeholder
-  tool_context: placeholder
+  task_id: fixtures/repositories/simple-python/main.py
+  evidence_type: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

@@ -1,22 +1,22 @@
-test_id: MSC-identify_side_effects-T01
-name: Happy Path test for identify_side_effects
 category: misc
-tool: identify_side_effects
-layer: 1
-test_type: T01
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Happy Path test for identify_side_effects
-fixture: simple-python
-input:
-  function_id: placeholder
-  tool_context: placeholder
 expected:
   status: ok
+fixture: simple-python
+input:
+  function_id: alpha
+  tool_context: fixtures/repositories/simple-python/main.py
+layer: 1
 must_not:
 - error
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Happy Path test for identify_side_effects
 performance:
   max_duration_ms: 3000
 severity: critical
+test_id: MSC-identify_side_effects-T01
+test_type: T01
+tool: identify_side_effects

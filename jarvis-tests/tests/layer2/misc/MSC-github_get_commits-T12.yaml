@@ -7,9 +7,9 @@ test_type: T12
 description: Security test for github_get_commits
 fixture: simple-python
 input:
-  owner: placeholder
-  repo: placeholder
-  tool_context: placeholder
+  owner: fixtures/repositories/simple-python/main.py
+  repo: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

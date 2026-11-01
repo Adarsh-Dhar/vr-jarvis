@@ -7,8 +7,8 @@ test_type: T14
 description: Regression test for trace_api_call
 fixture: simple-python
 input:
-  endpoint: placeholder
-  tool_context: placeholder
+  endpoint: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

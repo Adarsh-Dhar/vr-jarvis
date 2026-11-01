@@ -7,8 +7,8 @@ test_type: T09
 description: Dependency Failure test for inspect_database_connection
 fixture: simple-python
 input:
-  connection_string: placeholder
-  tool_context: placeholder
+  connection_string: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: error
 must_not: []

@@ -7,10 +7,10 @@ test_type: T01
 description: Happy Path test for find_indirect_callers
 fixture: simple-python
 input:
-  function_id: placeholder
-  tool_context: placeholder
+  function_id: alpha
+  tool_context: simple-python
 expected:
-  status: ok
+  status: not_found
 must_not:
 - error
 checks:
@@ -20,3 +20,5 @@ checks:
 performance:
   max_duration_ms: 3000
 severity: critical
+expected_symbol_name: placeholder
+expected_message: Symbol definition not found

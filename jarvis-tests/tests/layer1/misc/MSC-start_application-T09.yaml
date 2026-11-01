@@ -7,9 +7,9 @@ test_type: T09
 description: Dependency Failure test for start_application
 fixture: simple-python
 input:
-  application_id: placeholder
-  environment: placeholder
-  tool_context: placeholder
+  application_id: fixtures/repositories/simple-python/main.py
+  environment: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

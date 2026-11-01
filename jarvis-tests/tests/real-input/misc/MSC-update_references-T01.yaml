@@ -7,9 +7,9 @@ test_type: T01
 description: Happy Path test for update_references
 fixture: simple-python
 input:
-  symbol_id: placeholder
-  new_location: placeholder
-  tool_context: placeholder
+  symbol_id: fixtures/repositories/simple-python/main.py
+  new_location: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not:

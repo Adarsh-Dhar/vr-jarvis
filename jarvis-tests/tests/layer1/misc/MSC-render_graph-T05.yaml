@@ -7,8 +7,8 @@ test_type: T05
 description: Boundary Conditions test for render_graph
 fixture: simple-python
 input:
-  graph_id: placeholder
-  tool_context: placeholder
+  graph_id: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

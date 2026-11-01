@@ -7,9 +7,9 @@ test_type: T01
 description: Happy Path test for trace_path
 fixture: simple-python
 input:
-  src_id: placeholder
-  dst_id: placeholder
-  tool_context: placeholder
+  src_id: fixtures/repositories/simple-python/main.py
+  dst_id: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not:

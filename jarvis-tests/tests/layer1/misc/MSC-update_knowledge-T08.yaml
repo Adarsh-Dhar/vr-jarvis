@@ -7,9 +7,9 @@ test_type: T08
 description: Malformed Input test for update_knowledge
 fixture: corrupted-inputs
 input:
-  key: placeholder
-  value: placeholder
-  tool_context: placeholder
+  key: fixtures/repositories/simple-python/main.py
+  value: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

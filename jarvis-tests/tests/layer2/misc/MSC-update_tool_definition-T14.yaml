@@ -7,9 +7,9 @@ test_type: T14
 description: Regression test for update_tool_definition
 fixture: simple-python
 input:
-  tool_name: placeholder
-  tool_definition: placeholder
-  tool_context: placeholder
+  tool_name: fixtures/repositories/simple-python/main.py
+  tool_definition: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

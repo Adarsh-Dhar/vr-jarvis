@@ -7,10 +7,10 @@ test_type: T13
 description: Performance test for kubernetes_exec_command
 fixture: simple-python
 input:
-  pod_name: placeholder
-  namespace: placeholder
-  command: placeholder
-  tool_context: placeholder
+  pod_name: fixtures/repositories/simple-python/main.py
+  namespace: fixtures/repositories/simple-python/main.py
+  command: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

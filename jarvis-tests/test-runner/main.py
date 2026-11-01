@@ -45,7 +45,7 @@ def main():
     
     # Initialize components
     registry = TestRegistry(test_root)
-    registry.load_test_definitions()
+    registry.load_test_definitions(categories=args.category)
     
     if args.list:
         print("Available Tests:")

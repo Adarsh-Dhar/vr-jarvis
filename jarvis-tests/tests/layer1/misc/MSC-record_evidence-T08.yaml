@@ -7,8 +7,8 @@ test_type: T08
 description: Malformed Input test for record_evidence
 fixture: corrupted-inputs
 input:
-  tool_context: placeholder
-  node_ids: placeholder
+  tool_context: fixtures/repositories/simple-python/main.py
+  node_ids: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

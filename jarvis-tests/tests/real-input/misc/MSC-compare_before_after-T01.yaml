@@ -7,9 +7,9 @@ test_type: T01
 description: Happy Path test for compare_before_after
 fixture: simple-python
 input:
-  before_snapshot: placeholder
-  after_snapshot: placeholder
-  tool_context: placeholder
+  before_snapshot: fixtures/repositories/simple-python/main.py
+  after_snapshot: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not:

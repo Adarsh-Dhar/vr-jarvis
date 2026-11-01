@@ -7,10 +7,10 @@ test_type: T09
 description: Dependency Failure test for register_framework_adapter
 fixture: simple-python
 input:
-  framework: placeholder
+  framework: fixtures/repositories/simple-python/main.py
   language: python
-  adapter_config: placeholder
-  tool_context: placeholder
+  adapter_config: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

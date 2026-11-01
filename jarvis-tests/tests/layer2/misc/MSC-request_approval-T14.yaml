@@ -7,8 +7,8 @@ test_type: T14
 description: Regression test for request_approval
 fixture: simple-python
 input:
-  action_summary: placeholder
-  tool_context: placeholder
+  action_summary: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

@@ -7,9 +7,9 @@ test_type: T01
 description: Happy Path test for set_haptic_feedback
 fixture: simple-python
 input:
-  intensity: placeholder
-  duration: placeholder
-  tool_context: placeholder
+  intensity: fixtures/repositories/simple-python/main.py
+  duration: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not:

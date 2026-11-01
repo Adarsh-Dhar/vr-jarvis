@@ -20,6 +20,8 @@ namespace JarvisVR
     public List<SceneCommand> scene_commands;
     public string[] evidence;
   }
+  [Serializable] public class ProgressStep { public int i; public string agent, kind; }
+  [Serializable] public class ProgressDto { public bool busy; public List<ProgressStep> steps; }
   [Serializable] public class SourceResponse { public string status, id, file, source, error; public int first_line; }
   [Serializable] public class ApproveResponse { public bool ok; public string branch, commit, detail; }
   [Serializable] internal class SessionResponse { public string session_id; }
@@ -58,7 +60,7 @@ namespace JarvisVR
   {
     public static string DefaultServerUrl = "http://127.0.0.1:8000";
     public string Token = "";
-    public int TimeoutSeconds = 120;   // keep above JARVIS_ASK_TIMEOUT (110) on the server
+    public int TimeoutSeconds = 180;   // keep above JARVIS_ASK_TIMEOUT (170) on the server
 
     private string _session;
     public bool Busy { get; private set; }
@@ -108,6 +110,10 @@ namespace JarvisVR
 
     public void GetGraph(Action<GraphDto> ok) =>
       StartCoroutine(Send("GET", "/graph", null, b => ok(JsonUtility.FromJson<GraphDto>(b)), e => Debug.LogWarning("JARVIS graph: " + e)));
+
+    public void GetProgress(int since, Action<ProgressDto> ok) =>
+      StartCoroutine(Send("GET", "/progress/" + _session + "?since=" + since, null,
+        b => ok(JsonUtility.FromJson<ProgressDto>(b)), e => { }));
 
     private IEnumerator EnsureSession(Action<string> fail)
     {

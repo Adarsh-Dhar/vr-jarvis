@@ -7,9 +7,9 @@ test_type: T01
 description: Happy Path test for implement_interface
 fixture: simple-python
 input:
-  interface_id: placeholder
-  class_name: placeholder
-  tool_context: placeholder
+  interface_id: fixtures/repositories/simple-python/main.py
+  class_name: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not:

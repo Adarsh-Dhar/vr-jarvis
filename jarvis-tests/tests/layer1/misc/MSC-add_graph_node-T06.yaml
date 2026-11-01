@@ -7,10 +7,10 @@ test_type: T06
 description: Large Input test for add_graph_node
 fixture: polyglot-monorepo
 input:
-  graph_id: placeholder
-  node_id: placeholder
-  node_data: placeholder
-  tool_context: placeholder
+  graph_id: fixtures/repositories/simple-python/main.py
+  node_id: fixtures/repositories/simple-python/main.py
+  node_data: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

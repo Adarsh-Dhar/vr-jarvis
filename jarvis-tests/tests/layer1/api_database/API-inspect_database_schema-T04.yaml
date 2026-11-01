@@ -7,8 +7,8 @@ test_type: T04
 description: Empty Input test for inspect_database_schema
 fixture: simple-python
 input:
-  connection_string: placeholder
-  tool_context: placeholder
+  connection_string: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

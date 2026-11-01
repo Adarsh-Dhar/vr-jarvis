@@ -7,9 +7,9 @@ test_type: T01
 description: Happy Path test for manage_environment_variables
 fixture: simple-python
 input:
-  action: placeholder
-  variables: placeholder
-  tool_context: placeholder
+  action: fixtures/repositories/simple-python/main.py
+  variables: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not:

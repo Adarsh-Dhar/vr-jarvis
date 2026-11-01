@@ -7,8 +7,8 @@ test_type: T01
 description: Happy Path test for stop_telemetry_collection
 fixture: simple-python
 input:
-  collection_id: placeholder
-  tool_context: placeholder
+  collection_id: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not:

@@ -7,9 +7,9 @@ test_type: T01
 description: Happy Path test for subscribe_to_topic
 fixture: simple-python
 input:
-  topic: placeholder
-  callback: placeholder
-  tool_context: placeholder
+  topic: fixtures/repositories/simple-python/main.py
+  callback: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not:

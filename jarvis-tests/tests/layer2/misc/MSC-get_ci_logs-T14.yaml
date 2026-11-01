@@ -7,8 +7,8 @@ test_type: T14
 description: Regression test for get_ci_logs
 fixture: simple-python
 input:
-  pipeline_id: placeholder
-  tool_context: placeholder
+  pipeline_id: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

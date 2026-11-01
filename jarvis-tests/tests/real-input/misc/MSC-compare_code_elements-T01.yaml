@@ -7,9 +7,9 @@ test_type: T01
 description: Happy Path test for compare_code_elements
 fixture: simple-python
 input:
-  element1_id: placeholder
-  element2_id: placeholder
-  tool_context: placeholder
+  element1_id: fixtures/repositories/simple-python/main.py
+  element2_id: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not:

@@ -8,7 +8,7 @@ description: Boundary Conditions test for search_external_docs
 fixture: simple-python
 input:
   query: test
-  tool_context: placeholder
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

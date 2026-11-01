@@ -8,8 +8,8 @@ description: Large Input test for explain_query_plan
 fixture: polyglot-monorepo
 input:
   query: test
-  connection_string: placeholder
-  tool_context: placeholder
+  connection_string: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

@@ -7,8 +7,8 @@ test_type: T02
 description: Integration test - parse invalid Python file should fail gracefully
 fixture: simple-python
 infrastructure:
-  - temp_copy
-  - parser
+- temp_copy
+- parser
 input:
   file_path: main.py
   language: python
@@ -17,16 +17,17 @@ expected:
   status: error
   error_type: syntax_error
 must_not:
-  - crash
-  - unexpected_error
+- crash
+- unexpected_error
 checks:
-  - type: content_validation
-    required_content:
-      - error
-  - type: infrastructure_check
-    parser_was_real: true
+- type: content_validation
+  required_content:
+  - error
+- type: infrastructure_check
+  parser_was_real: true
 performance:
   max_duration_ms: 500
 severity: critical
 stub_should_fail: true
 requires_real_infrastructure: true
+expected_error: 'File not found: /Users/adarsh/Documents/vr-agent/main.py'

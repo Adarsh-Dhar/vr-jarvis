@@ -7,10 +7,10 @@ test_type: T10
 description: Timeout test for search_and_replace
 fixture: simple-python
 input:
-  file_pattern: placeholder
-  search: placeholder
-  replace: placeholder
-  tool_context: placeholder
+  file_pattern: fixtures/repositories/simple-python/main.py
+  search: fixtures/repositories/simple-python/main.py
+  replace: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

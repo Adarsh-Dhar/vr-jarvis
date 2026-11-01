@@ -7,8 +7,8 @@ test_type: T06
 description: Large Input test for retrieve_knowledge
 fixture: polyglot-monorepo
 input:
-  key: placeholder
-  tool_context: placeholder
+  key: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

@@ -7,10 +7,10 @@ test_type: T13
 description: Performance test for store_graph_edge
 fixture: simple-python
 input:
-  from_id: placeholder
-  to_id: placeholder
-  edge_data: placeholder
-  tool_context: placeholder
+  from_id: fixtures/repositories/simple-python/main.py
+  to_id: fixtures/repositories/simple-python/main.py
+  edge_data: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

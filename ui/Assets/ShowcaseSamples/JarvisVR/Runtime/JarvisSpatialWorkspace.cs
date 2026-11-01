@@ -68,6 +68,8 @@ namespace JarvisVR
     private string _selected, _mode = "MAP", _pending, _ghostDiff, _testSummary = "No test run yet.";
     private readonly List<string> _log = new List<string>();
     private float _errorUntil;
+    private int _progressSeen;
+    private float _progressAt;
     private Transform _orb, _halo;
     private Material _orbMat;
     private JarvisOrbFx _orbFx;
@@ -498,6 +500,7 @@ namespace JarvisVR
     private void Ask(string text)
     {
       if (_bridge == null || string.IsNullOrEmpty(text)) return;
+      _progressSeen = 0;
       Say("Thinking…");
       Log("ask: " + text);
       _bridge.Ask(text, _selected, OnAnswer, err => { Say(err); Log("error: " + err); _errorUntil = Time.unscaledTime + 4f; });
@@ -505,7 +508,21 @@ namespace JarvisVR
 
     private void OnAnswer(AskResponse r)
     {
-      if (!string.IsNullOrEmpty(r.error)) { Say(r.error); Log("error: " + r.error); _errorUntil = Time.unscaledTime + 4f; return; }
+      if (!string.IsNullOrEmpty(r.error))
+      {
+        if (r.error.Contains("took too long"))
+        {
+          Say("Still working. Ask again in a moment.");
+          Log("timeout: " + r.error);
+        }
+        else
+        {
+          Say(r.error);
+          Log("error: " + r.error);
+          _errorUntil = Time.unscaledTime + 4f;
+        }
+        return;
+      }
       ResetOverlay();
       bool graphChanged = false;
       if (r.scene_commands != null) foreach (SceneCommand c in r.scene_commands) graphChanged |= ApplyCommand(c);
@@ -1178,6 +1195,11 @@ namespace JarvisVR
     {
       AnimateOrb();
       if (_edgesDirty) { RedrawEdges(); UpdateClusters(); }
+      if (CurrentOrb() == OrbState.Thinking && Time.unscaledTime > _progressAt)
+      {
+        _progressAt = Time.unscaledTime + 1f;
+        _bridge.GetProgress(_progressSeen, p => { foreach (var s in p.steps) { Log(s.agent + " working"); _progressSeen = s.i + 1; } });
+      }
     }
   }
 }

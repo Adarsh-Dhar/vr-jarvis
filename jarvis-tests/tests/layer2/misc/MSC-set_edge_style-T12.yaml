@@ -7,10 +7,10 @@ test_type: T12
 description: Security test for set_edge_style
 fixture: simple-python
 input:
-  src: placeholder
-  dst: placeholder
-  style: placeholder
-  tool_context: placeholder
+  src: fixtures/repositories/simple-python/main.py
+  dst: fixtures/repositories/simple-python/main.py
+  style: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

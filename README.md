@@ -15,7 +15,8 @@ From the project root, install the Python dependencies and start the server:
 ```bash
 pip install -r requirements.txt
 export GOOGLE_API_KEY="<your-key>"
-uvicorn server.jarvis_server:app --host 0.0.0.0 --port 8000
+export JARVIS_TOKEN="dev-token"  # Set the same value in Unity's JarvisServerSettings.Token
+uvicorn jarvis_server:app --app-dir server --host 0.0.0.0 --port 8000
 ```
 
 In Unity, open the `ui/` project, choose **JARVIS → Use real server**, then enter Play mode. The `ui/ProjectSettings` configuration enables both legacy and new input handling.

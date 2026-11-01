@@ -7,8 +7,8 @@ test_type: T10
 description: Timeout test for trace_database_reads
 fixture: simple-python
 input:
-  query_id: placeholder
-  tool_context: placeholder
+  query_id: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

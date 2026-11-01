@@ -7,9 +7,9 @@ test_type: T07
 description: Complex Input test for send_message_to_agent
 fixture: polyglot-monorepo
 input:
-  agent_id: placeholder
-  message: placeholder
-  tool_context: placeholder
+  agent_id: fixtures/repositories/simple-python/main.py
+  message: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

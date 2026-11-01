@@ -7,9 +7,9 @@ test_type: T01
 description: Happy Path test for generate_api
 fixture: simple-python
 input:
-  description: placeholder
-  endpoints: placeholder
-  tool_context: placeholder
+  description: fixtures/repositories/simple-python/main.py
+  endpoints: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not:

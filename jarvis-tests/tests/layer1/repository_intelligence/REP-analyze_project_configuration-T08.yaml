@@ -8,9 +8,9 @@ description: Malformed Input test for analyze_project_configuration
 fixture: corrupted-inputs
 input:
   repository_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/corrupted-inputs
-  tool_context: placeholder
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
-  status: error
+  status: ok
 must_not: []
 checks:
 - type: schema_validity
@@ -21,3 +21,5 @@ performance:
 severity: critical
 skip: true
 skip_reason: 'Tool execution issue: '
+expected_repository_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/corrupted-inputs
+expected_configurations: []

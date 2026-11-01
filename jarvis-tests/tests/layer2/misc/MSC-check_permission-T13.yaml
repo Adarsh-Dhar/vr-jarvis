@@ -7,10 +7,10 @@ test_type: T13
 description: Performance test for check_permission
 fixture: simple-python
 input:
-  tool_name: placeholder
-  agent_id: placeholder
-  operation: placeholder
-  tool_context: placeholder
+  tool_name: fixtures/repositories/simple-python/main.py
+  agent_id: fixtures/repositories/simple-python/main.py
+  operation: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

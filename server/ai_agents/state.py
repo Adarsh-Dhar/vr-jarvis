@@ -31,6 +31,14 @@ KEYS = [
     'result_conversational', # Conversational output
     'task_log',         # History of tasks and their status
     'calling_agent',    # Name of agent currently executing (for permission checks)
+    # Prompt state keys
+    'user_request',     # The user's current request text
+    'available_agents', # List of available agent names
+    'repo_path',        # Path to the repository root
+    'conversation_context',  # Context from previous turns
+    'error_context',    # Error context for debugging
+    'change_request',   # Requested change description
+    'context',          # General context placeholder
 ]
 
 DEFAULT_STATE = {key: '' for key in KEYS}
@@ -41,4 +49,11 @@ DEFAULT_STATE.update({
     'approved': False,
     'pending_approval': '',
     'task_log': [],
+    'user_request': '',
+    'available_agents': '',
+    'repo_path': '',
+    'conversation_context': '',
+    'error_context': '',
+    'change_request': '',
+    'context': '',
 })

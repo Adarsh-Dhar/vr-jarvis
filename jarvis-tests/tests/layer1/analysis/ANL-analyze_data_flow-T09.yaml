@@ -7,8 +7,8 @@ test_type: T09
 description: Dependency Failure test for analyze_data_flow
 fixture: simple-python
 input:
-  variable_name: placeholder
-  tool_context: placeholder
+  variable_name: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: error
 must_not: []
@@ -21,3 +21,5 @@ performance:
 severity: high
 skip: true
 skip_reason: 'Tool execution issue: '
+expected_error: argument should be a str or an os.PathLike object where __fspath__
+  returns a str, not 'NoneType'

@@ -7,9 +7,9 @@ test_type: T01
 description: Happy Path test for database_query
 fixture: simple-python
 input:
-  connection_string: placeholder
+  connection_string: fixtures/repositories/simple-python/main.py
   query: test
-  tool_context: placeholder
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not:

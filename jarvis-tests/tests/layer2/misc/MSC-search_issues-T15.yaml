@@ -7,9 +7,9 @@ test_type: T15
 description: Recovery test for search_issues
 fixture: simple-python
 input:
-  repository: placeholder
+  repository: fixtures/repositories/simple-python/main.py
   query: test
-  tool_context: placeholder
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

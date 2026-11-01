@@ -8,7 +8,7 @@ description: Happy Path test for set_graph_depth
 fixture: simple-python
 input:
   depth: 1
-  tool_context: placeholder
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not:

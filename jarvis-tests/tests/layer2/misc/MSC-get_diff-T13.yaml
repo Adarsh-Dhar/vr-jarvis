@@ -7,9 +7,9 @@ test_type: T13
 description: Performance test for get_diff
 fixture: simple-python
 input:
-  tool_context: placeholder
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
-  status: ok
+  status: error
 must_not: []
 checks:
 - type: schema_validity
@@ -20,3 +20,5 @@ checks:
 performance:
   max_duration_ms: 3000
 severity: medium
+expected_error: argument should be a str or an os.PathLike object where __fspath__
+  returns a str, not 'NoneType'

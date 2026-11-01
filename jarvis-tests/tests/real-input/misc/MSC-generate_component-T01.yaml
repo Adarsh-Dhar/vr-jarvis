@@ -7,9 +7,9 @@ test_type: T01
 description: Happy Path test for generate_component
 fixture: simple-python
 input:
-  description: placeholder
-  component_type: placeholder
-  tool_context: placeholder
+  description: fixtures/repositories/simple-python/main.py
+  component_type: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not:

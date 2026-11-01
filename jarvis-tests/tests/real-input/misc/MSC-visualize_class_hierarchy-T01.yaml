@@ -7,8 +7,8 @@ test_type: T01
 description: Happy Path test for visualize_class_hierarchy
 fixture: simple-python
 input:
-  class_id: placeholder
-  tool_context: placeholder
+  class_id: ExampleClass
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not:

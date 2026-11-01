@@ -7,7 +7,7 @@ test_type: T09
 description: Dependency Failure test for run_end_to_end_tests
 fixture: simple-python
 input:
-  tool_context: placeholder
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

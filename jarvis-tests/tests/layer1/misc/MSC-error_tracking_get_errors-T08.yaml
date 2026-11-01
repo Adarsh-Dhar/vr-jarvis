@@ -7,8 +7,8 @@ test_type: T08
 description: Malformed Input test for error_tracking_get_errors
 fixture: corrupted-inputs
 input:
-  service: placeholder
-  tool_context: placeholder
+  service: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

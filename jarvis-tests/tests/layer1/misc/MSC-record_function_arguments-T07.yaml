@@ -7,9 +7,9 @@ test_type: T07
 description: Complex Input test for record_function_arguments
 fixture: polyglot-monorepo
 input:
-  application_id: placeholder
-  function_id: placeholder
-  tool_context: placeholder
+  application_id: fixtures/repositories/simple-python/main.py
+  function_id: alpha
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

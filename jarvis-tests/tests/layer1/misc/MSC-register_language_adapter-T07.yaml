@@ -8,8 +8,8 @@ description: Complex Input test for register_language_adapter
 fixture: polyglot-monorepo
 input:
   language: python
-  adapter_config: placeholder
-  tool_context: placeholder
+  adapter_config: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

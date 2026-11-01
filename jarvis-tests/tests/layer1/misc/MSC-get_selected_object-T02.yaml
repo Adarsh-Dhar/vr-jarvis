@@ -7,7 +7,7 @@ test_type: T02
 description: Input Validation test for get_selected_object
 fixture: simple-python
 input:
-  tool_context: placeholder
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

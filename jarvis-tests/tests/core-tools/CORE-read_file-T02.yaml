@@ -10,14 +10,16 @@ input:
   file_path: fixtures/repositories/simple-python/nonexistent.py
 expected:
   status: error
-  error_contains: "does not exist"
+  error_contains: does not exist
 must_not:
-  - status: ok
+- status: ok
 checks:
-  - type: schema_validity
-    required_fields:
-      - status
-      - error
+- type: schema_validity
+  required_fields:
+  - status
+  - error
 performance:
   max_duration_ms: 500
 severity: critical
+expected[key]: 'File does not exist: ../fixtures/repositories/simple-python/nonexistent.py'
+expected_error: 'File does not exist: /Users/adarsh/Documents/vr-agent/fixtures/repositories/simple-python/nonexistent.py'

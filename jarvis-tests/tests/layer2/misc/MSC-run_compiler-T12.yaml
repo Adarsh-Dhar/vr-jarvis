@@ -7,8 +7,8 @@ test_type: T12
 description: Security test for run_compiler
 fixture: simple-python
 input:
-  source_files: placeholder
-  tool_context: placeholder
+  source_files: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

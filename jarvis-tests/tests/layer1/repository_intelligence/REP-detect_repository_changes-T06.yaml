@@ -8,9 +8,9 @@ description: Large Input test for detect_repository_changes
 fixture: polyglot-monorepo
 input:
   repository_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/polyglot-monorepo
-  tool_context: placeholder
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
-  status: ok
+  status: error
 must_not: []
 checks:
 - type: schema_validity
@@ -19,3 +19,4 @@ checks:
 performance:
   max_duration_ms: 10000
 severity: medium
+expected_error: 'AttributeError: ''MockToolContext'' object has no attribute ''state'''

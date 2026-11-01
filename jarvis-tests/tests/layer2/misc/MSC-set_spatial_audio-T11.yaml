@@ -7,9 +7,9 @@ test_type: T11
 description: Concurrency test for set_spatial_audio
 fixture: simple-python
 input:
-  source_id: placeholder
-  position: placeholder
-  tool_context: placeholder
+  source_id: fixtures/repositories/simple-python/main.py
+  position: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

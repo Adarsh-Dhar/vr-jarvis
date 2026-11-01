@@ -7,9 +7,9 @@ test_type: T06
 description: Large Input test for record_variable_state
 fixture: polyglot-monorepo
 input:
-  application_id: placeholder
-  variable_id: placeholder
-  tool_context: placeholder
+  application_id: fixtures/repositories/simple-python/main.py
+  variable_id: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

@@ -7,8 +7,8 @@ test_type: T06
 description: Large Input test for error_tracking_resolve_error
 fixture: polyglot-monorepo
 input:
-  error_id: placeholder
-  tool_context: placeholder
+  error_id: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

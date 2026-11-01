@@ -7,7 +7,7 @@ test_type: T10
 description: Timeout test for run_build
 fixture: simple-python
 input:
-  tool_context: placeholder
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

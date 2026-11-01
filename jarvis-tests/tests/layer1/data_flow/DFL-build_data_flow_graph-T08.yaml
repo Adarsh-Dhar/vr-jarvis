@@ -7,8 +7,8 @@ test_type: T08
 description: Malformed Input test for build_data_flow_graph
 fixture: corrupted-inputs
 input:
-  scope: placeholder
-  tool_context: placeholder
+  scope: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: error
 must_not: []

@@ -7,9 +7,9 @@ test_type: T01
 description: Happy Path test for annotate_code_element
 fixture: simple-python
 input:
-  element_id: placeholder
-  annotation: placeholder
-  tool_context: placeholder
+  element_id: fixtures/repositories/simple-python/main.py
+  annotation: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not:

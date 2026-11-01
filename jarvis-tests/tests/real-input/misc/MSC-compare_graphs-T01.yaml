@@ -7,9 +7,9 @@ test_type: T01
 description: Happy Path test for compare_graphs
 fixture: simple-python
 input:
-  graph1_id: placeholder
-  graph2_id: placeholder
-  tool_context: placeholder
+  graph1_id: fixtures/repositories/simple-python/main.py
+  graph2_id: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not:

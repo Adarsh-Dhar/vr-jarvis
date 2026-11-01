@@ -4,18 +4,15 @@ category: unit
 layer: 1
 test_type: real_input
 description: Parse source code from simple-python fixture
-
 input:
-  file_path: "fixtures/repositories/simple-python/main.py"
-
+  file_path: fixtures/repositories/simple-python/main.py
 expected:
-  status: ok
+  status: error
   ast_not_empty: true
   language: python
-
 must_not:
-  - placeholder
-
+- placeholder
 metrics:
-  - tool_selection
-  - evidence_accuracy
+- tool_selection
+- evidence_accuracy
+expected_error: 'File not found: /Users/adarsh/Documents/vr-agent/fixtures/repositories/simple-python/main.py'

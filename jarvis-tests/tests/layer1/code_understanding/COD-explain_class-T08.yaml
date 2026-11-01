@@ -10,7 +10,7 @@ input:
   class_id: placeholder
   tool_context: placeholder
 expected:
-  status: error
+  status: not_found
 must_not: []
 checks:
 - type: schema_validity
@@ -21,3 +21,5 @@ performance:
 severity: critical
 skip: true
 skip_reason: 'Tool execution issue: '
+expected_symbol_name: placeholder
+expected_message: 'Symbol definition not found: placeholder'

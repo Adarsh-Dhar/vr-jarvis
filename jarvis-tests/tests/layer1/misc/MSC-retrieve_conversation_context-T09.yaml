@@ -7,8 +7,8 @@ test_type: T09
 description: Dependency Failure test for retrieve_conversation_context
 fixture: simple-python
 input:
-  conversation_id: placeholder
-  tool_context: placeholder
+  conversation_id: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

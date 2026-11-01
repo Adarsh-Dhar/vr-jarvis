@@ -7,9 +7,9 @@ test_type: T01
 description: Happy Path test for request_visualization
 fixture: simple-python
 input:
-  visualization_type: placeholder
-  parameters: placeholder
-  tool_context: placeholder
+  visualization_type: fixtures/repositories/simple-python/main.py
+  parameters: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not:

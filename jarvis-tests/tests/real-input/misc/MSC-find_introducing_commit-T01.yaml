@@ -7,9 +7,9 @@ test_type: T01
 description: Happy Path test for find_introducing_commit
 fixture: simple-python
 input:
-  symbol_id: placeholder
+  symbol_id: fixtures/repositories/simple-python/main.py
   repository_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/simple-python
-  tool_context: placeholder
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not:

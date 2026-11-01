@@ -7,9 +7,9 @@ test_type: T05
 description: Boundary Conditions test for create_sandbox
 fixture: simple-python
 input:
-  sandbox_id: placeholder
-  configuration: placeholder
-  tool_context: placeholder
+  sandbox_id: fixtures/repositories/simple-python/main.py
+  configuration: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

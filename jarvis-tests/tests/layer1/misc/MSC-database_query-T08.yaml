@@ -7,9 +7,9 @@ test_type: T08
 description: Malformed Input test for database_query
 fixture: corrupted-inputs
 input:
-  connection_string: placeholder
+  connection_string: fixtures/repositories/simple-python/main.py
   query: test
-  tool_context: placeholder
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

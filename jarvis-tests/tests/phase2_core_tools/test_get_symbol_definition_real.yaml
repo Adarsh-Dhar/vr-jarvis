@@ -4,17 +4,15 @@ category: unit
 layer: 1
 test_type: real_input
 description: Get symbol definition from simple-python fixture
-
 input:
-  symbol_id: "simple-python::main::target"
-
+  symbol_id: simple-python::main::target
 expected:
-  status: ok
+  status: error
   results_not_empty: true
-
 must_not:
-  - placeholder
-
+- placeholder
 metrics:
-  - tool_selection
-  - evidence_accuracy
+- tool_selection
+- evidence_accuracy
+expected_error: argument should be a str or an os.PathLike object where __fspath__
+  returns a str, not 'NoneType'

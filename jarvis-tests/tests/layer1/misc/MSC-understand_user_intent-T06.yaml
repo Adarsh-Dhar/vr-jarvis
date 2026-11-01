@@ -7,8 +7,8 @@ test_type: T06
 description: Large Input test for understand_user_intent
 fixture: polyglot-monorepo
 input:
-  user_query: placeholder
-  tool_context: placeholder
+  user_query: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

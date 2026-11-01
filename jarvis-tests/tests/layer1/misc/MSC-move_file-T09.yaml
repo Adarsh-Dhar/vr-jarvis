@@ -7,9 +7,9 @@ test_type: T09
 description: Dependency Failure test for move_file
 fixture: simple-python
 input:
-  source: placeholder
-  destination: placeholder
-  tool_context: placeholder
+  source: fixtures/repositories/simple-python/main.py
+  destination: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

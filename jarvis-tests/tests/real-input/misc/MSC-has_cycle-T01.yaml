@@ -7,10 +7,10 @@ test_type: T01
 description: Happy Path test for has_cycle
 fixture: simple-python
 input:
-  graph: placeholder
-  node: placeholder
-  visited: placeholder
-  rec_stack: placeholder
+  graph: fixtures/repositories/simple-python/main.py
+  node: fixtures/repositories/simple-python/main.py
+  visited: fixtures/repositories/simple-python/main.py
+  rec_stack: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not:

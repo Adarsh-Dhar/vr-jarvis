@@ -7,9 +7,9 @@ test_type: T14
 description: Regression test for docker_exec_command
 fixture: simple-python
 input:
-  container_id: placeholder
-  command: placeholder
-  tool_context: placeholder
+  container_id: fixtures/repositories/simple-python/main.py
+  command: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

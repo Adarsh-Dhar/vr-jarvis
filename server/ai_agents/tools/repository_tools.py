@@ -230,11 +230,14 @@ def read_file(file_path: str, tool_context: ToolContext) -> dict:
         except UnicodeDecodeError:
             # Try with different encoding
             content = path.read_text(encoding='latin-1')
-        
+
+        line_count = len(content.splitlines())
+
         return {
             'status': 'ok',
             'file_path': str(path),
-            'content': content
+            'content': content,
+            'line_count': line_count
         }
     except Exception as e:
         return {

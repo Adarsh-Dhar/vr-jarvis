@@ -7,9 +7,9 @@ test_type: T09
 description: Dependency Failure test for cloud_get_instance_logs
 fixture: simple-python
 input:
-  instance_id: placeholder
-  provider: placeholder
-  tool_context: placeholder
+  instance_id: fixtures/repositories/simple-python/main.py
+  provider: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

@@ -7,10 +7,10 @@ test_type: T02
 description: Input Validation test for find_indirect_callers
 fixture: simple-python
 input:
-  function_id: placeholder
-  tool_context: placeholder
+  function_id: alpha
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
-  status: error
+  status: not_found
 must_not: []
 checks:
 - type: schema_validity
@@ -19,3 +19,5 @@ checks:
 performance:
   max_duration_ms: 3000
 severity: critical
+expected_symbol_name: alpha
+expected_message: Symbol definition not found

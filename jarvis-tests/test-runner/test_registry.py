@@ -25,13 +25,19 @@ class TestRegistry:
         # Fix: tests are in jarvis-tests/tests, not test_root/tests
         self.tests_path = self.test_root / 'tests'
         
-    def load_test_definitions(self):
+    def load_test_definitions(self, categories=None):
         """Load all test definitions from YAML and Python files"""
         # Load YAML test definitions
         yaml_tests_path = self.tests_path
         print(f"Loading tests from: {yaml_tests_path}")
+        if categories:
+            print(f"Filtering by categories: {categories}")
+        count = 0
         for yaml_file in yaml_tests_path.rglob('*.yaml'):
-            self._load_yaml_test(yaml_file)
+            self._load_yaml_test(yaml_file, categories)
+            count += 1
+            if count % 1000 == 0:
+                print(f"Processed {count} files...")
         print(f"Total tests loaded: {len(self.tests)}")
         
         # Load Python test files
@@ -39,13 +45,18 @@ class TestRegistry:
         for py_file in python_tests_path.rglob('test_*.py'):
             self._load_python_test(py_file)
     
-    def _load_yaml_test(self, yaml_file: Path):
+    def _load_yaml_test(self, yaml_file: Path, categories=None):
         """Load a test definition from YAML file"""
         with open(yaml_file, 'r') as f:
             test_def = yaml.safe_load(f)
-        
+
         test_id = test_def.get('test_id')
         if test_id:
+            # Filter by category if specified
+            if categories:
+                test_category = test_def.get('category')
+                if test_category not in categories:
+                    return
             self.tests[test_id] = test_def
             self._index_test(test_id, test_def)
     

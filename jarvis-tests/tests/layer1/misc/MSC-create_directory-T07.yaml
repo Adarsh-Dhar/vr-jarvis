@@ -7,8 +7,8 @@ test_type: T07
 description: Complex Input test for create_directory
 fixture: polyglot-monorepo
 input:
-  directory_path: placeholder
-  tool_context: placeholder
+  directory_path: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

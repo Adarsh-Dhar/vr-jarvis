@@ -7,9 +7,9 @@ test_type: T11
 description: Concurrency test for record_function_returns
 fixture: simple-python
 input:
-  application_id: placeholder
-  function_id: placeholder
-  tool_context: placeholder
+  application_id: fixtures/repositories/simple-python/main.py
+  function_id: alpha
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

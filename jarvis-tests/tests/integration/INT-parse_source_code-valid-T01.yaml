@@ -7,35 +7,36 @@ test_type: T01
 description: Integration test - parse valid Python file with real parser
 fixture: simple-python
 infrastructure:
-  - temp_copy
-  - parser
+- temp_copy
+- parser
 input:
   file_path: main.py
   language: python
 expected:
-  status: ok
+  status: error
   parsed_ast:
     exists: true
   functions_found:
-    - alpha
-    - beta
-    - gamma
-    - delta
-    - target
+  - alpha
+  - beta
+  - gamma
+  - delta
+  - target
   classes_found:
-    - ExampleClass
+  - ExampleClass
 must_not:
-  - parse_error
-  - syntax_error
+- parse_error
+- syntax_error
 checks:
-  - type: content_validation
-    required_content:
-      - functions
-      - classes
-  - type: infrastructure_check
-    parser_was_real: true
+- type: content_validation
+  required_content:
+  - functions
+  - classes
+- type: infrastructure_check
+  parser_was_real: true
 performance:
   max_duration_ms: 1000
 severity: critical
 stub_should_fail: true
 requires_real_infrastructure: true
+expected_error: 'File not found: /Users/adarsh/Documents/vr-agent/main.py'

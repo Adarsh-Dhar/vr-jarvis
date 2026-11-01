@@ -7,8 +7,8 @@ test_type: T01
 description: Happy Path test for save_scene_state
 fixture: simple-python
 input:
-  state_id: placeholder
-  tool_context: placeholder
+  state_id: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not:

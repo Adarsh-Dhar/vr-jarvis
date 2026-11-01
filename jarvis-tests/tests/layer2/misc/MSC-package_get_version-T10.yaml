@@ -7,9 +7,9 @@ test_type: T10
 description: Timeout test for package_get_version
 fixture: simple-python
 input:
-  registry: placeholder
-  package: placeholder
-  tool_context: placeholder
+  registry: fixtures/repositories/simple-python/main.py
+  package: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

@@ -7,8 +7,8 @@ test_type: T04
 description: Empty Input test for wait_for_agent
 fixture: simple-python
 input:
-  task_id: placeholder
-  tool_context: placeholder
+  task_id: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

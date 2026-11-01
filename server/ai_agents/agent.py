@@ -5,7 +5,7 @@ from .agents.critic import make_critic
 from .agents.fix import patch_agent, patch_repair, verifier
 from .agents.impact import change_loader, impact_synthesizer, static_impact, test_mapper
 from .agents.investigator import investigator
-from .agents.scene_director import make_scene_director
+from .agents.scene_director import make_scene_director, make_result_scene_director
 # Phase 2 agents
 from .agents.repository_intelligence import repository_intelligence_agent
 from .agents.code_understanding import code_understanding_agent
@@ -22,6 +22,19 @@ from .agents.orchestrator import orchestrator_agent
 from .callbacks import init_state, trim_history
 from .config import MODEL
 from .tools.control_tools import request_approval
+
+
+def _with_scene(agent, key):
+    return SequentialAgent(name=agent.name + '_pipeline', description=agent.description,
+                           sub_agents=[agent, make_result_scene_director(agent.name + '_scene', key)])
+
+
+data_flow_pipeline = _with_scene(data_flow_intelligence_agent, 'result_data_flow')
+runtime_pipeline = _with_scene(runtime_intelligence_agent, 'result_runtime')
+debugging_pipeline = _with_scene(debugging_intelligence_agent, 'result_debugging')
+security_pipeline = _with_scene(security_quality_agent, 'result_security')
+engineering_pipeline = _with_scene(software_engineering_agent, 'result_software_eng')
+testing_pipeline = _with_scene(testing_verification_agent, 'result_testing')
 
 investigate_pipeline = SequentialAgent(
     name='investigate_pipeline',
@@ -100,10 +113,9 @@ Route each request by delegating to exactly one sub-agent:
 - fix_pipeline: add, fix or change code, propose a patch.
 - briefing_pipeline: the user opens a project, asks for a status, or asks what is new.
 
-For security, debugging, or engineering requests, use the appropriate specialists:
-- Security review: delegate to security_quality_agent with repository_intelligence_agent and data_flow_intelligence_agent
-- Debugging: delegate to debugging_intelligence_agent with code_understanding_agent and runtime_intelligence_agent
-- Code changes: delegate to software_engineering_agent followed by testing_verification_agent
+For security, debugging, data flow, runtime, engineering or testing requests, delegate to exactly one of:
+- security_quality_pipeline, debugging_intelligence_pipeline, data_flow_intelligence_pipeline,
+  runtime_intelligence_pipeline, software_engineering_pipeline, testing_verification_pipeline.
 
 Rules:
 - Do not answer code questions yourself. You have no code tools.
@@ -119,8 +131,8 @@ root_agent = LlmAgent(
     instruction=ROOT_INSTRUCTION,
     tools=[request_approval],
     sub_agents=[phase2_pipeline, investigate_pipeline, impact_pipeline, fix_pipeline, briefing_pipeline,
-                data_flow_intelligence_agent, runtime_intelligence_agent, debugging_intelligence_agent,
-                security_quality_agent, software_engineering_agent, testing_verification_agent],
+                data_flow_pipeline, runtime_pipeline, debugging_pipeline,
+                security_pipeline, engineering_pipeline, testing_pipeline],
     before_agent_callback=init_state,
     before_model_callback=trim_history,
 )

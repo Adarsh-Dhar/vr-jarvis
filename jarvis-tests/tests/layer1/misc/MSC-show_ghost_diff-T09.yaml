@@ -7,9 +7,9 @@ test_type: T09
 description: Dependency Failure test for show_ghost_diff
 fixture: simple-python
 input:
-  node_id: placeholder
-  diff: placeholder
-  tool_context: placeholder
+  node_id: fixtures/repositories/simple-python/main.py
+  diff: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

@@ -7,9 +7,9 @@ test_type: T06
 description: Large Input test for publish_message
 fixture: polyglot-monorepo
 input:
-  topic: placeholder
-  message: placeholder
-  tool_context: placeholder
+  topic: fixtures/repositories/simple-python/main.py
+  message: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

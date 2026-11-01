@@ -7,8 +7,8 @@ test_type: T01
 description: Happy Path test for isolate_relationship_path
 fixture: simple-python
 input:
-  path: placeholder
-  tool_context: placeholder
+  path: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not:

@@ -7,8 +7,8 @@ test_type: T08
 description: Malformed Input test for commit_worktree
 fixture: corrupted-inputs
 input:
-  worktree: placeholder
-  message: placeholder
+  worktree: fixtures/repositories/simple-python/main.py
+  message: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

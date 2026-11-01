@@ -7,9 +7,9 @@ test_type: T06
 description: Large Input test for manage_conversation
 fixture: polyglot-monorepo
 input:
-  user_message: placeholder
-  context: placeholder
-  tool_context: placeholder
+  user_message: fixtures/repositories/simple-python/main.py
+  context: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

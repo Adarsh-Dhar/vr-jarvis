@@ -7,8 +7,8 @@ test_type: T15
 description: Recovery test for trace_cross_module_relationships
 fixture: simple-python
 input:
-  module_id: placeholder
-  tool_context: placeholder
+  module_id: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

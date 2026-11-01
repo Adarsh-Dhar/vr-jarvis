@@ -7,9 +7,9 @@ test_type: T01
 description: Happy Path test for compare_execution_traces
 fixture: simple-python
 input:
-  trace1_id: placeholder
-  trace2_id: placeholder
-  tool_context: placeholder
+  trace1_id: fixtures/repositories/simple-python/main.py
+  trace2_id: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not:

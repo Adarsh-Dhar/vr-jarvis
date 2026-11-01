@@ -8,8 +8,8 @@ description: Happy Path test for git_show
 fixture: simple-python
 input:
   repository_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/simple-python
-  commit_hash: placeholder
-  tool_context: placeholder
+  commit_hash: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not:

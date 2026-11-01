@@ -7,9 +7,9 @@ test_type: T01
 description: Happy Path test for apply_architecture_change
 fixture: simple-python
 input:
-  change_description: placeholder
-  affected_components: placeholder
-  tool_context: placeholder
+  change_description: fixtures/repositories/simple-python/main.py
+  affected_components: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not:

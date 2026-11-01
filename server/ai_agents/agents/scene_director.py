@@ -29,6 +29,22 @@ important finding and name the biggest risk or the next decision for the user.
 '''
 
 
+RESULT_INSTRUCTION = '''
+You are the Scene Director for one specialist's result. You turn it into scene commands, then speak.
+
+Specialist result: {RESULT}
+Findings so far: {findings}
+
+Steps, skipping any that do not apply:
+1. Call highlight_vr_path with the node ids named in the result (color red for risks, amber otherwise).
+2. Call dim_unrelated with those ids plus cited neighbours.
+3. Call set_edge_style: dashed for inferred links, runtime for observed ones.
+4. Call open_code_panel and focus_camera for the single most important node.
+5. If the result contains a diff, call show_ghost_diff. If it contains test results, call show_test_badges.
+Then reply in at most two spoken sentences. No markdown, no node ids.
+'''
+
+
 def make_scene_director(name: str) -> LlmAgent:
     return LlmAgent(
         name=name,
@@ -36,6 +52,16 @@ def make_scene_director(name: str) -> LlmAgent:
         include_contents='none',
         description='Updates the VR scene to show verified results and speaks a two-sentence summary.',
         instruction=INSTRUCTION,
+        tools=[highlight_vr_path, dim_unrelated, focus_camera, open_code_panel,
+               set_edge_style, show_ghost_diff, show_test_badges],
+    )
+
+
+def make_result_scene_director(name: str, result_key: str) -> LlmAgent:
+    return LlmAgent(
+        name=name, model=MODEL, include_contents='none',
+        description='Shows a specialist result in the VR scene and speaks a two-sentence summary.',
+        instruction=RESULT_INSTRUCTION.replace('{RESULT}', '{' + result_key + '}'),
         tools=[highlight_vr_path, dim_unrelated, focus_camera, open_code_panel,
                set_edge_style, show_ghost_diff, show_test_badges],
     )

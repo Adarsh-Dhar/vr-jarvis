@@ -7,10 +7,10 @@ test_type: T13
 description: Performance test for create_issue
 fixture: simple-python
 input:
-  tracker: placeholder
-  title: placeholder
-  description: placeholder
-  tool_context: placeholder
+  tracker: fixtures/repositories/simple-python/main.py
+  title: fixtures/repositories/simple-python/main.py
+  description: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

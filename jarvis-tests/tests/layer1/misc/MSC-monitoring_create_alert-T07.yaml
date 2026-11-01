@@ -7,8 +7,8 @@ test_type: T07
 description: Complex Input test for monitoring_create_alert
 fixture: polyglot-monorepo
 input:
-  condition: placeholder
-  tool_context: placeholder
+  condition: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

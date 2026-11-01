@@ -7,10 +7,10 @@ test_type: T06
 description: Large Input test for remove_graph_edge
 fixture: polyglot-monorepo
 input:
-  graph_id: placeholder
-  source_id: placeholder
-  target_id: placeholder
-  tool_context: placeholder
+  graph_id: fixtures/repositories/simple-python/main.py
+  source_id: fixtures/repositories/simple-python/main.py
+  target_id: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

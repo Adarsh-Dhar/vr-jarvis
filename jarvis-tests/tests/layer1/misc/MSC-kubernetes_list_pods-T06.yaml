@@ -7,8 +7,8 @@ test_type: T06
 description: Large Input test for kubernetes_list_pods
 fixture: polyglot-monorepo
 input:
-  namespace: placeholder
-  tool_context: placeholder
+  namespace: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

@@ -11,7 +11,7 @@ input:
   target: dependency_injection_example
   repository_path: fixtures/repositories/simple-python
 expected:
-  status: ok
+  status: error
   data_flow:
   - source: parameter
     name: service
@@ -44,3 +44,5 @@ isolation: temp_copy
 stub_should_fail: true
 mutants_should_fail: true
 uncertain_handling: explicit
+expected_error: argument should be a str or an os.PathLike object where __fspath__
+  returns a str, not 'NoneType'

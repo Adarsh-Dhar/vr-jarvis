@@ -7,8 +7,8 @@ test_type: T07
 description: Complex Input test for detect_voice_activity
 fixture: polyglot-monorepo
 input:
-  audio_data: placeholder
-  tool_context: placeholder
+  audio_data: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

@@ -7,9 +7,9 @@ test_type: T03
 description: Output Validation test for get_issue
 fixture: simple-python
 input:
-  tracker: placeholder
-  issue_id: placeholder
-  tool_context: placeholder
+  tracker: fixtures/repositories/simple-python/main.py
+  issue_id: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

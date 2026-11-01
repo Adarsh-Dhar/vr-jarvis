@@ -7,10 +7,10 @@ test_type: T08
 description: Malformed Input test for create_issue
 fixture: corrupted-inputs
 input:
-  tracker: placeholder
-  title: placeholder
-  description: placeholder
-  tool_context: placeholder
+  tracker: fixtures/repositories/simple-python/main.py
+  title: fixtures/repositories/simple-python/main.py
+  description: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

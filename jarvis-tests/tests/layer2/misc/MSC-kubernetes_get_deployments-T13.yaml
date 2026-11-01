@@ -7,8 +7,8 @@ test_type: T13
 description: Performance test for kubernetes_get_deployments
 fixture: simple-python
 input:
-  namespace: placeholder
-  tool_context: placeholder
+  namespace: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

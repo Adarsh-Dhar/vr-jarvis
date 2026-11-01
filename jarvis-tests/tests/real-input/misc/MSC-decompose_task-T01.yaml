@@ -7,8 +7,8 @@ test_type: T01
 description: Happy Path test for decompose_task
 fixture: simple-python
 input:
-  task_description: placeholder
-  tool_context: placeholder
+  task_description: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not:

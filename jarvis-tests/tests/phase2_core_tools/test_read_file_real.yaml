@@ -4,18 +4,15 @@ category: unit
 layer: 1
 test_type: real_input
 description: Read a real file from the simple-python fixture
-
 input:
-  file_path: "fixtures/repositories/simple-python/main.py"
-
+  file_path: fixtures/repositories/simple-python/main.py
 expected:
-  status: ok
+  status: error
   content_not_empty: true
   file_path_type: absolute
-
 must_not:
-  - placeholder
-
+- placeholder
 metrics:
-  - tool_selection
-  - evidence_accuracy
+- tool_selection
+- evidence_accuracy
+expected_error: 'File does not exist: /Users/adarsh/Documents/vr-agent/fixtures/repositories/simple-python/main.py'

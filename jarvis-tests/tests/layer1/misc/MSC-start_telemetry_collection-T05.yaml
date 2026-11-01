@@ -7,9 +7,9 @@ test_type: T05
 description: Boundary Conditions test for start_telemetry_collection
 fixture: simple-python
 input:
-  collection_id: placeholder
-  metrics: placeholder
-  tool_context: placeholder
+  collection_id: fixtures/repositories/simple-python/main.py
+  metrics: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

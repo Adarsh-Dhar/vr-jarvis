@@ -7,8 +7,8 @@ test_type: T04
 description: Empty Input test for install_dependency
 fixture: simple-python
 input:
-  package_name: placeholder
-  tool_context: placeholder
+  package_name: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

@@ -7,9 +7,9 @@ test_type: T08
 description: Malformed Input test for compare_implementations
 fixture: corrupted-inputs
 input:
-  function1_id: placeholder
-  function2_id: placeholder
-  tool_context: placeholder
+  function1_id: fixtures/repositories/simple-python/main.py
+  function2_id: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

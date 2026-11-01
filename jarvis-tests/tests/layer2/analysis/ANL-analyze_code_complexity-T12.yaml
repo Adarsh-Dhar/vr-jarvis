@@ -8,9 +8,10 @@ description: Security test for analyze_code_complexity
 fixture: simple-python
 input:
   file_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/simple-python/main.py
-  tool_context: placeholder
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
+  file_path_contains: main.py
 must_not: []
 checks:
 - type: schema_validity
@@ -19,3 +20,7 @@ checks:
 performance:
   max_duration_ms: 2000
 severity: critical
+expected_complexity:
+  cyclomatic: 1
+  cognitive: 0
+  lines_of_code: 61

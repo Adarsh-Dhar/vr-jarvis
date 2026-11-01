@@ -7,8 +7,8 @@ test_type: T01
 description: Happy Path test for process_voice_command
 fixture: simple-python
 input:
-  command: placeholder
-  tool_context: placeholder
+  command: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not:

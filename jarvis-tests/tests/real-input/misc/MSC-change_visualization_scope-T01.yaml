@@ -7,9 +7,9 @@ test_type: T01
 description: Happy Path test for change_visualization_scope
 fixture: simple-python
 input:
-  visualization_id: placeholder
-  scope: placeholder
-  tool_context: placeholder
+  visualization_id: fixtures/repositories/simple-python/main.py
+  scope: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not:

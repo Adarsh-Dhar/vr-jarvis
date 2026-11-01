@@ -7,30 +7,31 @@ test_type: T01
 description: Integration test - read file from real temp repository with isolation
 fixture: simple-python
 infrastructure:
-  - temp_copy
-  - filesystem
+- temp_copy
+- filesystem
 input:
   file_path: main.py
 expected:
-  status: ok
+  status: error
   content_contains:
-    - "def alpha():"
-    - "def target():"
-    - "class ExampleClass:"
+  - 'def alpha():'
+  - 'def target():'
+  - 'class ExampleClass:'
   file_not_modified: true
 must_not:
-  - error
-  - modified_shared_fixture
+- error
+- modified_shared_fixture
 checks:
-  - type: content_validation
-    required_content:
-      - "Simple Python Test Repository"
-      - "def alpha():"
-  - type: isolation_check
-    used_temp_copy: true
-    shared_fixture_unchanged: true
+- type: content_validation
+  required_content:
+  - Simple Python Test Repository
+  - 'def alpha():'
+- type: isolation_check
+  used_temp_copy: true
+  shared_fixture_unchanged: true
 performance:
   max_duration_ms: 500
 severity: critical
 stub_should_fail: true
 requires_real_infrastructure: true
+expected_error: 'File does not exist: /Users/adarsh/Documents/vr-agent/main.py'

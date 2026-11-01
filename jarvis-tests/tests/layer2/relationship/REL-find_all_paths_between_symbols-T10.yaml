@@ -7,9 +7,9 @@ test_type: T10
 description: Timeout test for find_all_paths_between_symbols
 fixture: simple-python
 input:
-  from_id: placeholder
-  to_id: placeholder
-  tool_context: placeholder
+  from_id: fixtures/repositories/simple-python/main.py
+  to_id: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

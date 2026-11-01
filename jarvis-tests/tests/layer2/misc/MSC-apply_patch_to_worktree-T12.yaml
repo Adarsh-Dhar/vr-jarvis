@@ -7,8 +7,8 @@ test_type: T12
 description: Security test for apply_patch_to_worktree
 fixture: simple-python
 input:
-  diff: placeholder
-  tool_context: placeholder
+  diff: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

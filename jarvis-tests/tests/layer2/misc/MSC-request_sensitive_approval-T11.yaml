@@ -7,9 +7,9 @@ test_type: T11
 description: Concurrency test for request_sensitive_approval
 fixture: simple-python
 input:
-  operation: placeholder
-  description: placeholder
-  tool_context: placeholder
+  operation: fixtures/repositories/simple-python/main.py
+  description: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

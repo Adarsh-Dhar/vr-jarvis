@@ -7,8 +7,8 @@ test_type: T11
 description: Concurrency test for identify_data_leaks
 fixture: simple-python
 input:
-  data_id: placeholder
-  tool_context: placeholder
+  data_id: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

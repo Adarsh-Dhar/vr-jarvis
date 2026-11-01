@@ -7,8 +7,8 @@ test_type: T03
 description: Output Validation test for commit_worktree
 fixture: simple-python
 input:
-  worktree: placeholder
-  message: placeholder
+  worktree: fixtures/repositories/simple-python/main.py
+  message: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []

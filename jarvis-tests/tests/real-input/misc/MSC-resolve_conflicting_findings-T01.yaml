@@ -7,8 +7,8 @@ test_type: T01
 description: Happy Path test for resolve_conflicting_findings
 fixture: simple-python
 input:
-  conflicts: placeholder
-  tool_context: placeholder
+  conflicts: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not:

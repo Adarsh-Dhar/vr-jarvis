@@ -7,8 +7,8 @@ test_type: T13
 description: Performance test for trace_return_value_flow
 fixture: simple-python
 input:
-  function_id: placeholder
-  tool_context: placeholder
+  function_id: alpha
+  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
 must_not: []
