@@ -25,13 +25,35 @@ class MutationTester:
     def get_tool_function(self, tool_name: str):
         """Get the actual tool function"""
         sys.path.insert(0, str(self.server_root))
-        
+
+        # Phase 0.6: Fix import to use direct module imports instead of ai_agents.tools
+        # Map tool names to their module files
+        tool_modules = {
+            'read_file': 'repository_tools',
+            'parse_source_code': 'code_understanding_tools',
+            'extract_symbols': 'code_understanding_tools',
+            'index_repository': 'repository_intelligence_tools',
+            'find_callers': 'relationship_intelligence_tools',
+            'list_files': 'repository_tools',
+            'search_symbols': 'navigation_tools',
+            'scan_secrets': 'security_quality_tools',
+            'scan_vulnerabilities': 'security_quality_tools',
+            'git_branch': 'git_tools',
+            'git_commit': 'git_tools',
+        }
+
+        module_name = tool_modules.get(tool_name)
+        if not module_name:
+            # Try to infer from tool name
+            module_name = f"{tool_name.split('_')[0]}_tools"
+
         try:
-            from ai_agents import tools
-            tool_func = getattr(tools, tool_name, None)
+            # Import directly from the module
+            module = __import__(f'ai_agents.tools.{module_name}', fromlist=[tool_name])
+            tool_func = getattr(module, tool_name, None)
             return tool_func
         except Exception as e:
-            print(f"Error importing tool {tool_name}: {e}")
+            print(f"Error importing tool {tool_name} from {module_name}: {e}")
             return None
 
     def create_mutation(self, tool_name: str, mutation_type: str):
@@ -40,14 +62,33 @@ class MutationTester:
         if not original_func:
             return None
 
-        # Get the source file
-        module = importlib.import_module('ai_agents.tools')
-        module_file = getattr(module, '__file__', None)
-        
+        # Phase 0.6: Fix the tool file path resolution
+        # Get the source file directly from the module
+        tool_modules = {
+            'read_file': 'repository_tools',
+            'parse_source_code': 'code_understanding_tools',
+            'extract_symbols': 'code_understanding_tools',
+            'index_repository': 'repository_intelligence_tools',
+            'find_callers': 'relationship_intelligence_tools',
+            'list_files': 'repository_tools',
+            'search_symbols': 'navigation_tools',
+            'scan_secrets': 'security_quality_tools',
+            'scan_vulnerabilities': 'security_quality_tools',
+            'git_branch': 'git_tools',
+            'git_commit': 'git_tools',
+        }
+
+        module_name = tool_modules.get(tool_name, f"{tool_name.split('_')[0]}_tools")
+        try:
+            module = __import__(f'ai_agents.tools.{module_name}', fromlist=[tool_name])
+            module_file = getattr(module, '__file__', None)
+        except:
+            module_file = None
+
         if not module_file:
             return None
 
-        tool_file = Path(module_file).parent / f"{tool_name.replace('_', '-')}.py"
+        tool_file = Path(module_file)
         if not tool_file.exists():
             # Try other naming patterns
             for py_file in Path(module_file).parent.glob('*.py'):

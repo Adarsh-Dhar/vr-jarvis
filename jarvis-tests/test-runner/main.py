@@ -16,6 +16,7 @@ from test_orchestrator import TestOrchestrator
 from test_fixture_manager import TestFixtureManager
 from ground_truth_engine import GroundTruthEngine
 from report_generator import ReportGenerator
+from regression_detector import RegressionDetector
 
 
 def main():
@@ -91,14 +92,23 @@ def main():
     
     # Generate report
     report_gen = ReportGenerator(test_root)
-    
+
     if args.report in ['json', 'both']:
         json_path = report_gen.generate_report(run_result)
         print(f"\nJSON Report: {json_path}")
-    
+
     if args.report in ['html', 'both']:
         html_path = report_gen.generate_html_report(run_result)
         print(f"HTML Report: {html_path}")
+
+    # Phase 0.6: Run regression detector
+    detector = RegressionDetector(test_root)
+    detector.save_result(run_result)
+    regressions = detector.detect_regressions(run_result)
+
+    if regressions['has_regressions']:
+        print("\n⚠️  Regressions detected:")
+        print(detector.generate_regression_report(regressions))
     
     # Print summary
     print("\n" + "=" * 50)
@@ -110,6 +120,8 @@ def main():
     print(f"Failed: {summary['failed']}")
     print(f"Errors: {summary['errors']}")
     print(f"Skipped: {summary['skipped']}")
+    if 'not_validated' in summary:
+        print(f"Not Validated (placeholder inputs): {summary['not_validated']}")
     print(f"Success Rate: {run_result['success_rate']:.2%}")
     print(f"Duration: {run_result['duration']:.2f}s")
     

@@ -1,0 +1,11 @@
+test_id: AGENT-VIS-001
+agent: visualization_spatial
+fixture: simple-python
+request: Show me the call graph for target()
+expected_tools_include: [visualize_call_graph, create_graph]
+expected_findings:
+  - claim_contains: graph
+  - claim_contains: nodes
+must_not:
+  - fabricated_node
+metrics: [tool_selection, evidence_accuracy, hallucination_rate, latency_ms]

@@ -1,0 +1,11 @@
+test_id: AGENT-REL-001
+agent: relationship_intelligence
+fixture: simple-python
+request: Who calls target(), directly and indirectly?
+expected_tools_include: [find_callers, find_indirect_callers]
+expected_findings:
+  - claim_contains: main
+  - claim_contains: calls
+must_not:
+  - fabricated_caller
+metrics: [tool_selection, evidence_accuracy, hallucination_rate, latency_ms]

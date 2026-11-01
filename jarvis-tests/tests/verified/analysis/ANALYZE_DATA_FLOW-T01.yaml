@@ -1,0 +1,46 @@
+test_id: ANALYZE_DATA_FLOW-T01
+name: Verified analyze_data_flow - Analysis
+category: verified
+tool: analyze_data_flow
+layer: 1
+test_type: T01
+description: Verified analysis test for analyze_data_flow
+fixture: simple-python
+verified: true
+input:
+  target: dependency_injection_example
+  repository_path: fixtures/repositories/simple-python
+expected:
+  status: ok
+  data_flow:
+  - source: parameter
+    name: service
+    flow: through
+    target: target
+    type: dependency
+  - source: return
+    from: target
+    flow: to
+    target: dependency_injection_example
+    type: return_value
+must_not:
+- placeholder_flows
+- fabricated_dependencies
+checks:
+- type: set_equals
+  field: results
+  expected_set: []
+- type: precision_recall
+  min_precision: 0.95
+  min_recall: 0.9
+performance:
+  max_duration_ms: 2000
+severity: critical
+limitations:
+- Static analysis only - no runtime tracing
+- May miss flows through intermediate variables
+- Does not handle reflection or dynamic dispatch
+isolation: temp_copy
+stub_should_fail: true
+mutants_should_fail: true
+uncertain_handling: explicit

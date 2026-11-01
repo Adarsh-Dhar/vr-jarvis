@@ -6,6 +6,19 @@ from .agents.fix import patch_agent, patch_repair, verifier
 from .agents.impact import change_loader, impact_synthesizer, static_impact, test_mapper
 from .agents.investigator import investigator
 from .agents.scene_director import make_scene_director
+# Phase 2 agents
+from .agents.repository_intelligence import repository_intelligence_agent
+from .agents.code_understanding import code_understanding_agent
+from .agents.relationship_intelligence import relationship_intelligence_agent
+from .agents.data_flow import data_flow_agent
+from .agents.runtime import runtime_intelligence_agent
+from .agents.debugging import debugging_intelligence_agent
+from .agents.security_quality import security_quality_agent
+from .agents.software_engineering import software_engineering_agent
+from .agents.testing_verification import testing_verification_agent
+from .agents.visualization import visualization_agent
+from .agents.conversational import conversational_agent
+from .agents.orchestrator import orchestrator_agent
 from .callbacks import init_state, trim_history
 from .config import MODEL
 from .tools.control_tools import request_approval
@@ -56,12 +69,32 @@ briefing_pipeline = SequentialAgent(
     sub_agents=[briefing_agent, make_scene_director('briefing_scene')],
 )
 
+# Phase 2: New pipeline for vertical slice
+phase2_specialists = ParallelAgent(
+    name='phase2_specialists',
+    description='Run Repository, Code Understanding, and Relationship in parallel',
+    sub_agents=[repository_intelligence_agent, code_understanding_agent, relationship_intelligence_agent],
+)
+
+phase2_pipeline = SequentialAgent(
+    name='phase2_pipeline',
+    description='First vertical slice: explain function and show connections',
+    sub_agents=[
+        orchestrator_agent,
+        phase2_specialists,
+        make_critic('phase2_critic', 'findings'),
+        visualization_agent,
+        conversational_agent
+    ],
+)
+
 ROOT_INSTRUCTION = '''
 You are JARVIS, a voice-and-hands assistant that helps a developer understand and change code inside
 a VR headset. Requests arrive as spoken text or as a pinch on a graph node.
 Current selection (may be empty): {selection}
 
 Route each request by delegating to exactly one sub-agent:
+- phase2_pipeline: explain code and show connections (new vertical slice)
 - investigate_pipeline: how existing code works, where something happens, what a selected node does.
 - impact_pipeline: what breaks, what is affected, risk of changing or removing something, change review.
 - fix_pipeline: add, fix or change code, propose a patch.
@@ -80,7 +113,7 @@ root_agent = LlmAgent(
     description='Voice-and-hands assistant for understanding and changing code in VR.',
     instruction=ROOT_INSTRUCTION,
     tools=[request_approval],
-    sub_agents=[investigate_pipeline, impact_pipeline, fix_pipeline, briefing_pipeline],
+    sub_agents=[phase2_pipeline, investigate_pipeline, impact_pipeline, fix_pipeline, briefing_pipeline],
     before_agent_callback=init_state,
     before_model_callback=trim_history,
 )

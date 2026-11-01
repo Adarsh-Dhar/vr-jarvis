@@ -1,0 +1,50 @@
+# Tool Manifest: analyze_data_flow
+# Ground truth for analyze_data_flow on simple-python fixture
+
+tool: analyze_data_flow
+archetype: analysis
+fixture: simple-python
+
+input:
+  target: dependency_injection_example
+  repository_path: fixtures/repositories/simple-python
+
+expected:
+  status: ok
+  data_flow:
+    - source: parameter
+      name: service
+      flow: through
+      target: target
+      type: dependency
+    - source: return
+      from: target
+      flow: to
+      target: dependency_injection_example
+      type: return_value
+
+must_not:
+  - placeholder_flows
+  - fabricated_dependencies
+
+performance:
+  max_duration_ms: 2000
+
+limitations:
+  - "Static analysis only - no runtime tracing"
+  - "May miss flows through intermediate variables"
+  - "Does not handle reflection or dynamic dispatch"
+
+required_test_types:
+  - T01
+  - T02
+  - T04
+  - T05
+  - T07
+  - T08
+  - T13
+
+metadata:
+  oracle: "Hand-written data flow analysis"
+  ground_truth_source: "Manual trace of dependency_injection_example()"
+  last_updated: "2026-11-01"

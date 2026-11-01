@@ -253,3 +253,35 @@ database_schema:
 expected_vulnerabilities: []
 expected_bugs: []
 known_issues: []
+
+# Phase 1.3 additions
+data_flow:
+  - from: UserController.createUser
+    to: UserRepository.save
+    data: User object
+    type: return_value
+  - from: UserController.getUserById
+    to: UserRepository.findById
+    data: Long id
+    type: parameter
+
+control_flow:
+  UserController.getAllUsers:
+    - type: framework_call
+      target: JpaRepository.findAll
+      line: 15
+
+expected_coverage:
+  src/main/java/com/example/demo/DemoApplication.java: 100%
+  src/main/java/com/example/demo/User.java: 95%
+  src/main/java/com/example/demo/UserRepository.java: 90%
+  src/main/java/com/example/demo/UserController.java: 95%
+
+recorded_traces:
+  - test: test_api_get_users
+    file: src/main/java/com/example/demo/UserController.java
+    function: getAllUsers
+    trace: |
+      REST endpoint: GET /api/users
+      calls: JpaRepository.findAll()
+

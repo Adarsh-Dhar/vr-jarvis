@@ -1,0 +1,79 @@
+# Tool Manifest: extract_symbols
+# Ground truth for extract_symbols on simple-python fixture
+
+tool: extract_symbols
+archetype: read_search
+fixture: simple-python
+
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+
+expected:
+  status: ok
+  symbols:
+    - name: alpha
+      type: function
+      file: main.py
+      line: 18
+    - name: beta
+      type: function
+      file: main.py
+      line: 25
+    - name: gamma
+      type: function
+      file: main.py
+      line: 32
+    - name: delta
+      type: function
+      file: main.py
+      line: 39
+    - name: target
+      type: function
+      file: main.py
+      line: 45
+    - name: ExampleClass
+      type: class
+      file: main.py
+      line: 55
+    - name: helper_function
+      type: function
+      file: main.py
+      line: 60
+    - name: dependency_injection_example
+      type: function
+      file: main.py
+      line: 15
+    - name: recursive_a
+      type: function
+      file: main.py
+      line: 70
+    - name: recursive_b
+      type: function
+      file: main.py
+      line: 75
+
+must_not:
+  - placeholder_symbols
+  - fabricated_classes
+
+performance:
+  max_duration_ms: 1000
+
+limitations:
+  - "Does not resolve symbols in dynamically generated code"
+  - "May miss symbols in exec() or eval() calls"
+  - "Type inference is static, not runtime"
+
+required_test_types:
+  - T01
+  - T02
+  - T04
+  - T05
+  - T08
+  - T12
+  - T13
+
+metadata:
+  oracle: "Python ast"
+  ground_truth_source: "ast.walk() analysis of main.py"
+  last_updated: "2026-11-01"

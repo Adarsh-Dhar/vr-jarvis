@@ -1599,7 +1599,12 @@ def refactor_function(
     refactoring_type: str,
     tool_context: ToolContext
 ) -> dict:
-    """Refactor function."""
+    """Refactor function.
+
+    WARNING: This tool uses template-based refactoring only. It does not perform
+    deep semantic analysis. Results should be reviewed carefully.
+    Marked for deep implementation in Phase 0.7.
+    """
     try:
         from .navigation_tools import get_symbol_definition
         from .repository_tools import read_file
@@ -1796,7 +1801,12 @@ def implement_interface(
     class_name: str,
     tool_context: ToolContext
 ) -> dict:
-    """Implement interface."""
+    """Implement interface.
+
+    WARNING: This tool uses template-based implementation only. It does not perform
+    deep semantic analysis. Results should be reviewed carefully.
+    Marked for deep implementation in Phase 0.7.
+    """
     try:
         from .navigation_tools import get_symbol_definition
         from .relationship_intelligence_tools import find_interface_implementations

@@ -1,0 +1,21 @@
+test_id: PHASE2-CORE-010
+tool: extract_symbols
+category: unit
+layer: 1
+test_type: real_input
+description: Extract symbols from simple-python fixture
+
+input:
+  file_path: "fixtures/repositories/simple-python/main.py"
+
+expected:
+  status: ok
+  symbol_count_min: 2
+  known_symbols_present: ["target", "main"]
+
+must_not:
+  - placeholder
+
+metrics:
+  - tool_selection
+  - evidence_accuracy

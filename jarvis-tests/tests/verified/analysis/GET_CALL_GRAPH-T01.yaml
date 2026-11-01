@@ -1,0 +1,70 @@
+test_id: GET_CALL_GRAPH-T01
+name: Verified get_call_graph - Analysis
+category: verified
+tool: get_call_graph
+layer: 1
+test_type: T01
+description: Verified analysis test for get_call_graph
+fixture: simple-python
+verified: true
+input:
+  repository_path: fixtures/repositories/simple-python
+  depth: 2
+expected:
+  status: ok
+  graph:
+    nodes:
+    - id: alpha
+      type: function
+      file: main.py
+      line: 18
+    - id: beta
+      type: function
+      file: main.py
+      line: 25
+    - id: gamma
+      type: function
+      file: main.py
+      line: 32
+    - id: delta
+      type: function
+      file: main.py
+      line: 39
+    - id: target
+      type: function
+      file: main.py
+      line: 45
+    edges:
+    - from: alpha
+      to: target
+      type: direct
+    - from: beta
+      to: target
+      type: direct
+    - from: gamma
+      to: target
+      type: direct
+    - from: delta
+      to: target
+      type: direct
+must_not:
+- placeholder_nodes
+- fabricated_edges
+checks:
+- type: set_equals
+  field: results
+  expected_set: []
+- type: precision_recall
+  min_precision: 0.95
+  min_recall: 0.9
+performance:
+  max_duration_ms: 1000
+severity: critical
+limitations:
+- Does not include external library calls
+- Limited to specified depth
+- Does not resolve virtual method calls
+isolation: temp_copy
+stub_should_fail: true
+mutants_should_fail: true
+uncertain_handling: explicit

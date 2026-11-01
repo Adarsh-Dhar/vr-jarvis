@@ -480,7 +480,12 @@ def analyze_cryptography(
     repository_path: str,
     tool_context: ToolContext
 ) -> dict:
-    """Analyze cryptographic practices."""
+    """Analyze cryptographic practices.
+
+    WARNING: This tool uses shallow keyword matching only. It does not perform
+    deep cryptographic analysis. Results should be treated as approximate.
+    Marked for deep implementation in Phase 0.7.
+    """
     try:
         from .repository_tools import search_code
         
@@ -773,7 +778,12 @@ def detect_code_smells(
     repository_path: str,
     tool_context: ToolContext
 ) -> dict:
-    """Detect code smells."""
+    """Detect code smells.
+
+    WARNING: This tool uses shallow keyword matching only. It does not perform
+    deep code analysis. Results should be treated as approximate.
+    Marked for deep implementation in Phase 0.7.
+    """
     try:
         from .repository_tools import search_code
         
@@ -1017,7 +1027,12 @@ def identify_technical_debt(
     repository_path: str,
     tool_context: ToolContext
 ) -> dict:
-    """Identify technical debt."""
+    """Identify technical debt.
+
+    WARNING: This tool uses shallow keyword matching only. It does not perform
+    deep debt analysis. Results should be treated as approximate.
+    Marked for deep implementation in Phase 0.7.
+    """
     try:
         from .repository_tools import search_code
         

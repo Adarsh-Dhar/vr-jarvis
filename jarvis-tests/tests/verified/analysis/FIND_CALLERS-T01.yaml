@@ -1,0 +1,58 @@
+test_id: FIND_CALLERS-T01
+name: Verified find_callers - Analysis
+category: verified
+tool: find_callers
+layer: 1
+test_type: T01
+description: Verified analysis test for find_callers
+fixture: simple-python
+verified: true
+input:
+  target: target
+  repository_path: fixtures/repositories/simple-python
+expected:
+  status: ok
+  results: &id001
+  - caller: alpha
+    file: main.py
+    line: 18
+    type: direct
+  - caller: beta
+    file: main.py
+    line: 25
+    type: direct
+  - caller: gamma
+    file: main.py
+    line: 32
+    type: direct
+  - caller: dependency_injection_example
+    file: main.py
+    line: 15
+    type: indirect
+  - caller: cross_package_caller
+    file: subpackage/helper.py
+    line: 8
+    type: indirect
+must_not:
+- placeholder_symbols
+- fabricated_callers
+- non_existent_functions
+checks:
+- type: set_equals
+  field: results
+  expected_set: *id001
+- type: precision_recall
+  min_precision: 0.95
+  min_recall: 0.9
+performance:
+  max_duration_ms: 500
+severity: critical
+limitations:
+- Does not resolve dynamic dispatch (e.g., getattr, importlib)
+- Does not handle call sites in string literals (e.g., eval)
+- May miss callers in generated code
+- Indirect callers limited to 3 levels deep
+isolation: temp_copy
+stub_should_fail: true
+mutants_should_fail: true
+uncertain_handling: explicit

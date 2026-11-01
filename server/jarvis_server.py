@@ -8,6 +8,7 @@ from collections import defaultdict
 from types import SimpleNamespace
 
 from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi.responses import StreamingResponse
 from google.adk.events import Event, EventActions
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
@@ -142,6 +143,53 @@ async def source(node_id: str, context: int = 0):
     return get_source(node_id, SimpleNamespace(state={}), min(max(context, 0), 20))
 
 
+async def _run_turn_streaming(body):
+    """Run turn with streaming progress."""
+    message = types.Content(role='user', parts=[types.Part(text=body.text)])
+    
+    async for event in runner.run_async(user_id=USER, session_id=body.session_id, new_message=message):
+        # Stream progress events
+        if event.author == 'agent':
+            yield {
+                "type": "agent_progress",
+                "agent": event.agent_name if hasattr(event, 'agent_name') else "unknown",
+                "content": _s(event.content) if event.content else ""
+            }
+        elif event.is_final_response():
+            yield {
+                "type": "final_response",
+                "content": ' '.join(p.text for p in event.content.parts if getattr(p, 'text', None))
+            }
+
+
+@app.post('/ask', dependencies=[Depends(auth)])
+async def ask(body: AskBody):
+    """Stream agent progress as Server-Sent Events."""
+    error = ''
+    reply = ''
+    state = {}
+    
+    async with locks[body.session_id]:
+        await ensure(body.session_id)
+        await set_state(body.session_id, {'selection': body.selection})
+        
+        try:
+            # Streaming response
+            async def event_generator():
+                async for event in _run_turn_streaming(body):
+                    yield f"data: {json.dumps(event)}\n\n"
+            
+            return StreamingResponse(
+                event_generator(),
+                media_type="text/event-stream",
+                headers={"Cache-Control": "no-cache"}
+            )
+        except Exception as exc:
+            error = f'{type(exc).__name__}: {str(exc)[:200]}'
+            return {"error": error}
+
+
+# Non-streaming fallback for compatibility
 async def _run_turn(body):
     message = types.Content(role='user', parts=[types.Part(text=body.text)])
     reply = ''
@@ -151,25 +199,24 @@ async def _run_turn(body):
     return reply
 
 
-@app.post('/ask', dependencies=[Depends(auth)])
-async def ask(body: AskBody):
+@app.post('/ask/nonstream', dependencies=[Depends(auth)])
+async def ask_nonstream(body: AskBody):
+    """Non-streaming endpoint for compatibility."""
     error = ''
     reply = ''
     async with locks[body.session_id]:
         await ensure(body.session_id)
-        await set_state(body.session_id, {'selection': body.selection})   # empty string clears a stale selection
+        await set_state(body.session_id, {'selection': body.selection})
         try:
             reply = await asyncio.wait_for(_run_turn(body), ASK_TIMEOUT)
         except asyncio.TimeoutError:
             error = 'JARVIS took too long to answer. Try a narrower question.'
-        except Exception as exc:                      # model/quota errors must not become an HTTP 500 in the headset
-            error = '%s: %s' % (type(exc).__name__, str(exc)[:200])
+        except Exception as exc:
+            error = f'{type(exc).__name__}: {str(exc)[:200]}'
         state = (await ensure(body.session_id)).state
     last = state.get('last_test_run') or {}
     commands = list(state.get('scene_commands', []))
     pending = _s(state.get('pending_approval'))
-    # Only the root agent may ask for approval, and the fix flow never does. So the server raises the prompt, and
-    # only when a patch exists AND its sandbox tests really passed. The commit itself happens in /approve.
     if (not pending and not error and state.get('proposed_patch') and state.get('worktree')
             and isinstance(last, dict) and last.get('status') == 'passed'):
         pending = 'Commit the verified patch to a sandbox branch'
@@ -178,11 +225,11 @@ async def ask(body: AskBody):
     return {
         'reply': reply,
         'error': error,
-        'scene_commands': commands,   # state copy is cleared every turn by init_state
+        'scene_commands': commands,
         'pending_approval': pending,
         'approved': bool(state.get('approved', False)),
         'test_results': _s(state.get('test_results')),
-        'test_source': last.get('source', '') if isinstance(last, dict) else '',   # "cached" must be shown as simulated
+        'test_source': last.get('source', '') if isinstance(last, dict) else '',
         'evidence': list(state.get('evidence', [])),
     }
 
@@ -200,3 +247,42 @@ async def approve(body: ApproveBody):
     if not pending:
         return {'ok': False, 'branch': '', 'commit': '', 'detail': 'Nothing was waiting for approval.'}
     return {'branch': '', 'commit': '', **commit_worktree(worktree, 'JARVIS: ' + str(pending)[:120])}
+
+
+@app.get('/task/{session_id}', dependencies=[Depends(auth)])
+async def get_task_state(session_id: str):
+    """Get current task state for a session."""
+    session = await ensure(session_id)
+    state = session.state
+    return {
+        'session_id': session_id,
+        'plan': state.get('plan', {}),
+        'findings': list(state.get('findings', [])),
+        'result_repository': state.get('result_repository', {}),
+        'result_code_understanding': state.get('result_code_understanding', {}),
+        'result_relationship': state.get('result_relationship', {}),
+        'result_data_flow': state.get('result_data_flow', {}),
+        'result_runtime': state.get('result_runtime', {}),
+        'result_debugging': state.get('result_debugging', {}),
+        'result_software_eng': state.get('result_software_eng', {}),
+        'result_testing': state.get('result_testing', {}),
+        'result_security': state.get('result_security', {}),
+    }
+
+
+@app.get('/agents', dependencies=[Depends(auth)])
+async def get_agent_status():
+    """Get status of all agents."""
+    from ai_agents.agents.registry import get_all_agent_statuses
+    return get_all_agent_statuses()
+
+
+@app.get('/agents/{agent_name}', dependencies=[Depends(auth)])
+async def get_agent_info(agent_name: str):
+    """Get info about a specific agent."""
+    from ai_agents.agents.registry import get_agent_status
+    status = get_agent_status(agent_name)
+    if status.get('status') == 'not_found':
+        raise HTTPException(status_code=404, detail=f'Agent not found: {agent_name}')
+    return status
+

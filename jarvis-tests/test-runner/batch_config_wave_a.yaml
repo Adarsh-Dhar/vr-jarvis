@@ -1,0 +1,277 @@
+# Batch Configuration for Phase 3 Wave A: Codebase Intelligence (127 tools)
+# This configuration defines tools to generate verified specs for
+
+tools:
+  # Repository Tools (11)
+  - tool: list_files
+    archetype: read_search
+    fixture: simple-python
+    manifest: list_files.yaml
+  
+  - tool: read_file
+    archetype: read_search
+    fixture: simple-python
+    manifest: read_file.yaml
+  
+  - tool: read_file_range
+    archetype: read_search
+    fixture: simple-python
+    manifest: read_file_range.yaml
+  
+  - tool: search_files
+    archetype: read_search
+    fixture: simple-python
+    manifest: search_files.yaml
+  
+  - tool: get_file_info
+    archetype: read_search
+    fixture: simple-python
+    manifest: get_file_info.yaml
+  
+  - tool: get_repository_tree
+    archetype: read_search
+    fixture: simple-python
+    manifest: get_repository_tree.yaml
+  
+  - tool: index_repository
+    archetype: read_search
+    fixture: simple-python
+    manifest: index_repository.yaml
+  
+  - tool: update_index
+    archetype: modify
+    fixture: simple-python
+    manifest: update_index.yaml
+  
+  - tool: get_index_status
+    archetype: read_search
+    fixture: simple-python
+    manifest: get_index_status.yaml
+  
+  - tool: remove_from_index
+    archetype: modify
+    fixture: simple-python
+    manifest: remove_from_index.yaml
+  
+  - tool: clear_index
+    archetype: modify
+    fixture: simple-python
+    manifest: clear_index.yaml
+  
+  # Repository Intelligence Tools (18)
+  - tool: extract_symbols
+    archetype: read_search
+    fixture: simple-python
+    manifest: extract_symbols.yaml
+  
+  - tool: parse_source_code
+    archetype: read_search
+    fixture: simple-python
+    manifest: parse_source_code.yaml
+  
+  - tool: extract_ast
+    archetype: read_search
+    fixture: simple-python
+    manifest: extract_ast.yaml
+  
+  - tool: get_file_structure
+    archetype: read_search
+    fixture: simple-python
+    manifest: get_file_structure.yaml
+  
+  - tool: get_imports
+    archetype: read_search
+    fixture: simple-python
+    manifest: get_imports.yaml
+  
+  - tool: get_exports
+    archetype: read_search
+    fixture: simple-python
+    manifest: get_exports.yaml
+  
+  - tool: analyze_dependencies
+    archetype: analysis
+    fixture: simple-python
+    manifest: analyze_dependencies.yaml
+  
+  - tool: get_file_complexity
+    archetype: analysis
+    fixture: simple-python
+    manifest: get_file_complexity.yaml
+  
+  - tool: detect_duplicates
+    archetype: analysis
+    fixture: simple-python
+    manifest: detect_duplicates.yaml
+  
+  - tool: get_code_metrics
+    archetype: analysis
+    fixture: simple-python
+    manifest: get_code_metrics.yaml
+  
+  - tool: analyze_naming_conventions
+    archetype: analysis
+    fixture: simple-python
+    manifest: analyze_naming_conventions.yaml
+  
+  - tool: detect_dead_code
+    archetype: analysis
+    fixture: simple-python
+    manifest: detect_dead_code.yaml
+  
+  - tool: get_function_signatures
+    archetype: read_search
+    fixture: simple-python
+    manifest: get_function_signatures.yaml
+  
+  - tool: get_class_hierarchy
+    archetype: analysis
+    fixture: simple-python
+    manifest: get_class_hierarchy.yaml
+  
+  - tool: get_module_structure
+    archetype: read_search
+    fixture: simple-python
+    manifest: get_module_structure.yaml
+  
+  - tool: find_unused_imports
+    archetype: analysis
+    fixture: simple-python
+    manifest: find_unused_imports.yaml
+  
+  - tool: find_circular_imports
+    archetype: analysis
+    fixture: simple-python
+    manifest: find_circular_imports.yaml
+  
+  # Navigation Tools (10)
+  - tool: navigate_to_definition
+    archetype: read_search
+    fixture: simple-python
+    manifest: navigate_to_definition.yaml
+  
+  - tool: navigate_to_references
+    archetype: read_search
+    fixture: simple-python
+    manifest: navigate_to_references.yaml
+  
+  - tool: find_symbol_at_position
+    archetype: read_search
+    fixture: simple-python
+    manifest: find_symbol_at_position.yaml
+  
+  - tool: get_symbol_info
+    archetype: read_search
+    fixture: simple-python
+    manifest: get_symbol_info.yaml
+  
+  - tool: search_symbols
+    archetype: read_search
+    fixture: simple-python
+    manifest: search_symbols.yaml
+  
+  - tool: find_definition
+    archetype: read_search
+    fixture: simple-python
+    manifest: find_definition.yaml
+  
+  - tool: find_references
+    archetype: read_search
+    fixture: simple-python
+    manifest: find_references.yaml
+  
+  - tool: go_to_definition
+    archetype: read_search
+    fixture: simple-python
+    manifest: go_to_definition.yaml
+  
+  - tool: peek_definition
+    archetype: read_search
+    fixture: simple-python
+    manifest: peek_definition.yaml
+  
+  - tool: symbol_search
+    archetype: read_search
+    fixture: simple-python
+    manifest: symbol_search.yaml
+  
+  # Code Understanding Tools (16) - Key relationship tools
+  - tool: find_callers
+    archetype: analysis
+    fixture: simple-python
+    manifest: find_callers.yaml
+  
+  - tool: find_callees
+    archetype: analysis
+    fixture: simple-python
+    manifest: find_callees.yaml
+  
+  - tool: get_call_graph
+    archetype: analysis
+    fixture: simple-python
+    manifest: get_call_graph.yaml
+  
+  - tool: trace_execution
+    archetype: analysis
+    fixture: simple-python
+    manifest: trace_execution.yaml
+  
+  - tool: analyze_data_flow
+    archetype: analysis
+    fixture: simple-python
+    manifest: analyze_data_flow.yaml
+  
+  - tool: get_control_flow
+    archetype: analysis
+    fixture: simple-python
+    manifest: get_control_flow.yaml
+  
+  - tool: find_function_uses
+    archetype: analysis
+    fixture: simple-python
+    manifest: find_function_uses.yaml
+  
+  - tool: get_function_context
+    archetype: read_search
+    fixture: simple-python
+    manifest: get_function_context.yaml
+  
+  - tool: explain_function
+    archetype: read_search
+    fixture: simple-python
+    manifest: explain_function.yaml
+  
+  - tool: summarize_code
+    archetype: read_search
+    fixture: simple-python
+    manifest: summarize_code.yaml
+  
+  - tool: detect_patterns
+    archetype: analysis
+    fixture: simple-python
+    manifest: detect_patterns.yaml
+  
+  - tool: find_similar_functions
+    archetype: analysis
+    fixture: simple-python
+    manifest: find_similar_functions.yaml
+  
+  - tool: get_code_quality_score
+    archetype: analysis
+    fixture: simple-python
+    manifest: get_code_quality_score.yaml
+  
+  - tool: identify_smells
+    archetype: analysis
+    fixture: simple-python
+    manifest: identify_smells.yaml
+  
+  - tool: suggest_refactoring
+    archetype: analysis
+    fixture: simple-python
+    manifest: suggest_refactoring.yaml
+  
+  - tool: generate_documentation
+    archetype: read_search
+    fixture: simple-python
+    manifest: generate_documentation.yaml

@@ -1,0 +1,20 @@
+test_id: PHASE2-CORE-011
+tool: analyze_control_flow
+category: unit
+layer: 1
+test_type: real_input
+description: Analyze control flow in simple-python fixture
+
+input:
+  file_path: "fixtures/repositories/simple-python/main.py"
+
+expected:
+  status: ok
+  results_not_empty: true
+
+must_not:
+  - placeholder
+
+metrics:
+  - tool_selection
+  - evidence_accuracy

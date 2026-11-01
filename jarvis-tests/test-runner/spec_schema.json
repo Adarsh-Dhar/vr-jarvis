@@ -1,0 +1,192 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "JARVIS Test Specification Schema",
+  "description": "Schema for validating JARVIS test specification YAML files",
+  "type": "object",
+  "required": ["test_id", "name", "tool", "description"],
+  "properties": {
+    "test_id": {
+      "type": "string",
+      "description": "Unique identifier for the test",
+      "pattern": "^[A-Z0-9-]+$"
+    },
+    "name": {
+      "type": "string",
+      "description": "Human-readable name of the test"
+    },
+    "category": {
+      "type": "string",
+      "description": "Test category (e.g., relationship_intelligence, analysis_tools)"
+    },
+    "tool": {
+      "type": "string",
+      "description": "Name of the tool being tested"
+    },
+    "description": {
+      "type": "string",
+      "description": "Detailed description of what the test validates"
+    },
+    "fixture": {
+      "type": "object",
+      "description": "Fixture configuration",
+      "properties": {
+        "repository": {
+          "type": "string",
+          "description": "Name of the repository fixture to use"
+        },
+        "target_symbol": {
+          "type": "string",
+          "description": "Target symbol for the test"
+        }
+      }
+    },
+    "setup": {
+      "type": "object",
+      "description": "Setup block for test execution (Phase 0.4+)",
+      "properties": {
+        "repository": {
+          "type": "string",
+          "description": "Repository to open"
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Files to copy to temp directory"
+        }
+      }
+    },
+    "input": {
+      "type": "object",
+      "description": "Input parameters for the tool",
+      "additionalProperties": true,
+      "not": {
+        "description": "Input must not contain 'placeholder' values",
+        "patternProperties": {
+          ".*": {
+            "not": {
+              "pattern": "placeholder"
+            }
+          }
+        }
+      }
+    },
+    "expected": {
+      "type": "object",
+      "description": "Expected output from the tool",
+      "additionalProperties": true,
+      "not": {
+        "description": "Expected must not contain only 'status' field (except for T02 and T08 reject cases)",
+        "anyOf": [
+          {
+            "not": {
+              "properties": {
+                "status": {
+                  "type": "string"
+                }
+              },
+              "required": ["status"],
+              "additionalProperties": false
+            }
+          }
+        ]
+      }
+    },
+    "must_not": {
+      "type": "array",
+      "description": "Fields or values that must not appear in output",
+      "items": {
+        "oneOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "object"
+          }
+        ]
+      }
+    },
+    "checks": {
+      "type": "array",
+      "description": "Validation checks to run",
+      "items": {
+        "type": "object",
+        "required": ["type"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "equals",
+              "set_equals",
+              "contains_all",
+              "must_not_contain",
+              "ordered",
+              "json_path",
+              "line_numbers",
+              "precision_recall",
+              "within_range",
+              "schema_validity",
+              "performance",
+              "content_validation",
+              "field_type_validation",
+              "non_empty_check"
+            ]
+          }
+        }
+      }
+    },
+    "performance": {
+      "type": "object",
+      "description": "Performance targets",
+      "properties": {
+        "max_duration_ms": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    },
+    "severity": {
+      "type": "string",
+      "enum": ["critical", "high", "medium", "low"],
+      "description": "Test severity level"
+    },
+    "skip": {
+      "type": "boolean",
+      "description": "Whether to skip this test"
+    },
+    "skip_reason": {
+      "type": "string",
+      "description": "Reason for skipping (required if skip is true)"
+    },
+    "linked_issue": {
+      "type": "string",
+      "description": "Issue tracking the work to fix the skip (required if skip is true)"
+    },
+    "layer": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 7,
+      "description": "Test layer (1-7)"
+    },
+    "test_type": {
+      "type": "string",
+      "description": "Test type (e.g., T01, T02, ... T15)"
+    }
+  },
+  "if": {
+    "properties": {
+      "skip": {
+        "const": true
+      }
+    },
+    "required": ["skip"]
+  },
+  "then": {
+    "required": ["skip_reason", "linked_issue"],
+    "errorMessage": {
+      "skip_reason": "skip_reason is required when skip is true",
+      "linked_issue": "linked_issue is required when skip is true"
+    }
+  }
+}

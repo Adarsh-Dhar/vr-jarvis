@@ -1,0 +1,48 @@
+test_id: SEARCH_SYMBOLS-T01
+name: Verified search_symbols - Analysis
+category: verified
+tool: search_symbols
+layer: 1
+test_type: T01
+description: Verified analysis test for search_symbols
+fixture: simple-python
+verified: true
+input:
+  query: target
+  repository_path: fixtures/repositories/simple-python
+expected:
+  status: ok
+  results: &id001
+  - name: target
+    type: function
+    file: main.py
+    line: 45
+    definition:
+      start_line: 45
+      end_line: 50
+  - name: dependency_injection_example
+    type: function
+    file: main.py
+    line: 15
+    matches_target: true
+must_not:
+- placeholder_results
+- fabricated_matches
+checks:
+- type: set_equals
+  field: results
+  expected_set: *id001
+- type: precision_recall
+  min_precision: 0.95
+  min_recall: 0.9
+performance:
+  max_duration_ms: 500
+severity: critical
+limitations:
+- Exact match only - no fuzzy search
+- Limited to specified repository
+- Does not search content of files
+isolation: temp_copy
+stub_should_fail: true
+mutants_should_fail: true
+uncertain_handling: explicit

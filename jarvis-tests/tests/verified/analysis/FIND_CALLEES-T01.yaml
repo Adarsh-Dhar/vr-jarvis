@@ -1,0 +1,44 @@
+test_id: FIND_CALLEES-T01
+name: Verified find_callees - Analysis
+category: verified
+tool: find_callees
+layer: 1
+test_type: T01
+description: Verified analysis test for find_callees
+fixture: simple-python
+verified: true
+input:
+  target: alpha
+  repository_path: fixtures/repositories/simple-python
+expected:
+  status: ok
+  results: &id001
+  - callee: target
+    file: main.py
+    line: 45
+    type: direct
+  - callee: helper_function
+    file: main.py
+    line: 60
+    type: direct
+must_not:
+- placeholder_symbols
+- fabricated_callees
+checks:
+- type: set_equals
+  field: results
+  expected_set: *id001
+- type: precision_recall
+  min_precision: 0.95
+  min_recall: 0.9
+performance:
+  max_duration_ms: 500
+severity: critical
+limitations:
+- Does not resolve callees in dynamically imported modules
+- May miss callees in string-based calls (e.g., getattr)
+- Indirect callees limited to 3 levels deep
+isolation: temp_copy
+stub_should_fail: true
+mutants_should_fail: true
+uncertain_handling: explicit

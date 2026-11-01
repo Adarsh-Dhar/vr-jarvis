@@ -1,0 +1,43 @@
+# Ground Truth for Distributed System Fixture
+
+## Service Dependencies
+service_calls:
+  order_processor:
+    - target: queue_client.publish
+      file: service_a/order_processor.py
+      line: 35
+      type: direct
+    - target: db_client.insert
+      file: service_a/order_processor.py
+      line: 28
+      type: direct
+    - target: db_client.update
+      file: service_a/order_processor.py
+      line: 79
+      type: direct
+
+## Data Flow
+data_flow:
+  - source: order_processor.create_order
+    target: queue_client.publish
+    data: payment_message
+    fields: [order_id, amount, customer_id]
+  - source: queue_client.publish
+    target: payment_queue
+    data: payment_message
+  - source: order_processor.update_order_status
+    target: queue_client.publish
+    data: notification_message
+    fields: [order_id, customer_id, total]
+
+## Known Issues/Complexities
+complexities:
+  - async_message_processing: "Services communicate via message queue, not direct calls"
+  - distributed_transaction: "Order spans multiple services without distributed transaction"
+  - eventual_consistency: "Status updates are eventual, not immediate"
+
+## Expected Coverage
+expected_coverage:
+  service_a/order_processor.py: 95%
+  shared/queue_client.py: 90%
+  shared/db_client.py: 85%

@@ -1,0 +1,21 @@
+test_id: PHASE2-CORE-007
+tool: list_files
+category: unit
+layer: 1
+test_type: real_input
+description: List files in simple-python fixture
+
+input:
+  directory: "fixtures/repositories/simple-python"
+
+expected:
+  status: ok
+  file_count_min: 3
+  known_files_present: ["main.py", "subpackage"]
+
+must_not:
+  - placeholder
+
+metrics:
+  - tool_selection
+  - evidence_accuracy

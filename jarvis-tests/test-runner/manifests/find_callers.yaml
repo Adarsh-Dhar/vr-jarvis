@@ -1,0 +1,71 @@
+# Tool Manifest: find_callers
+# This manifest contains the ground truth for find_callers on simple-python fixture
+
+tool: find_callers
+archetype: analysis
+fixture: simple-python
+
+# Input for the tool
+input:
+  target: target
+  repository_path: fixtures/repositories/simple-python
+
+# Expected exact output
+expected:
+  status: ok
+  results:
+    # Direct callers
+    - caller: alpha
+      file: main.py
+      line: 18
+      type: direct
+    - caller: beta
+      file: main.py
+      line: 25
+      type: direct
+    - caller: gamma
+      file: main.py
+      line: 32
+      type: direct
+    # Indirect callers
+    - caller: dependency_injection_example
+      file: main.py
+      line: 15
+      type: indirect
+    - caller: cross_package_caller
+      file: subpackage/helper.py
+      line: 8
+      type: indirect
+
+# Things that must NOT appear in output
+must_not:
+  - placeholder_symbols
+  - fabricated_callers
+  - non_existent_functions
+
+# Performance targets
+performance:
+  max_duration_ms: 500
+
+# Known limitations
+limitations:
+  - "Does not resolve dynamic dispatch (e.g., getattr, importlib)"
+  - "Does not handle call sites in string literals (e.g., eval)"
+  - "May miss callers in generated code"
+  - "Indirect callers limited to 3 levels deep"
+
+# Required test types for this archetype
+required_test_types:
+  - T01  # happy path
+  - T02  # invalid input
+  - T04  # empty result
+  - T05  # boundary
+  - T07  # complex input
+  - T08  # malformed
+  - T13  # performance
+
+# Additional metadata
+metadata:
+  oracle: "Python ast + manual inspection"
+  ground_truth_source: "hand-written analysis of simple-python/main.py"
+  last_updated: "2026-11-01"

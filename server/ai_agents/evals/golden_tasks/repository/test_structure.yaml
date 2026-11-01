@@ -1,0 +1,11 @@
+test_id: AGENT-REPO-001
+agent: repository_intelligence
+fixture: simple-python
+request: What is the structure of this repository?
+expected_tools_include: [analyze_repository_structure, detect_languages, detect_frameworks]
+expected_findings:
+  - claim_contains: Python
+  - claim_contains: main.py
+must_not:
+  - fabricated_language
+metrics: [tool_selection, evidence_accuracy, hallucination_rate, latency_ms]

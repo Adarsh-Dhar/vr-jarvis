@@ -1,0 +1,21 @@
+test_id: PHASE2-CORE-005
+tool: parse_source_code
+category: unit
+layer: 1
+test_type: real_input
+description: Parse source code from simple-python fixture
+
+input:
+  file_path: "fixtures/repositories/simple-python/main.py"
+
+expected:
+  status: ok
+  ast_not_empty: true
+  language: python
+
+must_not:
+  - placeholder
+
+metrics:
+  - tool_selection
+  - evidence_accuracy

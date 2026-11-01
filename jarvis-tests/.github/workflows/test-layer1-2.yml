@@ -22,7 +22,12 @@ jobs:
     - name: Install dependencies
       run: |
         cd jarvis-tests/test-runner
-        pip install pyyaml
+        pip install pyyaml jsonschema
+
+    - name: Validate spec schema
+      run: |
+        cd jarvis-tests/test-runner
+        python3 validate_spec_schema.py --test-root ..
 
     - name: Validate ground truth
       run: |
@@ -30,6 +35,11 @@ jobs:
         python3 ground_truth_validator.py simple-python
         python3 ground_truth_validator.py complex-typescript
         python3 ground_truth_validator.py spring-boot
+
+    - name: Validate no silent skips
+      run: |
+        cd jarvis-tests/test-runner
+        python3 validate_no_silent_skips.py --test-root ..
 
     - name: Run Layer 1-2 tests
       run: |
@@ -45,6 +55,11 @@ jobs:
       run: |
         cd jarvis-tests/test-runner
         python3 regression_detector.py --json test-reports/latest.json
+
+    - name: Run do-nothing gate
+      run: |
+        cd jarvis-tests/test-runner
+        python3 run_with_stub.py --test-root .. --max-allowed 100
 
     - name: Upload test results
       if: always()

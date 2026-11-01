@@ -1,0 +1,11 @@
+test_id: AGENT-ORCH-001
+agent: orchestrator
+fixture: simple-python
+request: Explain the target() function and show everything connected to it
+expected_tools_include: [classify_request, create_investigation_plan, merge_agent_results]
+expected_findings:
+  - claim_contains: plan
+  - claim_contains: delegated
+must_not:
+  - self_answered
+metrics: [tool_selection, evidence_accuracy, hallucination_rate, latency_ms]

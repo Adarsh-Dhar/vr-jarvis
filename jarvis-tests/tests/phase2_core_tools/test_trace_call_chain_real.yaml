@@ -1,0 +1,21 @@
+test_id: PHASE2-CORE-014
+tool: trace_call_chain
+category: unit
+layer: 1
+test_type: real_input
+description: Trace call chain in simple-python
+
+input:
+  from_symbol: "simple-python::main::main"
+  to_symbol: "simple-python::main::target"
+
+expected:
+  status: ok
+  results_not_empty: true
+
+must_not:
+  - placeholder
+
+metrics:
+  - tool_selection
+  - evidence_accuracy

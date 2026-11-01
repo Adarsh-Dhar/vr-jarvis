@@ -199,7 +199,12 @@ def build_dependency_graph(
     repository_path: str,
     tool_context: ToolContext
 ) -> dict:
-    """Build module dependency graphs."""
+    """Build module dependency graphs.
+
+    WARNING: This tool has basic implementation only. It does not perform
+    deep dependency analysis. Results should be treated as approximate.
+    Marked for deep implementation in Phase 0.7.
+    """
     try:
         from .analysis_tools import analyze_dependencies
         # analyze_dependencies in analysis_tools takes a file_path, not repository_path

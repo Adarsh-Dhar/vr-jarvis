@@ -322,3 +322,41 @@ type_complexity:
 expected_vulnerabilities: []
 expected_bugs: []
 known_issues: []
+
+# Phase 1.3 additions
+data_flow:
+  - from: handleNewUser
+    to: createUser
+    data: User object
+    type: return_value
+  - from: handleNewUser
+    to: greet
+    data: User.name
+    type: parameter
+  - from: UserService.hasAdmin
+    to: isAdmin
+    data: User.permissions
+    type: parameter
+
+control_flow:
+  factorial:
+    - type: recursion
+      target: factorial
+      line: 90
+  divide:
+    - type: error_handling
+      target: exception
+      line: 48
+
+expected_coverage:
+  src/types.ts: 95%
+  src/main.ts: 90%
+
+recorded_traces:
+  - test: test_generic_types
+    file: src/types.ts
+    function: GenericRepository.findById
+    trace: |
+      type parameters: [T, K]
+      returns: Maybe<T>
+

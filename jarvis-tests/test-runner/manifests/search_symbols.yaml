@@ -1,0 +1,52 @@
+# Tool Manifest: search_symbols
+# Ground truth for search_symbols on simple-python fixture
+
+tool: search_symbols
+archetype: read_search
+fixture: simple-python
+
+input:
+  query: target
+  repository_path: fixtures/repositories/simple-python
+
+expected:
+  status: ok
+  results:
+    - name: target
+      type: function
+      file: main.py
+      line: 45
+      definition:
+        start_line: 45
+        end_line: 50
+    - name: dependency_injection_example
+      type: function
+      file: main.py
+      line: 15
+      matches_target: true
+
+must_not:
+  - placeholder_results
+  - fabricated_matches
+
+performance:
+  max_duration_ms: 500
+
+limitations:
+  - "Exact match only - no fuzzy search"
+  - "Limited to specified repository"
+  - "Does not search content of files"
+
+required_test_types:
+  - T01
+  - T02
+  - T04
+  - T05
+  - T08
+  - T12
+  - T13
+
+metadata:
+  oracle: "grep + manual verification"
+  ground_truth_source: "Search for 'target' in simple-python"
+  last_updated: "2026-11-01"

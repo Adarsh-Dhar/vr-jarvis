@@ -541,26 +541,11 @@ from .language_adapters import (
 )
 
 # VR-Specific Tools
+# Note: Spatial tools (select_code_element, focus_on_object, etc.) are in visualization_spatial_tools.py
+# This module contains only VR-specific state management, voice, haptics, and environment tools
 from .vr_specific_tools import (
     get_vr_session_state,
     get_selected_object,
-    get_spatial_selection_context,
-    select_code_element,
-    focus_on_object,
-    expand_relationships,
-    trace_relationship_path,
-    isolate_relationship_path,
-    compare_code_regions,
-    pin_investigation,
-    restore_investigation,
-    create_spatial_bookmark,
-    annotate_code_element,
-    synchronize_graphs,
-    request_visualization,
-    change_visualization_depth,
-    change_visualization_scope,
-    get_visualization_state,
-    get_spatial_object_details,
     # Voice commands
     process_voice_command,
     register_voice_command,
@@ -579,10 +564,6 @@ from .vr_specific_tools import (
     reset_camera,
     save_scene_state,
     load_scene_state,
-    # Additional spatial navigation
-    focus_on_graph_node,
-    set_graph_depth,
-    navigate_to_code_element,
 )
 
 # Infrastructure Services

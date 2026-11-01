@@ -1,0 +1,48 @@
+# Tool Manifest: find_callees
+# Ground truth for find_callees on simple-python fixture
+
+tool: find_callees
+archetype: analysis
+fixture: simple-python
+
+input:
+  target: alpha
+  repository_path: fixtures/repositories/simple-python
+
+expected:
+  status: ok
+  results:
+    - callee: target
+      file: main.py
+      line: 45
+      type: direct
+    - callee: helper_function
+      file: main.py
+      line: 60
+      type: direct
+
+must_not:
+  - placeholder_symbols
+  - fabricated_callees
+
+performance:
+  max_duration_ms: 500
+
+limitations:
+  - "Does not resolve callees in dynamically imported modules"
+  - "May miss callees in string-based calls (e.g., getattr)"
+  - "Indirect callees limited to 3 levels deep"
+
+required_test_types:
+  - T01
+  - T02
+  - T04
+  - T05
+  - T07
+  - T08
+  - T13
+
+metadata:
+  oracle: "Python ast"
+  ground_truth_source: "ast.walk() analysis of alpha() function"
+  last_updated: "2026-11-01"

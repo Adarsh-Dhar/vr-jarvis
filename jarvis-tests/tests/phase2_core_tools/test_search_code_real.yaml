@@ -1,0 +1,21 @@
+test_id: PHASE2-CORE-002
+tool: search_code
+category: unit
+layer: 1
+test_type: real_input
+description: Search for code in simple-python fixture
+
+input:
+  directory: "fixtures/repositories/simple-python"
+  query: "def target"
+
+expected:
+  status: ok
+  results_not_empty: true
+
+must_not:
+  - placeholder
+
+metrics:
+  - tool_selection
+  - evidence_accuracy

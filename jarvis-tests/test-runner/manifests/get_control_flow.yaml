@@ -1,0 +1,48 @@
+# Tool Manifest: get_control_flow
+# Ground truth for get_control_flow on simple-python fixture
+
+tool: get_control_flow
+archetype: analysis
+fixture: simple-python
+
+input:
+  target: alpha
+  repository_path: fixtures/repositories/simple-python
+
+expected:
+  status: ok
+  control_flow:
+    - type: function_call
+      target: target
+      line: 20
+    - type: if_statement
+      condition: result
+      line: 21
+    - type: return_statement
+      line: 22
+
+must_not:
+  - placeholder_flows
+  - fabricated_branches
+
+performance:
+  max_duration_ms: 1000
+
+limitations:
+  - "Static analysis only - no runtime tracing"
+  - "May miss complex control flow through closures"
+  - "Does not handle exceptions explicitly"
+
+required_test_types:
+  - T01
+  - T02
+  - T04
+  - T05
+  - T07
+  - T08
+  - T13
+
+metadata:
+  oracle: "Python ast"
+  ground_truth_source: "ast.walk() analysis of alpha() function"
+  last_updated: "2026-11-01"

@@ -1,0 +1,44 @@
+test_id: GET_CONTROL_FLOW-T01
+name: Verified get_control_flow - Analysis
+category: verified
+tool: get_control_flow
+layer: 1
+test_type: T01
+description: Verified analysis test for get_control_flow
+fixture: simple-python
+verified: true
+input:
+  target: alpha
+  repository_path: fixtures/repositories/simple-python
+expected:
+  status: ok
+  control_flow:
+  - type: function_call
+    target: target
+    line: 20
+  - type: if_statement
+    condition: result
+    line: 21
+  - type: return_statement
+    line: 22
+must_not:
+- placeholder_flows
+- fabricated_branches
+checks:
+- type: set_equals
+  field: results
+  expected_set: []
+- type: precision_recall
+  min_precision: 0.95
+  min_recall: 0.9
+performance:
+  max_duration_ms: 1000
+severity: critical
+limitations:
+- Static analysis only - no runtime tracing
+- May miss complex control flow through closures
+- Does not handle exceptions explicitly
+isolation: temp_copy
+stub_should_fail: true
+mutants_should_fail: true
+uncertain_handling: explicit

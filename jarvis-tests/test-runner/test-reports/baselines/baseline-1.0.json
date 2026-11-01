@@ -1,0 +1,26 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-11-01T08:37:48.835599",
+  "run_id": "baseline-1.0",
+  "summary": "Baseline for v1.0",
+  "success_rate": 0.85,
+  "passed_tests": [
+    "test_1",
+    "test_2",
+    "test_3",
+    "test_4",
+    "test_5"
+  ],
+  "failed_tests": [
+    "test_6"
+  ],
+  "error_tests": [],
+  "tool_results": {
+    "find_callers": {
+      "pass_rate": 0.9
+    },
+    "extract_symbols": {
+      "pass_rate": 0.85
+    }
+  }
+}

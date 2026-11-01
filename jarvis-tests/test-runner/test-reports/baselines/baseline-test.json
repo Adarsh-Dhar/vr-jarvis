@@ -1,0 +1,13 @@
+{
+  "version": "test",
+  "timestamp": "2026-11-01T08:51:12.528401",
+  "run_id": "test",
+  "summary": null,
+  "success_rate": 0.9,
+  "passed_tests": [
+    "t1"
+  ],
+  "failed_tests": [],
+  "error_tests": [],
+  "tool_results": {}
+}

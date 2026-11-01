@@ -1,0 +1,21 @@
+test_id: PHASE2-CORE-012
+tool: resolve_types
+category: unit
+layer: 1
+test_type: real_input
+description: Resolve types in simple-python fixture
+
+input:
+  file_path: "fixtures/repositories/simple-python/main.py"
+  symbol_id: "simple-python::main::target"
+
+expected:
+  status: ok
+  results_not_empty: true
+
+must_not:
+  - placeholder
+
+metrics:
+  - tool_selection
+  - evidence_accuracy

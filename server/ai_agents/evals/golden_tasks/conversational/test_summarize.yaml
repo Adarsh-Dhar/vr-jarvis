@@ -1,0 +1,10 @@
+test_id: AGENT-CONV-001
+agent: conversational
+fixture: simple-python
+request: What did you find about target()?
+expected_tools_include: [summarize_investigation, answer_code_question]
+expected_findings:
+  - claim_contains: summary
+must_not:
+  - fabricated_answer
+metrics: [tool_selection, evidence_accuracy, hallucination_rate, latency_ms]

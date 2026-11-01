@@ -1,1 +1,439 @@
-{}
+{
+  "apply_patch": {
+    "status": "Untested",
+    "spec_count": 0,
+    "checklist": {
+      "has_specs": false,
+      "has_real_inputs": false,
+      "has_exact_expected": false,
+      "covers_required_types": false,
+      "has_setup_block": false,
+      "runs_on_temp_copy": false,
+      "no_absolute_paths": true,
+      "no_placeholders": false,
+      "has_skip_reason": true,
+      "linked_to_issue": true,
+      "tests_critical_paths": false,
+      "documented_limits": false
+    },
+    "checklist_score": 0.25
+  },
+  "collect_execution_trace": {
+    "status": "Untested",
+    "spec_count": 0,
+    "checklist": {
+      "has_specs": false,
+      "has_real_inputs": false,
+      "has_exact_expected": false,
+      "covers_required_types": false,
+      "has_setup_block": false,
+      "runs_on_temp_copy": false,
+      "no_absolute_paths": true,
+      "no_placeholders": false,
+      "has_skip_reason": true,
+      "linked_to_issue": true,
+      "tests_critical_paths": false,
+      "documented_limits": false
+    },
+    "checklist_score": 0.25
+  },
+  "create_graph": {
+    "status": "Untested",
+    "spec_count": 0,
+    "checklist": {
+      "has_specs": false,
+      "has_real_inputs": false,
+      "has_exact_expected": false,
+      "covers_required_types": false,
+      "has_setup_block": false,
+      "runs_on_temp_copy": false,
+      "no_absolute_paths": true,
+      "no_placeholders": false,
+      "has_skip_reason": true,
+      "linked_to_issue": true,
+      "tests_critical_paths": false,
+      "documented_limits": false
+    },
+    "checklist_score": 0.25
+  },
+  "expand_callers": {
+    "status": "Untested",
+    "spec_count": 0,
+    "checklist": {
+      "has_specs": false,
+      "has_real_inputs": false,
+      "has_exact_expected": false,
+      "covers_required_types": false,
+      "has_setup_block": false,
+      "runs_on_temp_copy": false,
+      "no_absolute_paths": true,
+      "no_placeholders": false,
+      "has_skip_reason": true,
+      "linked_to_issue": true,
+      "tests_critical_paths": false,
+      "documented_limits": false
+    },
+    "checklist_score": 0.25
+  },
+  "extract_symbols": {
+    "status": "Validated",
+    "spec_count": 10,
+    "checklist": {
+      "has_specs": true,
+      "has_real_inputs": true,
+      "has_exact_expected": true,
+      "covers_required_types": false,
+      "has_setup_block": false,
+      "runs_on_temp_copy": false,
+      "no_absolute_paths": true,
+      "no_placeholders": true,
+      "has_skip_reason": true,
+      "linked_to_issue": true,
+      "tests_critical_paths": false,
+      "documented_limits": false
+    },
+    "checklist_score": 0.5833333333333334
+  },
+  "find_callees": {
+    "status": "Untested",
+    "spec_count": 0,
+    "checklist": {
+      "has_specs": false,
+      "has_real_inputs": false,
+      "has_exact_expected": false,
+      "covers_required_types": false,
+      "has_setup_block": false,
+      "runs_on_temp_copy": false,
+      "no_absolute_paths": true,
+      "no_placeholders": false,
+      "has_skip_reason": true,
+      "linked_to_issue": true,
+      "tests_critical_paths": false,
+      "documented_limits": false
+    },
+    "checklist_score": 0.25
+  },
+  "find_callers": {
+    "status": "Validated",
+    "spec_count": 10,
+    "checklist": {
+      "has_specs": true,
+      "has_real_inputs": true,
+      "has_exact_expected": true,
+      "covers_required_types": false,
+      "has_setup_block": false,
+      "runs_on_temp_copy": false,
+      "no_absolute_paths": true,
+      "no_placeholders": true,
+      "has_skip_reason": true,
+      "linked_to_issue": true,
+      "tests_critical_paths": false,
+      "documented_limits": false
+    },
+    "checklist_score": 0.5833333333333334
+  },
+  "get_dependencies": {
+    "status": "Untested",
+    "spec_count": 0,
+    "checklist": {
+      "has_specs": false,
+      "has_real_inputs": false,
+      "has_exact_expected": false,
+      "covers_required_types": false,
+      "has_setup_block": false,
+      "runs_on_temp_copy": false,
+      "no_absolute_paths": true,
+      "no_placeholders": false,
+      "has_skip_reason": true,
+      "linked_to_issue": true,
+      "tests_critical_paths": false,
+      "documented_limits": false
+    },
+    "checklist_score": 0.25
+  },
+  "git_blame": {
+    "status": "Untested",
+    "spec_count": 0,
+    "checklist": {
+      "has_specs": false,
+      "has_real_inputs": false,
+      "has_exact_expected": false,
+      "covers_required_types": false,
+      "has_setup_block": false,
+      "runs_on_temp_copy": false,
+      "no_absolute_paths": true,
+      "no_placeholders": false,
+      "has_skip_reason": true,
+      "linked_to_issue": true,
+      "tests_critical_paths": false,
+      "documented_limits": false
+    },
+    "checklist_score": 0.25
+  },
+  "git_branch": {
+    "status": "Untested",
+    "spec_count": 0,
+    "checklist": {
+      "has_specs": false,
+      "has_real_inputs": false,
+      "has_exact_expected": false,
+      "covers_required_types": false,
+      "has_setup_block": false,
+      "runs_on_temp_copy": false,
+      "no_absolute_paths": true,
+      "no_placeholders": false,
+      "has_skip_reason": true,
+      "linked_to_issue": true,
+      "tests_critical_paths": false,
+      "documented_limits": false
+    },
+    "checklist_score": 0.25
+  },
+  "git_commit": {
+    "status": "Untested",
+    "spec_count": 0,
+    "checklist": {
+      "has_specs": false,
+      "has_real_inputs": false,
+      "has_exact_expected": false,
+      "covers_required_types": false,
+      "has_setup_block": false,
+      "runs_on_temp_copy": false,
+      "no_absolute_paths": true,
+      "no_placeholders": false,
+      "has_skip_reason": true,
+      "linked_to_issue": true,
+      "tests_critical_paths": false,
+      "documented_limits": false
+    },
+    "checklist_score": 0.25
+  },
+  "git_history": {
+    "status": "Untested",
+    "spec_count": 0,
+    "checklist": {
+      "has_specs": false,
+      "has_real_inputs": false,
+      "has_exact_expected": false,
+      "covers_required_types": false,
+      "has_setup_block": false,
+      "runs_on_temp_copy": false,
+      "no_absolute_paths": true,
+      "no_placeholders": false,
+      "has_skip_reason": true,
+      "linked_to_issue": true,
+      "tests_critical_paths": false,
+      "documented_limits": false
+    },
+    "checklist_score": 0.25
+  },
+  "index_repository": {
+    "status": "Validated",
+    "spec_count": 10,
+    "checklist": {
+      "has_specs": true,
+      "has_real_inputs": true,
+      "has_exact_expected": true,
+      "covers_required_types": false,
+      "has_setup_block": false,
+      "runs_on_temp_copy": false,
+      "no_absolute_paths": true,
+      "no_placeholders": true,
+      "has_skip_reason": true,
+      "linked_to_issue": true,
+      "tests_critical_paths": false,
+      "documented_limits": false
+    },
+    "checklist_score": 0.5833333333333334
+  },
+  "list_files": {
+    "status": "Validated",
+    "spec_count": 10,
+    "checklist": {
+      "has_specs": true,
+      "has_real_inputs": true,
+      "has_exact_expected": true,
+      "covers_required_types": false,
+      "has_setup_block": false,
+      "runs_on_temp_copy": false,
+      "no_absolute_paths": true,
+      "no_placeholders": true,
+      "has_skip_reason": true,
+      "linked_to_issue": true,
+      "tests_critical_paths": false,
+      "documented_limits": false
+    },
+    "checklist_score": 0.5833333333333334
+  },
+  "navigate_to": {
+    "status": "Untested",
+    "spec_count": 0,
+    "checklist": {
+      "has_specs": false,
+      "has_real_inputs": false,
+      "has_exact_expected": false,
+      "covers_required_types": false,
+      "has_setup_block": false,
+      "runs_on_temp_copy": false,
+      "no_absolute_paths": true,
+      "no_placeholders": false,
+      "has_skip_reason": true,
+      "linked_to_issue": true,
+      "tests_critical_paths": false,
+      "documented_limits": false
+    },
+    "checklist_score": 0.25
+  },
+  "parse_source_code": {
+    "status": "Validated",
+    "spec_count": 10,
+    "checklist": {
+      "has_specs": true,
+      "has_real_inputs": true,
+      "has_exact_expected": true,
+      "covers_required_types": false,
+      "has_setup_block": false,
+      "runs_on_temp_copy": false,
+      "no_absolute_paths": true,
+      "no_placeholders": true,
+      "has_skip_reason": true,
+      "linked_to_issue": true,
+      "tests_critical_paths": false,
+      "documented_limits": false
+    },
+    "checklist_score": 0.5833333333333334
+  },
+  "read_file": {
+    "status": "Validated",
+    "spec_count": 10,
+    "checklist": {
+      "has_specs": true,
+      "has_real_inputs": true,
+      "has_exact_expected": true,
+      "covers_required_types": false,
+      "has_setup_block": false,
+      "runs_on_temp_copy": false,
+      "no_absolute_paths": true,
+      "no_placeholders": true,
+      "has_skip_reason": true,
+      "linked_to_issue": true,
+      "tests_critical_paths": false,
+      "documented_limits": false
+    },
+    "checklist_score": 0.5833333333333334
+  },
+  "resolve_types": {
+    "status": "Untested",
+    "spec_count": 0,
+    "checklist": {
+      "has_specs": false,
+      "has_real_inputs": false,
+      "has_exact_expected": false,
+      "covers_required_types": false,
+      "has_setup_block": false,
+      "runs_on_temp_copy": false,
+      "no_absolute_paths": true,
+      "no_placeholders": false,
+      "has_skip_reason": true,
+      "linked_to_issue": true,
+      "tests_critical_paths": false,
+      "documented_limits": false
+    },
+    "checklist_score": 0.25
+  },
+  "run_unit_tests": {
+    "status": "Untested",
+    "spec_count": 0,
+    "checklist": {
+      "has_specs": false,
+      "has_real_inputs": false,
+      "has_exact_expected": false,
+      "covers_required_types": false,
+      "has_setup_block": false,
+      "runs_on_temp_copy": false,
+      "no_absolute_paths": true,
+      "no_placeholders": false,
+      "has_skip_reason": true,
+      "linked_to_issue": true,
+      "tests_critical_paths": false,
+      "documented_limits": false
+    },
+    "checklist_score": 0.25
+  },
+  "scan_secrets": {
+    "status": "Untested",
+    "spec_count": 0,
+    "checklist": {
+      "has_specs": false,
+      "has_real_inputs": false,
+      "has_exact_expected": false,
+      "covers_required_types": false,
+      "has_setup_block": false,
+      "runs_on_temp_copy": false,
+      "no_absolute_paths": true,
+      "no_placeholders": false,
+      "has_skip_reason": true,
+      "linked_to_issue": true,
+      "tests_critical_paths": false,
+      "documented_limits": false
+    },
+    "checklist_score": 0.25
+  },
+  "scan_vulnerabilities": {
+    "status": "Untested",
+    "spec_count": 0,
+    "checklist": {
+      "has_specs": false,
+      "has_real_inputs": false,
+      "has_exact_expected": false,
+      "covers_required_types": false,
+      "has_setup_block": false,
+      "runs_on_temp_copy": false,
+      "no_absolute_paths": true,
+      "no_placeholders": false,
+      "has_skip_reason": true,
+      "linked_to_issue": true,
+      "tests_critical_paths": false,
+      "documented_limits": false
+    },
+    "checklist_score": 0.25
+  },
+  "search_symbols": {
+    "status": "Untested",
+    "spec_count": 0,
+    "checklist": {
+      "has_specs": false,
+      "has_real_inputs": false,
+      "has_exact_expected": false,
+      "covers_required_types": false,
+      "has_setup_block": false,
+      "runs_on_temp_copy": false,
+      "no_absolute_paths": true,
+      "no_placeholders": false,
+      "has_skip_reason": true,
+      "linked_to_issue": true,
+      "tests_critical_paths": false,
+      "documented_limits": false
+    },
+    "checklist_score": 0.25
+  },
+  "select_function": {
+    "status": "Untested",
+    "spec_count": 0,
+    "checklist": {
+      "has_specs": false,
+      "has_real_inputs": false,
+      "has_exact_expected": false,
+      "covers_required_types": false,
+      "has_setup_block": false,
+      "runs_on_temp_copy": false,
+      "no_absolute_paths": true,
+      "no_placeholders": false,
+      "has_skip_reason": true,
+      "linked_to_issue": true,
+      "tests_critical_paths": false,
+      "documented_limits": false
+    },
+    "checklist_score": 0.25
+  }
+}

@@ -1,0 +1,128 @@
+# Integration Test Spec Schema
+# Schema for integration tests that run against real infrastructure
+
+$schema: http://json-schema.org/draft-07/schema#
+title: Integration Test Specification
+type: object
+required:
+  - test_id
+  - name
+  - category
+  - tool
+  - layer
+  - test_type
+  - description
+  - fixture
+  - infrastructure
+  - input
+  - expected
+properties:
+  test_id:
+    type: string
+    description: Unique test identifier (e.g., INT-read_file-T01)
+  
+  name:
+    type: string
+    description: Human-readable test name
+  
+  category:
+    type: string
+    enum: [integration]
+    description: Test category
+  
+  tool:
+    type: string
+    description: Tool being tested
+  
+  layer:
+    type: integer
+    enum: [3]
+    description: Test layer (always 3 for integration)
+  
+  test_type:
+    type: string
+    enum: [T01, T02, T04, T08, T09, T10, T12]
+    description: Test type per plan
+  
+  description:
+    type: string
+    description: Test description
+  
+  fixture:
+    type: string
+    description: Fixture repository to use
+  
+  infrastructure:
+    type: array
+    items:
+      type: string
+      description: Required infrastructure components (temp_copy, database, api, git, runtime)
+  
+  input:
+    type: object
+    description: Input parameters for the tool
+  
+  expected:
+    type: object
+    properties:
+      status:
+        type: string
+        enum: [ok, error]
+      content_contains:
+        type: array
+        items:
+          type: string
+      file_not_modified:
+        type: boolean
+      exact_match:
+        type: object
+      performance:
+        type: object
+        properties:
+          max_duration_ms:
+            type: number
+  
+  must_not:
+    type: array
+    items:
+      type: string
+    description: Things that must NOT appear in output
+  
+  checks:
+    type: array
+    items:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [content_validation, isolation_check, infrastructure_check, 
+                 schema_validity, stub_should_fail]
+        field:
+          type: string
+        value:
+          type: [string, number, boolean, array, object]
+        used_temp_copy:
+          type: boolean
+        service_was_real:
+          type: boolean
+  
+  performance:
+    type: object
+    properties:
+      max_duration_ms:
+        type: number
+  
+  severity:
+    type: string
+    enum: [critical, high, medium, low]
+    default: critical
+  
+  stub_should_fail:
+    type: boolean
+    default: true
+    description: Test should fail when infrastructure is stubbed
+  
+  requires_real_infrastructure:
+    type: boolean
+    default: true
+    description: Test requires real infrastructure (not mocks)

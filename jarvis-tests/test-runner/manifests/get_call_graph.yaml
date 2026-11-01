@@ -1,0 +1,74 @@
+# Tool Manifest: get_call_graph
+# Ground truth for get_call_graph on simple-python fixture
+
+tool: get_call_graph
+archetype: analysis
+fixture: simple-python
+
+input:
+  repository_path: fixtures/repositories/simple-python
+  depth: 2
+
+expected:
+  status: ok
+  graph:
+    nodes:
+      - id: alpha
+        type: function
+        file: main.py
+        line: 18
+      - id: beta
+        type: function
+        file: main.py
+        line: 25
+      - id: gamma
+        type: function
+        file: main.py
+        line: 32
+      - id: delta
+        type: function
+        file: main.py
+        line: 39
+      - id: target
+        type: function
+        file: main.py
+        line: 45
+    edges:
+      - from: alpha
+        to: target
+        type: direct
+      - from: beta
+        to: target
+        type: direct
+      - from: gamma
+        to: target
+        type: direct
+      - from: delta
+        to: target
+        type: direct
+
+must_not:
+  - placeholder_nodes
+  - fabricated_edges
+
+performance:
+  max_duration_ms: 1000
+
+limitations:
+  - "Does not include external library calls"
+  - "Limited to specified depth"
+  - "Does not resolve virtual method calls"
+
+required_test_types:
+  - T01
+  - T02
+  - T04
+  - T05
+  - T07
+  - T08
+  - T13
+
+metadata:
+  oracle: "Python ast + manual inspection"
+  ground_truth_source: "call graph analysis of main.py"
+  last_updated: "2026-11-01"

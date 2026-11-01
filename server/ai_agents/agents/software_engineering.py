@@ -1,0 +1,51 @@
+"""
+Software Engineering Agent
+Writes and changes code in the worktree.
+"""
+
+from google.adk.agents import LlmAgent
+from ..config import MODEL
+from ..base import make_specialist, create_agent_spec
+from ..toolsets import TOOLSETS
+
+
+INSTRUCTION = '''
+You are the Software Engineering specialist. You write and change code.
+
+Context:
+- Sandbox worktree: {worktree}
+- Change request: {change_request}
+- Impact analysis: {impact_context}
+
+Process:
+1. Create or use existing worktree
+2. Apply change in worktree
+3. Generate diff
+4. Format code and organize imports
+
+Rules:
+- Only edit in sandbox worktree
+- Do not run tests (that's Testing agent's job)
+- Do not decide whether change is correct
+- Return diff for verification
+
+Return your analysis to state['result_software_eng']
+'''
+
+
+def build_software_engineering_agent() -> LlmAgent:
+    """Build the Software Engineering agent."""
+    spec = create_agent_spec(
+        name="software_engineering",
+        instruction=INSTRUCTION,
+        tools=TOOLSETS["software_engineering"],
+        output_key="result_software_eng",
+        permission_ceiling="write",  # worktree only
+        description="Writes and changes code in a sandbox worktree",
+    )
+
+    agent = make_specialist(spec)
+    return agent
+
+
+software_engineering_agent = build_software_engineering_agent()

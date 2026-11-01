@@ -1,0 +1,12 @@
+test_id: AGENT-CU-001
+agent: code_understanding
+fixture: simple-python
+request: Explain what the target() function does
+expected_tools_include: [get_symbol_definition, explain_function, parse_source_code]
+expected_findings:
+  - claim_contains: returns
+  - claim_contains: parameters
+must_not:
+  - fabricated_symbol
+  - uncited_claim
+metrics: [tool_selection, evidence_accuracy, hallucination_rate, latency_ms]
