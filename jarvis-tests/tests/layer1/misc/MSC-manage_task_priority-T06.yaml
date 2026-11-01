@@ -1,21 +1,23 @@
-test_id: MSC-manage_task_priority-T06
-name: Large Input test for manage_task_priority
 category: misc
-tool: manage_task_priority
-layer: 1
-test_type: T06
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Large Input test for manage_task_priority
-fixture: polyglot-monorepo
-input:
-  task_ids: placeholder
-  tool_context: placeholder
 expected:
   status: ok
+fixture: polyglot-monorepo
+input:
+  file_path: fixtures/repositories/polyglot-monorepo/main.py
+  repository_path: fixtures/repositories/polyglot-monorepo
+  task_ids: placeholder
+  tool_context: placeholder
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Large Input test for manage_task_priority
 performance:
   max_duration_ms: 3000
 severity: medium
+test_id: MSC-manage_task_priority-T06
+test_type: T06
+tool: manage_task_priority

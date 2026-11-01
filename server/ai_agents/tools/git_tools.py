@@ -9,7 +9,7 @@ from pathlib import Path
 from google.adk.tools import ToolContext
 
 from ..config import CHANGE_PATH, REPO_ROOT, WORKTREE_DIR
-from ._common import record_evidence
+from ._common import record_evidence, resolve_in_repo
 from ._safe import safe
 
 MAX_WORKTREES = 10          # oldest sandboxes are removed beyond this many
@@ -29,6 +29,11 @@ def _bad_diff_path(diff):
                 continue
             parts = path.split('/')
             if path.startswith('/') or '..' in parts or parts[0] == '.git':
+                return path
+            # Check if path would escape the repository when resolved
+            try:
+                resolve_in_repo(path)
+            except ValueError:
                 return path
     return None
 

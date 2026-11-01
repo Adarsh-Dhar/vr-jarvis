@@ -1,22 +1,24 @@
-test_id: MSC-record_database_activity-T01
-name: Happy Path test for record_database_activity
 category: misc
-tool: record_database_activity
-layer: 1
-test_type: T01
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Happy Path test for record_database_activity
+expected:
+  status: ok
 fixture: simple-python
 input:
   application_id: fixtures/repositories/simple-python/main.py
+  file_path: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
   tool_context: fixtures/repositories/simple-python/main.py
-expected:
-  status: ok
+layer: 1
 must_not:
 - error
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Happy Path test for record_database_activity
 performance:
   max_duration_ms: 3000
 severity: critical
+test_id: MSC-record_database_activity-T01
+test_type: T01
+tool: record_database_activity

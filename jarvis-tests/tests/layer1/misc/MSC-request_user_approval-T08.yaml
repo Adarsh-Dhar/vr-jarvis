@@ -1,24 +1,26 @@
-test_id: MSC-request_user_approval-T08
-name: Malformed Input test for request_user_approval
 category: misc
-tool: request_user_approval
-layer: 1
-test_type: T08
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Malformed Input test for request_user_approval
-fixture: corrupted-inputs
-input:
-  operation: placeholder
-  description: placeholder
-  tool_context: placeholder
 expected:
   status: ok
+fixture: corrupted-inputs
+input:
+  description: placeholder
+  file_path: fixtures/repositories/corrupted-inputs/main.py
+  operation: placeholder
+  repository_path: fixtures/repositories/corrupted-inputs
+  tool_context: placeholder
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Malformed Input test for request_user_approval
 performance:
   max_duration_ms: 3000
 severity: critical
 skip: true
 skip_reason: 'Tool execution issue: '
+test_id: MSC-request_user_approval-T08
+test_type: T08
+tool: request_user_approval

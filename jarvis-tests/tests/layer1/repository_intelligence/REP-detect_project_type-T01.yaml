@@ -1,24 +1,25 @@
-test_id: REP-detect_project_type-T01
-name: Happy Path test for detect_project_type
 category: repository_intelligence
-tool: detect_project_type
-layer: 1
-test_type: T01
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Happy Path test for detect_project_type
-fixture: simple-python
-input:
-  repository_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/simple-python
-  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
+expected_project_type: unknown
+expected_repository_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/simple-python
+fixture: simple-python
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+  repository_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/simple-python
+  tool_context: placeholder
+layer: 1
 must_not:
 - error
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Happy Path test for detect_project_type
 performance:
   max_duration_ms: 10000
 severity: critical
-expected_repository_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/simple-python
-expected_project_type: unknown
+test_id: REP-detect_project_type-T01
+test_type: T01
+tool: detect_project_type

@@ -7,6 +7,7 @@ from typing import Optional, List, Dict, Any
 from pathlib import Path
 import re
 from google.adk.tools import ToolContext
+from ._common import repo_root, resolve_in_repo
 from ._safe import safe
 
 
@@ -21,7 +22,7 @@ def scan_secrets(
     try:
         path = Path(repository_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            path = resolve_in_repo(path)
         
         # Common secret patterns
         secret_patterns = [
@@ -73,7 +74,7 @@ def scan_dependency_vulnerabilities(
     try:
         path = Path(repository_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            path = resolve_in_repo(path)
         
         dependencies = []
         
@@ -208,30 +209,56 @@ def scan_dependency_vulnerabilities(
 ) -> dict:
     """Scan for vulnerable dependencies."""
     try:
-        # Get dependencies first
-        dep_result = analyze_dependencies(repository_path, tool_context)
+        path = Path(repository_path)
+        if not path.is_absolute():
+            path = resolve_in_repo(path)
         
-        if dep_result.get('status') != 'ok':
-            return dep_result
+        dependencies = []
         
-        dependencies = dep_result.get('dependencies', [])
+        # Check for requirements.txt
+        req_file = path / 'requirements.txt'
+        if req_file.exists():
+            content = req_file.read_text(encoding='utf-8')
+            for line in content.splitlines():
+                line = line.strip()
+                if line and not line.startswith('#'):
+                    dependencies.append({
+                        'package': line,
+                        'type': 'python',
+                        'file': 'requirements.txt'
+                    })
+        
+        # Check for package.json
+        pkg_file = path / 'package.json'
+        if pkg_file.exists():
+            import json
+            content = pkg_file.read_text(encoding='utf-8')
+            try:
+                pkg_data = json.loads(content)
+                for dep_name in pkg_data.get('dependencies', {}).keys():
+                    dependencies.append({
+                        'package': dep_name,
+                        'type': 'javascript',
+                        'file': 'package.json'
+                    })
+            except:
+                pass
         
         # Analyze dependencies for known vulnerability patterns
         vulnerable_deps = []
         for dep in dependencies:
-            dep_name = dep.get('name', '').lower()
+            dep_name = dep.get('package', '').lower()
             # Common known vulnerable patterns (simplified)
             if any(vuln in dep_name for vuln in ['requests', 'urllib', 'pyyaml', 'jinja2']):
                 vulnerable_deps.append({
-                    'name': dep.get('name'),
-                    'version': dep.get('version'),
+                    'name': dep.get('package'),
                     'severity': 'medium',
                     'note': 'Requires manual audit - use pip-audit for actual vulnerability check'
                 })
 
         return {
             'status': 'ok',
-            'repository_path': repository_path,
+            'repository_path': str(path),
             'dependencies': dependencies,
             'vulnerable_dependencies': vulnerable_deps,
             'total_vulnerabilities': len(vulnerable_deps),

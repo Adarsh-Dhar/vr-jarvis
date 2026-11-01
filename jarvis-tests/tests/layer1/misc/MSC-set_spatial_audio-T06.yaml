@@ -1,22 +1,24 @@
-test_id: MSC-set_spatial_audio-T06
-name: Large Input test for set_spatial_audio
 category: misc
-tool: set_spatial_audio
-layer: 1
-test_type: T06
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Large Input test for set_spatial_audio
-fixture: polyglot-monorepo
-input:
-  source_id: fixtures/repositories/simple-python/main.py
-  position: fixtures/repositories/simple-python/main.py
-  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
+fixture: polyglot-monorepo
+input:
+  file_path: fixtures/repositories/polyglot-monorepo/main.py
+  position: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/polyglot-monorepo
+  source_id: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Large Input test for set_spatial_audio
 performance:
   max_duration_ms: 3000
 severity: medium
+test_id: MSC-set_spatial_audio-T06
+test_type: T06
+tool: set_spatial_audio

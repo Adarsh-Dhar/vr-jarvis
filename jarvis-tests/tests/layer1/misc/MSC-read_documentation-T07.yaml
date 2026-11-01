@@ -1,23 +1,25 @@
-test_id: MSC-read_documentation-T07
-name: Complex Input test for read_documentation
 category: misc
-tool: read_documentation
-layer: 1
-test_type: T07
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Complex Input test for read_documentation
+expected:
+  status: ok
 fixture: polyglot-monorepo
 input:
   doc_path: fixtures/repositories/simple-python/main.py
+  file_path: fixtures/repositories/polyglot-monorepo/main.py
+  repository_path: fixtures/repositories/polyglot-monorepo
   tool_context: fixtures/repositories/simple-python/main.py
-expected:
-  status: ok
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Complex Input test for read_documentation
 performance:
   max_duration_ms: 3000
 severity: high
 skip: true
 skip_reason: 'Tool execution issue: '
+test_id: MSC-read_documentation-T07
+test_type: T07
+tool: read_documentation

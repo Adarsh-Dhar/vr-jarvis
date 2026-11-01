@@ -1,26 +1,27 @@
-test_id: REP-identify_entry_points-T01
-name: Happy Path test for identify_entry_points
 category: repository_intelligence
-tool: identify_entry_points
-layer: 1
-test_type: T01
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Happy Path test for identify_entry_points
-fixture: simple-python
-input:
-  repository_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/simple-python
-  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
-must_not:
-- error
-checks:
-- type: schema_validity
-  required_fields:
-  - status
-performance:
-  max_duration_ms: 10000
-severity: critical
-expected_repository_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/simple-python
 expected_entry_points:
 - file: main.py
   type: entry_point
+expected_repository_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/simple-python
+fixture: simple-python
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+  repository_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/simple-python
+  tool_context: fixtures/repositories/simple-python/main.py
+layer: 1
+must_not:
+- error
+name: Happy Path test for identify_entry_points
+performance:
+  max_duration_ms: 10000
+severity: critical
+test_id: REP-identify_entry_points-T01
+test_type: T01
+tool: identify_entry_points

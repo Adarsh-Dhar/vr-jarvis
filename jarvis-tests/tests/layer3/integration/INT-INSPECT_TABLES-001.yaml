@@ -1,23 +1,25 @@
-test_id: INT-INSPECT_TABLES-001
-name: Integration test for inspect_tables
 category: integration
-tool: inspect_tables
-layer: 3
-test_type: INTEGRATION
+checks:
+- required_fields:
+  - status
+  type: schema_validity
+- type: integration_connectivity
 description: Inspect database tables
-fixture:
-  type: database
-  path: integration-test-infrastructure/databases/test.db
-input:
-  database_path: integration-test-infrastructure/databases/test.db
 expected:
   status: ok
-checks:
-- type: schema_validity
-  required_fields:
-  - status
-- type: integration_connectivity
+fixture:
+  path: integration-test-infrastructure/databases/test.db
+  type: database
+input:
+  database_path: integration-test-infrastructure/databases/test.db
+  file_path: 'fixtures/repositories/{''type'': ''database'', ''path'': ''integration-test-infrastructure/databases/test.db''}/main.py'
+  repository_path: 'fixtures/repositories/{''type'': ''database'', ''path'': ''integration-test-infrastructure/databases/test.db''}'
+layer: 3
+name: Integration test for inspect_tables
 performance:
   max_duration_ms: 5000
-severity: high
 requires_infrastructure: true
+severity: high
+test_id: INT-INSPECT_TABLES-001
+test_type: INTEGRATION
+tool: inspect_tables

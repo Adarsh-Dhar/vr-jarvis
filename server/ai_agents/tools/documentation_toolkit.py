@@ -4,9 +4,13 @@ Search and generate documentation.
 """
 
 from typing import Optional, List, Dict, Any
+from ._common import repo_root, resolve_in_repo
 from pathlib import Path
+from ._common import repo_root, resolve_in_repo
 from google.adk.tools import ToolContext
+from ._common import repo_root, resolve_in_repo
 from ._safe import safe
+from ._common import repo_root, resolve_in_repo
 
 
 @safe
@@ -19,7 +23,7 @@ def search_documentation(
     try:
         path = Path(repository_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            path = resolve_in_repo(path)
         
         # Search for documentation files
         results = []
@@ -128,7 +132,7 @@ def verify_documentation_coverage(
         
         path = Path(repository_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            path = resolve_in_repo(path)
         
         # Get all Python files
         files_result = list_files(tool_context, directory=repository_path, pattern='.py', recursive=True)
@@ -174,7 +178,7 @@ def read_documentation(
     try:
         path = Path(doc_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            path = resolve_in_repo(path)
         
         if not path.exists():
             return {

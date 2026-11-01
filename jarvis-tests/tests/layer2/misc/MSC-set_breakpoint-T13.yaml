@@ -1,24 +1,25 @@
-test_id: MSC-set_breakpoint-T13
-name: Performance test for set_breakpoint
 category: misc
-tool: set_breakpoint
-layer: 2
-test_type: T13
+checks:
+- required_fields:
+  - status
+  type: schema_validity
+- max_duration_ms: 3000
+  type: performance
 description: Performance test for set_breakpoint
+expected:
+  status: ok
 fixture: simple-python
 input:
   file_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/simple-python/main.py
   line: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
   tool_context: fixtures/repositories/simple-python/main.py
-expected:
-  status: ok
+layer: 2
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
-- type: performance
-  max_duration_ms: 3000
+name: Performance test for set_breakpoint
 performance:
   max_duration_ms: 3000
 severity: medium
+test_id: MSC-set_breakpoint-T13
+test_type: T13
+tool: set_breakpoint

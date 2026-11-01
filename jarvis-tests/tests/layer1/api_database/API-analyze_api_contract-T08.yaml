@@ -1,23 +1,25 @@
-test_id: API-analyze_api_contract-T08
-name: Malformed Input test for analyze_api_contract
 category: api_database
-tool: analyze_api_contract
-layer: 1
-test_type: T08
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Malformed Input test for analyze_api_contract
+expected:
+  status: error
 fixture: corrupted-inputs
 input:
   endpoint: fixtures/repositories/simple-python/main.py
+  file_path: fixtures/repositories/corrupted-inputs/main.py
+  repository_path: fixtures/repositories/corrupted-inputs
   tool_context: fixtures/repositories/simple-python/main.py
-expected:
-  status: error
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Malformed Input test for analyze_api_contract
 performance:
   max_duration_ms: 5000
 severity: critical
 skip: true
 skip_reason: 'Tool execution issue: '
+test_id: API-analyze_api_contract-T08
+test_type: T08
+tool: analyze_api_contract

@@ -1,23 +1,25 @@
-test_id: DFL-trace_database_reads-T13
-name: Performance test for trace_database_reads
 category: data_flow
-tool: trace_database_reads
-layer: 2
-test_type: T13
+checks:
+- required_fields:
+  - status
+  type: schema_validity
+- max_duration_ms: 5000
+  type: performance
 description: Performance test for trace_database_reads
-fixture: simple-python
-input:
-  query_id: fixtures/repositories/simple-python/main.py
-  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
+fixture: simple-python
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+  query_id: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
+  tool_context: fixtures/repositories/simple-python/main.py
+layer: 2
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
-- type: performance
-  max_duration_ms: 5000
+name: Performance test for trace_database_reads
 performance:
   max_duration_ms: 5000
 severity: medium
+test_id: DFL-trace_database_reads-T13
+test_type: T13
+tool: trace_database_reads

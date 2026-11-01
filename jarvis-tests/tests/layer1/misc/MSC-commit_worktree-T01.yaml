@@ -1,24 +1,26 @@
-test_id: MSC-commit_worktree-T01
-name: Happy Path test for commit_worktree
 category: misc
-tool: commit_worktree
-layer: 1
-test_type: T01
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Happy Path test for commit_worktree
-fixture: simple-python
-input:
-  worktree: placeholder
-  message: placeholder
 expected:
   status: ok
+fixture: simple-python
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+  message: placeholder
+  repository_path: fixtures/repositories/simple-python
+  worktree: placeholder
+layer: 1
 must_not:
 - error
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Happy Path test for commit_worktree
 performance:
   max_duration_ms: 3000
 severity: critical
 skip: true
 skip_reason: 'Tool execution issue: '
+test_id: MSC-commit_worktree-T01
+test_type: T01
+tool: commit_worktree

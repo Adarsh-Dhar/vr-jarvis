@@ -1,22 +1,24 @@
-test_id: MSC-set_permission_level-T01
-name: Happy Path test for set_permission_level
 category: misc
-tool: set_permission_level
-layer: 1
-test_type: T01
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Happy Path test for set_permission_level
-fixture: simple-python
-input:
-  permission_level: placeholder
-  tool_context: placeholder
 expected:
   status: ok
+fixture: simple-python
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+  permission_level: placeholder
+  repository_path: fixtures/repositories/simple-python
+  tool_context: placeholder
+layer: 1
 must_not:
 - error
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Happy Path test for set_permission_level
 performance:
   max_duration_ms: 3000
 severity: critical
+test_id: MSC-set_permission_level-T01
+test_type: T01
+tool: set_permission_level

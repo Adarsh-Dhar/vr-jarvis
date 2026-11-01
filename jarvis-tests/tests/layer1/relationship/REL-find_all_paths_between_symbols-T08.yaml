@@ -1,22 +1,24 @@
-test_id: REL-find_all_paths_between_symbols-T08
-name: Malformed Input test for find_all_paths_between_symbols
 category: relationship
-tool: find_all_paths_between_symbols
-layer: 1
-test_type: T08
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Malformed Input test for find_all_paths_between_symbols
-fixture: corrupted-inputs
-input:
-  from_id: fixtures/repositories/simple-python/main.py
-  to_id: fixtures/repositories/simple-python/main.py
-  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: error
+fixture: corrupted-inputs
+input:
+  file_path: fixtures/repositories/corrupted-inputs/main.py
+  from_id: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/corrupted-inputs
+  to_id: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Malformed Input test for find_all_paths_between_symbols
 performance:
   max_duration_ms: 3000
 severity: critical
+test_id: REL-find_all_paths_between_symbols-T08
+test_type: T08
+tool: find_all_paths_between_symbols

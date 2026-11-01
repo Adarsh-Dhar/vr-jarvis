@@ -1,23 +1,24 @@
-test_id: MSC-delete_file-T08
-name: Malformed Input test for delete_file
 category: misc
-tool: delete_file
-layer: 1
-test_type: T08
+checks:
+- required_fields:
+  - status
+  - file_path
+  type: schema_validity
 description: Malformed Input test for delete_file
+expected:
+  file_path: present
+  status: ok
 fixture: corrupted-inputs
 input:
   file_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/corrupted-inputs/nonexistent.py
+  repository_path: fixtures/repositories/corrupted-inputs
   tool_context: fixtures/repositories/simple-python/main.py
-expected:
-  status: ok
-  file_path: present
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
-  - file_path
+name: Malformed Input test for delete_file
 performance:
   max_duration_ms: 3000
 severity: critical
+test_id: MSC-delete_file-T08
+test_type: T08
+tool: delete_file

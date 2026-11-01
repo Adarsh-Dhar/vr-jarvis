@@ -10,11 +10,20 @@ from ._safe import safe
 
 @safe
 def build_call_graph(scope: str, tool_context: ToolContext) -> dict:
-    """Construct function call graphs."""
+    """Construct function call graphs.
+    
+    Args:
+        scope: The analysis scope. Use '.' for the whole repository, a folder path, a file path, or a node id.
+    """
     try:
         from .analysis_tools import extract_symbols
         from .navigation_tools import get_call_hierarchy
         from .repository_tools import list_files
+        from ._common import repo_root
+        
+        # Handle scope: '.' means whole repository
+        if scope == '.' or scope == 'repo':
+            scope = str(repo_root())
         
         # Get all Python files in scope
         files_result = list_files(tool_context, directory=scope, pattern='.py', recursive=True)
@@ -444,8 +453,15 @@ def trace_cross_module_relationships(
     module_id: str,
     tool_context: ToolContext
 ) -> dict:
-    """Follow relationships between modules."""
+    """Follow relationships between modules.
+    
+    Args:
+        module_id: The module identifier. Use '.' for the whole repository, a folder path, a file path, or a node id.
+    """
     try:
+        from ._common import repo_root
+        if module_id == "." or module_id == "repo":
+            module_id = str(repo_root())
         from .navigation_tools import get_imports
         from .repository_tools import list_files
         
@@ -538,8 +554,15 @@ def trace_cross_service_relationships(
 
 @safe
 def find_circular_dependencies(scope: str, tool_context: ToolContext) -> dict:
-    """Detect dependency cycles."""
+    """Detect dependency cycles.
+    
+    Args:
+        scope: The analysis scope. Use '.' for the whole repository, a folder path, a file path, or a node id.
+    """
     try:
+        from ._common import repo_root
+        if scope == "." or scope == "repo":
+            scope = str(repo_root())
         from .navigation_tools import get_imports
         from .repository_tools import list_files
         
@@ -602,8 +625,15 @@ def find_circular_dependencies(scope: str, tool_context: ToolContext) -> dict:
 
 @safe
 def analyze_architecture_boundaries(scope: str, tool_context: ToolContext) -> dict:
-    """Identify architectural boundaries."""
+    """Identify architectural boundaries.
+    
+    Args:
+        scope: The analysis scope. Use '.' for the whole repository, a folder path, a file path, or a node id.
+    """
     try:
+        from ._common import repo_root
+        if scope == "." or scope == "repo":
+            scope = str(repo_root())
         from .repository_tools import list_files
         
         # Analyze directory structure to identify architectural layers

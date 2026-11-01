@@ -1,25 +1,27 @@
-test_id: MSC-remove_graph_edge-T08
-name: Malformed Input test for remove_graph_edge
 category: misc
-tool: remove_graph_edge
-layer: 1
-test_type: T08
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Malformed Input test for remove_graph_edge
+expected:
+  status: ok
 fixture: corrupted-inputs
 input:
+  file_path: fixtures/repositories/corrupted-inputs/main.py
   graph_id: placeholder
+  repository_path: fixtures/repositories/corrupted-inputs
   source_id: placeholder
   target_id: placeholder
   tool_context: placeholder
-expected:
-  status: ok
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Malformed Input test for remove_graph_edge
 performance:
   max_duration_ms: 3000
 severity: critical
 skip: true
 skip_reason: 'Tool execution issue: '
+test_id: MSC-remove_graph_edge-T08
+test_type: T08
+tool: remove_graph_edge

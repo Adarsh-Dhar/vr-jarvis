@@ -1,21 +1,23 @@
-test_id: MSC-kubernetes_get_deployments-T15
-name: Recovery test for kubernetes_get_deployments
 category: misc
-tool: kubernetes_get_deployments
-layer: 2
-test_type: T15
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Recovery test for kubernetes_get_deployments
-fixture: simple-python
-input:
-  namespace: fixtures/repositories/simple-python/main.py
-  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
+fixture: simple-python
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+  namespace: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
+  tool_context: fixtures/repositories/simple-python/main.py
+layer: 2
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Recovery test for kubernetes_get_deployments
 performance:
   max_duration_ms: 3000
 severity: high
+test_id: MSC-kubernetes_get_deployments-T15
+test_type: T15
+tool: kubernetes_get_deployments

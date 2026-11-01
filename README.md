@@ -1,30 +1,121 @@
 # vr-jarvis
 
-## Repository browser
+JARVIS is a VR-native code intelligence system with 12 specialist agents for repository analysis, security, testing, and spatial visualization.
 
-The spatial VR workspace opens on a repository picker. Select a repository to open its folder tree, select folders to navigate, and select a file to inspect it in the code panel. Use **BACK** to move up one directory, **ROOT** to return to the repository root, and the page controls to browse long lists.
+## Quick Start
 
-The code panel is currently **read-only**: it shows source with line numbers and page controls; editing and saving files are not implemented yet.
-
-The server reads direct child folders of the project-root `repository/` directory by default. Override this with `JARVIS_REPOSITORY_DIR`.
-
-## Run the real repository browser
-
-From the project root, install the Python dependencies and start the server:
+### 1. Setup Python Environment
 
 ```bash
+# Create virtual environment
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Install dependencies
 pip install -r requirements.txt
-export GOOGLE_API_KEY="<your-key>"
-export JARVIS_TOKEN="dev-token"  # Set the same value in Unity's JarvisServerSettings.Token
-uvicorn jarvis_server:app --app-dir server --host 0.0.0.0 --port 8000
 ```
 
-In Unity, open the `ui/` project, choose **JARVIS → Use real server**, then enter Play mode. The `ui/ProjectSettings` configuration enables both legacy and new input handling.
+### 2. Configure Environment
 
-For the Unity Editor, aim at a button with the pointer and click in the Game view. On Quest, point with tracked hands and pinch the index finger, or aim a Touch controller and press its trigger. Normal buttons activate on press-down; deliberate hold actions still require their configured hold time. A successful click is written to the Unity Console as `JARVIS input: clicked ...`.
+```bash
+# Set your Google API key for Gemini
+export GOOGLE_API_KEY="your-api-key-here"
 
-When running on Quest, `127.0.0.1` refers to the headset. Set the `jarvis.server` PlayerPrefs value to the PC's LAN address (for example, `http://192.168.1.20:8000`) so the headset can reach the backend.
+# Set a secure token (not 'dev-token' for network exposure)
+export JARVIS_TOKEN="$(openssl rand -hex 16)"
 
-## Mock UI mode
+# Optional: Set repository directory (default: ./repository)
+export JARVIS_REPOSITORY_DIR="/path/to/your/repositories"
 
-Choose **JARVIS → Use mock data** to test the repository list, folders, file viewer, and button interaction without starting the backend. The mock contains a single sample repository.
+# Optional: Set monthly budget limit in USD (default: 100.0)
+export JARVIS_MONTHLY_BUDGET="50.0"
+```
+
+### 3. Start the Server
+
+```bash
+# From project root
+cd /Users/adarsh/Documents/vr-agent
+uvicorn jarvis_server:app --app-dir server --host 127.0.0.1 --port 8000
+```
+
+**Security Note**: The server will refuse to start on `0.0.0.0` (network accessible) unless `JARVIS_TOKEN` is set to a non-default value.
+
+### 4. Unity Configuration
+
+In Unity's `JarvisServerSettings`:
+- Set Token to match `JARVIS_TOKEN`
+- Set Server URL to `http://127.0.0.1:8000` (or LAN IP for Quest)
+
+## Architecture
+
+### Agent Specialists (12)
+
+1. **Orchestrator** - Routes requests to specialists
+2. **Conversational** - Q&A and explanation
+3. **Repository Intelligence** - Project structure and metadata
+4. **Code Understanding** - Symbol analysis and navigation
+5. **Relationship Intelligence** - Call graphs and dependencies
+6. **Data Flow Intelligence** - Variable tracing
+7. **Runtime Intelligence** - Process monitoring (sandboxed)
+8. **Debugging Intelligence** - Breakpoint debugging (sandboxed)
+9. **Security & Quality** - Vulnerability scanning
+10. **Software Engineering** - Code editing (worktree only)
+11. **Testing & Verification** - Test execution (sandboxed)
+12. **Visualization & Spatial** - VR scene commands
+
+### Security Model
+
+- **Sandbox**: All writes go to a git worktree, never the main checkout
+- **Permissions**: Each agent has a permission ceiling (read/execute/write)
+- **Guard**: Tools are checked against agent permissions before execution
+- **Approval**: Destructive actions require explicit user approval
+- **Audit**: All tool calls are logged with arguments and outcomes
+
+### Tool Audit
+
+Run the tool audit to check all tools:
+
+```bash
+python scripts/audit_tools.py
+```
+
+Run smoke tests:
+
+```bash
+pytest server/tests/test_tools_smoke.py -v
+```
+
+## Development
+
+### Tool Development
+
+Tools live in `server/ai_agents/tools/`. Follow these conventions:
+
+1. Use `repo_root()` for repository paths, never `Path.cwd()`
+2. Use `resolve_in_repo(path)` to validate paths stay inside the repository
+3. Write tools must check `state['worktree']` and return `blocked` if missing
+4. Add tools to `TOOLSETS` in `agents/toolsets.py`
+5. Add permission level to `TOOL_LEVELS` in `agents/toolsets.py`
+6. Mark unavailable tools with `status: 'unavailable'` and a hint
+
+### Adding New Agents
+
+1. Create agent file in `server/ai_agents/agents/`
+2. Define toolset in `agents/toolsets.py`
+3. Set permission ceiling in `PERMISSION_CEILINGS`
+4. Register in `agents/registry.py`
+5. Add to orchestrator routing logic
+
+## Status
+
+- ✓ Phase A: Tool safety and correctness (complete)
+- ⏳ Phase B: Tool gaps (partial - spatial tools need Unity integration)
+- ⏳ Phase C: Agent layer (partial - needs Gemini for evaluation)
+- ⏳ Phase D: Server improvements (partial - session persistence pending)
+- ⏳ Phase E: Unity integration (requires Unity Editor)
+- ⏳ Phase F: Verification (requires Gemini and headset)
+
+## Mock UI Mode
+
+Choose **JARVIS → Use mock data** in Unity to test without the backend.

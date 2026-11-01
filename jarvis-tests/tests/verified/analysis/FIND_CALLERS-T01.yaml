@@ -1,18 +1,6 @@
-test_id: FIND_CALLERS-T01
-name: Verified find_callers - Analysis
 category: verified
-tool: find_callers
-layer: 1
-test_type: T01
-description: Verified analysis test for find_callers
-fixture: simple-python
-verified: true
-input:
-  target: target
-  repository_path: fixtures/repositories/simple-python
-expected:
-  status: not_found
-  results: &id001
+checks:
+- expected_set: &id001
   - caller: alpha
     file: main.py
     line: 18
@@ -33,28 +21,41 @@ expected:
     file: subpackage/helper.py
     line: 8
     type: indirect
-must_not:
-- placeholder_symbols
-- fabricated_callers
-- non_existent_functions
-checks:
-- type: set_equals
   field: results
-  expected_set: *id001
-- type: precision_recall
-  min_precision: 0.95
+  type: set_equals
+- min_precision: 0.95
   min_recall: 0.9
-performance:
-  max_duration_ms: 500
-severity: critical
+  type: precision_recall
+description: Verified analysis test for find_callers
+expected:
+  results: *id001
+  status: not_found
+expected_message: Symbol definition not found
+expected_symbol_name: null
+fixture: simple-python
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
+  target: target
+isolation: temp_copy
+layer: 1
 limitations:
 - Does not resolve dynamic dispatch (e.g., getattr, importlib)
 - Does not handle call sites in string literals (e.g., eval)
 - May miss callers in generated code
 - Indirect callers limited to 3 levels deep
-isolation: temp_copy
-stub_should_fail: true
+must_not:
+- placeholder_symbols
+- fabricated_callers
+- non_existent_functions
 mutants_should_fail: true
+name: Verified find_callers - Analysis
+performance:
+  max_duration_ms: 500
+severity: critical
+stub_should_fail: true
+test_id: FIND_CALLERS-T01
+test_type: T01
+tool: find_callers
 uncertain_handling: explicit
-expected_symbol_name: null
-expected_message: Symbol definition not found
+verified: true

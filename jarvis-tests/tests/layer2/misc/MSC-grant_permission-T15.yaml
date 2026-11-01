@@ -1,23 +1,25 @@
-test_id: MSC-grant_permission-T15
-name: Recovery test for grant_permission
 category: misc
-tool: grant_permission
-layer: 2
-test_type: T15
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Recovery test for grant_permission
-fixture: simple-python
-input:
-  tool_name: fixtures/repositories/simple-python/main.py
-  agent_id: fixtures/repositories/simple-python/main.py
-  permission_level: fixtures/repositories/simple-python/main.py
-  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
+fixture: simple-python
+input:
+  agent_id: fixtures/repositories/simple-python/main.py
+  file_path: fixtures/repositories/simple-python/main.py
+  permission_level: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
+  tool_context: fixtures/repositories/simple-python/main.py
+  tool_name: fixtures/repositories/simple-python/main.py
+layer: 2
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Recovery test for grant_permission
 performance:
   max_duration_ms: 3000
 severity: high
+test_id: MSC-grant_permission-T15
+test_type: T15
+tool: grant_permission

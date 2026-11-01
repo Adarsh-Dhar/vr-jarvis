@@ -1,22 +1,24 @@
-test_id: MSC-start_telemetry_collection-T05
-name: Boundary Conditions test for start_telemetry_collection
 category: misc
-tool: start_telemetry_collection
-layer: 1
-test_type: T05
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Boundary Conditions test for start_telemetry_collection
+expected:
+  status: ok
 fixture: simple-python
 input:
   collection_id: fixtures/repositories/simple-python/main.py
+  file_path: fixtures/repositories/simple-python/main.py
   metrics: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
   tool_context: fixtures/repositories/simple-python/main.py
-expected:
-  status: ok
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Boundary Conditions test for start_telemetry_collection
 performance:
   max_duration_ms: 3000
 severity: high
+test_id: MSC-start_telemetry_collection-T05
+test_type: T05
+tool: start_telemetry_collection

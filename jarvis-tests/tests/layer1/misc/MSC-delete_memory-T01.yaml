@@ -1,22 +1,24 @@
-test_id: MSC-delete_memory-T01
-name: Happy Path test for delete_memory
 category: misc
-tool: delete_memory
-layer: 1
-test_type: T01
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Happy Path test for delete_memory
-fixture: simple-python
-input:
-  key: placeholder
-  tool_context: placeholder
 expected:
   status: ok
+fixture: simple-python
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+  key: placeholder
+  repository_path: fixtures/repositories/simple-python
+  tool_context: placeholder
+layer: 1
 must_not:
 - error
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Happy Path test for delete_memory
 performance:
   max_duration_ms: 3000
 severity: critical
+test_id: MSC-delete_memory-T01
+test_type: T01
+tool: delete_memory

@@ -1,23 +1,25 @@
-test_id: MSC-cloud_get_instance_logs-T01
-name: Happy Path test for cloud_get_instance_logs
 category: misc
-tool: cloud_get_instance_logs
-layer: 1
-test_type: T01
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Happy Path test for cloud_get_instance_logs
-fixture: simple-python
-input:
-  instance_id: fixtures/repositories/simple-python/main.py
-  provider: fixtures/repositories/simple-python/main.py
-  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
+fixture: simple-python
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+  instance_id: fixtures/repositories/simple-python/main.py
+  provider: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
+  tool_context: fixtures/repositories/simple-python/main.py
+layer: 1
 must_not:
 - error
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Happy Path test for cloud_get_instance_logs
 performance:
   max_duration_ms: 3000
 severity: critical
+test_id: MSC-cloud_get_instance_logs-T01
+test_type: T01
+tool: cloud_get_instance_logs

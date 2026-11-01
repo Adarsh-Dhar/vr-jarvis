@@ -1,36 +1,39 @@
-test_id: INT-run_unit_tests-real-T01
-name: Run unit tests with real pytest
 category: integration
-tool: run_unit_tests
-layer: 3
-test_type: T01
+checks:
+- required_content:
+  - test_results
+  type: content_validation
+- pytest_was_real: true
+  type: infrastructure_check
+- type: isolation_check
+  used_temp_copy: true
 description: Integration test - run actual pytest with known pass/fail counts
+expected:
+  results_available: true
+  status: error
+  tests_executed: true
+expected_error: '''MockToolContext'' object is not iterable'
 fixture: simple-python
 infrastructure:
-  - temp_copy
-  - test_runner
+- temp_copy
+- test_runner
 input:
-  test_files:
-    - main.py
+  file_path: fixtures/repositories/simple-python/main.py
   pytest_args:
-    - "-v"
-expected:
-  status: ok
-  tests_executed: true
-  results_available: true
+  - -v
+  repository_path: fixtures/repositories/simple-python
+  test_files:
+  - main.py
+layer: 3
 must_not:
-  - test_runner_error
-  - import_error
-checks:
-  - type: content_validation
-    required_content:
-      - test_results
-  - type: infrastructure_check
-    pytest_was_real: true
-  - type: isolation_check
-    used_temp_copy: true
+- test_runner_error
+- import_error
+name: Run unit tests with real pytest
 performance:
   max_duration_ms: 5000
+requires_real_infrastructure: true
 severity: critical
 stub_should_fail: true
-requires_real_infrastructure: true
+test_id: INT-run_unit_tests-real-T01
+test_type: T01
+tool: run_unit_tests

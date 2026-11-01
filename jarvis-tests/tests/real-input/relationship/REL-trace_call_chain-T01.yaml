@@ -1,23 +1,25 @@
-test_id: REL-trace_call_chain-T01
-name: Happy Path test for trace_call_chain
 category: relationship
-tool: trace_call_chain
-layer: 1
-test_type: T01
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Happy Path test for trace_call_chain
-fixture: simple-python
-input:
-  function_id: alpha
-  tool_context: fixtures/repositories/simple-python/main.py
-  depth: 1
 expected:
   status: ok
+fixture: simple-python
+input:
+  depth: 1
+  file_path: fixtures/repositories/simple-python/main.py
+  function_id: alpha
+  repository_path: fixtures/repositories/simple-python
+  tool_context: fixtures/repositories/simple-python/main.py
+layer: 1
 must_not:
 - error
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Happy Path test for trace_call_chain
 performance:
   max_duration_ms: 3000
 severity: critical
+test_id: REL-trace_call_chain-T01
+test_type: T01
+tool: trace_call_chain

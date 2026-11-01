@@ -1,21 +1,22 @@
-test_id: API-map_api_to_database-T06
-name: Large Input test for map_api_to_database
 category: api_database
-tool: map_api_to_database
-layer: 1
-test_type: T06
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Large Input test for map_api_to_database
-fixture: polyglot-monorepo
-input:
-  repository_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/polyglot-monorepo
-  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
+fixture: polyglot-monorepo
+input:
+  file_path: fixtures/repositories/polyglot-monorepo/main.py
+  repository_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/polyglot-monorepo
+  tool_context: fixtures/repositories/simple-python/main.py
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Large Input test for map_api_to_database
 performance:
   max_duration_ms: 5000
 severity: medium
+test_id: API-map_api_to_database-T06
+test_type: T06
+tool: map_api_to_database

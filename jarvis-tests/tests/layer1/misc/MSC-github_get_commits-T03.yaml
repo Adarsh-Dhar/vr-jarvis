@@ -1,24 +1,26 @@
-test_id: MSC-github_get_commits-T03
-name: Output Validation test for github_get_commits
 category: misc
-tool: github_get_commits
-layer: 1
-test_type: T03
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Output Validation test for github_get_commits
-fixture: simple-python
-input:
-  owner: placeholder
-  repo: placeholder
-  tool_context: placeholder
 expected:
   status: ok
+fixture: simple-python
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+  owner: placeholder
+  repo: placeholder
+  repository_path: fixtures/repositories/simple-python
+  tool_context: placeholder
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Output Validation test for github_get_commits
 performance:
   max_duration_ms: 3000
 severity: critical
 skip: true
 skip_reason: 'Tool execution issue: '
+test_id: MSC-github_get_commits-T03
+test_type: T03
+tool: github_get_commits

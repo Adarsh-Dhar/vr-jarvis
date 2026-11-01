@@ -1,21 +1,23 @@
-test_id: MSC-get_ci_status-T15
-name: Recovery test for get_ci_status
 category: misc
-tool: get_ci_status
-layer: 2
-test_type: T15
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Recovery test for get_ci_status
-fixture: simple-python
-input:
-  pipeline_id: fixtures/repositories/simple-python/main.py
-  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
+fixture: simple-python
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+  pipeline_id: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
+  tool_context: fixtures/repositories/simple-python/main.py
+layer: 2
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Recovery test for get_ci_status
 performance:
   max_duration_ms: 3000
 severity: high
+test_id: MSC-get_ci_status-T15
+test_type: T15
+tool: get_ci_status

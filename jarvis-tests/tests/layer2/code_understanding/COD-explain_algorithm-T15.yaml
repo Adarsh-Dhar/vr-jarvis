@@ -1,21 +1,23 @@
-test_id: COD-explain_algorithm-T15
-name: Recovery test for explain_algorithm
 category: code_understanding
-tool: explain_algorithm
-layer: 2
-test_type: T15
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Recovery test for explain_algorithm
-fixture: simple-python
-input:
-  function_id: alpha
-  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
+fixture: simple-python
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+  function_id: alpha
+  repository_path: fixtures/repositories/simple-python
+  tool_context: fixtures/repositories/simple-python/main.py
+layer: 2
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Recovery test for explain_algorithm
 performance:
   max_duration_ms: 3000
 severity: high
+test_id: COD-explain_algorithm-T15
+test_type: T15
+tool: explain_algorithm

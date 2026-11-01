@@ -1,23 +1,25 @@
-test_id: MSC-check_approval_status-T06
-name: Large Input test for check_approval_status
 category: misc
-tool: check_approval_status
-layer: 1
-test_type: T06
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Large Input test for check_approval_status
+expected:
+  status: ok
 fixture: polyglot-monorepo
 input:
   approval_id: fixtures/repositories/simple-python/main.py
+  file_path: fixtures/repositories/polyglot-monorepo/main.py
+  repository_path: fixtures/repositories/polyglot-monorepo
   tool_context: fixtures/repositories/simple-python/main.py
-expected:
-  status: ok
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Large Input test for check_approval_status
 performance:
   max_duration_ms: 3000
 severity: medium
 skip: true
 skip_reason: 'Tool execution issue: '
+test_id: MSC-check_approval_status-T06
+test_type: T06
+tool: check_approval_status

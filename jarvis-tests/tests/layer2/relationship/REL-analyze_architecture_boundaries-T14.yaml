@@ -1,21 +1,23 @@
-test_id: REL-analyze_architecture_boundaries-T14
-name: Regression test for analyze_architecture_boundaries
 category: relationship
-tool: analyze_architecture_boundaries
-layer: 2
-test_type: T14
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Regression test for analyze_architecture_boundaries
-fixture: simple-python
-input:
-  scope: fixtures/repositories/simple-python/main.py
-  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
+fixture: simple-python
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
+  scope: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
+layer: 2
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Regression test for analyze_architecture_boundaries
 performance:
   max_duration_ms: 3000
 severity: high
+test_id: REL-analyze_architecture_boundaries-T14
+test_type: T14
+tool: analyze_architecture_boundaries

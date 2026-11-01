@@ -1,44 +1,45 @@
-test_id: GET_CONTROL_FLOW-T01
-name: Verified get_control_flow - Analysis
 category: verified
-tool: get_control_flow
-layer: 1
-test_type: T01
-description: Verified analysis test for get_control_flow
-fixture: simple-python
-verified: true
-input:
-  target: alpha
-  repository_path: fixtures/repositories/simple-python
-expected:
-  status: ok
-  control_flow:
-  - type: function_call
-    target: target
-    line: 20
-  - type: if_statement
-    condition: result
-    line: 21
-  - type: return_statement
-    line: 22
-must_not:
-- placeholder_flows
-- fabricated_branches
 checks:
-- type: set_equals
+- expected_set: []
   field: results
-  expected_set: []
-- type: precision_recall
-  min_precision: 0.95
+  type: set_equals
+- min_precision: 0.95
   min_recall: 0.9
-performance:
-  max_duration_ms: 1000
-severity: critical
+  type: precision_recall
+description: Verified analysis test for get_control_flow
+expected:
+  control_flow:
+  - line: 20
+    target: target
+    type: function_call
+  - condition: result
+    line: 21
+    type: if_statement
+  - line: 22
+    type: return_statement
+  status: ok
+fixture: simple-python
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
+  target: alpha
+isolation: temp_copy
+layer: 1
 limitations:
 - Static analysis only - no runtime tracing
 - May miss complex control flow through closures
 - Does not handle exceptions explicitly
-isolation: temp_copy
-stub_should_fail: true
+must_not:
+- placeholder_flows
+- fabricated_branches
 mutants_should_fail: true
+name: Verified get_control_flow - Analysis
+performance:
+  max_duration_ms: 1000
+severity: critical
+stub_should_fail: true
+test_id: GET_CONTROL_FLOW-T01
+test_type: T01
+tool: get_control_flow
 uncertain_handling: explicit
+verified: true

@@ -1,34 +1,35 @@
-test_id: INT-parse_non_utf8-T08
-name: Parse non-UTF-8 file with real parser
 category: integration
-tool: parse_source_code
-layer: 3
-test_type: T08
+checks:
+- required_content:
+  - status
+  type: content_validation
+- parser_was_real: true
+  type: infrastructure_check
 description: Integration test - parse non-UTF-8 file should handle gracefully
+expected:
+  error_type: encoding_error
+  or_status: error
+  parsed_with_encoding: true
+  status: error
+expected_error: 'File not found: /Users/adarsh/Documents/vr-agent/binary_file.bin'
 fixture: simple-python
 infrastructure:
 - temp_copy
 - parser
 input:
-  file_path: binary_file.bin
   encoding: latin-1
-expected:
-  status: error
-  parsed_with_encoding: true
-  or_status: error
-  error_type: encoding_error
+  file_path: binary_file.bin
+  repository_path: fixtures/repositories/simple-python
+layer: 3
 must_not:
 - crash
 - unexpected_error
-checks:
-- type: content_validation
-  required_content:
-  - status
-- type: infrastructure_check
-  parser_was_real: true
+name: Parse non-UTF-8 file with real parser
 performance:
   max_duration_ms: 500
+requires_real_infrastructure: true
 severity: critical
 stub_should_fail: true
-requires_real_infrastructure: true
-expected_error: 'File not found: /Users/adarsh/Documents/vr-agent/binary_file.bin'
+test_id: INT-parse_non_utf8-T08
+test_type: T08
+tool: parse_source_code

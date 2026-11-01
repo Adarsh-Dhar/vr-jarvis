@@ -30,7 +30,7 @@ KEYS = [
     'result_orchestrator',  # Orchestrator output
     'result_conversational', # Conversational output
     'task_log',         # History of tasks and their status
-    'calling_agent',    # Name of agent currently executing (for permission checks)
+    'tool_budgets',     # Tool budget tracking per agent (session state)
     # Prompt state keys
     'user_request',     # The user's current request text
     'available_agents', # List of available agent names

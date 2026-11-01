@@ -1,21 +1,23 @@
-test_id: DFL-trace_api_data_flow-T12
-name: Security test for trace_api_data_flow
 category: data_flow
-tool: trace_api_data_flow
-layer: 2
-test_type: T12
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Security test for trace_api_data_flow
+expected:
+  status: ok
 fixture: simple-python
 input:
   endpoint: fixtures/repositories/simple-python/main.py
+  file_path: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
   tool_context: fixtures/repositories/simple-python/main.py
-expected:
-  status: ok
+layer: 2
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Security test for trace_api_data_flow
 performance:
   max_duration_ms: 5000
 severity: critical
+test_id: DFL-trace_api_data_flow-T12
+test_type: T12
+tool: trace_api_data_flow

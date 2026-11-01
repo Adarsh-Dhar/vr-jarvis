@@ -1,24 +1,26 @@
-test_id: COD-compare_implementations-T06
-name: Large Input test for compare_implementations
 category: code_understanding
-tool: compare_implementations
-layer: 1
-test_type: T06
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Large Input test for compare_implementations
-fixture: polyglot-monorepo
-input:
-  function1_id: placeholder
-  function2_id: placeholder
-  tool_context: placeholder
 expected:
   status: ok
+fixture: polyglot-monorepo
+input:
+  file_path: fixtures/repositories/polyglot-monorepo/main.py
+  function1_id: placeholder
+  function2_id: placeholder
+  repository_path: fixtures/repositories/polyglot-monorepo
+  tool_context: placeholder
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Large Input test for compare_implementations
 performance:
   max_duration_ms: 3000
 severity: medium
 skip: true
 skip_reason: 'Tool execution issue: '
+test_id: COD-compare_implementations-T06
+test_type: T06
+tool: compare_implementations

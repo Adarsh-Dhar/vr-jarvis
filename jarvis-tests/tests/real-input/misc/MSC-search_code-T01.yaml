@@ -1,22 +1,24 @@
-test_id: MSC-search_code-T01
-name: Happy Path test for search_code
 category: misc
-tool: search_code
-layer: 1
-test_type: T01
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Happy Path test for search_code
-fixture: simple-python
-input:
-  tool_context: fixtures/repositories/simple-python/main.py
-  query: test
 expected:
   status: ok
+fixture: simple-python
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+  query: test
+  repository_path: fixtures/repositories/simple-python
+  tool_context: fixtures/repositories/simple-python/main.py
+layer: 1
 must_not:
 - error
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Happy Path test for search_code
 performance:
   max_duration_ms: 3000
 severity: critical
+test_id: MSC-search_code-T01
+test_type: T01
+tool: search_code

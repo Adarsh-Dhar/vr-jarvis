@@ -1,21 +1,23 @@
-test_id: DFL-trace_state_changes-T10
-name: Timeout test for trace_state_changes
 category: data_flow
-tool: trace_state_changes
-layer: 2
-test_type: T10
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Timeout test for trace_state_changes
+expected:
+  status: ok
 fixture: simple-python
 input:
   component_id: fixtures/repositories/simple-python/main.py
+  file_path: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
   tool_context: fixtures/repositories/simple-python/main.py
-expected:
-  status: ok
+layer: 2
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Timeout test for trace_state_changes
 performance:
   max_duration_ms: 5000
 severity: high
+test_id: DFL-trace_state_changes-T10
+test_type: T10
+tool: trace_state_changes

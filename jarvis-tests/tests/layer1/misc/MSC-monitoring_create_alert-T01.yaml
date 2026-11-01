@@ -1,22 +1,24 @@
-test_id: MSC-monitoring_create_alert-T01
-name: Happy Path test for monitoring_create_alert
 category: misc
-tool: monitoring_create_alert
-layer: 1
-test_type: T01
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Happy Path test for monitoring_create_alert
+expected:
+  status: ok
 fixture: simple-python
 input:
   condition: fixtures/repositories/simple-python/main.py
+  file_path: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
   tool_context: fixtures/repositories/simple-python/main.py
-expected:
-  status: ok
+layer: 1
 must_not:
 - error
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Happy Path test for monitoring_create_alert
 performance:
   max_duration_ms: 3000
 severity: critical
+test_id: MSC-monitoring_create_alert-T01
+test_type: T01
+tool: monitoring_create_alert

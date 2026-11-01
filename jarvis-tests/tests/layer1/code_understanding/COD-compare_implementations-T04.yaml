@@ -1,24 +1,26 @@
-test_id: COD-compare_implementations-T04
-name: Empty Input test for compare_implementations
 category: code_understanding
-tool: compare_implementations
-layer: 1
-test_type: T04
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Empty Input test for compare_implementations
-fixture: simple-python
-input:
-  function1_id: fixtures/repositories/simple-python/main.py
-  function2_id: fixtures/repositories/simple-python/main.py
-  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
+fixture: simple-python
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+  function1_id: placeholder
+  function2_id: placeholder
+  repository_path: fixtures/repositories/simple-python
+  tool_context: placeholder
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Empty Input test for compare_implementations
 performance:
   max_duration_ms: 3000
 severity: high
 skip: true
 skip_reason: 'Tool execution issue: '
+test_id: COD-compare_implementations-T04
+test_type: T04
+tool: compare_implementations

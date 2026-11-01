@@ -1,21 +1,23 @@
-test_id: DFL-trace_state_changes-T06
-name: Large Input test for trace_state_changes
 category: data_flow
-tool: trace_state_changes
-layer: 1
-test_type: T06
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Large Input test for trace_state_changes
+expected:
+  status: ok
 fixture: polyglot-monorepo
 input:
   component_id: fixtures/repositories/simple-python/main.py
+  file_path: fixtures/repositories/polyglot-monorepo/main.py
+  repository_path: fixtures/repositories/polyglot-monorepo
   tool_context: fixtures/repositories/simple-python/main.py
-expected:
-  status: ok
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Large Input test for trace_state_changes
 performance:
   max_duration_ms: 5000
 severity: medium
+test_id: DFL-trace_state_changes-T06
+test_type: T06
+tool: trace_state_changes

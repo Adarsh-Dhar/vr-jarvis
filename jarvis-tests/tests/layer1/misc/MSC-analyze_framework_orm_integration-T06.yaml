@@ -1,22 +1,23 @@
-test_id: MSC-analyze_framework_orm_integration-T06
-name: Large Input test for analyze_framework_orm_integration
 category: misc
-tool: analyze_framework_orm_integration
-layer: 1
-test_type: T06
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Large Input test for analyze_framework_orm_integration
-fixture: polyglot-monorepo
-input:
-  repository_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/polyglot-monorepo
-  framework: placeholder
-  tool_context: placeholder
 expected:
   status: ok
+fixture: polyglot-monorepo
+input:
+  file_path: fixtures/repositories/polyglot-monorepo/main.py
+  framework: placeholder
+  repository_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/polyglot-monorepo
+  tool_context: placeholder
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Large Input test for analyze_framework_orm_integration
 performance:
   max_duration_ms: 3000
 severity: medium
+test_id: MSC-analyze_framework_orm_integration-T06
+test_type: T06
+tool: analyze_framework_orm_integration

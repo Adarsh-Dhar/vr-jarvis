@@ -1,23 +1,25 @@
-test_id: COD-explain_module-T14
-name: Regression test for explain_module
 category: code_understanding
-tool: explain_module
-layer: 2
-test_type: T14
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Regression test for explain_module
-fixture: simple-python
-input:
-  module_path: fixtures/repositories/simple-python/main.py
-  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: error
+expected_error: argument should be a str or an os.PathLike object where __fspath__
+  returns a str, not 'NoneType'
+fixture: simple-python
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+  module_path: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
+  tool_context: fixtures/repositories/simple-python/main.py
+layer: 2
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Regression test for explain_module
 performance:
   max_duration_ms: 3000
 severity: high
-expected_error: argument should be a str or an os.PathLike object where __fspath__
-  returns a str, not 'NoneType'
+test_id: COD-explain_module-T14
+test_type: T14
+tool: explain_module

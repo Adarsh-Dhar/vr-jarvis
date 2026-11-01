@@ -1,14 +1,15 @@
-test_id: REPO-001
-tool: detect_languages
 agent: repository_intelligence
+evidence_required: true
+expected:
+  error: null
+  languages:
+  - confidence: 0.95
+    file_count: 1
+    name: python
 fixture: simple-python
 input:
-  repository_path: "fixtures/repositories/simple-python"
-expected:
-  languages:
-    - name: "python"
-      confidence: 0.95
-      file_count: 1
-  error: null
-evidence_required: true
-notes: "Should detect Python from .py files"
+  file_path: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
+notes: Should detect Python from .py files
+test_id: REPO-001
+tool: detect_languages

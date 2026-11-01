@@ -1,21 +1,23 @@
-test_id: REL-build_class_relationship_graph-T02
-name: Input Validation test for build_class_relationship_graph
 category: relationship
-tool: build_class_relationship_graph
-layer: 1
-test_type: T02
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Input Validation test for build_class_relationship_graph
-fixture: simple-python
-input:
-  scope: fixtures/repositories/simple-python/main.py
-  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: error
+fixture: simple-python
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
+  scope: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Input Validation test for build_class_relationship_graph
 performance:
   max_duration_ms: 3000
 severity: critical
+test_id: REL-build_class_relationship_graph-T02
+test_type: T02
+tool: build_class_relationship_graph

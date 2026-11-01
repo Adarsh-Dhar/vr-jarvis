@@ -1,23 +1,24 @@
-test_id: ANL-analyze_exceptions-T14
-name: Regression test for analyze_exceptions
 category: analysis
-tool: analyze_exceptions
-layer: 2
-test_type: T14
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Regression test for analyze_exceptions
+expected:
+  file_path_contains: main.py
+  status: ok
+expected_exception_paths: []
 fixture: simple-python
 input:
   file_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
   tool_context: fixtures/repositories/simple-python/main.py
-expected:
-  status: ok
-  file_path_contains: main.py
+layer: 2
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Regression test for analyze_exceptions
 performance:
   max_duration_ms: 2000
 severity: high
-expected_exception_paths: []
+test_id: ANL-analyze_exceptions-T14
+test_type: T14
+tool: analyze_exceptions

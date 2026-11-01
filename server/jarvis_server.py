@@ -3,7 +3,10 @@ import json
 import os
 import subprocess
 import uuid
+import hmac
+import time
 from collections import defaultdict
+from pathlib import Path
 
 from types import SimpleNamespace
 
@@ -24,17 +27,50 @@ from ai_agents.tools.graph_tools import get_source
 APP, USER = 'jarvis', 'quest'
 TOKEN = os.getenv('JARVIS_TOKEN', '')
 ASK_TIMEOUT = float(os.getenv('JARVIS_ASK_TIMEOUT', '170'))   # keep below the Unity request timeout
+MAX_SESSIONS = int(os.getenv('JARVIS_MAX_SESSIONS', '50'))
+SESSION_IDLE_TIMEOUT = int(os.getenv('JARVIS_SESSION_IDLE_TIMEOUT', '3600'))  # 1 hour
 
 sessions = InMemorySessionService()
 runner = Runner(agent=root_agent, app_name=APP, session_service=sessions)
 locks = defaultdict(asyncio.Lock)
+session_last_used = {}  # Track session last activity for eviction
 app = FastAPI(title='JARVIS bridge')
+
+# Audit log
+AUDIT_LOG_PATH = Path(__file__).parent.parent / 'logs' / 'audit.jsonl'
+AUDIT_LOG_PATH.parent.mkdir(exist_ok=True)
+
+
+def log_audit(agent: str, tool: str, args: dict, outcome: str, duration: float):
+    """Write audit entry to log file."""
+    import datetime
+    entry = {
+        'timestamp': datetime.datetime.utcnow().isoformat(),
+        'agent': agent,
+        'tool': tool,
+        'args_redacted': {k: '***' if 'token' in k.lower() or 'key' in k.lower() or 'password' in k.lower() else v 
+                         for k, v in args.items()},
+        'outcome': outcome,
+        'duration_seconds': duration
+    }
+    with open(AUDIT_LOG_PATH, 'a') as f:
+        f.write(json.dumps(entry) + '\n')
 
 
 def auth(authorization: str = Header(default='')):
     # LAN only. Set JARVIS_TOKEN and put the same value in JarvisServerSettings.Token.
-    if TOKEN and authorization != 'Bearer ' + TOKEN:
-        raise HTTPException(status_code=401, detail='bad token')
+    # Use constant-time comparison to prevent timing attacks
+    if TOKEN:
+        expected = f'Bearer {TOKEN}'
+        if not hmac.compare_digest(authorization, expected):
+            raise HTTPException(status_code=401, detail='bad token')
+    
+    # Security check: refuse to start on network with default token
+    if os.getenv('JARVIS_HOST', '127.0.0.1') != '127.0.0.1' and TOKEN in ('', 'dev-token'):
+        raise HTTPException(
+            status_code=403,
+            detail='Cannot start on network with default token. Set JARVIS_TOKEN to a secure value.'
+        )
 
 
 def _s(value):
@@ -46,7 +82,19 @@ def _s(value):
 async def ensure(session_id):
     session = await sessions.get_session(app_name=APP, user_id=USER, session_id=session_id)
     if session is None:
+        # Check session cap
+        active_sessions = len([s for s, t in session_last_used.items() 
+                            if time.time() - t < SESSION_IDLE_TIMEOUT])
+        if active_sessions >= MAX_SESSIONS:
+            # Evict oldest idle session
+            oldest = min(session_last_used.items(), key=lambda x: x[1])
+            await sessions.delete_session(app_name=APP, user_id=USER, session_id=oldest[0])
+            del session_last_used[oldest[0]]
+        
         session = await sessions.create_session(app_name=APP, user_id=USER, session_id=session_id)
+    
+    # Update last used time
+    session_last_used[session_id] = time.time()
     return session
 
 
@@ -226,29 +274,81 @@ async def ask(body: AskBody):
 
 @app.post('/approve', dependencies=[Depends(auth)])
 async def approve(body: ApproveBody):
-    # The 2 s pinch-hold in the headset is the only thing that should call this.
+    """Handle user approval for commits or tool actions.
+    
+    Phase D1: Improved approval path that handles:
+    - Commits (requires worktree and passed tests)
+    - Tool actions (single-use expiring token)
+    - Rejection (clears pending state)
+    """
     async with locks[body.session_id]:
         state = (await ensure(body.session_id)).state
         pending = state.get('pending_approval', '')
         worktree = state.get('worktree', '')
-        await set_state(body.session_id, {'approved': body.approved, 'pending_approval': ''})
+        approval_type = state.get('approval_type', 'commit')  # 'commit' or 'tool'
+        
+        # Clear pending state
+        await set_state(body.session_id, {'approved': body.approved, 'pending_approval': '', 'approval_type': ''})
+    
     if not body.approved:
-        return {'ok': True, 'branch': '', 'commit': '', 'detail': 'Rejected. Nothing was changed.'}
+        return {'ok': True, 'action': 'rejected', 'detail': 'Rejected. Nothing was changed.'}
+    
     if not pending:
-        return {'ok': False, 'branch': '', 'commit': '', 'detail': 'Nothing was waiting for approval.'}
-    return {'branch': '', 'commit': '', **commit_worktree(worktree, 'JARVIS: ' + str(pending)[:120])}
+        return {'ok': False, 'action': 'none', 'detail': 'Nothing was waiting for approval.'}
+    
+    if approval_type == 'commit':
+        # Commit workflow: requires worktree and passed tests
+        if not worktree:
+            return {'ok': False, 'action': 'commit', 'detail': 'No sandbox worktree to commit.'}
+        
+        last = state.get('last_test_run', {})
+        if not isinstance(last, dict) or last.get('status') != 'passed':
+            return {'ok': False, 'action': 'commit', 'detail': 'Tests must pass before committing.'}
+        
+        return {'ok': True, 'action': 'commit', **commit_worktree(worktree, 'JARVIS: ' + str(pending)[:120])}
+    
+    elif approval_type == 'tool':
+        # Tool action workflow: check for valid token
+        approval_token = state.get('approval_token')
+        if not approval_token:
+            return {'ok': False, 'action': 'tool', 'detail': 'No approval token found.'}
+        
+        # Token is consumed by the permission guard in callbacks.py
+        return {'ok': True, 'action': 'tool', 'detail': f'Tool action approved: {pending}'}
+    
+    else:
+        return {'ok': False, 'action': 'unknown', 'detail': f'Unknown approval type: {approval_type}'}
 
 
 @app.get('/task/{session_id}', dependencies=[Depends(auth)])
 async def get_task_state(session_id: str):
-    """Get current task state for a session."""
+    """Get current task state for a session.
+    Flattened for JsonUtility compatibility in Unity.
+    """
     session = await ensure(session_id)
     state = session.state
+    
+    # Flatten results into a list for Unity
+    agent_results = []
+    for key in ['result_repository', 'result_code_understanding', 'result_relationship',
+                'result_data_flow', 'result_runtime', 'result_debugging', 'result_security',
+                'result_software_eng', 'result_testing', 'result_visualization', 'result_orchestrator',
+                'result_conversational']:
+        value = state.get(key, {})
+        if value and isinstance(value, dict):
+            agent_name = key.replace('result_', '')
+            agent_results.append({
+                'agent': agent_name,
+                'summary': value.get('summary', ''),
+                'confidence': value.get('confidence', 0),
+                'status': value.get('status', 'unknown')
+            })
+    
     return {
         'session_id': session_id,
         'plan': state.get('plan', {}),
         'findings': list(state.get('findings', [])),
-        'result_repository': state.get('result_repository', {}),
+        'agent_results': agent_results,
         'result_code_understanding': state.get('result_code_understanding', {}),
         'result_relationship': state.get('result_relationship', {}),
         'result_data_flow': state.get('result_data_flow', {}),
@@ -279,8 +379,122 @@ async def get_agent_info(agent_name: str):
 
 @app.get('/progress/{session_id}', dependencies=[Depends(auth)])
 async def progress(session_id: str, since: int = 0):
+    """Get progress events for a session."""
     state = (await ensure(session_id)).state
     log = list(state.get('task_log', []))
     return {'busy': locks[session_id].locked(),
             'steps': [{'i': i, 'agent': e['agent'], 'kind': e['kind']} for i, e in enumerate(log) if i >= since]}
+
+
+@app.get('/tools', dependencies=[Depends(auth)])
+async def list_tools():
+    """List all available tools with metadata."""
+    from ai_agents.agents.toolsets import TOOLSETS, TOOL_LEVELS, PERMISSION_CEILINGS
+    
+    tools_metadata = []
+    all_tools = set()
+    
+    # Collect all tools from all agents
+    for agent_name, tool_names in TOOLSETS.items():
+        for tool_name in tool_names:
+            all_tools.add(tool_name)
+    
+    # Build metadata for each tool
+    for tool_name in all_tools:
+        # Find which agents have this tool
+        owning_agents = []
+        for agent_name, tool_names in TOOLSETS.items():
+            if tool_name in tool_names:
+                owning_agents.append(agent_name)
+        
+        # Get permission level
+        perm_level = TOOL_LEVELS.get(tool_name, 'read')
+        
+        # Get parameter info from the actual tool function
+        from ai_agents import tools as tools_module
+        params = []
+        if hasattr(tools_module, tool_name):
+            import inspect
+            sig = inspect.signature(getattr(tools_module, tool_name))
+            for param_name, param in sig.parameters.items():
+                if param_name != 'tool_context':
+                    params.append({
+                        'name': param_name,
+                        'required': param.default == inspect.Parameter.empty
+                    })
+        
+        tools_metadata.append({
+            'name': tool_name,
+            'level': perm_level,
+            'owning_agents': owning_agents,
+            'parameters': params
+        })
+    
+    return {'tools': tools_metadata}
+
+
+class ToolCallBody(BaseModel):
+    tool_name: str
+    parameters: dict = {}
+
+
+@app.post('/tools/{tool_name}', dependencies=[Depends(auth)])
+async def call_tool(tool_name: str, body: ToolCallBody):
+    """Run a read-level tool directly without a model.
+    Write and execute tools are refused.
+    """
+    from ai_agents.agents.toolsets import TOOL_LEVELS
+    from ai_agents import tools as tools_module
+    
+    # Check permission level
+    perm_level = TOOL_LEVELS.get(tool_name, 'read')
+    if perm_level in ['write', 'execute']:
+        return {
+            'status': 'blocked',
+            'reason': f'Tool {tool_name} requires {perm_level} permission and cannot be called directly'
+        }
+    
+    # Check tool exists
+    if not hasattr(tools_module, tool_name):
+        return {
+            'status': 'error',
+            'error': f'Tool {tool_name} not found'
+        }
+    
+    # Call the tool
+    try:
+        tool_func = getattr(tools_module, tool_name)
+        
+        # Build mock tool context
+        class MockToolContext:
+            def __init__(self):
+                self.state = {
+                    'worktree': None,
+                    'tool_budgets': {},
+                    'evidence': [],
+                    'scene_commands': [],
+                }
+                self.agent_name = 'direct_call'
+        
+        tool_context = MockToolContext()
+        
+        # Add tool_context to parameters
+        params = body.parameters.copy()
+        params['tool_context'] = tool_context
+        
+        result = tool_func(**params)
+        
+        if not isinstance(result, dict):
+            return {
+                'status': 'error',
+                'error': f'Tool returned non-dict: {type(result)}'
+            }
+        
+        return result
+        
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
 

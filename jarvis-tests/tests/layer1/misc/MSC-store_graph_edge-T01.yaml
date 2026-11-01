@@ -1,24 +1,26 @@
-test_id: MSC-store_graph_edge-T01
-name: Happy Path test for store_graph_edge
 category: misc
-tool: store_graph_edge
-layer: 1
-test_type: T01
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Happy Path test for store_graph_edge
-fixture: simple-python
-input:
-  from_id: placeholder
-  to_id: placeholder
-  edge_data: placeholder
-  tool_context: placeholder
 expected:
   status: ok
+fixture: simple-python
+input:
+  edge_data: placeholder
+  file_path: fixtures/repositories/simple-python/main.py
+  from_id: placeholder
+  repository_path: fixtures/repositories/simple-python
+  to_id: placeholder
+  tool_context: placeholder
+layer: 1
 must_not:
 - error
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Happy Path test for store_graph_edge
 performance:
   max_duration_ms: 3000
 severity: critical
+test_id: MSC-store_graph_edge-T01
+test_type: T01
+tool: store_graph_edge

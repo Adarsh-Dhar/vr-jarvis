@@ -1,23 +1,24 @@
-test_id: REP-detect_project_type-T15
-name: Recovery test for detect_project_type
 category: repository_intelligence
-tool: detect_project_type
-layer: 2
-test_type: T15
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Recovery test for detect_project_type
-fixture: simple-python
-input:
-  repository_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/simple-python
-  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
+expected_project_type: unknown
+expected_repository_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/simple-python
+fixture: simple-python
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+  repository_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/simple-python
+  tool_context: fixtures/repositories/simple-python/main.py
+layer: 2
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Recovery test for detect_project_type
 performance:
   max_duration_ms: 10000
 severity: high
-expected_repository_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/simple-python
-expected_project_type: unknown
+test_id: REP-detect_project_type-T15
+test_type: T15
+tool: detect_project_type

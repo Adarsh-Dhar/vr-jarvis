@@ -1,34 +1,38 @@
-test_id: REL-CALL-001
-name: Direct function caller discovery
 category: relationship_intelligence
-tool: find_callers
-description: 'Verify that the tool identifies all direct callers of a selected function.
-
-  '
-fixture:
-  repository: simple-python
-  target_symbol: target
-input:
-  depth: 1
-expected:
-  status: not_found
-  callers:
-  - name: alpha
-    file: main.py
-    line: 6
-  - name: beta
-    file: main.py
-    line: 12
-must_not:
-- gamma
-- delta
 checks:
 - correct_callers
 - correct_source_locations
 - correct_relationship_types
 - valid_response_schema
+description: 'Verify that the tool identifies all direct callers of a selected function.
+
+  '
+expected:
+  callers:
+  - file: main.py
+    line: 6
+    name: alpha
+  - file: main.py
+    line: 12
+    name: beta
+  status: not_found
+expected_message: Symbol definition not found
+expected_symbol_name: null
+fixture:
+  repository: simple-python
+  target_symbol: target
+input:
+  depth: 1
+  file_path: 'fixtures/repositories/{''repository'': ''simple-python'', ''target_symbol'':
+    ''target''}/main.py'
+  repository_path: 'fixtures/repositories/{''repository'': ''simple-python'', ''target_symbol'':
+    ''target''}'
+must_not:
+- gamma
+- delta
+name: Direct function caller discovery
 performance:
   max_duration_ms: 2000
 severity: critical
-expected_symbol_name: null
-expected_message: Symbol definition not found
+test_id: REL-CALL-001
+tool: find_callers

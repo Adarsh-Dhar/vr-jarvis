@@ -4,10 +4,14 @@ Reusable adapters around existing language tooling for universal-language suppor
 """
 
 from typing import Optional, List, Dict, Any
+from ._common import repo_root, resolve_in_repo
 from pathlib import Path
+from ._common import repo_root, resolve_in_repo
 import ast
 from google.adk.tools import ToolContext
+from ._common import repo_root, resolve_in_repo
 from ._safe import safe
+from ._common import repo_root, resolve_in_repo
 
 # In-memory adapter registry
 _language_adapters = {}
@@ -118,7 +122,7 @@ def parse_language_ast(
     try:
         path = Path(file_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            path = resolve_in_repo(path)
         
         if not path.exists():
             return {
@@ -212,7 +216,7 @@ def resolve_language_types(
         # For other languages, provide basic symbol extraction
         path = Path(file_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            path = resolve_in_repo(path)
         
         if not path.exists():
             return {
@@ -287,7 +291,7 @@ def extract_language_symbols(
         # For other languages, use regex-based symbol extraction
         path = Path(file_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            path = resolve_in_repo(path)
         
         if not path.exists():
             return {
@@ -390,7 +394,7 @@ def analyze_language_specific_features(
         # For other languages, use basic feature detection
         path = Path(file_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            path = resolve_in_repo(path)
         
         if not path.exists():
             return {

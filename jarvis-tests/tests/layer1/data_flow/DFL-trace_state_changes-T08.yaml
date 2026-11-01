@@ -1,21 +1,23 @@
-test_id: DFL-trace_state_changes-T08
-name: Malformed Input test for trace_state_changes
 category: data_flow
-tool: trace_state_changes
-layer: 1
-test_type: T08
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Malformed Input test for trace_state_changes
+expected:
+  status: error
 fixture: corrupted-inputs
 input:
   component_id: fixtures/repositories/simple-python/main.py
+  file_path: fixtures/repositories/corrupted-inputs/main.py
+  repository_path: fixtures/repositories/corrupted-inputs
   tool_context: fixtures/repositories/simple-python/main.py
-expected:
-  status: error
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Malformed Input test for trace_state_changes
 performance:
   max_duration_ms: 5000
 severity: critical
+test_id: DFL-trace_state_changes-T08
+test_type: T08
+tool: trace_state_changes

@@ -1,21 +1,23 @@
-test_id: MSC-run_tests-T15
-name: Recovery test for run_tests
 category: misc
-tool: run_tests
-layer: 2
-test_type: T15
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Recovery test for run_tests
-fixture: simple-python
-input:
-  test_files: fixtures/repositories/simple-python/main.py
-  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
+fixture: simple-python
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
+  test_files: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
+layer: 2
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Recovery test for run_tests
 performance:
   max_duration_ms: 3000
 severity: high
+test_id: MSC-run_tests-T15
+test_type: T15
+tool: run_tests

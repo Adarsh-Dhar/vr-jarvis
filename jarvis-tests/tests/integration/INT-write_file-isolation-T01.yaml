@@ -1,35 +1,34 @@
-test_id: INT-write_file-isolation-T01
-name: Write file with temp copy isolation
 category: integration
-tool: write_file
-layer: 3
-test_type: T01
+checks:
+- required_content:
+  - file_created
+  type: content_validation
+- shared_fixture_unchanged: true
+  type: isolation_check
+  used_temp_copy: true
 description: Integration test - write file uses temp copy isolation
-fixture: simple-python
-infrastructure:
-  - temp_copy
-  - filesystem
-input:
-  file_path: new_file.py
-  content: |
-    def new_function():
-        return "new"
 expected:
-  status: ok
   file_created: true
   shared_fixture_unchanged: true
+  status: ok
+fixture: simple-python
+infrastructure:
+- temp_copy
+- filesystem
+input:
+  content: "def new_function():\n    return \"new\"\n"
+  file_path: new_file.py
+  repository_path: fixtures/repositories/simple-python
+layer: 3
 must_not:
-  - modified_shared_fixture
-  - write_error
-checks:
-  - type: content_validation
-    required_content:
-      - file_created
-  - type: isolation_check
-    used_temp_copy: true
-    shared_fixture_unchanged: true
+- modified_shared_fixture
+- write_error
+name: Write file with temp copy isolation
 performance:
   max_duration_ms: 500
+requires_real_infrastructure: true
 severity: critical
 stub_should_fail: true
-requires_real_infrastructure: true
+test_id: INT-write_file-isolation-T01
+test_type: T01
+tool: write_file

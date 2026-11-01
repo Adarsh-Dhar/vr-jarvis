@@ -1,21 +1,23 @@
-test_id: API-analyze_api_contract-T05
-name: Boundary Conditions test for analyze_api_contract
 category: api_database
-tool: analyze_api_contract
-layer: 1
-test_type: T05
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Boundary Conditions test for analyze_api_contract
+expected:
+  status: ok
 fixture: simple-python
 input:
   endpoint: placeholder
+  file_path: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
   tool_context: placeholder
-expected:
-  status: ok
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Boundary Conditions test for analyze_api_contract
 performance:
   max_duration_ms: 5000
 severity: high
+test_id: API-analyze_api_contract-T05
+test_type: T05
+tool: analyze_api_contract

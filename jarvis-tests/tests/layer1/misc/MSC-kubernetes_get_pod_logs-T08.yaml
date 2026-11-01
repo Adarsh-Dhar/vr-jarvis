@@ -1,24 +1,26 @@
-test_id: MSC-kubernetes_get_pod_logs-T08
-name: Malformed Input test for kubernetes_get_pod_logs
 category: misc
-tool: kubernetes_get_pod_logs
-layer: 1
-test_type: T08
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Malformed Input test for kubernetes_get_pod_logs
-fixture: corrupted-inputs
-input:
-  pod_name: placeholder
-  namespace: placeholder
-  tool_context: placeholder
 expected:
   status: ok
+fixture: corrupted-inputs
+input:
+  file_path: fixtures/repositories/corrupted-inputs/main.py
+  namespace: placeholder
+  pod_name: placeholder
+  repository_path: fixtures/repositories/corrupted-inputs
+  tool_context: placeholder
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Malformed Input test for kubernetes_get_pod_logs
 performance:
   max_duration_ms: 3000
 severity: critical
 skip: true
 skip_reason: 'Tool execution issue: '
+test_id: MSC-kubernetes_get_pod_logs-T08
+test_type: T08
+tool: kubernetes_get_pod_logs

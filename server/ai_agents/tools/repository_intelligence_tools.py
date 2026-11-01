@@ -4,9 +4,13 @@ Understand everything available in your software projects.
 """
 
 from typing import Optional, List, Dict, Any
+from ._common import repo_root, resolve_in_repo
 from pathlib import Path
+from ._common import repo_root, resolve_in_repo
 from google.adk.tools import ToolContext
+from ._common import repo_root, resolve_in_repo
 from ._safe import safe
+from ._common import repo_root, resolve_in_repo
 
 
 @safe
@@ -15,7 +19,7 @@ def detect_languages(repository_path: str, tool_context: ToolContext) -> dict:
     try:
         path = Path(repository_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            path = resolve_in_repo(path)
         if not path.is_dir():
             return {'status': 'error', 'error': f'Repository path not found: {repository_path}'}
         
@@ -79,7 +83,7 @@ def detect_frameworks(repository_path: str, tool_context: ToolContext) -> dict:
     try:
         path = Path(repository_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            path = resolve_in_repo(path)
         
         # Detect frameworks by looking for config files and dependencies
         frameworks = []
@@ -169,7 +173,7 @@ def identify_entry_points(
     try:
         path = Path(repository_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            path = resolve_in_repo(path)
 
         entry_points = []
         seen = set()
@@ -224,7 +228,7 @@ def detect_build_system(repository_path: str, tool_context: ToolContext) -> dict
     try:
         path = Path(repository_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            path = resolve_in_repo(path)
         
         build_systems = []
         
@@ -263,7 +267,7 @@ def detect_package_manager(repository_path: str, tool_context: ToolContext) -> d
     try:
         path = Path(repository_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            path = resolve_in_repo(path)
         
         package_managers = []
         
@@ -298,7 +302,7 @@ def detect_project_type(repository_path: str, tool_context: ToolContext) -> dict
     try:
         path = Path(repository_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            path = resolve_in_repo(path)
         
         project_type = 'unknown'
         
@@ -346,7 +350,7 @@ def analyze_project_configuration(repository_path: str, tool_context: ToolContex
     try:
         path = Path(repository_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            path = resolve_in_repo(path)
         
         configs = []
         
@@ -377,7 +381,7 @@ def analyze_build_configuration(repository_path: str, tool_context: ToolContext)
     try:
         path = Path(repository_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            path = resolve_in_repo(path)
         
         build_configs = []
         
@@ -408,7 +412,7 @@ def analyze_environment_configuration(repository_path: str, tool_context: ToolCo
     try:
         path = Path(repository_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            path = resolve_in_repo(path)
         
         env_configs = []
         
@@ -443,7 +447,7 @@ def analyze_dependencies_manifest(repository_path: str, tool_context: ToolContex
         import xml.etree.ElementTree as ET
         path = Path(repository_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            path = resolve_in_repo(path)
         if path.is_file() and path.suffix == '.py':
             from .analysis_tools import analyze_dependencies
             return analyze_dependencies(repository_path, tool_context)
@@ -547,7 +551,7 @@ def identify_generated_files(repository_path: str, tool_context: ToolContext) ->
     try:
         path = Path(repository_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            path = resolve_in_repo(path)
         
         generated_patterns = ['node_modules', '__pycache__', '.git', 'build', 'dist', '*.pyc']
         generated_files = []
@@ -574,10 +578,18 @@ def identify_generated_files(repository_path: str, tool_context: ToolContext) ->
 
 @safe
 def index_repository(repository_path: str, tool_context: ToolContext) -> dict:
-    """Index repository: build its code graph and make it the active repository."""
+    """Index repository: build its code graph and make it the active repository.
+    Accepts '.' to mean the currently active repository."""
     try:
         from ..repository import activate
-        name = Path(repository_path).name
+        from .. import config
+        
+        # '.' means use the currently active repository
+        if repository_path == '.' or repository_path == '':
+            name = config.REPO_ROOT.name
+        else:
+            name = Path(repository_path).name
+        
         try:
             graph = activate(name)       # builds the code graph and makes this the active repository
         except KeyError:
@@ -599,10 +611,18 @@ def index_repository(repository_path: str, tool_context: ToolContext) -> dict:
 
 @safe
 def incremental_index_repository(repository_path: str, tool_context: ToolContext) -> dict:
-    """Re-index the repository (full rebuild until true incremental indexing exists)."""
+    """Re-index the repository (full rebuild until true incremental indexing exists).
+    Accepts '.' to mean the currently active repository."""
     try:
         from ..repository import activate
-        name = Path(repository_path).name
+        from .. import config
+        
+        # '.' means use the currently active repository
+        if repository_path == '.' or repository_path == '':
+            name = config.REPO_ROOT.name
+        else:
+            name = Path(repository_path).name
+        
         try:
             graph = activate(name)       # builds the code graph and makes this the active repository
         except KeyError:

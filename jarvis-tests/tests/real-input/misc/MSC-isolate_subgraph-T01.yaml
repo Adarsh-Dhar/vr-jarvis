@@ -1,23 +1,25 @@
-test_id: MSC-isolate_subgraph-T01
-name: Happy Path test for isolate_subgraph
 category: misc
-tool: isolate_subgraph
-layer: 1
-test_type: T01
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Happy Path test for isolate_subgraph
-fixture: simple-python
-input:
-  graph_id: fixtures/repositories/simple-python/main.py
-  node_ids: fixtures/repositories/simple-python/main.py
-  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
+fixture: simple-python
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+  graph_id: fixtures/repositories/simple-python/main.py
+  node_ids: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
+  tool_context: fixtures/repositories/simple-python/main.py
+layer: 1
 must_not:
 - error
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Happy Path test for isolate_subgraph
 performance:
   max_duration_ms: 3000
 severity: critical
+test_id: MSC-isolate_subgraph-T01
+test_type: T01
+tool: isolate_subgraph

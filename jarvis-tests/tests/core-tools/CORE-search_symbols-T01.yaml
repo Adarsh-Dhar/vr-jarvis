@@ -1,22 +1,24 @@
-test_id: CORE-search_symbols-T01
-name: Search for target symbol
 category: core
-tool: search_symbols
-layer: 1
-test_type: T01
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Happy Path - search for known symbol target in simple-python
-fixture: simple-python
-input:
-  symbol_name: target
-  symbol_type: function
 expected:
   status: ok
+fixture: simple-python
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
+  symbol_name: target
+  symbol_type: function
+layer: 1
 must_not:
 - error
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Search for target symbol
 performance:
   max_duration_ms: 1000
 severity: critical
+test_id: CORE-search_symbols-T01
+test_type: T01
+tool: search_symbols

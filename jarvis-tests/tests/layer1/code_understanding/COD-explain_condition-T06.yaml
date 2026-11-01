@@ -1,23 +1,25 @@
-test_id: COD-explain_condition-T06
-name: Large Input test for explain_condition
 category: code_understanding
-tool: explain_condition
-layer: 1
-test_type: T06
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Large Input test for explain_condition
+expected:
+  status: ok
 fixture: polyglot-monorepo
 input:
   condition_id: placeholder
+  file_path: fixtures/repositories/polyglot-monorepo/main.py
+  repository_path: fixtures/repositories/polyglot-monorepo
   tool_context: placeholder
-expected:
-  status: ok
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Large Input test for explain_condition
 performance:
   max_duration_ms: 3000
 severity: medium
 skip: true
 skip_reason: 'Tool execution issue: '
+test_id: COD-explain_condition-T06
+test_type: T06
+tool: explain_condition

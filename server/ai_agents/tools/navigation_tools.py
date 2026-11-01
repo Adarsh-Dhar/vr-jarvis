@@ -402,7 +402,7 @@ def get_imports(file_path: str, tool_context: ToolContext) -> dict:
     try:
         path = Path(file_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            path = resolve_in_repo(path)
         
         if not path.exists():
             return {
@@ -467,7 +467,7 @@ def get_exports(file_path: str, tool_context: ToolContext) -> dict:
     try:
         path = Path(file_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            path = resolve_in_repo(path)
         
         if not path.exists():
             return {
@@ -528,7 +528,7 @@ def get_scope_information(
     try:
         path = Path(file_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            path = resolve_in_repo(path)
         
         if not path.exists():
             return {

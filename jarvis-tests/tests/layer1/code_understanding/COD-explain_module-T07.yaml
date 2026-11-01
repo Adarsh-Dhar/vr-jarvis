@@ -1,25 +1,27 @@
-test_id: COD-explain_module-T07
-name: Complex Input test for explain_module
 category: code_understanding
-tool: explain_module
-layer: 1
-test_type: T07
-description: Complex Input test for explain_module
-fixture: polyglot-monorepo
-input:
-  module_path: fixtures/repositories/simple-python/main.py
-  tool_context: fixtures/repositories/simple-python/main.py
-expected:
-  status: error
-  files: present
-must_not: []
 checks:
-- type: schema_validity
-  required_fields:
+- required_fields:
   - status
   - files
+  type: schema_validity
+description: Complex Input test for explain_module
+expected:
+  files: present
+  status: error
+expected_error: argument should be a str or an os.PathLike object where __fspath__
+  returns a str, not 'NoneType'
+fixture: polyglot-monorepo
+input:
+  file_path: fixtures/repositories/polyglot-monorepo/main.py
+  module_path: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/polyglot-monorepo
+  tool_context: fixtures/repositories/simple-python/main.py
+layer: 1
+must_not: []
+name: Complex Input test for explain_module
 performance:
   max_duration_ms: 3000
 severity: high
-expected_error: argument should be a str or an os.PathLike object where __fspath__
-  returns a str, not 'NoneType'
+test_id: COD-explain_module-T07
+test_type: T07
+tool: explain_module

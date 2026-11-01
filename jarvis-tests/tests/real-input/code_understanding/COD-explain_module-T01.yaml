@@ -1,24 +1,26 @@
-test_id: COD-explain_module-T01
-name: Happy Path test for explain_module
 category: code_understanding
-tool: explain_module
-layer: 1
-test_type: T01
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Happy Path test for explain_module
-fixture: simple-python
-input:
-  module_path: fixtures/repositories/simple-python/main.py
-  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: error
+expected_error: argument should be a str or an os.PathLike object where __fspath__
+  returns a str, not 'NoneType'
+fixture: simple-python
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+  module_path: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
+  tool_context: fixtures/repositories/simple-python/main.py
+layer: 1
 must_not:
 - error
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Happy Path test for explain_module
 performance:
   max_duration_ms: 3000
 severity: critical
-expected_error: argument should be a str or an os.PathLike object where __fspath__
-  returns a str, not 'NoneType'
+test_id: COD-explain_module-T01
+test_type: T01
+tool: explain_module

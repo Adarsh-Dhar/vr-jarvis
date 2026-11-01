@@ -1,25 +1,27 @@
-test_id: COD-explain_class-T07
-name: Complex Input test for explain_class
 category: code_understanding
-tool: explain_class
-layer: 1
-test_type: T07
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Complex Input test for explain_class
-fixture: polyglot-monorepo
-input:
-  class_id: ExampleClass
-  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: not_found
+expected_message: 'Symbol definition not found: placeholder'
+expected_symbol_name: placeholder
+fixture: polyglot-monorepo
+input:
+  class_id: placeholder
+  file_path: fixtures/repositories/polyglot-monorepo/main.py
+  repository_path: fixtures/repositories/polyglot-monorepo
+  tool_context: placeholder
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Complex Input test for explain_class
 performance:
   max_duration_ms: 3000
 severity: high
 skip: true
 skip_reason: 'Tool execution issue: '
-expected_symbol_name: ExampleClass
-expected_message: 'Symbol definition not found: ExampleClass'
+test_id: COD-explain_class-T07
+test_type: T07
+tool: explain_class

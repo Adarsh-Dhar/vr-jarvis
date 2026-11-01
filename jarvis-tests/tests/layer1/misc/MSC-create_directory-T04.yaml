@@ -1,21 +1,23 @@
-test_id: MSC-create_directory-T04
-name: Empty Input test for create_directory
 category: misc
-tool: create_directory
-layer: 1
-test_type: T04
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Empty Input test for create_directory
+expected:
+  status: ok
 fixture: simple-python
 input:
   directory_path: fixtures/repositories/simple-python/main.py
+  file_path: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
   tool_context: fixtures/repositories/simple-python/main.py
-expected:
-  status: ok
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Empty Input test for create_directory
 performance:
   max_duration_ms: 3000
 severity: high
+test_id: MSC-create_directory-T04
+test_type: T04
+tool: create_directory

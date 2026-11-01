@@ -1,23 +1,25 @@
-test_id: MSC-store_graph_edge-T06
-name: Large Input test for store_graph_edge
 category: misc
-tool: store_graph_edge
-layer: 1
-test_type: T06
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Large Input test for store_graph_edge
-fixture: polyglot-monorepo
-input:
-  from_id: fixtures/repositories/simple-python/main.py
-  to_id: fixtures/repositories/simple-python/main.py
-  edge_data: fixtures/repositories/simple-python/main.py
-  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
+fixture: polyglot-monorepo
+input:
+  edge_data: fixtures/repositories/simple-python/main.py
+  file_path: fixtures/repositories/polyglot-monorepo/main.py
+  from_id: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/polyglot-monorepo
+  to_id: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Large Input test for store_graph_edge
 performance:
   max_duration_ms: 3000
 severity: medium
+test_id: MSC-store_graph_edge-T06
+test_type: T06
+tool: store_graph_edge

@@ -1,22 +1,24 @@
-test_id: MSC-record_function_returns-T04
-name: Empty Input test for record_function_returns
 category: misc
-tool: record_function_returns
-layer: 1
-test_type: T04
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Empty Input test for record_function_returns
+expected:
+  status: ok
 fixture: simple-python
 input:
   application_id: placeholder
+  file_path: fixtures/repositories/simple-python/main.py
   function_id: placeholder
+  repository_path: fixtures/repositories/simple-python
   tool_context: placeholder
-expected:
-  status: ok
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Empty Input test for record_function_returns
 performance:
   max_duration_ms: 3000
 severity: high
+test_id: MSC-record_function_returns-T04
+test_type: T04
+tool: record_function_returns

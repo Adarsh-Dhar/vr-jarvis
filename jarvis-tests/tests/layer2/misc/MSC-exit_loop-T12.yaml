@@ -1,20 +1,22 @@
-test_id: MSC-exit_loop-T12
-name: Security test for exit_loop
 category: misc
-tool: exit_loop
-layer: 2
-test_type: T12
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Security test for exit_loop
-fixture: simple-python
-input:
-  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
+fixture: simple-python
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
+  tool_context: fixtures/repositories/simple-python/main.py
+layer: 2
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Security test for exit_loop
 performance:
   max_duration_ms: 3000
 severity: critical
+test_id: MSC-exit_loop-T12
+test_type: T12
+tool: exit_loop

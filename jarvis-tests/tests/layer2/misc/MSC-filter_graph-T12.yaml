@@ -1,22 +1,24 @@
-test_id: MSC-filter_graph-T12
-name: Security test for filter_graph
 category: misc
-tool: filter_graph
-layer: 2
-test_type: T12
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Security test for filter_graph
-fixture: simple-python
-input:
-  graph_id: fixtures/repositories/simple-python/main.py
-  filters: fixtures/repositories/simple-python/main.py
-  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
+fixture: simple-python
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+  filters: fixtures/repositories/simple-python/main.py
+  graph_id: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
+  tool_context: fixtures/repositories/simple-python/main.py
+layer: 2
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Security test for filter_graph
 performance:
   max_duration_ms: 3000
 severity: critical
+test_id: MSC-filter_graph-T12
+test_type: T12
+tool: filter_graph

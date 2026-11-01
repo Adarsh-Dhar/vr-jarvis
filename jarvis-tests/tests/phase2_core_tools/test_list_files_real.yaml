@@ -1,20 +1,27 @@
-test_id: PHASE2-CORE-007
-tool: list_files
 category: unit
-layer: 1
-test_type: real_input
 description: List files in simple-python fixture
-input:
-  directory: fixtures/repositories/simple-python
 expected:
-  status: error
   file_count_min: 3
   known_files_present:
   - main.py
   - subpackage
-must_not:
-- placeholder
+  status: ok
+expected_directory: /Users/adarsh/Documents/vr-agent/fixtures/repositories/simple-python
+expected_error: 'Directory does not exist: /Users/adarsh/Documents/vr-agent/fixtures/repositories/simple-python'
+expected_files:
+- path: main.py
+  size: 0
+  type: directory
+input:
+  directory: fixtures/repositories/simple-python
+  file_path: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
+layer: 1
 metrics:
 - tool_selection
 - evidence_accuracy
-expected_error: 'Directory does not exist: /Users/adarsh/Documents/vr-agent/fixtures/repositories/simple-python'
+must_not:
+- placeholder
+test_id: PHASE2-CORE-007
+test_type: real_input
+tool: list_files

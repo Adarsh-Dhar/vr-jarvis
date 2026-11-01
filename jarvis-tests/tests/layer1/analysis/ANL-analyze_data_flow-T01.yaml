@@ -1,24 +1,27 @@
-test_id: ANL-analyze_data_flow-T01
-name: Happy Path test for analyze_data_flow
 category: analysis
-tool: analyze_data_flow
-layer: 1
-test_type: T01
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Happy Path test for analyze_data_flow
+expected:
+  status: ok
+expected_data_flow: []
+expected_note: Full data flow analysis requires additional infrastructure
+expected_variable_name: /Users/adarsh/Documents/vr-agent/fixtures/repositories/simple-python/main.py
 fixture: simple-python
 input:
-  variable_name: fixtures/repositories/simple-python/main.py
-  tool_context: fixtures/repositories/simple-python/main.py
-expected:
-  status: error
+  file_path: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
+  tool_context: placeholder
+  variable_name: placeholder
+layer: 1
 must_not:
 - error
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Happy Path test for analyze_data_flow
 performance:
   max_duration_ms: 2000
 severity: critical
-expected_error: argument should be a str or an os.PathLike object where __fspath__
-  returns a str, not 'NoneType'
+test_id: ANL-analyze_data_flow-T01
+test_type: T01
+tool: analyze_data_flow

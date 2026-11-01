@@ -1,25 +1,27 @@
-test_id: MSC-package_search-T01
-name: Happy Path test for package_search
 category: misc
-tool: package_search
-layer: 1
-test_type: T01
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Happy Path test for package_search
-fixture: simple-python
-input:
-  registry: placeholder
-  query: test
-  tool_context: placeholder
 expected:
   status: ok
+fixture: simple-python
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+  query: test
+  registry: placeholder
+  repository_path: fixtures/repositories/simple-python
+  tool_context: placeholder
+layer: 1
 must_not:
 - error
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Happy Path test for package_search
 performance:
   max_duration_ms: 3000
 severity: critical
 skip: true
 skip_reason: 'Tool execution issue: '
+test_id: MSC-package_search-T01
+test_type: T01
+tool: package_search

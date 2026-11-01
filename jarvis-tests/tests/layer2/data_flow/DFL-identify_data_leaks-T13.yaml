@@ -1,23 +1,25 @@
-test_id: DFL-identify_data_leaks-T13
-name: Performance test for identify_data_leaks
 category: data_flow
-tool: identify_data_leaks
-layer: 2
-test_type: T13
+checks:
+- required_fields:
+  - status
+  type: schema_validity
+- max_duration_ms: 5000
+  type: performance
 description: Performance test for identify_data_leaks
+expected:
+  status: ok
 fixture: simple-python
 input:
   data_id: fixtures/repositories/simple-python/main.py
+  file_path: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
   tool_context: fixtures/repositories/simple-python/main.py
-expected:
-  status: ok
+layer: 2
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
-- type: performance
-  max_duration_ms: 5000
+name: Performance test for identify_data_leaks
 performance:
   max_duration_ms: 5000
 severity: medium
+test_id: DFL-identify_data_leaks-T13
+test_type: T13
+tool: identify_data_leaks

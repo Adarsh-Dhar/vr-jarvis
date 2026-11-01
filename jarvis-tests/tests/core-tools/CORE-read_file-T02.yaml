@@ -1,25 +1,26 @@
-test_id: CORE-read_file-T02
-name: Read non-existent file returns error
 category: core
-tool: read_file
-layer: 1
-test_type: T02
+checks:
+- required_fields:
+  - status
+  - error
+  type: schema_validity
 description: Input validation - non-existent file should return error
+expected:
+  error_contains: does not exist
+  status: error
+expected[key]: 'File does not exist: ../fixtures/repositories/simple-python/nonexistent.py'
+expected_error: 'File does not exist: /Users/adarsh/Documents/vr-agent/fixtures/repositories/simple-python/nonexistent.py'
 fixture: simple-python
 input:
   file_path: fixtures/repositories/simple-python/nonexistent.py
-expected:
-  status: error
-  error_contains: does not exist
+  repository_path: fixtures/repositories/simple-python
+layer: 1
 must_not:
 - status: ok
-checks:
-- type: schema_validity
-  required_fields:
-  - status
-  - error
+name: Read non-existent file returns error
 performance:
   max_duration_ms: 500
 severity: critical
-expected[key]: 'File does not exist: ../fixtures/repositories/simple-python/nonexistent.py'
-expected_error: 'File does not exist: /Users/adarsh/Documents/vr-agent/fixtures/repositories/simple-python/nonexistent.py'
+test_id: CORE-read_file-T02
+test_type: T02
+tool: read_file

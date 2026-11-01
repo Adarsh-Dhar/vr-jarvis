@@ -1,23 +1,25 @@
-test_id: MSC-remove_graph_edge-T10
-name: Timeout test for remove_graph_edge
 category: misc
-tool: remove_graph_edge
-layer: 2
-test_type: T10
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Timeout test for remove_graph_edge
+expected:
+  status: ok
 fixture: simple-python
 input:
+  file_path: fixtures/repositories/simple-python/main.py
   graph_id: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
   source_id: fixtures/repositories/simple-python/main.py
   target_id: fixtures/repositories/simple-python/main.py
   tool_context: fixtures/repositories/simple-python/main.py
-expected:
-  status: ok
+layer: 2
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Timeout test for remove_graph_edge
 performance:
   max_duration_ms: 3000
 severity: high
+test_id: MSC-remove_graph_edge-T10
+test_type: T10
+tool: remove_graph_edge

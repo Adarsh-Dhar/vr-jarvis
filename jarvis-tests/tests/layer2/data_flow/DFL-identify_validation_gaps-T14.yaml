@@ -1,21 +1,23 @@
-test_id: DFL-identify_validation_gaps-T14
-name: Regression test for identify_validation_gaps
 category: data_flow
-tool: identify_validation_gaps
-layer: 2
-test_type: T14
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Regression test for identify_validation_gaps
+expected:
+  status: ok
 fixture: simple-python
 input:
   data_id: fixtures/repositories/simple-python/main.py
+  file_path: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
   tool_context: fixtures/repositories/simple-python/main.py
-expected:
-  status: ok
+layer: 2
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Regression test for identify_validation_gaps
 performance:
   max_duration_ms: 5000
 severity: high
+test_id: DFL-identify_validation_gaps-T14
+test_type: T14
+tool: identify_validation_gaps

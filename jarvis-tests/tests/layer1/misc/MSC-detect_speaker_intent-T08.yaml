@@ -1,23 +1,25 @@
-test_id: MSC-detect_speaker_intent-T08
-name: Malformed Input test for detect_speaker_intent
 category: misc
-tool: detect_speaker_intent
-layer: 1
-test_type: T08
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Malformed Input test for detect_speaker_intent
-fixture: corrupted-inputs
-input:
-  text: placeholder
-  tool_context: placeholder
 expected:
   status: ok
+fixture: corrupted-inputs
+input:
+  file_path: fixtures/repositories/corrupted-inputs/main.py
+  repository_path: fixtures/repositories/corrupted-inputs
+  text: placeholder
+  tool_context: placeholder
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Malformed Input test for detect_speaker_intent
 performance:
   max_duration_ms: 3000
 severity: critical
 skip: true
 skip_reason: 'Tool execution issue: '
+test_id: MSC-detect_speaker_intent-T08
+test_type: T08
+tool: detect_speaker_intent

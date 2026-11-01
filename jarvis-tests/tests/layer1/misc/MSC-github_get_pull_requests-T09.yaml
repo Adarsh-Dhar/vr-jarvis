@@ -1,24 +1,26 @@
-test_id: MSC-github_get_pull_requests-T09
-name: Dependency Failure test for github_get_pull_requests
 category: misc
-tool: github_get_pull_requests
-layer: 1
-test_type: T09
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Dependency Failure test for github_get_pull_requests
-fixture: simple-python
-input:
-  owner: fixtures/repositories/simple-python/main.py
-  repo: fixtures/repositories/simple-python/main.py
-  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
+fixture: simple-python
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+  owner: fixtures/repositories/simple-python/main.py
+  repo: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
+  tool_context: fixtures/repositories/simple-python/main.py
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Dependency Failure test for github_get_pull_requests
 performance:
   max_duration_ms: 3000
 severity: high
 skip: true
 skip_reason: 'Tool execution issue: '
+test_id: MSC-github_get_pull_requests-T09
+test_type: T09
+tool: github_get_pull_requests

@@ -1,35 +1,36 @@
-test_id: CORE-extract_symbols-T01
-name: Extract symbols from main.py
 category: core
-tool: extract_symbols
-layer: 1
-test_type: T01
+checks:
+- required_content:
+  - alpha
+  - beta
+  - target
+  - ExampleClass
+  type: content_validation
+- required_fields:
+  - status
+  - file_path
+  - symbols
+  type: schema_validity
 description: Happy Path - extract functions and classes from Python file
+expected:
+  known_symbols_present:
+  - alpha
+  - beta
+  - target
+  - ExampleClass
+  status: ok
+  symbol_count_min: 5
 fixture: simple-python
 input:
   file_path: fixtures/repositories/simple-python/main.py
-expected:
-  status: ok
-  symbol_count_min: 5
-  known_symbols_present:
-    - alpha
-    - beta
-    - target
-    - ExampleClass
+  repository_path: fixtures/repositories/simple-python
+layer: 1
 must_not:
-  - error
-checks:
-  - type: content_validation
-    required_content:
-      - "alpha"
-      - "beta"
-      - "target"
-      - "ExampleClass"
-  - type: schema_validity
-    required_fields:
-      - status
-      - file_path
-      - symbols
+- error
+name: Extract symbols from main.py
 performance:
   max_duration_ms: 1000
 severity: critical
+test_id: CORE-extract_symbols-T01
+test_type: T01
+tool: extract_symbols

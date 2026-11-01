@@ -1,21 +1,23 @@
-test_id: MSC-get_agent_messages-T03
-name: Output Validation test for get_agent_messages
 category: misc
-tool: get_agent_messages
-layer: 1
-test_type: T03
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Output Validation test for get_agent_messages
+expected:
+  status: ok
 fixture: simple-python
 input:
   agent_id: placeholder
+  file_path: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
   tool_context: placeholder
-expected:
-  status: ok
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Output Validation test for get_agent_messages
 performance:
   max_duration_ms: 3000
 severity: critical
+test_id: MSC-get_agent_messages-T03
+test_type: T03
+tool: get_agent_messages

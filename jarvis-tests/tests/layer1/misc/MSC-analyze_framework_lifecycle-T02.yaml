@@ -1,24 +1,25 @@
-test_id: MSC-analyze_framework_lifecycle-T02
-name: Input Validation test for analyze_framework_lifecycle
 category: misc
-tool: analyze_framework_lifecycle
-layer: 1
-test_type: T02
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Input Validation test for analyze_framework_lifecycle
-fixture: simple-python
-input:
-  repository_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/simple-python
-  framework: placeholder
-  tool_context: placeholder
 expected:
   status: ok
+fixture: simple-python
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+  framework: placeholder
+  repository_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/simple-python
+  tool_context: placeholder
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Input Validation test for analyze_framework_lifecycle
 performance:
   max_duration_ms: 3000
 severity: critical
 skip: true
 skip_reason: 'Tool execution issue: '
+test_id: MSC-analyze_framework_lifecycle-T02
+test_type: T02
+tool: analyze_framework_lifecycle

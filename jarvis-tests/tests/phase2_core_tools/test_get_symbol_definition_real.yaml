@@ -1,18 +1,20 @@
-test_id: PHASE2-CORE-003
-tool: get_symbol_definition
 category: unit
-layer: 1
-test_type: real_input
 description: Get symbol definition from simple-python fixture
-input:
-  symbol_id: simple-python::main::target
 expected:
-  status: error
   results_not_empty: true
-must_not:
-- placeholder
+  status: error
+expected_error: 'TypeError: get_symbol_definition() takes 2 positional arguments but
+  3 were given'
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
+  symbol_id: simple-python::main::target
+layer: 1
 metrics:
 - tool_selection
 - evidence_accuracy
-expected_error: argument should be a str or an os.PathLike object where __fspath__
-  returns a str, not 'NoneType'
+must_not:
+- placeholder
+test_id: PHASE2-CORE-003
+test_type: real_input
+tool: get_symbol_definition

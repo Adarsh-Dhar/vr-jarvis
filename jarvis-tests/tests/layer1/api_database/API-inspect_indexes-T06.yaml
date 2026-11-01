@@ -1,22 +1,24 @@
-test_id: API-inspect_indexes-T06
-name: Large Input test for inspect_indexes
 category: api_database
-tool: inspect_indexes
-layer: 1
-test_type: T06
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Large Input test for inspect_indexes
+expected:
+  status: ok
 fixture: polyglot-monorepo
 input:
   connection_string: fixtures/repositories/simple-python/main.py
+  file_path: fixtures/repositories/polyglot-monorepo/main.py
+  repository_path: fixtures/repositories/polyglot-monorepo
   table: fixtures/repositories/simple-python/main.py
   tool_context: fixtures/repositories/simple-python/main.py
-expected:
-  status: ok
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Large Input test for inspect_indexes
 performance:
   max_duration_ms: 5000
 severity: medium
+test_id: API-inspect_indexes-T06
+test_type: T06
+tool: inspect_indexes

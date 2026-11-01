@@ -1,20 +1,19 @@
-test_id: PHASE2-CORE-006
-tool: verify_citations
 category: unit
-layer: 1
-test_type: real_input
 description: Verify citations for known nodes
-
-input:
-  node_ids: ["simple-python::main::target"]
-
 expected:
-  status: ok
   results_not_empty: true
-
-must_not:
-  - placeholder
-
+  status: ok
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+  node_ids:
+  - simple-python::main::target
+  repository_path: fixtures/repositories/simple-python
+layer: 1
 metrics:
-  - tool_selection
-  - evidence_accuracy
+- tool_selection
+- evidence_accuracy
+must_not:
+- placeholder
+test_id: PHASE2-CORE-006
+test_type: real_input
+tool: verify_citations

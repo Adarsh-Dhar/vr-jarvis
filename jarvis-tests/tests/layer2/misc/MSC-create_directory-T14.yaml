@@ -1,21 +1,28 @@
-test_id: MSC-create_directory-T14
-name: Regression test for create_directory
 category: misc
-tool: create_directory
-layer: 2
-test_type: T14
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Regression test for create_directory
+expected:
+  status: blocked
+expected_created: true
+expected_directory_path: /Users/adarsh/Documents/vr-agent/fixtures/repositories/simple-python/main.py
+expected_error: argument should be a str or an os.PathLike object where __fspath__
+  returns a str, not 'NoneType'
+expected_reason: Create a sandbox worktree first with create_worktree.
 fixture: simple-python
 input:
   directory_path: fixtures/repositories/simple-python/main.py
+  file_path: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
   tool_context: fixtures/repositories/simple-python/main.py
-expected:
-  status: ok
+layer: 2
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Regression test for create_directory
 performance:
   max_duration_ms: 3000
 severity: high
+test_id: MSC-create_directory-T14
+test_type: T14
+tool: create_directory

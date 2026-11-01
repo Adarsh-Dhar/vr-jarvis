@@ -1,2061 +1,2062 @@
-test_id: CORE-parse_source_code-T01
-name: Parse main.py into AST
 category: core
-tool: parse_source_code
-layer: 1
-test_type: T01
-description: Happy Path - parse Python file into AST
-fixture: simple-python
-input:
-  file_path: fixtures/repositories/simple-python/main.py
-expected:
-  status: error
-  language: python
-  ast_not_empty: true
-  file_path_contains: main.py
-must_not:
-- error
 checks:
-- type: content_validation
-  required_content:
+- required_content:
   - python
-- type: schema_validity
-  required_fields:
+  type: content_validation
+- required_fields:
   - status
   - file_path
   - language
   - ast
-- type: non_empty_check
-  fields:
+  type: schema_validity
+- fields:
   - ast
+  type: non_empty_check
+description: Happy Path - parse Python file into AST
+expected:
+  ast_not_empty: true
+  file_path_contains: main.py
+  language: python
+  status: error
+expected[key]:
+  body:
+  - args:
+      args: []
+      defaults: []
+      kw_defaults: []
+      kwarg: None
+      kwonlyargs: []
+      posonlyargs: []
+      type: arguments
+      vararg: None
+    body:
+    - col_offset: '4'
+      end_col_offset: '31'
+      end_lineno: '5'
+      lineno: '5'
+      type: Expr
+      value:
+        col_offset: '4'
+        end_col_offset: '31'
+        end_lineno: '5'
+        kind: None
+        lineno: '5'
+        type: Constant
+        value: Calls target function
+    - col_offset: '4'
+      end_col_offset: '12'
+      end_lineno: '6'
+      lineno: '6'
+      type: Expr
+      value:
+        args: []
+        col_offset: '4'
+        end_col_offset: '12'
+        end_lineno: '6'
+        func:
+          col_offset: '4'
+          end_col_offset: '10'
+          end_lineno: '6'
+          id: target
+          lineno: '6'
+          type: Name
+        keywords: []
+        lineno: '6'
+        type: Call
+    col_offset: '0'
+    decorator_list: []
+    end_col_offset: '12'
+    end_lineno: '6'
+    lineno: '4'
+    name: alpha
+    returns: None
+    type: FunctionDef
+    type_comment: None
+  - args:
+      args: []
+      defaults: []
+      kw_defaults: []
+      kwarg: None
+      kwonlyargs: []
+      posonlyargs: []
+      type: arguments
+      vararg: None
+    body:
+    - col_offset: '4'
+      end_col_offset: '31'
+      end_lineno: '10'
+      lineno: '10'
+      type: Expr
+      value:
+        col_offset: '4'
+        end_col_offset: '31'
+        end_lineno: '10'
+        kind: None
+        lineno: '10'
+        type: Constant
+        value: Calls target function
+    - col_offset: '4'
+      end_col_offset: '12'
+      end_lineno: '11'
+      lineno: '11'
+      type: Expr
+      value:
+        args: []
+        col_offset: '4'
+        end_col_offset: '12'
+        end_lineno: '11'
+        func:
+          col_offset: '4'
+          end_col_offset: '10'
+          end_lineno: '11'
+          id: target
+          lineno: '11'
+          type: Name
+        keywords: []
+        lineno: '11'
+        type: Call
+    col_offset: '0'
+    decorator_list: []
+    end_col_offset: '12'
+    end_lineno: '11'
+    lineno: '9'
+    name: beta
+    returns: None
+    type: FunctionDef
+    type_comment: None
+  - args:
+      args: []
+      defaults: []
+      kw_defaults: []
+      kwarg: None
+      kwonlyargs: []
+      posonlyargs: []
+      type: arguments
+      vararg: None
+    body:
+    - col_offset: '4'
+      end_col_offset: '41'
+      end_lineno: '15'
+      lineno: '15'
+      type: Expr
+      value:
+        col_offset: '4'
+        end_col_offset: '41'
+        end_lineno: '15'
+        kind: None
+        lineno: '15'
+        type: Constant
+        value: Calls alpha, which calls target
+    - col_offset: '4'
+      end_col_offset: '11'
+      end_lineno: '16'
+      lineno: '16'
+      type: Expr
+      value:
+        args: []
+        col_offset: '4'
+        end_col_offset: '11'
+        end_lineno: '16'
+        func:
+          col_offset: '4'
+          end_col_offset: '9'
+          end_lineno: '16'
+          id: alpha
+          lineno: '16'
+          type: Name
+        keywords: []
+        lineno: '16'
+        type: Call
+    col_offset: '0'
+    decorator_list: []
+    end_col_offset: '11'
+    end_lineno: '16'
+    lineno: '14'
+    name: gamma
+    returns: None
+    type: FunctionDef
+    type_comment: None
+  - args:
+      args: []
+      defaults: []
+      kw_defaults: []
+      kwarg: None
+      kwonlyargs: []
+      posonlyargs: []
+      type: arguments
+      vararg: None
+    body:
+    - col_offset: '4'
+      end_col_offset: '40'
+      end_lineno: '20'
+      lineno: '20'
+      type: Expr
+      value:
+        col_offset: '4'
+        end_col_offset: '40'
+        end_lineno: '20'
+        kind: None
+        lineno: '20'
+        type: Constant
+        value: Calls beta, which calls target
+    - col_offset: '4'
+      end_col_offset: '10'
+      end_lineno: '21'
+      lineno: '21'
+      type: Expr
+      value:
+        args: []
+        col_offset: '4'
+        end_col_offset: '10'
+        end_lineno: '21'
+        func:
+          col_offset: '4'
+          end_col_offset: '8'
+          end_lineno: '21'
+          id: beta
+          lineno: '21'
+          type: Name
+        keywords: []
+        lineno: '21'
+        type: Call
+    col_offset: '0'
+    decorator_list: []
+    end_col_offset: '10'
+    end_lineno: '21'
+    lineno: '19'
+    name: delta
+    returns: None
+    type: FunctionDef
+    type_comment: None
+  - args:
+      args: []
+      defaults: []
+      kw_defaults: []
+      kwarg: None
+      kwonlyargs: []
+      posonlyargs: []
+      type: arguments
+      vararg: None
+    body:
+    - col_offset: '4'
+      end_col_offset: '47'
+      end_lineno: '25'
+      lineno: '25'
+      type: Expr
+      value:
+        col_offset: '4'
+        end_col_offset: '47'
+        end_lineno: '25'
+        kind: None
+        lineno: '25'
+        type: Constant
+        value: Target function with multiple callers
+    - col_offset: '4'
+      end_col_offset: '15'
+      end_lineno: '26'
+      lineno: '26'
+      type: Return
+      value:
+        col_offset: '11'
+        end_col_offset: '15'
+        end_lineno: '26'
+        kind: None
+        lineno: '26'
+        type: Constant
+        value: 'True'
+    col_offset: '0'
+    decorator_list: []
+    end_col_offset: '15'
+    end_lineno: '26'
+    lineno: '24'
+    name: target
+    returns: None
+    type: FunctionDef
+    type_comment: None
+  - args:
+      args: []
+      defaults: []
+      kw_defaults: []
+      kwarg: None
+      kwonlyargs: []
+      posonlyargs: []
+      type: arguments
+      vararg: None
+    body:
+    - col_offset: '4'
+      end_col_offset: '45'
+      end_lineno: '30'
+      lineno: '30'
+      type: Expr
+      value:
+        col_offset: '4'
+        end_col_offset: '45'
+        end_lineno: '30'
+        kind: None
+        lineno: '30'
+        type: Constant
+        value: Standalone function with no callers
+    - col_offset: '4'
+      end_col_offset: '23'
+      end_lineno: '31'
+      lineno: '31'
+      type: Return
+      value:
+        col_offset: '11'
+        end_col_offset: '23'
+        end_lineno: '31'
+        kind: None
+        lineno: '31'
+        type: Constant
+        value: standalone
+    col_offset: '0'
+    decorator_list: []
+    end_col_offset: '23'
+    end_lineno: '31'
+    lineno: '29'
+    name: epsilon
+    returns: None
+    type: FunctionDef
+    type_comment: None
+  - args:
+      args: []
+      defaults: []
+      kw_defaults: []
+      kwarg: None
+      kwonlyargs: []
+      posonlyargs: []
+      type: arguments
+      vararg: None
+    body:
+    - col_offset: '4'
+      end_col_offset: '30'
+      end_lineno: '35'
+      lineno: '35'
+      type: Expr
+      value:
+        col_offset: '4'
+        end_col_offset: '30'
+        end_lineno: '35'
+        kind: None
+        lineno: '35'
+        type: Constant
+        value: Recursive function A
+    - col_offset: '4'
+      end_col_offset: '17'
+      end_lineno: '36'
+      lineno: '36'
+      type: Expr
+      value:
+        args: []
+        col_offset: '4'
+        end_col_offset: '17'
+        end_lineno: '36'
+        func:
+          col_offset: '4'
+          end_col_offset: '15'
+          end_lineno: '36'
+          id: recursive_b
+          lineno: '36'
+          type: Name
+        keywords: []
+        lineno: '36'
+        type: Call
+    col_offset: '0'
+    decorator_list: []
+    end_col_offset: '17'
+    end_lineno: '36'
+    lineno: '34'
+    name: recursive_a
+    returns: None
+    type: FunctionDef
+    type_comment: None
+  - args:
+      args: []
+      defaults: []
+      kw_defaults: []
+      kwarg: None
+      kwonlyargs: []
+      posonlyargs: []
+      type: arguments
+      vararg: None
+    body:
+    - col_offset: '4'
+      end_col_offset: '30'
+      end_lineno: '40'
+      lineno: '40'
+      type: Expr
+      value:
+        col_offset: '4'
+        end_col_offset: '30'
+        end_lineno: '40'
+        kind: None
+        lineno: '40'
+        type: Constant
+        value: Recursive function B
+    - col_offset: '4'
+      end_col_offset: '17'
+      end_lineno: '41'
+      lineno: '41'
+      type: Expr
+      value:
+        args: []
+        col_offset: '4'
+        end_col_offset: '17'
+        end_lineno: '41'
+        func:
+          col_offset: '4'
+          end_col_offset: '15'
+          end_lineno: '41'
+          id: recursive_a
+          lineno: '41'
+          type: Name
+        keywords: []
+        lineno: '41'
+        type: Call
+    col_offset: '0'
+    decorator_list: []
+    end_col_offset: '17'
+    end_lineno: '41'
+    lineno: '39'
+    name: recursive_b
+    returns: None
+    type: FunctionDef
+    type_comment: None
+  - args:
+      args: []
+      defaults: []
+      kw_defaults: []
+      kwarg: None
+      kwonlyargs: []
+      posonlyargs: []
+      type: arguments
+      vararg: None
+    body:
+    - col_offset: '4'
+      end_col_offset: '71'
+      end_lineno: '45'
+      lineno: '45'
+      type: Expr
+      value:
+        col_offset: '4'
+        end_col_offset: '71'
+        end_lineno: '45'
+        kind: None
+        lineno: '45'
+        type: Constant
+        value: Function with name that might be overloaded in other contexts
+    - col_offset: '4'
+      end_col_offset: '21'
+      end_lineno: '46'
+      lineno: '46'
+      type: Return
+      value:
+        col_offset: '11'
+        end_col_offset: '21'
+        end_lineno: '46'
+        kind: None
+        lineno: '46'
+        type: Constant
+        value: original
+    col_offset: '0'
+    decorator_list: []
+    end_col_offset: '21'
+    end_lineno: '46'
+    lineno: '44'
+    name: overloaded_example
+    returns: None
+    type: FunctionDef
+    type_comment: None
+  - bases: []
+    body:
+    - col_offset: '4'
+      end_col_offset: '35'
+      end_lineno: '50'
+      lineno: '50'
+      type: Expr
+      value:
+        col_offset: '4'
+        end_col_offset: '35'
+        end_lineno: '50'
+        kind: None
+        lineno: '50'
+        type: Constant
+        value: Example class for testing
+    - args:
+        args:
+        - annotation: None
+          arg: self
+          col_offset: '17'
+          end_col_offset: '21'
+          end_lineno: '52'
+          lineno: '52'
+          type: arg
+          type_comment: None
+        defaults: []
+        kw_defaults: []
+        kwarg: None
+        kwonlyargs: []
+        posonlyargs: []
+        type: arguments
+        vararg: None
+      body:
+      - col_offset: '8'
+        end_col_offset: '29'
+        end_lineno: '53'
+        lineno: '53'
+        type: Expr
+        value:
+          col_offset: '8'
+          end_col_offset: '29'
+          end_lineno: '53'
+          kind: None
+          lineno: '53'
+          type: Constant
+          value: Instance method
+      - col_offset: '8'
+        end_col_offset: '28'
+        end_lineno: '54'
+        lineno: '54'
+        type: Expr
+        value:
+          args: []
+          col_offset: '8'
+          end_col_offset: '28'
+          end_lineno: '54'
+          func:
+            attr: target_method
+            col_offset: '8'
+            end_col_offset: '26'
+            end_lineno: '54'
+            lineno: '54'
+            type: Attribute
+            value:
+              col_offset: '8'
+              end_col_offset: '12'
+              end_lineno: '54'
+              id: self
+              lineno: '54'
+              type: Name
+          keywords: []
+          lineno: '54'
+          type: Call
+      col_offset: '4'
+      decorator_list: []
+      end_col_offset: '28'
+      end_lineno: '54'
+      lineno: '52'
+      name: method_a
+      returns: None
+      type: FunctionDef
+      type_comment: None
+    - args:
+        args:
+        - annotation: None
+          arg: self
+          col_offset: '17'
+          end_col_offset: '21'
+          end_lineno: '56'
+          lineno: '56'
+          type: arg
+          type_comment: None
+        defaults: []
+        kw_defaults: []
+        kwarg: None
+        kwonlyargs: []
+        posonlyargs: []
+        type: arguments
+        vararg: None
+      body:
+      - col_offset: '8'
+        end_col_offset: '29'
+        end_lineno: '57'
+        lineno: '57'
+        type: Expr
+        value:
+          col_offset: '8'
+          end_col_offset: '29'
+          end_lineno: '57'
+          kind: None
+          lineno: '57'
+          type: Constant
+          value: Instance method
+      - col_offset: '8'
+        end_col_offset: '28'
+        end_lineno: '58'
+        lineno: '58'
+        type: Expr
+        value:
+          args: []
+          col_offset: '8'
+          end_col_offset: '28'
+          end_lineno: '58'
+          func:
+            attr: target_method
+            col_offset: '8'
+            end_col_offset: '26'
+            end_lineno: '58'
+            lineno: '58'
+            type: Attribute
+            value:
+              col_offset: '8'
+              end_col_offset: '12'
+              end_lineno: '58'
+              id: self
+              lineno: '58'
+              type: Name
+          keywords: []
+          lineno: '58'
+          type: Call
+      col_offset: '4'
+      decorator_list: []
+      end_col_offset: '28'
+      end_lineno: '58'
+      lineno: '56'
+      name: method_b
+      returns: None
+      type: FunctionDef
+      type_comment: None
+    - args:
+        args:
+        - annotation: None
+          arg: self
+          col_offset: '22'
+          end_col_offset: '26'
+          end_lineno: '60'
+          lineno: '60'
+          type: arg
+          type_comment: None
+        defaults: []
+        kw_defaults: []
+        kwarg: None
+        kwonlyargs: []
+        posonlyargs: []
+        type: arguments
+        vararg: None
+      body:
+      - col_offset: '8'
+        end_col_offset: '27'
+        end_lineno: '61'
+        lineno: '61'
+        type: Expr
+        value:
+          col_offset: '8'
+          end_col_offset: '27'
+          end_lineno: '61'
+          kind: None
+          lineno: '61'
+          type: Constant
+          value: Target method
+      - col_offset: '8'
+        end_col_offset: '30'
+        end_lineno: '62'
+        lineno: '62'
+        type: Return
+        value:
+          col_offset: '15'
+          end_col_offset: '30'
+          end_lineno: '62'
+          kind: None
+          lineno: '62'
+          type: Constant
+          value: method_target
+      col_offset: '4'
+      decorator_list: []
+      end_col_offset: '30'
+      end_lineno: '62'
+      lineno: '60'
+      name: target_method
+      returns: None
+      type: FunctionDef
+      type_comment: None
+    - args:
+        args: []
+        defaults: []
+        kw_defaults: []
+        kwarg: None
+        kwonlyargs: []
+        posonlyargs: []
+        type: arguments
+        vararg: None
+      body:
+      - col_offset: '8'
+        end_col_offset: '27'
+        end_lineno: '66'
+        lineno: '66'
+        type: Expr
+        value:
+          col_offset: '8'
+          end_col_offset: '27'
+          end_lineno: '66'
+          kind: None
+          lineno: '66'
+          type: Constant
+          value: Static method
+      - col_offset: '8'
+        end_col_offset: '23'
+        end_lineno: '67'
+        lineno: '67'
+        type: Return
+        value:
+          col_offset: '15'
+          end_col_offset: '23'
+          end_lineno: '67'
+          kind: None
+          lineno: '67'
+          type: Constant
+          value: static
+      col_offset: '4'
+      decorator_list:
+      - col_offset: '5'
+        end_col_offset: '17'
+        end_lineno: '64'
+        id: staticmethod
+        lineno: '64'
+        type: Name
+      end_col_offset: '23'
+      end_lineno: '67'
+      lineno: '65'
+      name: static_method
+      returns: None
+      type: FunctionDef
+      type_comment: None
+    - args:
+        args:
+        - annotation: None
+          arg: cls
+          col_offset: '21'
+          end_col_offset: '24'
+          end_lineno: '70'
+          lineno: '70'
+          type: arg
+          type_comment: None
+        defaults: []
+        kw_defaults: []
+        kwarg: None
+        kwonlyargs: []
+        posonlyargs: []
+        type: arguments
+        vararg: None
+      body:
+      - col_offset: '8'
+        end_col_offset: '26'
+        end_lineno: '71'
+        lineno: '71'
+        type: Expr
+        value:
+          col_offset: '8'
+          end_col_offset: '26'
+          end_lineno: '71'
+          kind: None
+          lineno: '71'
+          type: Constant
+          value: Class method
+      - col_offset: '8'
+        end_col_offset: '22'
+        end_lineno: '72'
+        lineno: '72'
+        type: Return
+        value:
+          col_offset: '15'
+          end_col_offset: '22'
+          end_lineno: '72'
+          kind: None
+          lineno: '72'
+          type: Constant
+          value: class
+      col_offset: '4'
+      decorator_list:
+      - col_offset: '5'
+        end_col_offset: '16'
+        end_lineno: '69'
+        id: classmethod
+        lineno: '69'
+        type: Name
+      end_col_offset: '22'
+      end_lineno: '72'
+      lineno: '70'
+      name: class_method
+      returns: None
+      type: FunctionDef
+      type_comment: None
+    col_offset: '0'
+    decorator_list: []
+    end_col_offset: '22'
+    end_lineno: '72'
+    keywords: []
+    lineno: '49'
+    name: ExampleClass
+    type: ClassDef
+  - args:
+      args:
+      - annotation: None
+        arg: callback
+        col_offset: '21'
+        end_col_offset: '29'
+        end_lineno: '75'
+        lineno: '75'
+        type: arg
+        type_comment: None
+      defaults: []
+      kw_defaults: []
+      kwarg: None
+      kwonlyargs: []
+      posonlyargs: []
+      type: arguments
+      vararg: None
+    body:
+    - col_offset: '4'
+      end_col_offset: '42'
+      end_lineno: '76'
+      lineno: '76'
+      type: Expr
+      value:
+        col_offset: '4'
+        end_col_offset: '42'
+        end_lineno: '76'
+        kind: None
+        lineno: '76'
+        type: Constant
+        value: Function that accepts a callback
+    - col_offset: '4'
+      end_col_offset: '21'
+      end_lineno: '77'
+      lineno: '77'
+      type: Return
+      value:
+        args: []
+        col_offset: '11'
+        end_col_offset: '21'
+        end_lineno: '77'
+        func:
+          col_offset: '11'
+          end_col_offset: '19'
+          end_lineno: '77'
+          id: callback
+          lineno: '77'
+          type: Name
+        keywords: []
+        lineno: '77'
+        type: Call
+    col_offset: '0'
+    decorator_list: []
+    end_col_offset: '21'
+    end_lineno: '77'
+    lineno: '75'
+    name: callback_example
+    returns: None
+    type: FunctionDef
+    type_comment: None
+  - args:
+      args:
+      - annotation: None
+        arg: service
+        col_offset: '33'
+        end_col_offset: '40'
+        end_lineno: '80'
+        lineno: '80'
+        type: arg
+        type_comment: None
+      defaults: []
+      kw_defaults: []
+      kwarg: None
+      kwonlyargs: []
+      posonlyargs: []
+      type: arguments
+      vararg: None
+    body:
+    - col_offset: '4'
+      end_col_offset: '45'
+      end_lineno: '81'
+      lineno: '81'
+      type: Expr
+      value:
+        col_offset: '4'
+        end_col_offset: '45'
+        end_lineno: '81'
+        kind: None
+        lineno: '81'
+        type: Constant
+        value: Function using dependency injection
+    - col_offset: '4'
+      end_col_offset: '28'
+      end_lineno: '82'
+      lineno: '82'
+      type: Return
+      value:
+        args: []
+        col_offset: '11'
+        end_col_offset: '28'
+        end_lineno: '82'
+        func:
+          attr: process
+          col_offset: '11'
+          end_col_offset: '26'
+          end_lineno: '82'
+          lineno: '82'
+          type: Attribute
+          value:
+            col_offset: '11'
+            end_col_offset: '18'
+            end_lineno: '82'
+            id: service
+            lineno: '82'
+            type: Name
+        keywords: []
+        lineno: '82'
+        type: Call
+    col_offset: '0'
+    decorator_list: []
+    end_col_offset: '28'
+    end_lineno: '82'
+    lineno: '80'
+    name: dependency_injection_example
+    returns: None
+    type: FunctionDef
+    type_comment: None
+  - args:
+      args: []
+      defaults: []
+      kw_defaults: []
+      kwarg: None
+      kwonlyargs: []
+      posonlyargs: []
+      type: arguments
+      vararg: None
+    body:
+    - col_offset: '4'
+      end_col_offset: '47'
+      end_lineno: '86'
+      lineno: '86'
+      type: Expr
+      value:
+        col_offset: '4'
+        end_col_offset: '47'
+        end_lineno: '86'
+        kind: None
+        lineno: '86'
+        type: Constant
+        value: Function imported from another module
+    - col_offset: '4'
+      end_col_offset: '21'
+      end_lineno: '87'
+      lineno: '87'
+      type: Return
+      value:
+        col_offset: '11'
+        end_col_offset: '21'
+        end_lineno: '87'
+        kind: None
+        lineno: '87'
+        type: Constant
+        value: imported
+    col_offset: '0'
+    decorator_list: []
+    end_col_offset: '21'
+    end_lineno: '87'
+    lineno: '85'
+    name: imported_function
+    returns: None
+    type: FunctionDef
+    type_comment: None
+  - args:
+      args: []
+      defaults: []
+      kw_defaults: []
+      kwarg: None
+      kwonlyargs: []
+      posonlyargs: []
+      type: arguments
+      vararg: None
+    body:
+    - col_offset: '4'
+      end_col_offset: '45'
+      end_lineno: '91'
+      lineno: '91'
+      type: Expr
+      value:
+        col_offset: '4'
+        end_col_offset: '45'
+        end_lineno: '91'
+        kind: None
+        lineno: '91'
+        type: Constant
+        value: Function that calls across packages
+    - col_offset: '4'
+      end_col_offset: '33'
+      end_lineno: '92'
+      level: '0'
+      lineno: '92'
+      module: subpackage
+      names:
+      - asname: None
+        name: helper
+        type: alias
+      type: ImportFrom
+    - col_offset: '4'
+      end_col_offset: '35'
+      end_lineno: '93'
+      lineno: '93'
+      type: Return
+      value:
+        args: []
+        col_offset: '11'
+        end_col_offset: '35'
+        end_lineno: '93'
+        func:
+          attr: helper_function
+          col_offset: '11'
+          end_col_offset: '33'
+          end_lineno: '93'
+          lineno: '93'
+          type: Attribute
+          value:
+            col_offset: '11'
+            end_col_offset: '17'
+            end_lineno: '93'
+            id: helper
+            lineno: '93'
+            type: Name
+        keywords: []
+        lineno: '93'
+        type: Call
+    col_offset: '0'
+    decorator_list: []
+    end_col_offset: '35'
+    end_lineno: '93'
+    lineno: '90'
+    name: cross_package_caller
+    returns: None
+    type: FunctionDef
+    type_comment: None
+  type: Module
+  type_ignores: []
+expected_ast:
+  body:
+  - args:
+      args: []
+      defaults: []
+      kw_defaults: []
+      kwarg: None
+      kwonlyargs: []
+      posonlyargs: []
+      type: arguments
+      vararg: None
+    body:
+    - col_offset: '4'
+      end_col_offset: '31'
+      end_lineno: '5'
+      lineno: '5'
+      type: Expr
+      value:
+        col_offset: '4'
+        end_col_offset: '31'
+        end_lineno: '5'
+        kind: None
+        lineno: '5'
+        type: Constant
+        value: Calls target function
+    - col_offset: '4'
+      end_col_offset: '12'
+      end_lineno: '6'
+      lineno: '6'
+      type: Expr
+      value:
+        args: []
+        col_offset: '4'
+        end_col_offset: '12'
+        end_lineno: '6'
+        func:
+          col_offset: '4'
+          end_col_offset: '10'
+          end_lineno: '6'
+          id: target
+          lineno: '6'
+          type: Name
+        keywords: []
+        lineno: '6'
+        type: Call
+    col_offset: '0'
+    decorator_list: []
+    end_col_offset: '12'
+    end_lineno: '6'
+    lineno: '4'
+    name: alpha
+    returns: None
+    type: FunctionDef
+    type_comment: None
+  - args:
+      args: []
+      defaults: []
+      kw_defaults: []
+      kwarg: None
+      kwonlyargs: []
+      posonlyargs: []
+      type: arguments
+      vararg: None
+    body:
+    - col_offset: '4'
+      end_col_offset: '31'
+      end_lineno: '10'
+      lineno: '10'
+      type: Expr
+      value:
+        col_offset: '4'
+        end_col_offset: '31'
+        end_lineno: '10'
+        kind: None
+        lineno: '10'
+        type: Constant
+        value: Calls target function
+    - col_offset: '4'
+      end_col_offset: '12'
+      end_lineno: '11'
+      lineno: '11'
+      type: Expr
+      value:
+        args: []
+        col_offset: '4'
+        end_col_offset: '12'
+        end_lineno: '11'
+        func:
+          col_offset: '4'
+          end_col_offset: '10'
+          end_lineno: '11'
+          id: target
+          lineno: '11'
+          type: Name
+        keywords: []
+        lineno: '11'
+        type: Call
+    col_offset: '0'
+    decorator_list: []
+    end_col_offset: '12'
+    end_lineno: '11'
+    lineno: '9'
+    name: beta
+    returns: None
+    type: FunctionDef
+    type_comment: None
+  - args:
+      args: []
+      defaults: []
+      kw_defaults: []
+      kwarg: None
+      kwonlyargs: []
+      posonlyargs: []
+      type: arguments
+      vararg: None
+    body:
+    - col_offset: '4'
+      end_col_offset: '41'
+      end_lineno: '15'
+      lineno: '15'
+      type: Expr
+      value:
+        col_offset: '4'
+        end_col_offset: '41'
+        end_lineno: '15'
+        kind: None
+        lineno: '15'
+        type: Constant
+        value: Calls alpha, which calls target
+    - col_offset: '4'
+      end_col_offset: '11'
+      end_lineno: '16'
+      lineno: '16'
+      type: Expr
+      value:
+        args: []
+        col_offset: '4'
+        end_col_offset: '11'
+        end_lineno: '16'
+        func:
+          col_offset: '4'
+          end_col_offset: '9'
+          end_lineno: '16'
+          id: alpha
+          lineno: '16'
+          type: Name
+        keywords: []
+        lineno: '16'
+        type: Call
+    col_offset: '0'
+    decorator_list: []
+    end_col_offset: '11'
+    end_lineno: '16'
+    lineno: '14'
+    name: gamma
+    returns: None
+    type: FunctionDef
+    type_comment: None
+  - args:
+      args: []
+      defaults: []
+      kw_defaults: []
+      kwarg: None
+      kwonlyargs: []
+      posonlyargs: []
+      type: arguments
+      vararg: None
+    body:
+    - col_offset: '4'
+      end_col_offset: '40'
+      end_lineno: '20'
+      lineno: '20'
+      type: Expr
+      value:
+        col_offset: '4'
+        end_col_offset: '40'
+        end_lineno: '20'
+        kind: None
+        lineno: '20'
+        type: Constant
+        value: Calls beta, which calls target
+    - col_offset: '4'
+      end_col_offset: '10'
+      end_lineno: '21'
+      lineno: '21'
+      type: Expr
+      value:
+        args: []
+        col_offset: '4'
+        end_col_offset: '10'
+        end_lineno: '21'
+        func:
+          col_offset: '4'
+          end_col_offset: '8'
+          end_lineno: '21'
+          id: beta
+          lineno: '21'
+          type: Name
+        keywords: []
+        lineno: '21'
+        type: Call
+    col_offset: '0'
+    decorator_list: []
+    end_col_offset: '10'
+    end_lineno: '21'
+    lineno: '19'
+    name: delta
+    returns: None
+    type: FunctionDef
+    type_comment: None
+  - args:
+      args: []
+      defaults: []
+      kw_defaults: []
+      kwarg: None
+      kwonlyargs: []
+      posonlyargs: []
+      type: arguments
+      vararg: None
+    body:
+    - col_offset: '4'
+      end_col_offset: '47'
+      end_lineno: '25'
+      lineno: '25'
+      type: Expr
+      value:
+        col_offset: '4'
+        end_col_offset: '47'
+        end_lineno: '25'
+        kind: None
+        lineno: '25'
+        type: Constant
+        value: Target function with multiple callers
+    - col_offset: '4'
+      end_col_offset: '15'
+      end_lineno: '26'
+      lineno: '26'
+      type: Return
+      value:
+        col_offset: '11'
+        end_col_offset: '15'
+        end_lineno: '26'
+        kind: None
+        lineno: '26'
+        type: Constant
+        value: 'True'
+    col_offset: '0'
+    decorator_list: []
+    end_col_offset: '15'
+    end_lineno: '26'
+    lineno: '24'
+    name: target
+    returns: None
+    type: FunctionDef
+    type_comment: None
+  - args:
+      args: []
+      defaults: []
+      kw_defaults: []
+      kwarg: None
+      kwonlyargs: []
+      posonlyargs: []
+      type: arguments
+      vararg: None
+    body:
+    - col_offset: '4'
+      end_col_offset: '45'
+      end_lineno: '30'
+      lineno: '30'
+      type: Expr
+      value:
+        col_offset: '4'
+        end_col_offset: '45'
+        end_lineno: '30'
+        kind: None
+        lineno: '30'
+        type: Constant
+        value: Standalone function with no callers
+    - col_offset: '4'
+      end_col_offset: '23'
+      end_lineno: '31'
+      lineno: '31'
+      type: Return
+      value:
+        col_offset: '11'
+        end_col_offset: '23'
+        end_lineno: '31'
+        kind: None
+        lineno: '31'
+        type: Constant
+        value: standalone
+    col_offset: '0'
+    decorator_list: []
+    end_col_offset: '23'
+    end_lineno: '31'
+    lineno: '29'
+    name: epsilon
+    returns: None
+    type: FunctionDef
+    type_comment: None
+  - args:
+      args: []
+      defaults: []
+      kw_defaults: []
+      kwarg: None
+      kwonlyargs: []
+      posonlyargs: []
+      type: arguments
+      vararg: None
+    body:
+    - col_offset: '4'
+      end_col_offset: '30'
+      end_lineno: '35'
+      lineno: '35'
+      type: Expr
+      value:
+        col_offset: '4'
+        end_col_offset: '30'
+        end_lineno: '35'
+        kind: None
+        lineno: '35'
+        type: Constant
+        value: Recursive function A
+    - col_offset: '4'
+      end_col_offset: '17'
+      end_lineno: '36'
+      lineno: '36'
+      type: Expr
+      value:
+        args: []
+        col_offset: '4'
+        end_col_offset: '17'
+        end_lineno: '36'
+        func:
+          col_offset: '4'
+          end_col_offset: '15'
+          end_lineno: '36'
+          id: recursive_b
+          lineno: '36'
+          type: Name
+        keywords: []
+        lineno: '36'
+        type: Call
+    col_offset: '0'
+    decorator_list: []
+    end_col_offset: '17'
+    end_lineno: '36'
+    lineno: '34'
+    name: recursive_a
+    returns: None
+    type: FunctionDef
+    type_comment: None
+  - args:
+      args: []
+      defaults: []
+      kw_defaults: []
+      kwarg: None
+      kwonlyargs: []
+      posonlyargs: []
+      type: arguments
+      vararg: None
+    body:
+    - col_offset: '4'
+      end_col_offset: '30'
+      end_lineno: '40'
+      lineno: '40'
+      type: Expr
+      value:
+        col_offset: '4'
+        end_col_offset: '30'
+        end_lineno: '40'
+        kind: None
+        lineno: '40'
+        type: Constant
+        value: Recursive function B
+    - col_offset: '4'
+      end_col_offset: '17'
+      end_lineno: '41'
+      lineno: '41'
+      type: Expr
+      value:
+        args: []
+        col_offset: '4'
+        end_col_offset: '17'
+        end_lineno: '41'
+        func:
+          col_offset: '4'
+          end_col_offset: '15'
+          end_lineno: '41'
+          id: recursive_a
+          lineno: '41'
+          type: Name
+        keywords: []
+        lineno: '41'
+        type: Call
+    col_offset: '0'
+    decorator_list: []
+    end_col_offset: '17'
+    end_lineno: '41'
+    lineno: '39'
+    name: recursive_b
+    returns: None
+    type: FunctionDef
+    type_comment: None
+  - args:
+      args: []
+      defaults: []
+      kw_defaults: []
+      kwarg: None
+      kwonlyargs: []
+      posonlyargs: []
+      type: arguments
+      vararg: None
+    body:
+    - col_offset: '4'
+      end_col_offset: '71'
+      end_lineno: '45'
+      lineno: '45'
+      type: Expr
+      value:
+        col_offset: '4'
+        end_col_offset: '71'
+        end_lineno: '45'
+        kind: None
+        lineno: '45'
+        type: Constant
+        value: Function with name that might be overloaded in other contexts
+    - col_offset: '4'
+      end_col_offset: '21'
+      end_lineno: '46'
+      lineno: '46'
+      type: Return
+      value:
+        col_offset: '11'
+        end_col_offset: '21'
+        end_lineno: '46'
+        kind: None
+        lineno: '46'
+        type: Constant
+        value: original
+    col_offset: '0'
+    decorator_list: []
+    end_col_offset: '21'
+    end_lineno: '46'
+    lineno: '44'
+    name: overloaded_example
+    returns: None
+    type: FunctionDef
+    type_comment: None
+  - bases: []
+    body:
+    - col_offset: '4'
+      end_col_offset: '35'
+      end_lineno: '50'
+      lineno: '50'
+      type: Expr
+      value:
+        col_offset: '4'
+        end_col_offset: '35'
+        end_lineno: '50'
+        kind: None
+        lineno: '50'
+        type: Constant
+        value: Example class for testing
+    - args:
+        args:
+        - annotation: None
+          arg: self
+          col_offset: '17'
+          end_col_offset: '21'
+          end_lineno: '52'
+          lineno: '52'
+          type: arg
+          type_comment: None
+        defaults: []
+        kw_defaults: []
+        kwarg: None
+        kwonlyargs: []
+        posonlyargs: []
+        type: arguments
+        vararg: None
+      body:
+      - col_offset: '8'
+        end_col_offset: '29'
+        end_lineno: '53'
+        lineno: '53'
+        type: Expr
+        value:
+          col_offset: '8'
+          end_col_offset: '29'
+          end_lineno: '53'
+          kind: None
+          lineno: '53'
+          type: Constant
+          value: Instance method
+      - col_offset: '8'
+        end_col_offset: '28'
+        end_lineno: '54'
+        lineno: '54'
+        type: Expr
+        value:
+          args: []
+          col_offset: '8'
+          end_col_offset: '28'
+          end_lineno: '54'
+          func:
+            attr: target_method
+            col_offset: '8'
+            end_col_offset: '26'
+            end_lineno: '54'
+            lineno: '54'
+            type: Attribute
+            value:
+              col_offset: '8'
+              end_col_offset: '12'
+              end_lineno: '54'
+              id: self
+              lineno: '54'
+              type: Name
+          keywords: []
+          lineno: '54'
+          type: Call
+      col_offset: '4'
+      decorator_list: []
+      end_col_offset: '28'
+      end_lineno: '54'
+      lineno: '52'
+      name: method_a
+      returns: None
+      type: FunctionDef
+      type_comment: None
+    - args:
+        args:
+        - annotation: None
+          arg: self
+          col_offset: '17'
+          end_col_offset: '21'
+          end_lineno: '56'
+          lineno: '56'
+          type: arg
+          type_comment: None
+        defaults: []
+        kw_defaults: []
+        kwarg: None
+        kwonlyargs: []
+        posonlyargs: []
+        type: arguments
+        vararg: None
+      body:
+      - col_offset: '8'
+        end_col_offset: '29'
+        end_lineno: '57'
+        lineno: '57'
+        type: Expr
+        value:
+          col_offset: '8'
+          end_col_offset: '29'
+          end_lineno: '57'
+          kind: None
+          lineno: '57'
+          type: Constant
+          value: Instance method
+      - col_offset: '8'
+        end_col_offset: '28'
+        end_lineno: '58'
+        lineno: '58'
+        type: Expr
+        value:
+          args: []
+          col_offset: '8'
+          end_col_offset: '28'
+          end_lineno: '58'
+          func:
+            attr: target_method
+            col_offset: '8'
+            end_col_offset: '26'
+            end_lineno: '58'
+            lineno: '58'
+            type: Attribute
+            value:
+              col_offset: '8'
+              end_col_offset: '12'
+              end_lineno: '58'
+              id: self
+              lineno: '58'
+              type: Name
+          keywords: []
+          lineno: '58'
+          type: Call
+      col_offset: '4'
+      decorator_list: []
+      end_col_offset: '28'
+      end_lineno: '58'
+      lineno: '56'
+      name: method_b
+      returns: None
+      type: FunctionDef
+      type_comment: None
+    - args:
+        args:
+        - annotation: None
+          arg: self
+          col_offset: '22'
+          end_col_offset: '26'
+          end_lineno: '60'
+          lineno: '60'
+          type: arg
+          type_comment: None
+        defaults: []
+        kw_defaults: []
+        kwarg: None
+        kwonlyargs: []
+        posonlyargs: []
+        type: arguments
+        vararg: None
+      body:
+      - col_offset: '8'
+        end_col_offset: '27'
+        end_lineno: '61'
+        lineno: '61'
+        type: Expr
+        value:
+          col_offset: '8'
+          end_col_offset: '27'
+          end_lineno: '61'
+          kind: None
+          lineno: '61'
+          type: Constant
+          value: Target method
+      - col_offset: '8'
+        end_col_offset: '30'
+        end_lineno: '62'
+        lineno: '62'
+        type: Return
+        value:
+          col_offset: '15'
+          end_col_offset: '30'
+          end_lineno: '62'
+          kind: None
+          lineno: '62'
+          type: Constant
+          value: method_target
+      col_offset: '4'
+      decorator_list: []
+      end_col_offset: '30'
+      end_lineno: '62'
+      lineno: '60'
+      name: target_method
+      returns: None
+      type: FunctionDef
+      type_comment: None
+    - args:
+        args: []
+        defaults: []
+        kw_defaults: []
+        kwarg: None
+        kwonlyargs: []
+        posonlyargs: []
+        type: arguments
+        vararg: None
+      body:
+      - col_offset: '8'
+        end_col_offset: '27'
+        end_lineno: '66'
+        lineno: '66'
+        type: Expr
+        value:
+          col_offset: '8'
+          end_col_offset: '27'
+          end_lineno: '66'
+          kind: None
+          lineno: '66'
+          type: Constant
+          value: Static method
+      - col_offset: '8'
+        end_col_offset: '23'
+        end_lineno: '67'
+        lineno: '67'
+        type: Return
+        value:
+          col_offset: '15'
+          end_col_offset: '23'
+          end_lineno: '67'
+          kind: None
+          lineno: '67'
+          type: Constant
+          value: static
+      col_offset: '4'
+      decorator_list:
+      - col_offset: '5'
+        end_col_offset: '17'
+        end_lineno: '64'
+        id: staticmethod
+        lineno: '64'
+        type: Name
+      end_col_offset: '23'
+      end_lineno: '67'
+      lineno: '65'
+      name: static_method
+      returns: None
+      type: FunctionDef
+      type_comment: None
+    - args:
+        args:
+        - annotation: None
+          arg: cls
+          col_offset: '21'
+          end_col_offset: '24'
+          end_lineno: '70'
+          lineno: '70'
+          type: arg
+          type_comment: None
+        defaults: []
+        kw_defaults: []
+        kwarg: None
+        kwonlyargs: []
+        posonlyargs: []
+        type: arguments
+        vararg: None
+      body:
+      - col_offset: '8'
+        end_col_offset: '26'
+        end_lineno: '71'
+        lineno: '71'
+        type: Expr
+        value:
+          col_offset: '8'
+          end_col_offset: '26'
+          end_lineno: '71'
+          kind: None
+          lineno: '71'
+          type: Constant
+          value: Class method
+      - col_offset: '8'
+        end_col_offset: '22'
+        end_lineno: '72'
+        lineno: '72'
+        type: Return
+        value:
+          col_offset: '15'
+          end_col_offset: '22'
+          end_lineno: '72'
+          kind: None
+          lineno: '72'
+          type: Constant
+          value: class
+      col_offset: '4'
+      decorator_list:
+      - col_offset: '5'
+        end_col_offset: '16'
+        end_lineno: '69'
+        id: classmethod
+        lineno: '69'
+        type: Name
+      end_col_offset: '22'
+      end_lineno: '72'
+      lineno: '70'
+      name: class_method
+      returns: None
+      type: FunctionDef
+      type_comment: None
+    col_offset: '0'
+    decorator_list: []
+    end_col_offset: '22'
+    end_lineno: '72'
+    keywords: []
+    lineno: '49'
+    name: ExampleClass
+    type: ClassDef
+  - args:
+      args:
+      - annotation: None
+        arg: callback
+        col_offset: '21'
+        end_col_offset: '29'
+        end_lineno: '75'
+        lineno: '75'
+        type: arg
+        type_comment: None
+      defaults: []
+      kw_defaults: []
+      kwarg: None
+      kwonlyargs: []
+      posonlyargs: []
+      type: arguments
+      vararg: None
+    body:
+    - col_offset: '4'
+      end_col_offset: '42'
+      end_lineno: '76'
+      lineno: '76'
+      type: Expr
+      value:
+        col_offset: '4'
+        end_col_offset: '42'
+        end_lineno: '76'
+        kind: None
+        lineno: '76'
+        type: Constant
+        value: Function that accepts a callback
+    - col_offset: '4'
+      end_col_offset: '21'
+      end_lineno: '77'
+      lineno: '77'
+      type: Return
+      value:
+        args: []
+        col_offset: '11'
+        end_col_offset: '21'
+        end_lineno: '77'
+        func:
+          col_offset: '11'
+          end_col_offset: '19'
+          end_lineno: '77'
+          id: callback
+          lineno: '77'
+          type: Name
+        keywords: []
+        lineno: '77'
+        type: Call
+    col_offset: '0'
+    decorator_list: []
+    end_col_offset: '21'
+    end_lineno: '77'
+    lineno: '75'
+    name: callback_example
+    returns: None
+    type: FunctionDef
+    type_comment: None
+  - args:
+      args:
+      - annotation: None
+        arg: service
+        col_offset: '33'
+        end_col_offset: '40'
+        end_lineno: '80'
+        lineno: '80'
+        type: arg
+        type_comment: None
+      defaults: []
+      kw_defaults: []
+      kwarg: None
+      kwonlyargs: []
+      posonlyargs: []
+      type: arguments
+      vararg: None
+    body:
+    - col_offset: '4'
+      end_col_offset: '45'
+      end_lineno: '81'
+      lineno: '81'
+      type: Expr
+      value:
+        col_offset: '4'
+        end_col_offset: '45'
+        end_lineno: '81'
+        kind: None
+        lineno: '81'
+        type: Constant
+        value: Function using dependency injection
+    - col_offset: '4'
+      end_col_offset: '28'
+      end_lineno: '82'
+      lineno: '82'
+      type: Return
+      value:
+        args: []
+        col_offset: '11'
+        end_col_offset: '28'
+        end_lineno: '82'
+        func:
+          attr: process
+          col_offset: '11'
+          end_col_offset: '26'
+          end_lineno: '82'
+          lineno: '82'
+          type: Attribute
+          value:
+            col_offset: '11'
+            end_col_offset: '18'
+            end_lineno: '82'
+            id: service
+            lineno: '82'
+            type: Name
+        keywords: []
+        lineno: '82'
+        type: Call
+    col_offset: '0'
+    decorator_list: []
+    end_col_offset: '28'
+    end_lineno: '82'
+    lineno: '80'
+    name: dependency_injection_example
+    returns: None
+    type: FunctionDef
+    type_comment: None
+  - args:
+      args: []
+      defaults: []
+      kw_defaults: []
+      kwarg: None
+      kwonlyargs: []
+      posonlyargs: []
+      type: arguments
+      vararg: None
+    body:
+    - col_offset: '4'
+      end_col_offset: '47'
+      end_lineno: '86'
+      lineno: '86'
+      type: Expr
+      value:
+        col_offset: '4'
+        end_col_offset: '47'
+        end_lineno: '86'
+        kind: None
+        lineno: '86'
+        type: Constant
+        value: Function imported from another module
+    - col_offset: '4'
+      end_col_offset: '21'
+      end_lineno: '87'
+      lineno: '87'
+      type: Return
+      value:
+        col_offset: '11'
+        end_col_offset: '21'
+        end_lineno: '87'
+        kind: None
+        lineno: '87'
+        type: Constant
+        value: imported
+    col_offset: '0'
+    decorator_list: []
+    end_col_offset: '21'
+    end_lineno: '87'
+    lineno: '85'
+    name: imported_function
+    returns: None
+    type: FunctionDef
+    type_comment: None
+  - args:
+      args: []
+      defaults: []
+      kw_defaults: []
+      kwarg: None
+      kwonlyargs: []
+      posonlyargs: []
+      type: arguments
+      vararg: None
+    body:
+    - col_offset: '4'
+      end_col_offset: '45'
+      end_lineno: '91'
+      lineno: '91'
+      type: Expr
+      value:
+        col_offset: '4'
+        end_col_offset: '45'
+        end_lineno: '91'
+        kind: None
+        lineno: '91'
+        type: Constant
+        value: Function that calls across packages
+    - col_offset: '4'
+      end_col_offset: '33'
+      end_lineno: '92'
+      level: '0'
+      lineno: '92'
+      module: subpackage
+      names:
+      - asname: None
+        name: helper
+        type: alias
+      type: ImportFrom
+    - col_offset: '4'
+      end_col_offset: '35'
+      end_lineno: '93'
+      lineno: '93'
+      type: Return
+      value:
+        args: []
+        col_offset: '11'
+        end_col_offset: '35'
+        end_lineno: '93'
+        func:
+          attr: helper_function
+          col_offset: '11'
+          end_col_offset: '33'
+          end_lineno: '93'
+          lineno: '93'
+          type: Attribute
+          value:
+            col_offset: '11'
+            end_col_offset: '17'
+            end_lineno: '93'
+            id: helper
+            lineno: '93'
+            type: Name
+        keywords: []
+        lineno: '93'
+        type: Call
+    col_offset: '0'
+    decorator_list: []
+    end_col_offset: '35'
+    end_lineno: '93'
+    lineno: '90'
+    name: cross_package_caller
+    returns: None
+    type: FunctionDef
+    type_comment: None
+  type: Module
+  type_ignores: []
+expected_error: '[Errno 21] Is a directory: ''/Users/adarsh/Documents/vr-agent/fixtures/repositories/simple-python/main.py'''
+expected_language: python
+fixture: simple-python
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
+layer: 1
+must_not:
+- error
+name: Parse main.py into AST
 performance:
   max_duration_ms: 1000
 severity: critical
-expected[key]:
-  type: Module
-  body:
-  - type: FunctionDef
-    name: alpha
-    args:
-      type: arguments
-      posonlyargs: []
-      args: []
-      vararg: None
-      kwonlyargs: []
-      kw_defaults: []
-      kwarg: None
-      defaults: []
-    body:
-    - type: Expr
-      value:
-        type: Constant
-        value: Calls target function
-        kind: None
-        lineno: '5'
-        col_offset: '4'
-        end_lineno: '5'
-        end_col_offset: '31'
-      lineno: '5'
-      col_offset: '4'
-      end_lineno: '5'
-      end_col_offset: '31'
-    - type: Expr
-      value:
-        type: Call
-        func:
-          type: Name
-          id: target
-          lineno: '6'
-          col_offset: '4'
-          end_lineno: '6'
-          end_col_offset: '10'
-        args: []
-        keywords: []
-        lineno: '6'
-        col_offset: '4'
-        end_lineno: '6'
-        end_col_offset: '12'
-      lineno: '6'
-      col_offset: '4'
-      end_lineno: '6'
-      end_col_offset: '12'
-    decorator_list: []
-    returns: None
-    type_comment: None
-    lineno: '4'
-    col_offset: '0'
-    end_lineno: '6'
-    end_col_offset: '12'
-  - type: FunctionDef
-    name: beta
-    args:
-      type: arguments
-      posonlyargs: []
-      args: []
-      vararg: None
-      kwonlyargs: []
-      kw_defaults: []
-      kwarg: None
-      defaults: []
-    body:
-    - type: Expr
-      value:
-        type: Constant
-        value: Calls target function
-        kind: None
-        lineno: '10'
-        col_offset: '4'
-        end_lineno: '10'
-        end_col_offset: '31'
-      lineno: '10'
-      col_offset: '4'
-      end_lineno: '10'
-      end_col_offset: '31'
-    - type: Expr
-      value:
-        type: Call
-        func:
-          type: Name
-          id: target
-          lineno: '11'
-          col_offset: '4'
-          end_lineno: '11'
-          end_col_offset: '10'
-        args: []
-        keywords: []
-        lineno: '11'
-        col_offset: '4'
-        end_lineno: '11'
-        end_col_offset: '12'
-      lineno: '11'
-      col_offset: '4'
-      end_lineno: '11'
-      end_col_offset: '12'
-    decorator_list: []
-    returns: None
-    type_comment: None
-    lineno: '9'
-    col_offset: '0'
-    end_lineno: '11'
-    end_col_offset: '12'
-  - type: FunctionDef
-    name: gamma
-    args:
-      type: arguments
-      posonlyargs: []
-      args: []
-      vararg: None
-      kwonlyargs: []
-      kw_defaults: []
-      kwarg: None
-      defaults: []
-    body:
-    - type: Expr
-      value:
-        type: Constant
-        value: Calls alpha, which calls target
-        kind: None
-        lineno: '15'
-        col_offset: '4'
-        end_lineno: '15'
-        end_col_offset: '41'
-      lineno: '15'
-      col_offset: '4'
-      end_lineno: '15'
-      end_col_offset: '41'
-    - type: Expr
-      value:
-        type: Call
-        func:
-          type: Name
-          id: alpha
-          lineno: '16'
-          col_offset: '4'
-          end_lineno: '16'
-          end_col_offset: '9'
-        args: []
-        keywords: []
-        lineno: '16'
-        col_offset: '4'
-        end_lineno: '16'
-        end_col_offset: '11'
-      lineno: '16'
-      col_offset: '4'
-      end_lineno: '16'
-      end_col_offset: '11'
-    decorator_list: []
-    returns: None
-    type_comment: None
-    lineno: '14'
-    col_offset: '0'
-    end_lineno: '16'
-    end_col_offset: '11'
-  - type: FunctionDef
-    name: delta
-    args:
-      type: arguments
-      posonlyargs: []
-      args: []
-      vararg: None
-      kwonlyargs: []
-      kw_defaults: []
-      kwarg: None
-      defaults: []
-    body:
-    - type: Expr
-      value:
-        type: Constant
-        value: Calls beta, which calls target
-        kind: None
-        lineno: '20'
-        col_offset: '4'
-        end_lineno: '20'
-        end_col_offset: '40'
-      lineno: '20'
-      col_offset: '4'
-      end_lineno: '20'
-      end_col_offset: '40'
-    - type: Expr
-      value:
-        type: Call
-        func:
-          type: Name
-          id: beta
-          lineno: '21'
-          col_offset: '4'
-          end_lineno: '21'
-          end_col_offset: '8'
-        args: []
-        keywords: []
-        lineno: '21'
-        col_offset: '4'
-        end_lineno: '21'
-        end_col_offset: '10'
-      lineno: '21'
-      col_offset: '4'
-      end_lineno: '21'
-      end_col_offset: '10'
-    decorator_list: []
-    returns: None
-    type_comment: None
-    lineno: '19'
-    col_offset: '0'
-    end_lineno: '21'
-    end_col_offset: '10'
-  - type: FunctionDef
-    name: target
-    args:
-      type: arguments
-      posonlyargs: []
-      args: []
-      vararg: None
-      kwonlyargs: []
-      kw_defaults: []
-      kwarg: None
-      defaults: []
-    body:
-    - type: Expr
-      value:
-        type: Constant
-        value: Target function with multiple callers
-        kind: None
-        lineno: '25'
-        col_offset: '4'
-        end_lineno: '25'
-        end_col_offset: '47'
-      lineno: '25'
-      col_offset: '4'
-      end_lineno: '25'
-      end_col_offset: '47'
-    - type: Return
-      value:
-        type: Constant
-        value: 'True'
-        kind: None
-        lineno: '26'
-        col_offset: '11'
-        end_lineno: '26'
-        end_col_offset: '15'
-      lineno: '26'
-      col_offset: '4'
-      end_lineno: '26'
-      end_col_offset: '15'
-    decorator_list: []
-    returns: None
-    type_comment: None
-    lineno: '24'
-    col_offset: '0'
-    end_lineno: '26'
-    end_col_offset: '15'
-  - type: FunctionDef
-    name: epsilon
-    args:
-      type: arguments
-      posonlyargs: []
-      args: []
-      vararg: None
-      kwonlyargs: []
-      kw_defaults: []
-      kwarg: None
-      defaults: []
-    body:
-    - type: Expr
-      value:
-        type: Constant
-        value: Standalone function with no callers
-        kind: None
-        lineno: '30'
-        col_offset: '4'
-        end_lineno: '30'
-        end_col_offset: '45'
-      lineno: '30'
-      col_offset: '4'
-      end_lineno: '30'
-      end_col_offset: '45'
-    - type: Return
-      value:
-        type: Constant
-        value: standalone
-        kind: None
-        lineno: '31'
-        col_offset: '11'
-        end_lineno: '31'
-        end_col_offset: '23'
-      lineno: '31'
-      col_offset: '4'
-      end_lineno: '31'
-      end_col_offset: '23'
-    decorator_list: []
-    returns: None
-    type_comment: None
-    lineno: '29'
-    col_offset: '0'
-    end_lineno: '31'
-    end_col_offset: '23'
-  - type: FunctionDef
-    name: recursive_a
-    args:
-      type: arguments
-      posonlyargs: []
-      args: []
-      vararg: None
-      kwonlyargs: []
-      kw_defaults: []
-      kwarg: None
-      defaults: []
-    body:
-    - type: Expr
-      value:
-        type: Constant
-        value: Recursive function A
-        kind: None
-        lineno: '35'
-        col_offset: '4'
-        end_lineno: '35'
-        end_col_offset: '30'
-      lineno: '35'
-      col_offset: '4'
-      end_lineno: '35'
-      end_col_offset: '30'
-    - type: Expr
-      value:
-        type: Call
-        func:
-          type: Name
-          id: recursive_b
-          lineno: '36'
-          col_offset: '4'
-          end_lineno: '36'
-          end_col_offset: '15'
-        args: []
-        keywords: []
-        lineno: '36'
-        col_offset: '4'
-        end_lineno: '36'
-        end_col_offset: '17'
-      lineno: '36'
-      col_offset: '4'
-      end_lineno: '36'
-      end_col_offset: '17'
-    decorator_list: []
-    returns: None
-    type_comment: None
-    lineno: '34'
-    col_offset: '0'
-    end_lineno: '36'
-    end_col_offset: '17'
-  - type: FunctionDef
-    name: recursive_b
-    args:
-      type: arguments
-      posonlyargs: []
-      args: []
-      vararg: None
-      kwonlyargs: []
-      kw_defaults: []
-      kwarg: None
-      defaults: []
-    body:
-    - type: Expr
-      value:
-        type: Constant
-        value: Recursive function B
-        kind: None
-        lineno: '40'
-        col_offset: '4'
-        end_lineno: '40'
-        end_col_offset: '30'
-      lineno: '40'
-      col_offset: '4'
-      end_lineno: '40'
-      end_col_offset: '30'
-    - type: Expr
-      value:
-        type: Call
-        func:
-          type: Name
-          id: recursive_a
-          lineno: '41'
-          col_offset: '4'
-          end_lineno: '41'
-          end_col_offset: '15'
-        args: []
-        keywords: []
-        lineno: '41'
-        col_offset: '4'
-        end_lineno: '41'
-        end_col_offset: '17'
-      lineno: '41'
-      col_offset: '4'
-      end_lineno: '41'
-      end_col_offset: '17'
-    decorator_list: []
-    returns: None
-    type_comment: None
-    lineno: '39'
-    col_offset: '0'
-    end_lineno: '41'
-    end_col_offset: '17'
-  - type: FunctionDef
-    name: overloaded_example
-    args:
-      type: arguments
-      posonlyargs: []
-      args: []
-      vararg: None
-      kwonlyargs: []
-      kw_defaults: []
-      kwarg: None
-      defaults: []
-    body:
-    - type: Expr
-      value:
-        type: Constant
-        value: Function with name that might be overloaded in other contexts
-        kind: None
-        lineno: '45'
-        col_offset: '4'
-        end_lineno: '45'
-        end_col_offset: '71'
-      lineno: '45'
-      col_offset: '4'
-      end_lineno: '45'
-      end_col_offset: '71'
-    - type: Return
-      value:
-        type: Constant
-        value: original
-        kind: None
-        lineno: '46'
-        col_offset: '11'
-        end_lineno: '46'
-        end_col_offset: '21'
-      lineno: '46'
-      col_offset: '4'
-      end_lineno: '46'
-      end_col_offset: '21'
-    decorator_list: []
-    returns: None
-    type_comment: None
-    lineno: '44'
-    col_offset: '0'
-    end_lineno: '46'
-    end_col_offset: '21'
-  - type: ClassDef
-    name: ExampleClass
-    bases: []
-    keywords: []
-    body:
-    - type: Expr
-      value:
-        type: Constant
-        value: Example class for testing
-        kind: None
-        lineno: '50'
-        col_offset: '4'
-        end_lineno: '50'
-        end_col_offset: '35'
-      lineno: '50'
-      col_offset: '4'
-      end_lineno: '50'
-      end_col_offset: '35'
-    - type: FunctionDef
-      name: method_a
-      args:
-        type: arguments
-        posonlyargs: []
-        args:
-        - type: arg
-          arg: self
-          annotation: None
-          type_comment: None
-          lineno: '52'
-          col_offset: '17'
-          end_lineno: '52'
-          end_col_offset: '21'
-        vararg: None
-        kwonlyargs: []
-        kw_defaults: []
-        kwarg: None
-        defaults: []
-      body:
-      - type: Expr
-        value:
-          type: Constant
-          value: Instance method
-          kind: None
-          lineno: '53'
-          col_offset: '8'
-          end_lineno: '53'
-          end_col_offset: '29'
-        lineno: '53'
-        col_offset: '8'
-        end_lineno: '53'
-        end_col_offset: '29'
-      - type: Expr
-        value:
-          type: Call
-          func:
-            type: Attribute
-            value:
-              type: Name
-              id: self
-              lineno: '54'
-              col_offset: '8'
-              end_lineno: '54'
-              end_col_offset: '12'
-            attr: target_method
-            lineno: '54'
-            col_offset: '8'
-            end_lineno: '54'
-            end_col_offset: '26'
-          args: []
-          keywords: []
-          lineno: '54'
-          col_offset: '8'
-          end_lineno: '54'
-          end_col_offset: '28'
-        lineno: '54'
-        col_offset: '8'
-        end_lineno: '54'
-        end_col_offset: '28'
-      decorator_list: []
-      returns: None
-      type_comment: None
-      lineno: '52'
-      col_offset: '4'
-      end_lineno: '54'
-      end_col_offset: '28'
-    - type: FunctionDef
-      name: method_b
-      args:
-        type: arguments
-        posonlyargs: []
-        args:
-        - type: arg
-          arg: self
-          annotation: None
-          type_comment: None
-          lineno: '56'
-          col_offset: '17'
-          end_lineno: '56'
-          end_col_offset: '21'
-        vararg: None
-        kwonlyargs: []
-        kw_defaults: []
-        kwarg: None
-        defaults: []
-      body:
-      - type: Expr
-        value:
-          type: Constant
-          value: Instance method
-          kind: None
-          lineno: '57'
-          col_offset: '8'
-          end_lineno: '57'
-          end_col_offset: '29'
-        lineno: '57'
-        col_offset: '8'
-        end_lineno: '57'
-        end_col_offset: '29'
-      - type: Expr
-        value:
-          type: Call
-          func:
-            type: Attribute
-            value:
-              type: Name
-              id: self
-              lineno: '58'
-              col_offset: '8'
-              end_lineno: '58'
-              end_col_offset: '12'
-            attr: target_method
-            lineno: '58'
-            col_offset: '8'
-            end_lineno: '58'
-            end_col_offset: '26'
-          args: []
-          keywords: []
-          lineno: '58'
-          col_offset: '8'
-          end_lineno: '58'
-          end_col_offset: '28'
-        lineno: '58'
-        col_offset: '8'
-        end_lineno: '58'
-        end_col_offset: '28'
-      decorator_list: []
-      returns: None
-      type_comment: None
-      lineno: '56'
-      col_offset: '4'
-      end_lineno: '58'
-      end_col_offset: '28'
-    - type: FunctionDef
-      name: target_method
-      args:
-        type: arguments
-        posonlyargs: []
-        args:
-        - type: arg
-          arg: self
-          annotation: None
-          type_comment: None
-          lineno: '60'
-          col_offset: '22'
-          end_lineno: '60'
-          end_col_offset: '26'
-        vararg: None
-        kwonlyargs: []
-        kw_defaults: []
-        kwarg: None
-        defaults: []
-      body:
-      - type: Expr
-        value:
-          type: Constant
-          value: Target method
-          kind: None
-          lineno: '61'
-          col_offset: '8'
-          end_lineno: '61'
-          end_col_offset: '27'
-        lineno: '61'
-        col_offset: '8'
-        end_lineno: '61'
-        end_col_offset: '27'
-      - type: Return
-        value:
-          type: Constant
-          value: method_target
-          kind: None
-          lineno: '62'
-          col_offset: '15'
-          end_lineno: '62'
-          end_col_offset: '30'
-        lineno: '62'
-        col_offset: '8'
-        end_lineno: '62'
-        end_col_offset: '30'
-      decorator_list: []
-      returns: None
-      type_comment: None
-      lineno: '60'
-      col_offset: '4'
-      end_lineno: '62'
-      end_col_offset: '30'
-    - type: FunctionDef
-      name: static_method
-      args:
-        type: arguments
-        posonlyargs: []
-        args: []
-        vararg: None
-        kwonlyargs: []
-        kw_defaults: []
-        kwarg: None
-        defaults: []
-      body:
-      - type: Expr
-        value:
-          type: Constant
-          value: Static method
-          kind: None
-          lineno: '66'
-          col_offset: '8'
-          end_lineno: '66'
-          end_col_offset: '27'
-        lineno: '66'
-        col_offset: '8'
-        end_lineno: '66'
-        end_col_offset: '27'
-      - type: Return
-        value:
-          type: Constant
-          value: static
-          kind: None
-          lineno: '67'
-          col_offset: '15'
-          end_lineno: '67'
-          end_col_offset: '23'
-        lineno: '67'
-        col_offset: '8'
-        end_lineno: '67'
-        end_col_offset: '23'
-      decorator_list:
-      - type: Name
-        id: staticmethod
-        lineno: '64'
-        col_offset: '5'
-        end_lineno: '64'
-        end_col_offset: '17'
-      returns: None
-      type_comment: None
-      lineno: '65'
-      col_offset: '4'
-      end_lineno: '67'
-      end_col_offset: '23'
-    - type: FunctionDef
-      name: class_method
-      args:
-        type: arguments
-        posonlyargs: []
-        args:
-        - type: arg
-          arg: cls
-          annotation: None
-          type_comment: None
-          lineno: '70'
-          col_offset: '21'
-          end_lineno: '70'
-          end_col_offset: '24'
-        vararg: None
-        kwonlyargs: []
-        kw_defaults: []
-        kwarg: None
-        defaults: []
-      body:
-      - type: Expr
-        value:
-          type: Constant
-          value: Class method
-          kind: None
-          lineno: '71'
-          col_offset: '8'
-          end_lineno: '71'
-          end_col_offset: '26'
-        lineno: '71'
-        col_offset: '8'
-        end_lineno: '71'
-        end_col_offset: '26'
-      - type: Return
-        value:
-          type: Constant
-          value: class
-          kind: None
-          lineno: '72'
-          col_offset: '15'
-          end_lineno: '72'
-          end_col_offset: '22'
-        lineno: '72'
-        col_offset: '8'
-        end_lineno: '72'
-        end_col_offset: '22'
-      decorator_list:
-      - type: Name
-        id: classmethod
-        lineno: '69'
-        col_offset: '5'
-        end_lineno: '69'
-        end_col_offset: '16'
-      returns: None
-      type_comment: None
-      lineno: '70'
-      col_offset: '4'
-      end_lineno: '72'
-      end_col_offset: '22'
-    decorator_list: []
-    lineno: '49'
-    col_offset: '0'
-    end_lineno: '72'
-    end_col_offset: '22'
-  - type: FunctionDef
-    name: callback_example
-    args:
-      type: arguments
-      posonlyargs: []
-      args:
-      - type: arg
-        arg: callback
-        annotation: None
-        type_comment: None
-        lineno: '75'
-        col_offset: '21'
-        end_lineno: '75'
-        end_col_offset: '29'
-      vararg: None
-      kwonlyargs: []
-      kw_defaults: []
-      kwarg: None
-      defaults: []
-    body:
-    - type: Expr
-      value:
-        type: Constant
-        value: Function that accepts a callback
-        kind: None
-        lineno: '76'
-        col_offset: '4'
-        end_lineno: '76'
-        end_col_offset: '42'
-      lineno: '76'
-      col_offset: '4'
-      end_lineno: '76'
-      end_col_offset: '42'
-    - type: Return
-      value:
-        type: Call
-        func:
-          type: Name
-          id: callback
-          lineno: '77'
-          col_offset: '11'
-          end_lineno: '77'
-          end_col_offset: '19'
-        args: []
-        keywords: []
-        lineno: '77'
-        col_offset: '11'
-        end_lineno: '77'
-        end_col_offset: '21'
-      lineno: '77'
-      col_offset: '4'
-      end_lineno: '77'
-      end_col_offset: '21'
-    decorator_list: []
-    returns: None
-    type_comment: None
-    lineno: '75'
-    col_offset: '0'
-    end_lineno: '77'
-    end_col_offset: '21'
-  - type: FunctionDef
-    name: dependency_injection_example
-    args:
-      type: arguments
-      posonlyargs: []
-      args:
-      - type: arg
-        arg: service
-        annotation: None
-        type_comment: None
-        lineno: '80'
-        col_offset: '33'
-        end_lineno: '80'
-        end_col_offset: '40'
-      vararg: None
-      kwonlyargs: []
-      kw_defaults: []
-      kwarg: None
-      defaults: []
-    body:
-    - type: Expr
-      value:
-        type: Constant
-        value: Function using dependency injection
-        kind: None
-        lineno: '81'
-        col_offset: '4'
-        end_lineno: '81'
-        end_col_offset: '45'
-      lineno: '81'
-      col_offset: '4'
-      end_lineno: '81'
-      end_col_offset: '45'
-    - type: Return
-      value:
-        type: Call
-        func:
-          type: Attribute
-          value:
-            type: Name
-            id: service
-            lineno: '82'
-            col_offset: '11'
-            end_lineno: '82'
-            end_col_offset: '18'
-          attr: process
-          lineno: '82'
-          col_offset: '11'
-          end_lineno: '82'
-          end_col_offset: '26'
-        args: []
-        keywords: []
-        lineno: '82'
-        col_offset: '11'
-        end_lineno: '82'
-        end_col_offset: '28'
-      lineno: '82'
-      col_offset: '4'
-      end_lineno: '82'
-      end_col_offset: '28'
-    decorator_list: []
-    returns: None
-    type_comment: None
-    lineno: '80'
-    col_offset: '0'
-    end_lineno: '82'
-    end_col_offset: '28'
-  - type: FunctionDef
-    name: imported_function
-    args:
-      type: arguments
-      posonlyargs: []
-      args: []
-      vararg: None
-      kwonlyargs: []
-      kw_defaults: []
-      kwarg: None
-      defaults: []
-    body:
-    - type: Expr
-      value:
-        type: Constant
-        value: Function imported from another module
-        kind: None
-        lineno: '86'
-        col_offset: '4'
-        end_lineno: '86'
-        end_col_offset: '47'
-      lineno: '86'
-      col_offset: '4'
-      end_lineno: '86'
-      end_col_offset: '47'
-    - type: Return
-      value:
-        type: Constant
-        value: imported
-        kind: None
-        lineno: '87'
-        col_offset: '11'
-        end_lineno: '87'
-        end_col_offset: '21'
-      lineno: '87'
-      col_offset: '4'
-      end_lineno: '87'
-      end_col_offset: '21'
-    decorator_list: []
-    returns: None
-    type_comment: None
-    lineno: '85'
-    col_offset: '0'
-    end_lineno: '87'
-    end_col_offset: '21'
-  - type: FunctionDef
-    name: cross_package_caller
-    args:
-      type: arguments
-      posonlyargs: []
-      args: []
-      vararg: None
-      kwonlyargs: []
-      kw_defaults: []
-      kwarg: None
-      defaults: []
-    body:
-    - type: Expr
-      value:
-        type: Constant
-        value: Function that calls across packages
-        kind: None
-        lineno: '91'
-        col_offset: '4'
-        end_lineno: '91'
-        end_col_offset: '45'
-      lineno: '91'
-      col_offset: '4'
-      end_lineno: '91'
-      end_col_offset: '45'
-    - type: ImportFrom
-      module: subpackage
-      names:
-      - type: alias
-        name: helper
-        asname: None
-      level: '0'
-      lineno: '92'
-      col_offset: '4'
-      end_lineno: '92'
-      end_col_offset: '33'
-    - type: Return
-      value:
-        type: Call
-        func:
-          type: Attribute
-          value:
-            type: Name
-            id: helper
-            lineno: '93'
-            col_offset: '11'
-            end_lineno: '93'
-            end_col_offset: '17'
-          attr: helper_function
-          lineno: '93'
-          col_offset: '11'
-          end_lineno: '93'
-          end_col_offset: '33'
-        args: []
-        keywords: []
-        lineno: '93'
-        col_offset: '11'
-        end_lineno: '93'
-        end_col_offset: '35'
-      lineno: '93'
-      col_offset: '4'
-      end_lineno: '93'
-      end_col_offset: '35'
-    decorator_list: []
-    returns: None
-    type_comment: None
-    lineno: '90'
-    col_offset: '0'
-    end_lineno: '93'
-    end_col_offset: '35'
-  type_ignores: []
-expected_language: python
-expected_ast:
-  type: Module
-  body:
-  - type: FunctionDef
-    name: alpha
-    args:
-      type: arguments
-      posonlyargs: []
-      args: []
-      vararg: None
-      kwonlyargs: []
-      kw_defaults: []
-      kwarg: None
-      defaults: []
-    body:
-    - type: Expr
-      value:
-        type: Constant
-        value: Calls target function
-        kind: None
-        lineno: '5'
-        col_offset: '4'
-        end_lineno: '5'
-        end_col_offset: '31'
-      lineno: '5'
-      col_offset: '4'
-      end_lineno: '5'
-      end_col_offset: '31'
-    - type: Expr
-      value:
-        type: Call
-        func:
-          type: Name
-          id: target
-          lineno: '6'
-          col_offset: '4'
-          end_lineno: '6'
-          end_col_offset: '10'
-        args: []
-        keywords: []
-        lineno: '6'
-        col_offset: '4'
-        end_lineno: '6'
-        end_col_offset: '12'
-      lineno: '6'
-      col_offset: '4'
-      end_lineno: '6'
-      end_col_offset: '12'
-    decorator_list: []
-    returns: None
-    type_comment: None
-    lineno: '4'
-    col_offset: '0'
-    end_lineno: '6'
-    end_col_offset: '12'
-  - type: FunctionDef
-    name: beta
-    args:
-      type: arguments
-      posonlyargs: []
-      args: []
-      vararg: None
-      kwonlyargs: []
-      kw_defaults: []
-      kwarg: None
-      defaults: []
-    body:
-    - type: Expr
-      value:
-        type: Constant
-        value: Calls target function
-        kind: None
-        lineno: '10'
-        col_offset: '4'
-        end_lineno: '10'
-        end_col_offset: '31'
-      lineno: '10'
-      col_offset: '4'
-      end_lineno: '10'
-      end_col_offset: '31'
-    - type: Expr
-      value:
-        type: Call
-        func:
-          type: Name
-          id: target
-          lineno: '11'
-          col_offset: '4'
-          end_lineno: '11'
-          end_col_offset: '10'
-        args: []
-        keywords: []
-        lineno: '11'
-        col_offset: '4'
-        end_lineno: '11'
-        end_col_offset: '12'
-      lineno: '11'
-      col_offset: '4'
-      end_lineno: '11'
-      end_col_offset: '12'
-    decorator_list: []
-    returns: None
-    type_comment: None
-    lineno: '9'
-    col_offset: '0'
-    end_lineno: '11'
-    end_col_offset: '12'
-  - type: FunctionDef
-    name: gamma
-    args:
-      type: arguments
-      posonlyargs: []
-      args: []
-      vararg: None
-      kwonlyargs: []
-      kw_defaults: []
-      kwarg: None
-      defaults: []
-    body:
-    - type: Expr
-      value:
-        type: Constant
-        value: Calls alpha, which calls target
-        kind: None
-        lineno: '15'
-        col_offset: '4'
-        end_lineno: '15'
-        end_col_offset: '41'
-      lineno: '15'
-      col_offset: '4'
-      end_lineno: '15'
-      end_col_offset: '41'
-    - type: Expr
-      value:
-        type: Call
-        func:
-          type: Name
-          id: alpha
-          lineno: '16'
-          col_offset: '4'
-          end_lineno: '16'
-          end_col_offset: '9'
-        args: []
-        keywords: []
-        lineno: '16'
-        col_offset: '4'
-        end_lineno: '16'
-        end_col_offset: '11'
-      lineno: '16'
-      col_offset: '4'
-      end_lineno: '16'
-      end_col_offset: '11'
-    decorator_list: []
-    returns: None
-    type_comment: None
-    lineno: '14'
-    col_offset: '0'
-    end_lineno: '16'
-    end_col_offset: '11'
-  - type: FunctionDef
-    name: delta
-    args:
-      type: arguments
-      posonlyargs: []
-      args: []
-      vararg: None
-      kwonlyargs: []
-      kw_defaults: []
-      kwarg: None
-      defaults: []
-    body:
-    - type: Expr
-      value:
-        type: Constant
-        value: Calls beta, which calls target
-        kind: None
-        lineno: '20'
-        col_offset: '4'
-        end_lineno: '20'
-        end_col_offset: '40'
-      lineno: '20'
-      col_offset: '4'
-      end_lineno: '20'
-      end_col_offset: '40'
-    - type: Expr
-      value:
-        type: Call
-        func:
-          type: Name
-          id: beta
-          lineno: '21'
-          col_offset: '4'
-          end_lineno: '21'
-          end_col_offset: '8'
-        args: []
-        keywords: []
-        lineno: '21'
-        col_offset: '4'
-        end_lineno: '21'
-        end_col_offset: '10'
-      lineno: '21'
-      col_offset: '4'
-      end_lineno: '21'
-      end_col_offset: '10'
-    decorator_list: []
-    returns: None
-    type_comment: None
-    lineno: '19'
-    col_offset: '0'
-    end_lineno: '21'
-    end_col_offset: '10'
-  - type: FunctionDef
-    name: target
-    args:
-      type: arguments
-      posonlyargs: []
-      args: []
-      vararg: None
-      kwonlyargs: []
-      kw_defaults: []
-      kwarg: None
-      defaults: []
-    body:
-    - type: Expr
-      value:
-        type: Constant
-        value: Target function with multiple callers
-        kind: None
-        lineno: '25'
-        col_offset: '4'
-        end_lineno: '25'
-        end_col_offset: '47'
-      lineno: '25'
-      col_offset: '4'
-      end_lineno: '25'
-      end_col_offset: '47'
-    - type: Return
-      value:
-        type: Constant
-        value: 'True'
-        kind: None
-        lineno: '26'
-        col_offset: '11'
-        end_lineno: '26'
-        end_col_offset: '15'
-      lineno: '26'
-      col_offset: '4'
-      end_lineno: '26'
-      end_col_offset: '15'
-    decorator_list: []
-    returns: None
-    type_comment: None
-    lineno: '24'
-    col_offset: '0'
-    end_lineno: '26'
-    end_col_offset: '15'
-  - type: FunctionDef
-    name: epsilon
-    args:
-      type: arguments
-      posonlyargs: []
-      args: []
-      vararg: None
-      kwonlyargs: []
-      kw_defaults: []
-      kwarg: None
-      defaults: []
-    body:
-    - type: Expr
-      value:
-        type: Constant
-        value: Standalone function with no callers
-        kind: None
-        lineno: '30'
-        col_offset: '4'
-        end_lineno: '30'
-        end_col_offset: '45'
-      lineno: '30'
-      col_offset: '4'
-      end_lineno: '30'
-      end_col_offset: '45'
-    - type: Return
-      value:
-        type: Constant
-        value: standalone
-        kind: None
-        lineno: '31'
-        col_offset: '11'
-        end_lineno: '31'
-        end_col_offset: '23'
-      lineno: '31'
-      col_offset: '4'
-      end_lineno: '31'
-      end_col_offset: '23'
-    decorator_list: []
-    returns: None
-    type_comment: None
-    lineno: '29'
-    col_offset: '0'
-    end_lineno: '31'
-    end_col_offset: '23'
-  - type: FunctionDef
-    name: recursive_a
-    args:
-      type: arguments
-      posonlyargs: []
-      args: []
-      vararg: None
-      kwonlyargs: []
-      kw_defaults: []
-      kwarg: None
-      defaults: []
-    body:
-    - type: Expr
-      value:
-        type: Constant
-        value: Recursive function A
-        kind: None
-        lineno: '35'
-        col_offset: '4'
-        end_lineno: '35'
-        end_col_offset: '30'
-      lineno: '35'
-      col_offset: '4'
-      end_lineno: '35'
-      end_col_offset: '30'
-    - type: Expr
-      value:
-        type: Call
-        func:
-          type: Name
-          id: recursive_b
-          lineno: '36'
-          col_offset: '4'
-          end_lineno: '36'
-          end_col_offset: '15'
-        args: []
-        keywords: []
-        lineno: '36'
-        col_offset: '4'
-        end_lineno: '36'
-        end_col_offset: '17'
-      lineno: '36'
-      col_offset: '4'
-      end_lineno: '36'
-      end_col_offset: '17'
-    decorator_list: []
-    returns: None
-    type_comment: None
-    lineno: '34'
-    col_offset: '0'
-    end_lineno: '36'
-    end_col_offset: '17'
-  - type: FunctionDef
-    name: recursive_b
-    args:
-      type: arguments
-      posonlyargs: []
-      args: []
-      vararg: None
-      kwonlyargs: []
-      kw_defaults: []
-      kwarg: None
-      defaults: []
-    body:
-    - type: Expr
-      value:
-        type: Constant
-        value: Recursive function B
-        kind: None
-        lineno: '40'
-        col_offset: '4'
-        end_lineno: '40'
-        end_col_offset: '30'
-      lineno: '40'
-      col_offset: '4'
-      end_lineno: '40'
-      end_col_offset: '30'
-    - type: Expr
-      value:
-        type: Call
-        func:
-          type: Name
-          id: recursive_a
-          lineno: '41'
-          col_offset: '4'
-          end_lineno: '41'
-          end_col_offset: '15'
-        args: []
-        keywords: []
-        lineno: '41'
-        col_offset: '4'
-        end_lineno: '41'
-        end_col_offset: '17'
-      lineno: '41'
-      col_offset: '4'
-      end_lineno: '41'
-      end_col_offset: '17'
-    decorator_list: []
-    returns: None
-    type_comment: None
-    lineno: '39'
-    col_offset: '0'
-    end_lineno: '41'
-    end_col_offset: '17'
-  - type: FunctionDef
-    name: overloaded_example
-    args:
-      type: arguments
-      posonlyargs: []
-      args: []
-      vararg: None
-      kwonlyargs: []
-      kw_defaults: []
-      kwarg: None
-      defaults: []
-    body:
-    - type: Expr
-      value:
-        type: Constant
-        value: Function with name that might be overloaded in other contexts
-        kind: None
-        lineno: '45'
-        col_offset: '4'
-        end_lineno: '45'
-        end_col_offset: '71'
-      lineno: '45'
-      col_offset: '4'
-      end_lineno: '45'
-      end_col_offset: '71'
-    - type: Return
-      value:
-        type: Constant
-        value: original
-        kind: None
-        lineno: '46'
-        col_offset: '11'
-        end_lineno: '46'
-        end_col_offset: '21'
-      lineno: '46'
-      col_offset: '4'
-      end_lineno: '46'
-      end_col_offset: '21'
-    decorator_list: []
-    returns: None
-    type_comment: None
-    lineno: '44'
-    col_offset: '0'
-    end_lineno: '46'
-    end_col_offset: '21'
-  - type: ClassDef
-    name: ExampleClass
-    bases: []
-    keywords: []
-    body:
-    - type: Expr
-      value:
-        type: Constant
-        value: Example class for testing
-        kind: None
-        lineno: '50'
-        col_offset: '4'
-        end_lineno: '50'
-        end_col_offset: '35'
-      lineno: '50'
-      col_offset: '4'
-      end_lineno: '50'
-      end_col_offset: '35'
-    - type: FunctionDef
-      name: method_a
-      args:
-        type: arguments
-        posonlyargs: []
-        args:
-        - type: arg
-          arg: self
-          annotation: None
-          type_comment: None
-          lineno: '52'
-          col_offset: '17'
-          end_lineno: '52'
-          end_col_offset: '21'
-        vararg: None
-        kwonlyargs: []
-        kw_defaults: []
-        kwarg: None
-        defaults: []
-      body:
-      - type: Expr
-        value:
-          type: Constant
-          value: Instance method
-          kind: None
-          lineno: '53'
-          col_offset: '8'
-          end_lineno: '53'
-          end_col_offset: '29'
-        lineno: '53'
-        col_offset: '8'
-        end_lineno: '53'
-        end_col_offset: '29'
-      - type: Expr
-        value:
-          type: Call
-          func:
-            type: Attribute
-            value:
-              type: Name
-              id: self
-              lineno: '54'
-              col_offset: '8'
-              end_lineno: '54'
-              end_col_offset: '12'
-            attr: target_method
-            lineno: '54'
-            col_offset: '8'
-            end_lineno: '54'
-            end_col_offset: '26'
-          args: []
-          keywords: []
-          lineno: '54'
-          col_offset: '8'
-          end_lineno: '54'
-          end_col_offset: '28'
-        lineno: '54'
-        col_offset: '8'
-        end_lineno: '54'
-        end_col_offset: '28'
-      decorator_list: []
-      returns: None
-      type_comment: None
-      lineno: '52'
-      col_offset: '4'
-      end_lineno: '54'
-      end_col_offset: '28'
-    - type: FunctionDef
-      name: method_b
-      args:
-        type: arguments
-        posonlyargs: []
-        args:
-        - type: arg
-          arg: self
-          annotation: None
-          type_comment: None
-          lineno: '56'
-          col_offset: '17'
-          end_lineno: '56'
-          end_col_offset: '21'
-        vararg: None
-        kwonlyargs: []
-        kw_defaults: []
-        kwarg: None
-        defaults: []
-      body:
-      - type: Expr
-        value:
-          type: Constant
-          value: Instance method
-          kind: None
-          lineno: '57'
-          col_offset: '8'
-          end_lineno: '57'
-          end_col_offset: '29'
-        lineno: '57'
-        col_offset: '8'
-        end_lineno: '57'
-        end_col_offset: '29'
-      - type: Expr
-        value:
-          type: Call
-          func:
-            type: Attribute
-            value:
-              type: Name
-              id: self
-              lineno: '58'
-              col_offset: '8'
-              end_lineno: '58'
-              end_col_offset: '12'
-            attr: target_method
-            lineno: '58'
-            col_offset: '8'
-            end_lineno: '58'
-            end_col_offset: '26'
-          args: []
-          keywords: []
-          lineno: '58'
-          col_offset: '8'
-          end_lineno: '58'
-          end_col_offset: '28'
-        lineno: '58'
-        col_offset: '8'
-        end_lineno: '58'
-        end_col_offset: '28'
-      decorator_list: []
-      returns: None
-      type_comment: None
-      lineno: '56'
-      col_offset: '4'
-      end_lineno: '58'
-      end_col_offset: '28'
-    - type: FunctionDef
-      name: target_method
-      args:
-        type: arguments
-        posonlyargs: []
-        args:
-        - type: arg
-          arg: self
-          annotation: None
-          type_comment: None
-          lineno: '60'
-          col_offset: '22'
-          end_lineno: '60'
-          end_col_offset: '26'
-        vararg: None
-        kwonlyargs: []
-        kw_defaults: []
-        kwarg: None
-        defaults: []
-      body:
-      - type: Expr
-        value:
-          type: Constant
-          value: Target method
-          kind: None
-          lineno: '61'
-          col_offset: '8'
-          end_lineno: '61'
-          end_col_offset: '27'
-        lineno: '61'
-        col_offset: '8'
-        end_lineno: '61'
-        end_col_offset: '27'
-      - type: Return
-        value:
-          type: Constant
-          value: method_target
-          kind: None
-          lineno: '62'
-          col_offset: '15'
-          end_lineno: '62'
-          end_col_offset: '30'
-        lineno: '62'
-        col_offset: '8'
-        end_lineno: '62'
-        end_col_offset: '30'
-      decorator_list: []
-      returns: None
-      type_comment: None
-      lineno: '60'
-      col_offset: '4'
-      end_lineno: '62'
-      end_col_offset: '30'
-    - type: FunctionDef
-      name: static_method
-      args:
-        type: arguments
-        posonlyargs: []
-        args: []
-        vararg: None
-        kwonlyargs: []
-        kw_defaults: []
-        kwarg: None
-        defaults: []
-      body:
-      - type: Expr
-        value:
-          type: Constant
-          value: Static method
-          kind: None
-          lineno: '66'
-          col_offset: '8'
-          end_lineno: '66'
-          end_col_offset: '27'
-        lineno: '66'
-        col_offset: '8'
-        end_lineno: '66'
-        end_col_offset: '27'
-      - type: Return
-        value:
-          type: Constant
-          value: static
-          kind: None
-          lineno: '67'
-          col_offset: '15'
-          end_lineno: '67'
-          end_col_offset: '23'
-        lineno: '67'
-        col_offset: '8'
-        end_lineno: '67'
-        end_col_offset: '23'
-      decorator_list:
-      - type: Name
-        id: staticmethod
-        lineno: '64'
-        col_offset: '5'
-        end_lineno: '64'
-        end_col_offset: '17'
-      returns: None
-      type_comment: None
-      lineno: '65'
-      col_offset: '4'
-      end_lineno: '67'
-      end_col_offset: '23'
-    - type: FunctionDef
-      name: class_method
-      args:
-        type: arguments
-        posonlyargs: []
-        args:
-        - type: arg
-          arg: cls
-          annotation: None
-          type_comment: None
-          lineno: '70'
-          col_offset: '21'
-          end_lineno: '70'
-          end_col_offset: '24'
-        vararg: None
-        kwonlyargs: []
-        kw_defaults: []
-        kwarg: None
-        defaults: []
-      body:
-      - type: Expr
-        value:
-          type: Constant
-          value: Class method
-          kind: None
-          lineno: '71'
-          col_offset: '8'
-          end_lineno: '71'
-          end_col_offset: '26'
-        lineno: '71'
-        col_offset: '8'
-        end_lineno: '71'
-        end_col_offset: '26'
-      - type: Return
-        value:
-          type: Constant
-          value: class
-          kind: None
-          lineno: '72'
-          col_offset: '15'
-          end_lineno: '72'
-          end_col_offset: '22'
-        lineno: '72'
-        col_offset: '8'
-        end_lineno: '72'
-        end_col_offset: '22'
-      decorator_list:
-      - type: Name
-        id: classmethod
-        lineno: '69'
-        col_offset: '5'
-        end_lineno: '69'
-        end_col_offset: '16'
-      returns: None
-      type_comment: None
-      lineno: '70'
-      col_offset: '4'
-      end_lineno: '72'
-      end_col_offset: '22'
-    decorator_list: []
-    lineno: '49'
-    col_offset: '0'
-    end_lineno: '72'
-    end_col_offset: '22'
-  - type: FunctionDef
-    name: callback_example
-    args:
-      type: arguments
-      posonlyargs: []
-      args:
-      - type: arg
-        arg: callback
-        annotation: None
-        type_comment: None
-        lineno: '75'
-        col_offset: '21'
-        end_lineno: '75'
-        end_col_offset: '29'
-      vararg: None
-      kwonlyargs: []
-      kw_defaults: []
-      kwarg: None
-      defaults: []
-    body:
-    - type: Expr
-      value:
-        type: Constant
-        value: Function that accepts a callback
-        kind: None
-        lineno: '76'
-        col_offset: '4'
-        end_lineno: '76'
-        end_col_offset: '42'
-      lineno: '76'
-      col_offset: '4'
-      end_lineno: '76'
-      end_col_offset: '42'
-    - type: Return
-      value:
-        type: Call
-        func:
-          type: Name
-          id: callback
-          lineno: '77'
-          col_offset: '11'
-          end_lineno: '77'
-          end_col_offset: '19'
-        args: []
-        keywords: []
-        lineno: '77'
-        col_offset: '11'
-        end_lineno: '77'
-        end_col_offset: '21'
-      lineno: '77'
-      col_offset: '4'
-      end_lineno: '77'
-      end_col_offset: '21'
-    decorator_list: []
-    returns: None
-    type_comment: None
-    lineno: '75'
-    col_offset: '0'
-    end_lineno: '77'
-    end_col_offset: '21'
-  - type: FunctionDef
-    name: dependency_injection_example
-    args:
-      type: arguments
-      posonlyargs: []
-      args:
-      - type: arg
-        arg: service
-        annotation: None
-        type_comment: None
-        lineno: '80'
-        col_offset: '33'
-        end_lineno: '80'
-        end_col_offset: '40'
-      vararg: None
-      kwonlyargs: []
-      kw_defaults: []
-      kwarg: None
-      defaults: []
-    body:
-    - type: Expr
-      value:
-        type: Constant
-        value: Function using dependency injection
-        kind: None
-        lineno: '81'
-        col_offset: '4'
-        end_lineno: '81'
-        end_col_offset: '45'
-      lineno: '81'
-      col_offset: '4'
-      end_lineno: '81'
-      end_col_offset: '45'
-    - type: Return
-      value:
-        type: Call
-        func:
-          type: Attribute
-          value:
-            type: Name
-            id: service
-            lineno: '82'
-            col_offset: '11'
-            end_lineno: '82'
-            end_col_offset: '18'
-          attr: process
-          lineno: '82'
-          col_offset: '11'
-          end_lineno: '82'
-          end_col_offset: '26'
-        args: []
-        keywords: []
-        lineno: '82'
-        col_offset: '11'
-        end_lineno: '82'
-        end_col_offset: '28'
-      lineno: '82'
-      col_offset: '4'
-      end_lineno: '82'
-      end_col_offset: '28'
-    decorator_list: []
-    returns: None
-    type_comment: None
-    lineno: '80'
-    col_offset: '0'
-    end_lineno: '82'
-    end_col_offset: '28'
-  - type: FunctionDef
-    name: imported_function
-    args:
-      type: arguments
-      posonlyargs: []
-      args: []
-      vararg: None
-      kwonlyargs: []
-      kw_defaults: []
-      kwarg: None
-      defaults: []
-    body:
-    - type: Expr
-      value:
-        type: Constant
-        value: Function imported from another module
-        kind: None
-        lineno: '86'
-        col_offset: '4'
-        end_lineno: '86'
-        end_col_offset: '47'
-      lineno: '86'
-      col_offset: '4'
-      end_lineno: '86'
-      end_col_offset: '47'
-    - type: Return
-      value:
-        type: Constant
-        value: imported
-        kind: None
-        lineno: '87'
-        col_offset: '11'
-        end_lineno: '87'
-        end_col_offset: '21'
-      lineno: '87'
-      col_offset: '4'
-      end_lineno: '87'
-      end_col_offset: '21'
-    decorator_list: []
-    returns: None
-    type_comment: None
-    lineno: '85'
-    col_offset: '0'
-    end_lineno: '87'
-    end_col_offset: '21'
-  - type: FunctionDef
-    name: cross_package_caller
-    args:
-      type: arguments
-      posonlyargs: []
-      args: []
-      vararg: None
-      kwonlyargs: []
-      kw_defaults: []
-      kwarg: None
-      defaults: []
-    body:
-    - type: Expr
-      value:
-        type: Constant
-        value: Function that calls across packages
-        kind: None
-        lineno: '91'
-        col_offset: '4'
-        end_lineno: '91'
-        end_col_offset: '45'
-      lineno: '91'
-      col_offset: '4'
-      end_lineno: '91'
-      end_col_offset: '45'
-    - type: ImportFrom
-      module: subpackage
-      names:
-      - type: alias
-        name: helper
-        asname: None
-      level: '0'
-      lineno: '92'
-      col_offset: '4'
-      end_lineno: '92'
-      end_col_offset: '33'
-    - type: Return
-      value:
-        type: Call
-        func:
-          type: Attribute
-          value:
-            type: Name
-            id: helper
-            lineno: '93'
-            col_offset: '11'
-            end_lineno: '93'
-            end_col_offset: '17'
-          attr: helper_function
-          lineno: '93'
-          col_offset: '11'
-          end_lineno: '93'
-          end_col_offset: '33'
-        args: []
-        keywords: []
-        lineno: '93'
-        col_offset: '11'
-        end_lineno: '93'
-        end_col_offset: '35'
-      lineno: '93'
-      col_offset: '4'
-      end_lineno: '93'
-      end_col_offset: '35'
-    decorator_list: []
-    returns: None
-    type_comment: None
-    lineno: '90'
-    col_offset: '0'
-    end_lineno: '93'
-    end_col_offset: '35'
-  type_ignores: []
-expected_error: 'File not found: /Users/adarsh/Documents/vr-agent/fixtures/repositories/simple-python/main.py'
+test_id: CORE-parse_source_code-T01
+test_type: T01
+tool: parse_source_code

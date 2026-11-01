@@ -1,22 +1,24 @@
-test_id: MSC-record_function_arguments-T06
-name: Large Input test for record_function_arguments
 category: misc
-tool: record_function_arguments
-layer: 1
-test_type: T06
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Large Input test for record_function_arguments
+expected:
+  status: ok
 fixture: polyglot-monorepo
 input:
   application_id: fixtures/repositories/simple-python/main.py
+  file_path: fixtures/repositories/polyglot-monorepo/main.py
   function_id: alpha
+  repository_path: fixtures/repositories/polyglot-monorepo
   tool_context: fixtures/repositories/simple-python/main.py
-expected:
-  status: ok
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Large Input test for record_function_arguments
 performance:
   max_duration_ms: 3000
 severity: medium
+test_id: MSC-record_function_arguments-T06
+test_type: T06
+tool: record_function_arguments

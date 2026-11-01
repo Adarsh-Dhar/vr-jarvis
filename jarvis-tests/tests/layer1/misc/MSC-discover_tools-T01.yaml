@@ -1,22 +1,24 @@
-test_id: MSC-discover_tools-T01
-name: Happy Path test for discover_tools
 category: misc
-tool: discover_tools
-layer: 1
-test_type: T01
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Happy Path test for discover_tools
-fixture: simple-python
-input:
-  module_path: placeholder
-  tool_context: placeholder
 expected:
   status: ok
+fixture: simple-python
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+  module_path: placeholder
+  repository_path: fixtures/repositories/simple-python
+  tool_context: placeholder
+layer: 1
 must_not:
 - error
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Happy Path test for discover_tools
 performance:
   max_duration_ms: 3000
 severity: critical
+test_id: MSC-discover_tools-T01
+test_type: T01
+tool: discover_tools

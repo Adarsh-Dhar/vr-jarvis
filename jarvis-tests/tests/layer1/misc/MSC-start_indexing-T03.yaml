@@ -1,23 +1,24 @@
-test_id: MSC-start_indexing-T03
-name: Output Validation test for start_indexing
 category: misc
-tool: start_indexing
-layer: 1
-test_type: T03
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Output Validation test for start_indexing
-fixture: simple-python
-input:
-  repository_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/simple-python
-  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
+fixture: simple-python
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+  repository_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/simple-python
+  tool_context: fixtures/repositories/simple-python/main.py
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Output Validation test for start_indexing
 performance:
   max_duration_ms: 3000
 severity: critical
 skip: true
 skip_reason: 'Tool execution issue: '
+test_id: MSC-start_indexing-T03
+test_type: T03
+tool: start_indexing

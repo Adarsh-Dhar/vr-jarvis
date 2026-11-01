@@ -1,18 +1,20 @@
-test_id: PHASE2-CORE-004
-tool: find_callers
 category: unit
-layer: 1
-test_type: real_input
 description: Find callers of target function in simple-python
-input:
-  symbol_id: simple-python::main::target
 expected:
-  status: not_found
   results_not_empty: true
-must_not:
-- placeholder
+  status: not_found
+expected_message: Symbol definition not found
+expected_symbol_name: null
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
+  symbol_id: simple-python::main::target
+layer: 1
 metrics:
 - tool_selection
 - evidence_accuracy
-expected_symbol_name: null
-expected_message: Symbol definition not found
+must_not:
+- placeholder
+test_id: PHASE2-CORE-004
+test_type: real_input
+tool: find_callers

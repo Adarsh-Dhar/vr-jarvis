@@ -11,7 +11,7 @@ from datetime import datetime
 # Add server to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from server.ai_agents.tools import repository_tools, code_understanding_tools, relationship_intelligence_tools, repository_intelligence_tools, analysis_tools, testing_verification_tools
+from server.ai_agents.tools import repository_tools, code_understanding_tools, relationship_intelligence_tools, repository_intelligence_tools, analysis_tools, testing_verification_tools, software_engineering_tools, git_tools
 from google.adk.tools import ToolContext
 
 # Absolute paths
@@ -21,7 +21,7 @@ FIXTURES_ROOT = WORKSPACE / 'jarvis-tests/fixtures/repositories'
 # Mock ToolContext
 class MockToolContext:
     def __init__(self):
-        pass
+        self.state = {'evidence': []}
 
 # Tool mapping
 TOOL_FUNCTIONS = {
@@ -64,6 +64,26 @@ TOOL_FUNCTIONS = {
     'discover_tests': testing_verification_tools.discover_tests,
     'run_unit_tests': testing_verification_tools.run_unit_tests,
     'verify_compilation': testing_verification_tools.verify_compilation,
+    'create_file': software_engineering_tools.create_file,
+    'edit_file': software_engineering_tools.edit_file,
+    'delete_file': software_engineering_tools.delete_file,
+    'move_file': software_engineering_tools.move_file,
+    'rename_file': software_engineering_tools.rename_file,
+    'create_directory': software_engineering_tools.create_directory,
+    'execute_command': software_engineering_tools.execute_command,
+    'git_diff': software_engineering_tools.git_diff,
+    'git_log': software_engineering_tools.git_log,
+    'git_status': software_engineering_tools.git_status,
+    'git_branch': software_engineering_tools.git_branch,
+    'git_commit': software_engineering_tools.git_commit,
+    'git_show': software_engineering_tools.git_show,
+    'run_build': software_engineering_tools.run_build,
+    'run_linter': software_engineering_tools.run_linter,
+    'run_formatter': software_engineering_tools.run_formatter,
+    'run_type_checker': software_engineering_tools.run_type_checker,
+    'get_diff': git_tools.get_diff,
+    'get_branch_info': git_tools.get_branch_info,
+    'list_changed_nodes': git_tools.list_changed_nodes,
 }
 
 def execute_tool(tool_name, input_data):
@@ -228,12 +248,51 @@ def execute_tool(tool_name, input_data):
             else:
                 full_path = Path(repository_path)
             return tool_func(str(full_path), tool_context)
+        elif tool_name in ['create_file', 'edit_file', 'delete_file', 'move_file', 'rename_file', 'create_directory']:
+            file_path = input_data.get('file_path')
+            if not Path(file_path).is_absolute():
+                full_path = WORKSPACE / file_path
+            else:
+                full_path = Path(file_path)
+            if tool_name == 'edit_file':
+                old_content = input_data.get('old_content', '')
+                new_content = input_data.get('new_content', '')
+                return tool_func(str(full_path), old_content, new_content, tool_context)
+            elif tool_name == 'create_file':
+                content = input_data.get('content', '')
+                return tool_func(str(full_path), content, tool_context)
+            else:
+                return tool_func(str(full_path), tool_context)
+        elif tool_name == 'execute_command':
+            command = input_data.get('command', '')
+            return tool_func(command, tool_context)
+        elif tool_name in ['git_diff', 'git_log', 'git_status', 'git_branch', 'git_commit', 'git_show']:
+            repository_path = input_data.get('repository_path', WORKSPACE)
+            if not Path(repository_path).is_absolute():
+                full_path = WORKSPACE / repository_path
+            else:
+                full_path = Path(repository_path)
+            if tool_name == 'git_commit':
+                message = input_data.get('message', '')
+                return tool_func(str(full_path), message, tool_context)
+            else:
+                return tool_func(str(full_path), tool_context)
+        elif tool_name in ['run_build', 'run_linter', 'run_formatter', 'run_type_checker']:
+            repository_path = input_data.get('repository_path', WORKSPACE)
+            if not Path(repository_path).is_absolute():
+                full_path = WORKSPACE / repository_path
+            else:
+                full_path = Path(repository_path)
+            return tool_func(str(full_path), tool_context)
+        elif tool_name in ['get_diff', 'get_branch_info', 'list_changed_nodes']:
+            # These tools only take tool_context, read from global config
+            return tool_func(tool_context)
         else:
             return None
     except Exception as e:
         return {'status': 'error', 'error': str(e)}
 
-def capture_outputs_for_tests(test_path, limit=50):
+def capture_outputs_for_tests(test_path, limit=None):
     """Execute tests and capture tool outputs (with limit to avoid timeouts)"""
     outputs = {}
     count = 0
@@ -246,7 +305,7 @@ def capture_outputs_for_tests(test_path, limit=50):
     print(f"Found {total_files} YAML files")
 
     for yaml_file in test_path.rglob('*.yaml'):
-        if count >= limit:
+        if limit and count >= limit:
             print(f"Reached limit of {limit} tests")
             break
 
@@ -324,7 +383,8 @@ def main():
             continue
 
         print(f"Capturing outputs from: {test_path}")
-        outputs = capture_outputs_for_tests(test_path, limit=150)
+        # No limit for any directory - process all tests
+        outputs = capture_outputs_for_tests(test_path, limit=None)
         all_outputs.update(outputs)
         print(f"  -> Captured {len(outputs)} from this directory")
 

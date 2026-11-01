@@ -1,24 +1,26 @@
-test_id: COD-trace_function_logic-T01
-name: Happy Path test for trace_function_logic
 category: code_understanding
-tool: trace_function_logic
-layer: 1
-test_type: T01
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Happy Path test for trace_function_logic
-fixture: simple-python
-input:
-  function_id: placeholder
-  tool_context: placeholder
 expected:
   status: ok
+fixture: simple-python
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+  function_id: placeholder
+  repository_path: fixtures/repositories/simple-python
+  tool_context: placeholder
+layer: 1
 must_not:
 - error
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Happy Path test for trace_function_logic
 performance:
   max_duration_ms: 3000
 severity: critical
 skip: true
 skip_reason: 'Tool execution issue: '
+test_id: COD-trace_function_logic-T01
+test_type: T01
+tool: trace_function_logic

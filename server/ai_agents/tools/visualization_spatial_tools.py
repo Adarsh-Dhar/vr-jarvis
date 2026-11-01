@@ -9,6 +9,14 @@ import time
 from google.adk.tools import ToolContext
 from ._safe import safe
 
+# Helper to emit scene commands
+def _emit_command(tool_context: ToolContext, command: str, **kwargs):
+    """Queue a scene command to state['scene_commands']."""
+    commands = tool_context.state.get('scene_commands', [])
+    cmd_entry = {'command': command, **kwargs}
+    commands.append(cmd_entry)
+    tool_context.state['scene_commands'] = commands
+
 # In-memory graph and visualization state
 _graph_state = {}
 _visualization_state = {}
@@ -187,8 +195,10 @@ def expand_graph_node(
     tool_context: ToolContext,
     depth: int = 1
 ) -> dict:
-    """Expand a node to show its connections."""
+    """Expand a node to show its connections. Emits expand_node command."""
     try:
+        _emit_command(tool_context, 'expand_node', node_id=node_id, depth=depth)
+        
         if graph_id not in _graph_state:
             return {
                 'status': 'error',
@@ -227,8 +237,7 @@ def expand_graph_node(
             'expanded': True,
             'total_nodes': node_count,
             'total_edges': edge_count,
-            'new_nodes': node_count - (len(graph['nodes']) - (len(dep_result.get('dependencies', [])) + len(shared_result.get('shared_dependencies', [])))),
-            'note': 'Expanded using relationship analysis'
+            'command_queued': True
         }
     except Exception as e:
         return {

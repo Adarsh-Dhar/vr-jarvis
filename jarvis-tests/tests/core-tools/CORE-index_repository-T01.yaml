@@ -1,14 +1,15 @@
-test_id: CORE-index_repository-T01
-name: Index simple-python repository
 category: core
-tool: index_repository
-layer: 1
-test_type: T01
 description: Happy Path - index repository for search
-fixture: simple-python
-input:
-  repository_path: fixtures/repositories
-skip: true
-skip_reason: Indexing tool requires additional setup
 expected:
   status: ok
+fixture: simple-python
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories
+layer: 1
+name: Index simple-python repository
+skip: true
+skip_reason: Indexing tool requires additional setup
+test_id: CORE-index_repository-T01
+test_type: T01
+tool: index_repository

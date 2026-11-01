@@ -1,31 +1,35 @@
-test_id: REL-CALLEE-001
-name: Direct function callee discovery
 category: relationship_intelligence
-tool: find_callees
-description: 'Verify that the tool identifies all direct callees of a selected function.
-
-  '
-fixture:
-  repository: simple-python
-  target_symbol: gamma
-input:
-  depth: 1
-expected:
-  status: not_found
-  callees:
-  - name: alpha
-    file: main.py
-    line: 18
-must_not:
-- target
-- beta
 checks:
 - correct_callees
 - correct_source_locations
 - correct_relationship_types
 - valid_response_schema
+description: 'Verify that the tool identifies all direct callees of a selected function.
+
+  '
+expected:
+  callees:
+  - file: main.py
+    line: 18
+    name: alpha
+  status: not_found
+expected_message: Symbol definition not found
+expected_symbol_name: null
+fixture:
+  repository: simple-python
+  target_symbol: gamma
+input:
+  depth: 1
+  file_path: 'fixtures/repositories/{''repository'': ''simple-python'', ''target_symbol'':
+    ''gamma''}/main.py'
+  repository_path: 'fixtures/repositories/{''repository'': ''simple-python'', ''target_symbol'':
+    ''gamma''}'
+must_not:
+- target
+- beta
+name: Direct function callee discovery
 performance:
   max_duration_ms: 2000
 severity: critical
-expected_symbol_name: null
-expected_message: Symbol definition not found
+test_id: REL-CALLEE-001
+tool: find_callees

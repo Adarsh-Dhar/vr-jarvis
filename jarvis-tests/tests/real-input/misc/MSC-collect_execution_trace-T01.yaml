@@ -1,23 +1,25 @@
-test_id: MSC-collect_execution_trace-T01
-name: Happy Path test for collect_execution_trace
 category: misc
-tool: collect_execution_trace
-layer: 1
-test_type: T01
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Happy Path test for collect_execution_trace
+expected:
+  status: ok
 fixture: simple-python
 input:
   application_id: fixtures/repositories/simple-python/main.py
   duration: fixtures/repositories/simple-python/main.py
+  file_path: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
   tool_context: fixtures/repositories/simple-python/main.py
-expected:
-  status: ok
+layer: 1
 must_not:
 - error
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Happy Path test for collect_execution_trace
 performance:
   max_duration_ms: 3000
 severity: critical
+test_id: MSC-collect_execution_trace-T01
+test_type: T01
+tool: collect_execution_trace

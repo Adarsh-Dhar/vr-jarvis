@@ -1,21 +1,23 @@
-test_id: MSC-list_supported_frameworks-T07
-name: Complex Input test for list_supported_frameworks
 category: misc
-tool: list_supported_frameworks
-layer: 1
-test_type: T07
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Complex Input test for list_supported_frameworks
-fixture: polyglot-monorepo
-input:
-  tool_context: fixtures/repositories/simple-python/main.py
-  language: python
 expected:
   status: ok
+fixture: polyglot-monorepo
+input:
+  file_path: fixtures/repositories/polyglot-monorepo/main.py
+  language: python
+  repository_path: fixtures/repositories/polyglot-monorepo
+  tool_context: fixtures/repositories/simple-python/main.py
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Complex Input test for list_supported_frameworks
 performance:
   max_duration_ms: 3000
 severity: high
+test_id: MSC-list_supported_frameworks-T07
+test_type: T07
+tool: list_supported_frameworks

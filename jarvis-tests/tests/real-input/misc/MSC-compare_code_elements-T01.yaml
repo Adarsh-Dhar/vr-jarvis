@@ -1,23 +1,25 @@
-test_id: MSC-compare_code_elements-T01
-name: Happy Path test for compare_code_elements
 category: misc
-tool: compare_code_elements
-layer: 1
-test_type: T01
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Happy Path test for compare_code_elements
+expected:
+  status: ok
 fixture: simple-python
 input:
   element1_id: fixtures/repositories/simple-python/main.py
   element2_id: fixtures/repositories/simple-python/main.py
+  file_path: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
   tool_context: fixtures/repositories/simple-python/main.py
-expected:
-  status: ok
+layer: 1
 must_not:
 - error
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Happy Path test for compare_code_elements
 performance:
   max_duration_ms: 3000
 severity: critical
+test_id: MSC-compare_code_elements-T01
+test_type: T01
+tool: compare_code_elements

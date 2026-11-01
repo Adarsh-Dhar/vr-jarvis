@@ -1,22 +1,24 @@
-test_id: MSC-set_haptic_feedback-T06
-name: Large Input test for set_haptic_feedback
 category: misc
-tool: set_haptic_feedback
-layer: 1
-test_type: T06
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Large Input test for set_haptic_feedback
-fixture: polyglot-monorepo
-input:
-  intensity: fixtures/repositories/simple-python/main.py
-  duration: fixtures/repositories/simple-python/main.py
-  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
+fixture: polyglot-monorepo
+input:
+  duration: fixtures/repositories/simple-python/main.py
+  file_path: fixtures/repositories/polyglot-monorepo/main.py
+  intensity: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/polyglot-monorepo
+  tool_context: fixtures/repositories/simple-python/main.py
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Large Input test for set_haptic_feedback
 performance:
   max_duration_ms: 3000
 severity: medium
+test_id: MSC-set_haptic_feedback-T06
+test_type: T06
+tool: set_haptic_feedback

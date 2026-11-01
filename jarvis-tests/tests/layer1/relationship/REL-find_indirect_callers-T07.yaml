@@ -1,23 +1,25 @@
-test_id: REL-find_indirect_callers-T07
-name: Complex Input test for find_indirect_callers
 category: relationship
-tool: find_indirect_callers
-layer: 1
-test_type: T07
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Complex Input test for find_indirect_callers
-fixture: polyglot-monorepo
-input:
-  function_id: alpha
-  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: not_found
+expected_message: Symbol definition not found
+expected_symbol_name: alpha
+fixture: polyglot-monorepo
+input:
+  file_path: fixtures/repositories/polyglot-monorepo/main.py
+  function_id: alpha
+  repository_path: fixtures/repositories/polyglot-monorepo
+  tool_context: fixtures/repositories/simple-python/main.py
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Complex Input test for find_indirect_callers
 performance:
   max_duration_ms: 3000
 severity: high
-expected_symbol_name: alpha
-expected_message: Symbol definition not found
+test_id: REL-find_indirect_callers-T07
+test_type: T07
+tool: find_indirect_callers

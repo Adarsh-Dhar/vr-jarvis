@@ -1,25 +1,27 @@
-test_id: MSC-get_symbol_definition-T13
-name: Performance test for get_symbol_definition
 category: misc
-tool: get_symbol_definition
-layer: 2
-test_type: T13
+checks:
+- required_fields:
+  - status
+  type: schema_validity
+- max_duration_ms: 3000
+  type: performance
 description: Performance test for get_symbol_definition
-fixture: simple-python
-input:
-  symbol_name: fixtures/repositories/simple-python/main.py
-  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: error
+expected_error: 'TypeError: get_symbol_definition() takes 2 positional arguments but
+  3 were given'
+fixture: simple-python
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
+  symbol_name: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
+layer: 2
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
-- type: performance
-  max_duration_ms: 3000
+name: Performance test for get_symbol_definition
 performance:
   max_duration_ms: 3000
 severity: medium
-expected_error: argument should be a str or an os.PathLike object where __fspath__
-  returns a str, not 'NoneType'
+test_id: MSC-get_symbol_definition-T13
+test_type: T13
+tool: get_symbol_definition

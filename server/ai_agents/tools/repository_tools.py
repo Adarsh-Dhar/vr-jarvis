@@ -57,7 +57,7 @@ def list_repositories(tool_context: ToolContext) -> dict:
     """Discover all available repositories in the workspace."""
     try:
         # Get workspace from tool context or use current directory
-        workspace = Path.cwd()
+        workspace = repo_root()
         repositories = []
         
         # Scan for .git directories to find repositories
@@ -165,7 +165,7 @@ def list_files(
     try:
         dir_path = Path(directory)
         if not dir_path.is_absolute():
-            dir_path = Path.cwd() / dir_path
+            dir_path = resolve_in_repo(dir_path)
         
         if not dir_path.exists():
             return {
@@ -210,7 +210,7 @@ def read_file(file_path: str, tool_context: ToolContext) -> dict:
     try:
         path = Path(file_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            path = resolve_in_repo(path)
         
         if not path.exists():
             return {
@@ -257,7 +257,7 @@ def read_file_range(
     try:
         path = Path(file_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            path = resolve_in_repo(path)
         
         if not path.exists():
             return {
@@ -303,7 +303,7 @@ def search_files(
     try:
         dir_path = Path(directory)
         if not dir_path.is_absolute():
-            dir_path = Path.cwd() / dir_path
+            dir_path = resolve_in_repo(dir_path)
         
         if not dir_path.exists():
             return {
@@ -412,7 +412,7 @@ def search_symbols(
             }
         
         # Fallback to grep for more comprehensive search
-        cwd = Path.cwd()
+        cwd = repo_root()
         matches = []
         
         # Build patterns for different symbol types
@@ -460,7 +460,7 @@ def get_file_metadata(file_path: str, tool_context: ToolContext) -> dict:
     try:
         path = Path(file_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            path = resolve_in_repo(path)
         
         if not path.exists():
             return {
@@ -493,7 +493,7 @@ def get_repository_metadata(repository_path: str, tool_context: ToolContext) -> 
     try:
         repo_path = Path(repository_path)
         if not repo_path.is_absolute():
-            repo_path = Path.cwd() / repo_path
+            repo_path = resolve_in_repo(repo_path)
         
         if not repo_path.exists():
             return {
@@ -564,7 +564,7 @@ def watch_repository(repository_path: str, tool_context: ToolContext) -> dict:
     try:
         repo_path = Path(repository_path)
         if not repo_path.is_absolute():
-            repo_path = Path.cwd() / repo_path
+            repo_path = resolve_in_repo(repo_path)
         
         if not repo_path.exists():
             return {
@@ -610,9 +610,9 @@ def get_changed_files(
 ) -> dict:
     """Identify modifications since a particular revision."""
     try:
-        repo_path = Path(repository_path) if repository_path else Path.cwd()
+        repo_path = Path(repository_path) if repository_path else repo_root()
         if not repo_path.is_absolute():
-            repo_path = Path.cwd() / repo_path
+            repo_path = resolve_in_repo(repo_path)
         
         if not (repo_path / '.git').exists():
             return {

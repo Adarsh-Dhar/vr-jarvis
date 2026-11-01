@@ -1,23 +1,25 @@
-test_id: MSC-search_discussions-T01
-name: Happy Path test for search_discussions
 category: misc
-tool: search_discussions
-layer: 1
-test_type: T01
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Happy Path test for search_discussions
-fixture: simple-python
-input:
-  repository: fixtures/repositories/simple-python/main.py
-  query: test
-  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
+fixture: simple-python
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+  query: test
+  repository: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
+  tool_context: fixtures/repositories/simple-python/main.py
+layer: 1
 must_not:
 - error
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Happy Path test for search_discussions
 performance:
   max_duration_ms: 3000
 severity: critical
+test_id: MSC-search_discussions-T01
+test_type: T01
+tool: search_discussions

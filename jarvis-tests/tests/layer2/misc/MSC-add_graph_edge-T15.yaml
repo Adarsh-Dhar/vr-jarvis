@@ -1,24 +1,26 @@
-test_id: MSC-add_graph_edge-T15
-name: Recovery test for add_graph_edge
 category: misc
-tool: add_graph_edge
-layer: 2
-test_type: T15
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Recovery test for add_graph_edge
-fixture: simple-python
-input:
-  graph_id: fixtures/repositories/simple-python/main.py
-  source_id: fixtures/repositories/simple-python/main.py
-  target_id: fixtures/repositories/simple-python/main.py
-  edge_data: fixtures/repositories/simple-python/main.py
-  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
+fixture: simple-python
+input:
+  edge_data: fixtures/repositories/simple-python/main.py
+  file_path: fixtures/repositories/simple-python/main.py
+  graph_id: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
+  source_id: fixtures/repositories/simple-python/main.py
+  target_id: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
+layer: 2
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Recovery test for add_graph_edge
 performance:
   max_duration_ms: 3000
 severity: high
+test_id: MSC-add_graph_edge-T15
+test_type: T15
+tool: add_graph_edge

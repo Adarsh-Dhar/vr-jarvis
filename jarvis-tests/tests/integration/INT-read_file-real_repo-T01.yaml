@@ -1,37 +1,38 @@
-test_id: INT-read_file-real_repo-T01
-name: Read file from real temporary repository
 category: integration
-tool: read_file
-layer: 3
-test_type: T01
+checks:
+- required_content:
+  - Simple Python Test Repository
+  - 'def alpha():'
+  type: content_validation
+- shared_fixture_unchanged: true
+  type: isolation_check
+  used_temp_copy: true
 description: Integration test - read file from real temp repository with isolation
+expected:
+  content_contains:
+  - 'def alpha():'
+  - 'def target():'
+  - 'class ExampleClass:'
+  file_not_modified: true
+  status: error
+expected_error: 'File does not exist: /Users/adarsh/Documents/vr-agent/main.py'
 fixture: simple-python
 infrastructure:
 - temp_copy
 - filesystem
 input:
   file_path: main.py
-expected:
-  status: error
-  content_contains:
-  - 'def alpha():'
-  - 'def target():'
-  - 'class ExampleClass:'
-  file_not_modified: true
+  repository_path: fixtures/repositories/simple-python
+layer: 3
 must_not:
 - error
 - modified_shared_fixture
-checks:
-- type: content_validation
-  required_content:
-  - Simple Python Test Repository
-  - 'def alpha():'
-- type: isolation_check
-  used_temp_copy: true
-  shared_fixture_unchanged: true
+name: Read file from real temporary repository
 performance:
   max_duration_ms: 500
+requires_real_infrastructure: true
 severity: critical
 stub_should_fail: true
-requires_real_infrastructure: true
-expected_error: 'File does not exist: /Users/adarsh/Documents/vr-agent/main.py'
+test_id: INT-read_file-real_repo-T01
+test_type: T01
+tool: read_file

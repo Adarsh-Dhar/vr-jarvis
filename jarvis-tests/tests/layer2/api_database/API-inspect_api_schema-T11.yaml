@@ -1,22 +1,24 @@
-test_id: API-inspect_api_schema-T11
-name: Concurrency test for inspect_api_schema
 category: api_database
-tool: inspect_api_schema
-layer: 2
-test_type: T11
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Concurrency test for inspect_api_schema
-fixture: simple-python
-input:
-  schema_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/simple-python/openapi.yaml
-  tool_context: fixtures/repositories/simple-python/main.py
-  schema_type: openapi
 expected:
   status: ok
+fixture: simple-python
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
+  schema_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/simple-python/openapi.yaml
+  schema_type: openapi
+  tool_context: fixtures/repositories/simple-python/main.py
+layer: 2
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Concurrency test for inspect_api_schema
 performance:
   max_duration_ms: 5000
 severity: high
+test_id: API-inspect_api_schema-T11
+test_type: T11
+tool: inspect_api_schema

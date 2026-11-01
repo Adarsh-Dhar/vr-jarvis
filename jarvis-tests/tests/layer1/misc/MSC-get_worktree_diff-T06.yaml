@@ -1,22 +1,24 @@
-test_id: MSC-get_worktree_diff-T06
-name: Large Input test for get_worktree_diff
 category: misc
-tool: get_worktree_diff
-layer: 1
-test_type: T06
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Large Input test for get_worktree_diff
-fixture: polyglot-monorepo
-input:
-  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
+fixture: polyglot-monorepo
+input:
+  file_path: fixtures/repositories/polyglot-monorepo/main.py
+  repository_path: fixtures/repositories/polyglot-monorepo
+  tool_context: fixtures/repositories/simple-python/main.py
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Large Input test for get_worktree_diff
 performance:
   max_duration_ms: 3000
 severity: medium
 skip: true
 skip_reason: 'Tool execution issue: '
+test_id: MSC-get_worktree_diff-T06
+test_type: T06
+tool: get_worktree_diff

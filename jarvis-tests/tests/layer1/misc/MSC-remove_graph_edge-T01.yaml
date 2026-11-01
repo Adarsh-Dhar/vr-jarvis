@@ -1,26 +1,28 @@
-test_id: MSC-remove_graph_edge-T01
-name: Happy Path test for remove_graph_edge
 category: misc
-tool: remove_graph_edge
-layer: 1
-test_type: T01
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Happy Path test for remove_graph_edge
+expected:
+  status: ok
 fixture: simple-python
 input:
+  file_path: fixtures/repositories/simple-python/main.py
   graph_id: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
   source_id: fixtures/repositories/simple-python/main.py
   target_id: fixtures/repositories/simple-python/main.py
   tool_context: fixtures/repositories/simple-python/main.py
-expected:
-  status: ok
+layer: 1
 must_not:
 - error
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Happy Path test for remove_graph_edge
 performance:
   max_duration_ms: 3000
 severity: critical
 skip: true
 skip_reason: 'Tool execution issue: '
+test_id: MSC-remove_graph_edge-T01
+test_type: T01
+tool: remove_graph_edge

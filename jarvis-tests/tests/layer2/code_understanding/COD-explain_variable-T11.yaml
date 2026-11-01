@@ -1,21 +1,23 @@
-test_id: COD-explain_variable-T11
-name: Concurrency test for explain_variable
 category: code_understanding
-tool: explain_variable
-layer: 2
-test_type: T11
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Concurrency test for explain_variable
-fixture: simple-python
-input:
-  variable_id: fixtures/repositories/simple-python/main.py
-  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
+fixture: simple-python
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
+  tool_context: fixtures/repositories/simple-python/main.py
+  variable_id: fixtures/repositories/simple-python/main.py
+layer: 2
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Concurrency test for explain_variable
 performance:
   max_duration_ms: 3000
 severity: high
+test_id: COD-explain_variable-T11
+test_type: T11
+tool: explain_variable

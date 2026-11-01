@@ -1,24 +1,26 @@
-test_id: MSC-subscribe_to_topic-T09
-name: Dependency Failure test for subscribe_to_topic
 category: misc
-tool: subscribe_to_topic
-layer: 1
-test_type: T09
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Dependency Failure test for subscribe_to_topic
-fixture: simple-python
-input:
-  topic: placeholder
-  callback: placeholder
-  tool_context: placeholder
 expected:
   status: ok
+fixture: simple-python
+input:
+  callback: placeholder
+  file_path: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
+  tool_context: placeholder
+  topic: placeholder
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Dependency Failure test for subscribe_to_topic
 performance:
   max_duration_ms: 3000
 severity: high
 skip: true
 skip_reason: 'Tool execution issue: '
+test_id: MSC-subscribe_to_topic-T09
+test_type: T09
+tool: subscribe_to_topic

@@ -1,22 +1,24 @@
-test_id: MSC-subscribe_to_topic-T14
-name: Regression test for subscribe_to_topic
 category: misc
-tool: subscribe_to_topic
-layer: 2
-test_type: T14
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Regression test for subscribe_to_topic
-fixture: simple-python
-input:
-  topic: fixtures/repositories/simple-python/main.py
-  callback: fixtures/repositories/simple-python/main.py
-  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
+fixture: simple-python
+input:
+  callback: fixtures/repositories/simple-python/main.py
+  file_path: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
+  tool_context: fixtures/repositories/simple-python/main.py
+  topic: fixtures/repositories/simple-python/main.py
+layer: 2
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Regression test for subscribe_to_topic
 performance:
   max_duration_ms: 3000
 severity: high
+test_id: MSC-subscribe_to_topic-T14
+test_type: T14
+tool: subscribe_to_topic

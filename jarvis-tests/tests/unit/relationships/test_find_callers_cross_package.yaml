@@ -1,32 +1,36 @@
-test_id: REL-CALL-005
-name: Find callers across package boundaries
 category: relationship_intelligence
-tool: find_callers
-description: 'Verify correct identification of callers that span across different
-  packages/modules.
-
-  '
-fixture:
-  repository: simple-python
-  target_symbol: helper_function
-input:
-  depth: 1
-expected:
-  status: not_found
-  callers:
-  - name: cross_package_caller
-    file: main.py
-    line: 104
-    cross_package: true
-must_not:
-- false_positive_callers
 checks:
 - correct_callers
 - cross_package_detection
 - correct_source_locations
 - valid_response_schema
+description: 'Verify correct identification of callers that span across different
+  packages/modules.
+
+  '
+expected:
+  callers:
+  - cross_package: true
+    file: main.py
+    line: 104
+    name: cross_package_caller
+  status: not_found
+expected_message: Symbol definition not found
+expected_symbol_name: null
+fixture:
+  repository: simple-python
+  target_symbol: helper_function
+input:
+  depth: 1
+  file_path: 'fixtures/repositories/{''repository'': ''simple-python'', ''target_symbol'':
+    ''helper_function''}/main.py'
+  repository_path: 'fixtures/repositories/{''repository'': ''simple-python'', ''target_symbol'':
+    ''helper_function''}'
+must_not:
+- false_positive_callers
+name: Find callers across package boundaries
 performance:
   max_duration_ms: 2000
 severity: high
-expected_symbol_name: null
-expected_message: Symbol definition not found
+test_id: REL-CALL-005
+tool: find_callers

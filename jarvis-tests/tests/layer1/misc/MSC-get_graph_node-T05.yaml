@@ -1,21 +1,23 @@
-test_id: MSC-get_graph_node-T05
-name: Boundary Conditions test for get_graph_node
 category: misc
-tool: get_graph_node
-layer: 1
-test_type: T05
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Boundary Conditions test for get_graph_node
-fixture: simple-python
-input:
-  node_id: placeholder
-  tool_context: placeholder
 expected:
   status: ok
+fixture: simple-python
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+  node_id: placeholder
+  repository_path: fixtures/repositories/simple-python
+  tool_context: placeholder
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Boundary Conditions test for get_graph_node
 performance:
   max_duration_ms: 3000
 severity: high
+test_id: MSC-get_graph_node-T05
+test_type: T05
+tool: get_graph_node

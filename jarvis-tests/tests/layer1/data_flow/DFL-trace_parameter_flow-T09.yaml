@@ -1,22 +1,24 @@
-test_id: DFL-trace_parameter_flow-T09
-name: Dependency Failure test for trace_parameter_flow
 category: data_flow
-tool: trace_parameter_flow
-layer: 1
-test_type: T09
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Dependency Failure test for trace_parameter_flow
-fixture: simple-python
-input:
-  function_id: alpha
-  parameter: fixtures/repositories/simple-python/main.py
-  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: error
+fixture: simple-python
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+  function_id: alpha
+  parameter: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
+  tool_context: fixtures/repositories/simple-python/main.py
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Dependency Failure test for trace_parameter_flow
 performance:
   max_duration_ms: 5000
 severity: high
+test_id: DFL-trace_parameter_flow-T09
+test_type: T09
+tool: trace_parameter_flow

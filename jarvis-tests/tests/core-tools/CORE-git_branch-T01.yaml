@@ -1,14 +1,16 @@
-test_id: CORE-git_branch-T01
-name: List branches in git repository
 category: core
-tool: git_branch
-layer: 1
-test_type: T01
 description: Happy Path - list branches in test git repository
+expected:
+  status: error
+expected_error: '[Errno 2] No such file or directory: ''/Users/adarsh/Documents/vr-agent/fixtures/integration-test-infrastructure/git-repos/simple-repo'''
 fixture: git-test-repo
 input:
+  file_path: fixtures/repositories/git-test-repo/main.py
   repository_path: fixtures/integration-test-infrastructure/git-repos/simple-repo
+layer: 1
+name: List branches in git repository
 skip: true
 skip_reason: Git repository not initialized in fixtures
-expected:
-  status: ok
+test_id: CORE-git_branch-T01
+test_type: T01
+tool: git_branch

@@ -1,24 +1,25 @@
-test_id: MSC-analyze_framework_configuration-T08
-name: Malformed Input test for analyze_framework_configuration
 category: misc
-tool: analyze_framework_configuration
-layer: 1
-test_type: T08
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Malformed Input test for analyze_framework_configuration
-fixture: corrupted-inputs
-input:
-  repository_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/corrupted-inputs
-  framework: fixtures/repositories/simple-python/main.py
-  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
+fixture: corrupted-inputs
+input:
+  file_path: fixtures/repositories/corrupted-inputs/main.py
+  framework: fixtures/repositories/simple-python/main.py
+  repository_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/corrupted-inputs
+  tool_context: fixtures/repositories/simple-python/main.py
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Malformed Input test for analyze_framework_configuration
 performance:
   max_duration_ms: 3000
 severity: critical
 skip: true
 skip_reason: 'Tool execution issue: '
+test_id: MSC-analyze_framework_configuration-T08
+test_type: T08
+tool: analyze_framework_configuration

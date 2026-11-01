@@ -1,63 +1,53 @@
-test_id: CORE-list_files-T01
-name: List files in simple-python fixture
 category: core
-tool: list_files
-layer: 1
-test_type: T01
-description: Happy Path - list all files in simple-python fixture
-fixture: simple-python
-input:
-  directory: fixtures/repositories/simple-python
-  recursive: true
-expected:
-  status: error
-  file_count_min: 5
-must_not:
-- error
 checks:
-- type: content_validation
-  required_files:
+- required_files:
   - main.py
   - ground-truth.yaml
-- type: schema_validity
-  required_fields:
+  type: content_validation
+- required_fields:
   - status
   - directory
   - files
+  type: schema_validity
+description: Happy Path - list all files in simple-python fixture
+expected:
+  file_count_min: 5
+  status: ok
+expected[key]:
+- path: subpackage
+  size: 0
+  type: directory
+- path: ground-truth.yaml
+  size: 6160
+  type: file
+- path: main.py
+  size: 1727
+  type: file
+- path: subpackage/__init__.py
+  size: 47
+  type: file
+- path: subpackage/helper.py
+  size: 272
+  type: file
+expected_directory: /Users/adarsh/Documents/vr-agent/fixtures/repositories/simple-python
+expected_error: 'Directory does not exist: /Users/adarsh/Documents/vr-agent/fixtures/repositories/simple-python'
+expected_files:
+- path: main.py
+  size: 0
+  type: directory
+fixture: simple-python
+input:
+  directory: fixtures/repositories/simple-python
+  file_path: fixtures/repositories/simple-python/main.py
+  recursive: true
+  repository_path: fixtures/repositories/simple-python
+layer: 1
+must_not:
+- error
+name: List files in simple-python fixture
 performance:
   max_duration_ms: 500
 severity: critical
-expected[key]:
-- path: subpackage
-  type: directory
-  size: 0
-- path: ground-truth.yaml
-  type: file
-  size: 6160
-- path: main.py
-  type: file
-  size: 1727
-- path: subpackage/__init__.py
-  type: file
-  size: 47
-- path: subpackage/helper.py
-  type: file
-  size: 272
-expected_directory: /Users/adarsh/Documents/vr-agent/jarvis-tests/test-runner/../fixtures/repositories/simple-python
-expected_files:
-- path: subpackage
-  type: directory
-  size: 0
-- path: ground-truth.yaml
-  type: file
-  size: 6160
-- path: main.py
-  type: file
-  size: 1727
-- path: subpackage/__init__.py
-  type: file
-  size: 47
-- path: subpackage/helper.py
-  type: file
-  size: 272
-expected_error: 'Directory does not exist: /Users/adarsh/Documents/vr-agent/fixtures/repositories/simple-python'
+test_id: CORE-list_files-T01
+test_type: T01
+tool: list_files

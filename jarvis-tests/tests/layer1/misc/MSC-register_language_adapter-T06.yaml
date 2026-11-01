@@ -1,24 +1,26 @@
-test_id: MSC-register_language_adapter-T06
-name: Large Input test for register_language_adapter
 category: misc
-tool: register_language_adapter
-layer: 1
-test_type: T06
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Large Input test for register_language_adapter
-fixture: polyglot-monorepo
-input:
-  language: python
-  adapter_config: fixtures/repositories/simple-python/main.py
-  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
+fixture: polyglot-monorepo
+input:
+  adapter_config: fixtures/repositories/simple-python/main.py
+  file_path: fixtures/repositories/polyglot-monorepo/main.py
+  language: python
+  repository_path: fixtures/repositories/polyglot-monorepo
+  tool_context: fixtures/repositories/simple-python/main.py
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Large Input test for register_language_adapter
 performance:
   max_duration_ms: 3000
 severity: medium
 skip: true
 skip_reason: 'Tool execution issue: '
+test_id: MSC-register_language_adapter-T06
+test_type: T06
+tool: register_language_adapter

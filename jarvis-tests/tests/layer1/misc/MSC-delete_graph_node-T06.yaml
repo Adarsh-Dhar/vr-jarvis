@@ -1,21 +1,23 @@
-test_id: MSC-delete_graph_node-T06
-name: Large Input test for delete_graph_node
 category: misc
-tool: delete_graph_node
-layer: 1
-test_type: T06
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Large Input test for delete_graph_node
-fixture: polyglot-monorepo
-input:
-  node_id: placeholder
-  tool_context: placeholder
 expected:
   status: ok
+fixture: polyglot-monorepo
+input:
+  file_path: fixtures/repositories/polyglot-monorepo/main.py
+  node_id: placeholder
+  repository_path: fixtures/repositories/polyglot-monorepo
+  tool_context: placeholder
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Large Input test for delete_graph_node
 performance:
   max_duration_ms: 3000
 severity: medium
+test_id: MSC-delete_graph_node-T06
+test_type: T06
+tool: delete_graph_node

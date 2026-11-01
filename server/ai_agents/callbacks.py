@@ -25,8 +25,9 @@ def init_state(callback_context):
         state[key] = ''
     state['scene_commands'] = []
     state['task_log'] = []
-    state['calling_agent'] = ''
-    TOOL_BUDGETS.clear()
+    # Initialize tool budgets in session state (not module global)
+    if 'tool_budgets' not in state:
+        state['tool_budgets'] = {}
     return None
 
 
@@ -34,7 +35,6 @@ def log_agent_start(callback_context):
     log = list(callback_context.state.get('task_log', []))
     log.append({'agent': callback_context.agent_name, 'kind': 'start', 'at': time.time()})
     callback_context.state['task_log'] = log[-60:]
-    callback_context.state['calling_agent'] = callback_context.agent_name   # also needed by P8
     return None
 
 
@@ -50,50 +50,34 @@ PERMISSION_LEVELS = {
 }
 
 
-# Tool budget tracking per agent
-TOOL_BUDGETS = {}
+# Tool budget tracking is now in session state['tool_budgets']
 
-# Tool permission assignments (from toolsets.py)
-TOOL_PERMISSIONS = {
-    # Write tools
-    "edit_file": "write",
-    "apply_patch": "write",
-    "create_file": "write",
-    "delete_file": "write",
-    "git_commit": "write",
-    "commit_changes": "write",
-    "merge_branch": "write",
-    "search_and_replace": "write",
-    "rename_symbol": "write",
-    "extract_function": "write",
-    "organize_imports": "write",
-    "generate_function": "write",
-    "generate_class": "write",
-    "format_code": "write",
-    "apply_patch_to_worktree": "write",
-    "create_worktree": "write",
-    # Execute tools
-    "start_application": "execute",
-    "stop_application": "execute",
-    "run_tests": "execute",
-    "run_typecheck": "execute",
-    "run_unit_tests": "execute",
-    "run_regression_tests": "execute",
-    # Most tools are read-only
-}
+# Tool permission assignments (from toolsets.py TOOL_LEVELS)
+from .agents.toolsets import TOOL_LEVELS as TOOL_PERMISSIONS
 
 
 def permission_guard(tool, args, tool_context):
     '''before_tool_callback. Returning a dict skips the tool call.'''
     name = tool.name
 
-    # Phase 1.4: Apply permission tier based on calling agent
-    calling_agent = tool_context.state.get('calling_agent')
+    # Use tool_context.agent_name (from ADK) instead of state['calling_agent']
+    calling_agent = tool_context.agent_name
+    
     if calling_agent:
         from .agents.toolsets import PERMISSION_CEILINGS
         from .agents.registry import AGENT_CONFIG
         agent_ceiling = PERMISSION_CEILINGS.get(calling_agent, "read")
-        tool_perm = TOOL_PERMISSIONS.get(name, "read")
+        
+        # Fail closed: tool missing from permission table is blocked for read-only agents
+        tool_perm = TOOL_PERMISSIONS.get(name)
+        if tool_perm is None:
+            # Tool not in permission table - block for read-only agents
+            if PERMISSION_LEVELS.get(agent_ceiling, 0) < PERMISSION_LEVELS.get("write", 2):
+                return {
+                    'status': 'blocked',
+                    'reason': f'Tool {name} is not in the permission table and agent {calling_agent} has {agent_ceiling} ceiling'
+                }
+            tool_perm = "read"  # Default to read for write agents
 
         # Check if tool exceeds agent's permission ceiling
         if PERMISSION_LEVELS.get(tool_perm, 0) > PERMISSION_LEVELS.get(agent_ceiling, 0):
@@ -102,18 +86,22 @@ def permission_guard(tool, args, tool_context):
                 'reason': f'Tool {name} requires {tool_perm} permission, agent {calling_agent} has {agent_ceiling}'
             }
 
-        # Check tool budget
-        if calling_agent not in TOOL_BUDGETS:
-            TOOL_BUDGETS[calling_agent] = 0
+        # Check tool budget from session state
+        tool_budgets = tool_context.state.get('tool_budgets', {})
+        if calling_agent not in tool_budgets:
+            tool_budgets[calling_agent] = 0
+            tool_context.state['tool_budgets'] = tool_budgets
+        
         # Get agent's tool budget from AGENT_CONFIG
         agent_config = AGENT_CONFIG.get(calling_agent, {})
         budget = agent_config.get("tool_budget", 20)  # Default budget
-        if TOOL_BUDGETS[calling_agent] >= budget:
+        if tool_budgets[calling_agent] >= budget:
             return {
                 'status': 'blocked',
                 'reason': f'Agent {calling_agent} exceeded tool budget of {budget}'
             }
-        TOOL_BUDGETS[calling_agent] += 1
+        tool_budgets[calling_agent] += 1
+        tool_context.state['tool_budgets'] = tool_budgets
 
     # Original tier2 checks
     if name in TIER2_TOOLS and not tool_context.state.get('approved'):

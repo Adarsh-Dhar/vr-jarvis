@@ -1,24 +1,25 @@
-test_id: MSC-set_breakpoint-T06
-name: Large Input test for set_breakpoint
 category: misc
-tool: set_breakpoint
-layer: 1
-test_type: T06
+checks:
+- required_fields:
+  - status
+  - file_path
+  type: schema_validity
 description: Large Input test for set_breakpoint
+expected:
+  file_path: present
+  status: ok
 fixture: polyglot-monorepo
 input:
   file_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/polyglot-monorepo/main.py
   line: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/polyglot-monorepo
   tool_context: fixtures/repositories/simple-python/main.py
-expected:
-  status: ok
-  file_path: present
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
-  - file_path
+name: Large Input test for set_breakpoint
 performance:
   max_duration_ms: 3000
 severity: medium
+test_id: MSC-set_breakpoint-T06
+test_type: T06
+tool: set_breakpoint

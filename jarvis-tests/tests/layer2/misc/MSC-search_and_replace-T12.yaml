@@ -1,23 +1,25 @@
-test_id: MSC-search_and_replace-T12
-name: Security test for search_and_replace
 category: misc
-tool: search_and_replace
-layer: 2
-test_type: T12
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Security test for search_and_replace
-fixture: simple-python
-input:
-  file_pattern: fixtures/repositories/simple-python/main.py
-  search: fixtures/repositories/simple-python/main.py
-  replace: fixtures/repositories/simple-python/main.py
-  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
+fixture: simple-python
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+  file_pattern: fixtures/repositories/simple-python/main.py
+  replace: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
+  search: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
+layer: 2
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Security test for search_and_replace
 performance:
   max_duration_ms: 3000
 severity: critical
+test_id: MSC-search_and_replace-T12
+test_type: T12
+tool: search_and_replace

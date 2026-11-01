@@ -1,21 +1,23 @@
-test_id: MSC-generate_investigation_report-T03
-name: Output Validation test for generate_investigation_report
 category: misc
-tool: generate_investigation_report
-layer: 1
-test_type: T03
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Output Validation test for generate_investigation_report
-fixture: simple-python
-input:
-  investigation_id: placeholder
-  tool_context: placeholder
 expected:
   status: ok
+fixture: simple-python
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+  investigation_id: placeholder
+  repository_path: fixtures/repositories/simple-python
+  tool_context: placeholder
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Output Validation test for generate_investigation_report
 performance:
   max_duration_ms: 3000
 severity: critical
+test_id: MSC-generate_investigation_report-T03
+test_type: T03
+tool: generate_investigation_report

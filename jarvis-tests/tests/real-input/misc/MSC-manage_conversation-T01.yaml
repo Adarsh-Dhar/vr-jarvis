@@ -1,23 +1,25 @@
-test_id: MSC-manage_conversation-T01
-name: Happy Path test for manage_conversation
 category: misc
-tool: manage_conversation
-layer: 1
-test_type: T01
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Happy Path test for manage_conversation
-fixture: simple-python
-input:
-  user_message: fixtures/repositories/simple-python/main.py
-  context: fixtures/repositories/simple-python/main.py
-  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
+fixture: simple-python
+input:
+  context: fixtures/repositories/simple-python/main.py
+  file_path: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
+  tool_context: fixtures/repositories/simple-python/main.py
+  user_message: fixtures/repositories/simple-python/main.py
+layer: 1
 must_not:
 - error
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Happy Path test for manage_conversation
 performance:
   max_duration_ms: 3000
 severity: critical
+test_id: MSC-manage_conversation-T01
+test_type: T01
+tool: manage_conversation

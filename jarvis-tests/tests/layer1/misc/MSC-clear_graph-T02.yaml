@@ -1,22 +1,24 @@
-test_id: MSC-clear_graph-T02
-name: Input Validation test for clear_graph
 category: misc
-tool: clear_graph
-layer: 1
-test_type: T02
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Input Validation test for clear_graph
-fixture: simple-python
-input:
-  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
+fixture: simple-python
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
+  tool_context: fixtures/repositories/simple-python/main.py
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Input Validation test for clear_graph
 performance:
   max_duration_ms: 3000
 severity: critical
 skip: true
 skip_reason: 'Tool execution issue: '
+test_id: MSC-clear_graph-T02
+test_type: T02
+tool: clear_graph

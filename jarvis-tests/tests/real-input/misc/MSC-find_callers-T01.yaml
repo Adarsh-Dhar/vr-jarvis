@@ -9,7 +9,9 @@ expected:
 fixture: simple-python
 input:
   depth: 1
+  file_path: fixtures/repositories/simple-python/main.py
   function_id: alpha
+  repository_path: fixtures/repositories/simple-python
   tool_context: fixtures/repositories/simple-python/main.py
 layer: 1
 must_not:

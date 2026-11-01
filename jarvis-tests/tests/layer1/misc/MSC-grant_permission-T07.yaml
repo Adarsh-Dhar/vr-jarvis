@@ -1,23 +1,25 @@
-test_id: MSC-grant_permission-T07
-name: Complex Input test for grant_permission
 category: misc
-tool: grant_permission
-layer: 1
-test_type: T07
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Complex Input test for grant_permission
-fixture: polyglot-monorepo
-input:
-  tool_name: placeholder
-  agent_id: placeholder
-  permission_level: placeholder
-  tool_context: placeholder
 expected:
   status: ok
+fixture: polyglot-monorepo
+input:
+  agent_id: placeholder
+  file_path: fixtures/repositories/polyglot-monorepo/main.py
+  permission_level: placeholder
+  repository_path: fixtures/repositories/polyglot-monorepo
+  tool_context: placeholder
+  tool_name: placeholder
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Complex Input test for grant_permission
 performance:
   max_duration_ms: 3000
 severity: high
+test_id: MSC-grant_permission-T07
+test_type: T07
+tool: grant_permission

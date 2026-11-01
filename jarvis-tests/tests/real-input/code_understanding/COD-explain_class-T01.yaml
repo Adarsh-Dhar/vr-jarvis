@@ -1,24 +1,26 @@
-test_id: COD-explain_class-T01
-name: Happy Path test for explain_class
 category: code_understanding
-tool: explain_class
-layer: 1
-test_type: T01
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Happy Path test for explain_class
+expected:
+  status: not_found
+expected_message: 'Symbol definition not found: placeholder'
+expected_symbol_name: placeholder
 fixture: simple-python
 input:
   class_id: ExampleClass
+  file_path: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
   tool_context: fixtures/repositories/simple-python/main.py
-expected:
-  status: not_found
+layer: 1
 must_not:
 - error
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Happy Path test for explain_class
 performance:
   max_duration_ms: 3000
 severity: critical
-expected_symbol_name: ExampleClass
-expected_message: 'Symbol definition not found: ExampleClass'
+test_id: COD-explain_class-T01
+test_type: T01
+tool: explain_class

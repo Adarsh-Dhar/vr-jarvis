@@ -1,21 +1,23 @@
-test_id: REL-calculate_change_impact-T03
-name: Output Validation test for calculate_change_impact
 category: relationship
-tool: calculate_change_impact
-layer: 1
-test_type: T03
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Output Validation test for calculate_change_impact
+expected:
+  status: ok
 fixture: simple-python
 input:
   element_id: fixtures/repositories/simple-python/main.py
+  file_path: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
   tool_context: fixtures/repositories/simple-python/main.py
-expected:
-  status: ok
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Output Validation test for calculate_change_impact
 performance:
   max_duration_ms: 3000
 severity: critical
+test_id: REL-calculate_change_impact-T03
+test_type: T03
+tool: calculate_change_impact

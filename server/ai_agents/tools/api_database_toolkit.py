@@ -4,13 +4,17 @@ Important for understanding full-stack applications.
 """
 
 from typing import Optional, List, Dict, Any
+from ._common import repo_root, resolve_in_repo
 from pathlib import Path
+from ._common import repo_root, resolve_in_repo
 import json
 import ast
 import re
 import subprocess
 from google.adk.tools import ToolContext
+from ._common import repo_root, resolve_in_repo
 from ._safe import safe
+from ._common import repo_root, resolve_in_repo
 
 
 # API Intelligence Tools
@@ -76,7 +80,7 @@ def inspect_api_schema(
     try:
         path = Path(schema_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            path = resolve_in_repo(path)
         
         if not path.exists():
             return {
@@ -288,7 +292,7 @@ def inspect_http_routes(
         
         path = Path(repository_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            path = resolve_in_repo(path)
         
         # Search for route definitions across different frameworks
         route_patterns = {
@@ -414,7 +418,7 @@ def inspect_middleware(
         
         path = Path(repository_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            path = resolve_in_repo(path)
         
         # Search for middleware patterns
         middleware_patterns = {
@@ -491,7 +495,7 @@ def inspect_authentication(
         
         path = Path(repository_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            path = resolve_in_repo(path)
         
         # Search for authentication patterns
         auth_patterns = {
@@ -561,7 +565,7 @@ def inspect_authorization(
         
         path = Path(repository_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            path = resolve_in_repo(path)
         
         # Search for authorization patterns
         authz_patterns = {
@@ -631,7 +635,7 @@ def discover_database_schema(
         
         path = Path(repository_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            path = resolve_in_repo(path)
         
         # Search for ORM model definitions
         orm_patterns = {
@@ -775,7 +779,7 @@ def analyze_database_queries(
         
         path = Path(repository_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            path = resolve_in_repo(path)
         
         # Search for SQL query patterns
         sql_patterns = {
@@ -1065,7 +1069,7 @@ def inspect_tables(
         
         # Parse Python files for table classes
         table_classes = []
-        cwd = Path.cwd()
+        cwd = repo_root()
         for py_file in cwd.rglob('*.py'):
             try:
                 tree = ast.parse(py_file.read_text(encoding='utf-8'))
@@ -1157,7 +1161,7 @@ def inspect_columns(
         
         # Parse Python files for the specific table
         table_columns = []
-        cwd = Path.cwd()
+        cwd = repo_root()
         for py_file in cwd.rglob('*.py'):
             try:
                 tree = ast.parse(py_file.read_text(encoding='utf-8'))
@@ -1365,7 +1369,7 @@ def inspect_sql_queries(
         
         path = Path(repository_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            path = resolve_in_repo(path)
         
         # Search for SQL query patterns
         sql_patterns = {
@@ -1517,7 +1521,7 @@ def inspect_orm_models(
         
         path = Path(repository_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            path = resolve_in_repo(path)
         
         # Search for ORM model patterns
         orm_patterns = {
@@ -1603,7 +1607,7 @@ def inspect_orm_relationships(
         
         path = Path(repository_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            path = resolve_in_repo(path)
         
         # Search for relationship patterns
         relationship_patterns = {
@@ -1758,7 +1762,7 @@ def trace_migrations(
         
         path = Path(repository_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            path = resolve_in_repo(path)
         
         # Search for migration patterns
         migration_patterns = {
@@ -1847,7 +1851,7 @@ def map_api_to_database(
         
         path = Path(repository_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            path = resolve_in_repo(path)
         
         # Search for API endpoints
         endpoint_patterns = ['@app.route', '@api.route', '@bp.route', 'router.get', 'router.post', 'app.get', 'app.post']
@@ -1965,7 +1969,7 @@ def visualize_database_schema(
         
         # Parse Python files to build a schema representation
         schema_representation = []
-        cwd = Path.cwd()
+        cwd = repo_root()
         for py_file in cwd.rglob('*.py'):
             try:
                 tree = ast.parse(py_file.read_text(encoding='utf-8'))

@@ -1,22 +1,24 @@
-test_id: REL-find_shared_dependencies-T01
-name: Happy Path test for find_shared_dependencies
 category: relationship
-tool: find_shared_dependencies
-layer: 1
-test_type: T01
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Happy Path test for find_shared_dependencies
-fixture: simple-python
-input:
-  module_ids: fixtures/repositories/simple-python/main.py
-  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
+fixture: simple-python
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+  module_ids: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
+  tool_context: fixtures/repositories/simple-python/main.py
+layer: 1
 must_not:
 - error
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Happy Path test for find_shared_dependencies
 performance:
   max_duration_ms: 3000
 severity: critical
+test_id: REL-find_shared_dependencies-T01
+test_type: T01
+tool: find_shared_dependencies

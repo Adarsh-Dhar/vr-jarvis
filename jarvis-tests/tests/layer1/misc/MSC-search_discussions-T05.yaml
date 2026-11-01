@@ -1,22 +1,24 @@
-test_id: MSC-search_discussions-T05
-name: Boundary Conditions test for search_discussions
 category: misc
-tool: search_discussions
-layer: 1
-test_type: T05
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Boundary Conditions test for search_discussions
-fixture: simple-python
-input:
-  repository: placeholder
-  query: test
-  tool_context: placeholder
 expected:
   status: ok
+fixture: simple-python
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+  query: test
+  repository: placeholder
+  repository_path: fixtures/repositories/simple-python
+  tool_context: placeholder
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Boundary Conditions test for search_discussions
 performance:
   max_duration_ms: 3000
 severity: high
+test_id: MSC-search_discussions-T05
+test_type: T05
+tool: search_discussions

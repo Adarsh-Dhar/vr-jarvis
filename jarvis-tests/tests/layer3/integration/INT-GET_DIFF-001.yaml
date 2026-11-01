@@ -1,26 +1,27 @@
-test_id: INT-GET_DIFF-001
-name: Integration test for get_diff
 category: integration
-tool: get_diff
-layer: 3
-test_type: INTEGRATION
+checks:
+- required_fields:
+  - status
+  type: schema_validity
+- type: integration_connectivity
 description: Get git diff between branches
-fixture:
-  type: git
-  path: integration-test-infrastructure/git-repos/simple-repo
-input:
-  repository_path: integration-test-infrastructure/git-repos/simple-repo
-  ref1: main
-  ref2: feature/new-feature
 expected:
   status: error
-checks:
-- type: schema_validity
-  required_fields:
-  - status
-- type: integration_connectivity
+expected_error: 'TypeError: get_diff() takes 1 positional argument but 2 were given'
+fixture:
+  path: integration-test-infrastructure/git-repos/simple-repo
+  type: git
+input:
+  file_path: 'fixtures/repositories/{''type'': ''git'', ''path'': ''integration-test-infrastructure/git-repos/simple-repo''}/main.py'
+  ref1: main
+  ref2: feature/new-feature
+  repository_path: integration-test-infrastructure/git-repos/simple-repo
+layer: 3
+name: Integration test for get_diff
 performance:
   max_duration_ms: 5000
-severity: high
 requires_infrastructure: true
-expected_error: 'TypeError: get_diff() takes 1 positional argument but 2 were given'
+severity: high
+test_id: INT-GET_DIFF-001
+test_type: INTEGRATION
+tool: get_diff

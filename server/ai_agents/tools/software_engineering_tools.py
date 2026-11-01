@@ -10,6 +10,7 @@ import os
 import shutil
 from google.adk.tools import ToolContext
 from ._safe import safe
+from ._common import repo_root, resolve_in_repo
 
 
 # File Editing Tools
@@ -20,11 +21,16 @@ def create_file(
     content: str,
     tool_context: ToolContext
 ) -> dict:
-    """Create new files."""
+    """Create new files in the worktree. Requires create_worktree to be called first."""
     try:
-        path = Path(file_path)
-        if not path.is_absolute():
-            path = Path.cwd() / path
+        worktree = tool_context.state.get('worktree')
+        if not worktree:
+            return {
+                'status': 'blocked',
+                'reason': 'Create a sandbox worktree first with create_worktree.'
+            }
+        
+        path = resolve_in_repo(file_path, root=Path(worktree))
         
         # Create parent directories if they don't exist
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -52,11 +58,16 @@ def edit_file(
     new_content: str,
     tool_context: ToolContext
 ) -> dict:
-    """Modify existing files."""
+    """Modify existing files in the worktree. Requires create_worktree to be called first."""
     try:
-        path = Path(file_path)
-        if not path.is_absolute():
-            path = Path.cwd() / path
+        worktree = tool_context.state.get('worktree')
+        if not worktree:
+            return {
+                'status': 'blocked',
+                'reason': 'Create a sandbox worktree first with create_worktree.'
+            }
+        
+        path = resolve_in_repo(file_path, root=Path(worktree))
         
         if not path.exists():
             return {
@@ -94,15 +105,22 @@ def apply_patch(
     patch_content: str,
     tool_context: ToolContext
 ) -> dict:
-    """Apply code patches."""
+    """Apply code patches in the worktree. Requires create_worktree to be called first."""
     try:
+        worktree = tool_context.state.get('worktree')
+        if not worktree:
+            return {
+                'status': 'blocked',
+                'reason': 'Create a sandbox worktree first with create_worktree.'
+            }
+        
         # Try git apply first
         result = subprocess.run(
             ['git', 'apply', '-'],
             input=patch_content,
             capture_output=True,
             text=True,
-            cwd=str(Path.cwd())
+            cwd=worktree
         )
         
         if result.returncode == 0:
@@ -119,7 +137,7 @@ def apply_patch(
             input=patch_content,
             capture_output=True,
             text=True,
-            cwd=str(Path.cwd())
+            cwd=worktree
         )
         
         if result.returncode == 0:
@@ -148,11 +166,16 @@ def delete_file(
     file_path: str,
     tool_context: ToolContext
 ) -> dict:
-    """Delete files with appropriate approval."""
+    """Delete files in the worktree. Requires create_worktree to be called first."""
     try:
-        path = Path(file_path)
-        if not path.is_absolute():
-            path = Path.cwd() / path
+        worktree = tool_context.state.get('worktree')
+        if not worktree:
+            return {
+                'status': 'blocked',
+                'reason': 'Create a sandbox worktree first with create_worktree.'
+            }
+        
+        path = resolve_in_repo(file_path, root=Path(worktree))
         
         if not path.exists():
             return {
@@ -182,15 +205,17 @@ def rename_file(
     new_path: str,
     tool_context: ToolContext
 ) -> dict:
-    """Rename files."""
+    """Rename files in the worktree. Requires create_worktree to be called first."""
     try:
-        old = Path(old_path)
-        new = Path(new_path)
+        worktree = tool_context.state.get('worktree')
+        if not worktree:
+            return {
+                'status': 'blocked',
+                'reason': 'Create a sandbox worktree first with create_worktree.'
+            }
         
-        if not old.is_absolute():
-            old = Path.cwd() / old
-        if not new.is_absolute():
-            new = Path.cwd() / new
+        old = resolve_in_repo(old_path, root=Path(worktree))
+        new = resolve_in_repo(new_path, root=Path(worktree))
         
         if not old.exists():
             return {
@@ -219,15 +244,17 @@ def move_file(
     destination: str,
     tool_context: ToolContext
 ) -> dict:
-    """Move files."""
+    """Move files in the worktree. Requires create_worktree to be called first."""
     try:
-        src = Path(source)
-        dst = Path(destination)
+        worktree = tool_context.state.get('worktree')
+        if not worktree:
+            return {
+                'status': 'blocked',
+                'reason': 'Create a sandbox worktree first with create_worktree.'
+            }
         
-        if not src.is_absolute():
-            src = Path.cwd() / src
-        if not dst.is_absolute():
-            dst = Path.cwd() / dst
+        src = resolve_in_repo(source, root=Path(worktree))
+        dst = resolve_in_repo(destination, root=Path(worktree))
         
         if not src.exists():
             return {
@@ -255,11 +282,16 @@ def move_file(
 
 @safe
 def create_directory(directory_path: str, tool_context: ToolContext) -> dict:
-    """Create directories."""
+    """Create directories in the worktree. Requires create_worktree to be called first."""
     try:
-        path = Path(directory_path)
-        if not path.is_absolute():
-            path = Path.cwd() / path
+        worktree = tool_context.state.get('worktree')
+        if not worktree:
+            return {
+                'status': 'blocked',
+                'reason': 'Create a sandbox worktree first with create_worktree.'
+            }
+        
+        path = resolve_in_repo(directory_path, root=Path(worktree))
         
         path.mkdir(parents=True, exist_ok=True)
         
@@ -282,9 +314,16 @@ def search_and_replace(
     replace: str,
     tool_context: ToolContext
 ) -> dict:
-    """Perform controlled replacements."""
+    """Perform controlled replacements in the worktree. Requires create_worktree to be called first."""
     try:
-        cwd = Path.cwd()
+        worktree = tool_context.state.get('worktree')
+        if not worktree:
+            return {
+                'status': 'blocked',
+                'reason': 'Create a sandbox worktree first with create_worktree.'
+            }
+        
+        cwd = Path(worktree)
         files_affected = 0
         total_replacements = 0
         
@@ -321,11 +360,16 @@ def format_code(
     tool_context: ToolContext,
     formatter: str = 'auto'
 ) -> dict:
-    """Format source code."""
+    """Format source code in the worktree. Requires create_worktree to be called first."""
     try:
-        path = Path(file_path)
-        if not path.is_absolute():
-            path = Path.cwd() / path
+        worktree = tool_context.state.get('worktree')
+        if not worktree:
+            return {
+                'status': 'blocked',
+                'reason': 'Create a sandbox worktree first with create_worktree.'
+            }
+        
+        path = resolve_in_repo(file_path, root=Path(worktree))
         
         if not path.exists():
             return {
@@ -376,11 +420,16 @@ def organize_imports(
     file_path: str,
     tool_context: ToolContext
 ) -> dict:
-    """Organize imports."""
+    """Organize imports in the worktree. Requires create_worktree to be called first."""
     try:
-        path = Path(file_path)
-        if not path.is_absolute():
-            path = Path.cwd() / path
+        worktree = tool_context.state.get('worktree')
+        if not worktree:
+            return {
+                'status': 'blocked',
+                'reason': 'Create a sandbox worktree first with create_worktree.'
+            }
+        
+        path = resolve_in_repo(file_path, root=Path(worktree))
         
         if not path.exists():
             return {
@@ -421,7 +470,7 @@ def execute_command(
 ) -> dict:
     """Execute commands in terminal."""
     try:
-        cwd = Path(working_directory) if working_directory else Path.cwd()
+        cwd = Path(working_directory) if working_directory else repo_root()
         
         result = subprocess.run(
             command,
@@ -462,7 +511,7 @@ def execute_script(
     try:
         path = Path(script_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            path = resolve_in_repo(path)
         
         if not path.exists():
             return {
@@ -635,7 +684,7 @@ def run_compiler(
                 'message': f'Compiler {compiler} not configured'
             }
         
-        result = subprocess.run(cmd, capture_output=True, text=True, cwd=str(Path.cwd()))
+        result = subprocess.run(cmd, capture_output=True, text=True, cwd=str(repo_root()))
         
         return {
             'status': 'ok' if result.returncode == 0 else 'error',
@@ -658,7 +707,7 @@ def run_build(
 ) -> dict:
     """Run build."""
     try:
-        cwd = Path.cwd()
+        cwd = repo_root()
         
         # Detect build system
         if (cwd / 'package.json').exists():
@@ -696,9 +745,7 @@ def run_linter(
 ) -> dict:
     """Run linter."""
     try:
-        path = Path(file_path)
-        if not path.is_absolute():
-            path = Path.cwd() / path
+        path = resolve_in_repo(file_path)
         
         ext = path.suffix.lower()
         
@@ -763,9 +810,7 @@ def run_type_checker(
 ) -> dict:
     """Run type checker."""
     try:
-        path = Path(file_path)
-        if not path.is_absolute():
-            path = Path.cwd() / path
+        path = resolve_in_repo(file_path)
         
         ext = path.suffix.lower()
         
@@ -988,7 +1033,7 @@ def git_status(repository_path: str, tool_context: ToolContext) -> dict:
     try:
         path = Path(repository_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            path = resolve_in_repo(path)
         
         result = subprocess.run(['git', 'status', '--porcelain'], cwd=str(path), capture_output=True, text=True)
         
@@ -1033,7 +1078,7 @@ def git_diff(
     try:
         path = Path(repository_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            path = resolve_in_repo(path)
         
         cmd = ['git', 'diff']
         if file_path:
@@ -1065,7 +1110,7 @@ def git_log(
     try:
         path = Path(repository_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            path = resolve_in_repo(path)
         
         result = subprocess.run(
             ['git', 'log', f'-{limit}', '--pretty=format:%H|%s|%an|%ad', '--date=short'],
@@ -1108,7 +1153,7 @@ def git_show(
     try:
         path = Path(repository_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            path = resolve_in_repo(path)
         
         result = subprocess.run(['git', 'show', commit_hash], cwd=str(path), capture_output=True, text=True)
         
@@ -1135,7 +1180,7 @@ def git_branch(
     try:
         path = Path(repository_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            path = resolve_in_repo(path)
         
         result = subprocess.run(['git', 'branch', '-a'], cwd=str(path), capture_output=True, text=True)
         
@@ -1175,7 +1220,7 @@ def git_create_branch(
     try:
         path = Path(repository_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            path = resolve_in_repo(path)
         
         result = subprocess.run(['git', 'checkout', '-b', branch_name], cwd=str(path), capture_output=True, text=True)
         
@@ -1203,7 +1248,7 @@ def git_commit(
     try:
         path = Path(repository_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            path = resolve_in_repo(path)
         
         result = subprocess.run(['git', 'commit', '-m', message], cwd=str(path), capture_output=True, text=True)
         
@@ -1234,7 +1279,7 @@ def git_stash(
     try:
         path = Path(repository_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            path = resolve_in_repo(path)
         
         result = subprocess.run(['git', 'stash'], cwd=str(path), capture_output=True, text=True)
         
@@ -1261,7 +1306,7 @@ def git_revert(
     try:
         path = Path(repository_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            path = resolve_in_repo(path)
         
         result = subprocess.run(['git', 'revert', '--no-commit', commit_hash], cwd=str(path), capture_output=True, text=True)
         
@@ -1290,7 +1335,7 @@ def git_blame(
     try:
         path = Path(repository_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            path = resolve_in_repo(path)
         
         result = subprocess.run(['git', 'blame', '-L', f'{line},{line}', file_path], cwd=str(path), capture_output=True, text=True)
         
@@ -1325,7 +1370,7 @@ def git_create_checkpoint(
     try:
         path = Path(repository_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            path = resolve_in_repo(path)
         
         # Create a tag as a checkpoint
         checkpoint_id = f"checkpoint_{int(time.time())}_{label.replace(' ', '_')}"
@@ -1353,8 +1398,14 @@ def generate_function(
     tool_context: ToolContext,
     signature: Optional[str] = None
 ) -> dict:
-    """Generate function."""
+    """Generate function template in the worktree. Requires create_worktree to be called first."""
     try:
+        worktree = tool_context.state.get('worktree')
+        if not worktree:
+            return {
+                'status': 'blocked',
+                'reason': 'Create a sandbox worktree first with create_worktree.'
+            }
         # Generate a template based on description analysis
         import re
         
@@ -1389,8 +1440,14 @@ def generate_class(
     tool_context: ToolContext,
     class_name: Optional[str] = None
 ) -> dict:
-    """Generate class."""
+    """Generate class template in the worktree. Requires create_worktree to be called first."""
     try:
+        worktree = tool_context.state.get('worktree')
+        if not worktree:
+            return {
+                'status': 'blocked',
+                'reason': 'Create a sandbox worktree first with create_worktree.'
+            }
         import re
         name = class_name or 'GeneratedClass'
         
@@ -1671,8 +1728,14 @@ def extract_function(
     function_name: str,
     tool_context: ToolContext
 ) -> dict:
-    """Extract function."""
+    """Extract function in the worktree. Requires create_worktree to be called first."""
     try:
+        worktree = tool_context.state.get('worktree')
+        if not worktree:
+            return {
+                'status': 'blocked',
+                'reason': 'Create a sandbox worktree first with create_worktree.'
+            }
         from .repository_tools import read_file
         
         file_path = code_range.get('file')
@@ -1721,8 +1784,14 @@ def rename_symbol(
     scope: str,
     tool_context: ToolContext
 ) -> dict:
-    """Rename symbol."""
+    """Rename symbol in the worktree. Requires create_worktree to be called first."""
     try:
+        worktree = tool_context.state.get('worktree')
+        if not worktree:
+            return {
+                'status': 'blocked',
+                'reason': 'Create a sandbox worktree first with create_worktree.'
+            }
         from .navigation_tools import get_symbol_references
         from .repository_tools import search_code
         

@@ -1,21 +1,23 @@
-test_id: DFL-trace_return_value_flow-T07
-name: Complex Input test for trace_return_value_flow
 category: data_flow
-tool: trace_return_value_flow
-layer: 1
-test_type: T07
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Complex Input test for trace_return_value_flow
-fixture: polyglot-monorepo
-input:
-  function_id: alpha
-  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
+fixture: polyglot-monorepo
+input:
+  file_path: fixtures/repositories/polyglot-monorepo/main.py
+  function_id: alpha
+  repository_path: fixtures/repositories/polyglot-monorepo
+  tool_context: fixtures/repositories/simple-python/main.py
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Complex Input test for trace_return_value_flow
 performance:
   max_duration_ms: 5000
 severity: high
+test_id: DFL-trace_return_value_flow-T07
+test_type: T07
+tool: trace_return_value_flow

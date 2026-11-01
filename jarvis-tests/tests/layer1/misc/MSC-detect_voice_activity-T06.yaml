@@ -1,21 +1,23 @@
-test_id: MSC-detect_voice_activity-T06
-name: Large Input test for detect_voice_activity
 category: misc
-tool: detect_voice_activity
-layer: 1
-test_type: T06
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Large Input test for detect_voice_activity
+expected:
+  status: ok
 fixture: polyglot-monorepo
 input:
   audio_data: placeholder
+  file_path: fixtures/repositories/polyglot-monorepo/main.py
+  repository_path: fixtures/repositories/polyglot-monorepo
   tool_context: placeholder
-expected:
-  status: ok
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Large Input test for detect_voice_activity
 performance:
   max_duration_ms: 3000
 severity: medium
+test_id: MSC-detect_voice_activity-T06
+test_type: T06
+tool: detect_voice_activity

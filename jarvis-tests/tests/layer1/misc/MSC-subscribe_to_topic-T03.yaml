@@ -1,22 +1,24 @@
-test_id: MSC-subscribe_to_topic-T03
-name: Output Validation test for subscribe_to_topic
 category: misc
-tool: subscribe_to_topic
-layer: 1
-test_type: T03
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Output Validation test for subscribe_to_topic
-fixture: simple-python
-input:
-  topic: placeholder
-  callback: placeholder
-  tool_context: placeholder
 expected:
   status: ok
+fixture: simple-python
+input:
+  callback: placeholder
+  file_path: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
+  tool_context: placeholder
+  topic: placeholder
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Output Validation test for subscribe_to_topic
 performance:
   max_duration_ms: 3000
 severity: critical
+test_id: MSC-subscribe_to_topic-T03
+test_type: T03
+tool: subscribe_to_topic

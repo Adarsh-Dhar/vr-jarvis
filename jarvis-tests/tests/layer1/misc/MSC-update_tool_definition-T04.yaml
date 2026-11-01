@@ -1,24 +1,26 @@
-test_id: MSC-update_tool_definition-T04
-name: Empty Input test for update_tool_definition
 category: misc
-tool: update_tool_definition
-layer: 1
-test_type: T04
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Empty Input test for update_tool_definition
-fixture: simple-python
-input:
-  tool_name: fixtures/repositories/simple-python/main.py
-  tool_definition: fixtures/repositories/simple-python/main.py
-  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
+fixture: simple-python
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
+  tool_context: fixtures/repositories/simple-python/main.py
+  tool_definition: fixtures/repositories/simple-python/main.py
+  tool_name: fixtures/repositories/simple-python/main.py
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Empty Input test for update_tool_definition
 performance:
   max_duration_ms: 3000
 severity: high
 skip: true
 skip_reason: 'Tool execution issue: '
+test_id: MSC-update_tool_definition-T04
+test_type: T04
+tool: update_tool_definition

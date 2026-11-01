@@ -1,25 +1,27 @@
-test_id: MSC-kubernetes_exec_command-T05
-name: Boundary Conditions test for kubernetes_exec_command
 category: misc
-tool: kubernetes_exec_command
-layer: 1
-test_type: T05
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Boundary Conditions test for kubernetes_exec_command
-fixture: simple-python
-input:
-  pod_name: placeholder
-  namespace: placeholder
-  command: placeholder
-  tool_context: placeholder
 expected:
   status: ok
+fixture: simple-python
+input:
+  command: placeholder
+  file_path: fixtures/repositories/simple-python/main.py
+  namespace: placeholder
+  pod_name: placeholder
+  repository_path: fixtures/repositories/simple-python
+  tool_context: placeholder
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Boundary Conditions test for kubernetes_exec_command
 performance:
   max_duration_ms: 3000
 severity: high
 skip: true
 skip_reason: 'Tool execution issue: '
+test_id: MSC-kubernetes_exec_command-T05
+test_type: T05
+tool: kubernetes_exec_command

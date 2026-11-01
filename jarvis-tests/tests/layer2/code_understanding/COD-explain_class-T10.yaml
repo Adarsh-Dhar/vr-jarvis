@@ -1,23 +1,25 @@
-test_id: COD-explain_class-T10
-name: Timeout test for explain_class
 category: code_understanding
-tool: explain_class
-layer: 2
-test_type: T10
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Timeout test for explain_class
+expected:
+  status: not_found
+expected_message: 'Symbol definition not found: ExampleClass'
+expected_symbol_name: ExampleClass
 fixture: simple-python
 input:
   class_id: ExampleClass
+  file_path: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
   tool_context: fixtures/repositories/simple-python/main.py
-expected:
-  status: not_found
+layer: 2
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Timeout test for explain_class
 performance:
   max_duration_ms: 3000
 severity: high
-expected_symbol_name: ExampleClass
-expected_message: 'Symbol definition not found: ExampleClass'
+test_id: COD-explain_class-T10
+test_type: T10
+tool: explain_class

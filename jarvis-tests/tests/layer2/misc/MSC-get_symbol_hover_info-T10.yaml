@@ -1,21 +1,23 @@
-test_id: MSC-get_symbol_hover_info-T10
-name: Timeout test for get_symbol_hover_info
 category: misc
-tool: get_symbol_hover_info
-layer: 2
-test_type: T10
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Timeout test for get_symbol_hover_info
-fixture: simple-python
-input:
-  symbol_name: fixtures/repositories/simple-python/main.py
-  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
+fixture: simple-python
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
+  symbol_name: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
+layer: 2
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Timeout test for get_symbol_hover_info
 performance:
   max_duration_ms: 3000
 severity: high
+test_id: MSC-get_symbol_hover_info-T10
+test_type: T10
+tool: get_symbol_hover_info

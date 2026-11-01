@@ -1,21 +1,23 @@
-test_id: MSC-retrieve_memory-T14
-name: Regression test for retrieve_memory
 category: misc
-tool: retrieve_memory
-layer: 2
-test_type: T14
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Regression test for retrieve_memory
-fixture: simple-python
-input:
-  key: fixtures/repositories/simple-python/main.py
-  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
+fixture: simple-python
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+  key: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
+  tool_context: fixtures/repositories/simple-python/main.py
+layer: 2
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Regression test for retrieve_memory
 performance:
   max_duration_ms: 3000
 severity: high
+test_id: MSC-retrieve_memory-T14
+test_type: T14
+tool: retrieve_memory

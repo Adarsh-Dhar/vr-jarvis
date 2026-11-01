@@ -1,25 +1,27 @@
-test_id: MSC-search_graph-T01
-name: Happy Path test for search_graph
 category: misc
-tool: search_graph
-layer: 1
-test_type: T01
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Happy Path test for search_graph
-fixture: simple-python
-input:
-  graph_id: fixtures/repositories/simple-python/main.py
-  query: test
-  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
+fixture: simple-python
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+  graph_id: fixtures/repositories/simple-python/main.py
+  query: test
+  repository_path: fixtures/repositories/simple-python
+  tool_context: fixtures/repositories/simple-python/main.py
+layer: 1
 must_not:
 - error
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Happy Path test for search_graph
 performance:
   max_duration_ms: 3000
 severity: critical
 skip: true
 skip_reason: 'Tool execution issue: '
+test_id: MSC-search_graph-T01
+test_type: T01
+tool: search_graph

@@ -1,24 +1,26 @@
-test_id: MSC-get_branch_info-T13
-name: Performance test for get_branch_info
 category: misc
-tool: get_branch_info
-layer: 2
-test_type: T13
+checks:
+- required_fields:
+  - status
+  type: schema_validity
+- max_duration_ms: 3000
+  type: performance
 description: Performance test for get_branch_info
-fixture: simple-python
-input:
-  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: error
+expected_error: argument should be a str or an os.PathLike object where __fspath__
+  returns a str, not 'NoneType'
+fixture: simple-python
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
+  tool_context: fixtures/repositories/simple-python/main.py
+layer: 2
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
-- type: performance
-  max_duration_ms: 3000
+name: Performance test for get_branch_info
 performance:
   max_duration_ms: 3000
 severity: medium
-expected_error: argument should be a str or an os.PathLike object where __fspath__
-  returns a str, not 'NoneType'
+test_id: MSC-get_branch_info-T13
+test_type: T13
+tool: get_branch_info

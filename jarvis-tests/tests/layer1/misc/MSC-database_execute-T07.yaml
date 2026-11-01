@@ -1,22 +1,24 @@
-test_id: MSC-database_execute-T07
-name: Complex Input test for database_execute
 category: misc
-tool: database_execute
-layer: 1
-test_type: T07
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Complex Input test for database_execute
+expected:
+  status: ok
 fixture: polyglot-monorepo
 input:
   connection_string: placeholder
+  file_path: fixtures/repositories/polyglot-monorepo/main.py
+  repository_path: fixtures/repositories/polyglot-monorepo
   statement: placeholder
   tool_context: placeholder
-expected:
-  status: ok
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Complex Input test for database_execute
 performance:
   max_duration_ms: 3000
 severity: high
+test_id: MSC-database_execute-T07
+test_type: T07
+tool: database_execute

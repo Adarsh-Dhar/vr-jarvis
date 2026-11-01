@@ -1,21 +1,23 @@
-test_id: MSC-read_documentation-T14
-name: Regression test for read_documentation
 category: misc
-tool: read_documentation
-layer: 2
-test_type: T14
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Regression test for read_documentation
+expected:
+  status: ok
 fixture: simple-python
 input:
   doc_path: fixtures/repositories/simple-python/main.py
+  file_path: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
   tool_context: fixtures/repositories/simple-python/main.py
-expected:
-  status: ok
+layer: 2
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Regression test for read_documentation
 performance:
   max_duration_ms: 3000
 severity: high
+test_id: MSC-read_documentation-T14
+test_type: T14
+tool: read_documentation

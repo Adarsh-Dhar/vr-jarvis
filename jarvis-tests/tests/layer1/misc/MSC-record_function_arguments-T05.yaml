@@ -1,22 +1,24 @@
-test_id: MSC-record_function_arguments-T05
-name: Boundary Conditions test for record_function_arguments
 category: misc
-tool: record_function_arguments
-layer: 1
-test_type: T05
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Boundary Conditions test for record_function_arguments
+expected:
+  status: ok
 fixture: simple-python
 input:
   application_id: fixtures/repositories/simple-python/main.py
+  file_path: fixtures/repositories/simple-python/main.py
   function_id: alpha
+  repository_path: fixtures/repositories/simple-python
   tool_context: fixtures/repositories/simple-python/main.py
-expected:
-  status: ok
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Boundary Conditions test for record_function_arguments
 performance:
   max_duration_ms: 3000
 severity: high
+test_id: MSC-record_function_arguments-T05
+test_type: T05
+tool: record_function_arguments

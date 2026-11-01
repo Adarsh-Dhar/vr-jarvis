@@ -1,23 +1,25 @@
-test_id: API-trace_transaction-T02
-name: Input Validation test for trace_transaction
 category: api_database
-tool: trace_transaction
-layer: 1
-test_type: T02
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Input Validation test for trace_transaction
-fixture: simple-python
-input:
-  transaction_id: fixtures/repositories/simple-python/main.py
-  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: error
+fixture: simple-python
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
+  tool_context: fixtures/repositories/simple-python/main.py
+  transaction_id: fixtures/repositories/simple-python/main.py
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Input Validation test for trace_transaction
 performance:
   max_duration_ms: 5000
 severity: critical
 skip: true
 skip_reason: 'Tool execution issue: '
+test_id: API-trace_transaction-T02
+test_type: T02
+tool: trace_transaction

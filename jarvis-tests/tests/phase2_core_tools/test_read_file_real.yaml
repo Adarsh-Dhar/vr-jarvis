@@ -1,18 +1,19 @@
-test_id: PHASE2-CORE-001
-tool: read_file
 category: unit
-layer: 1
-test_type: real_input
 description: Read a real file from the simple-python fixture
-input:
-  file_path: fixtures/repositories/simple-python/main.py
 expected:
-  status: error
   content_not_empty: true
   file_path_type: absolute
-must_not:
-- placeholder
+  status: error
+expected_error: 'Path is not a file: /Users/adarsh/Documents/vr-agent/fixtures/repositories/simple-python/main.py'
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
+layer: 1
 metrics:
 - tool_selection
 - evidence_accuracy
-expected_error: 'File does not exist: /Users/adarsh/Documents/vr-agent/fixtures/repositories/simple-python/main.py'
+must_not:
+- placeholder
+test_id: PHASE2-CORE-001
+test_type: real_input
+tool: read_file

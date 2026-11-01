@@ -1,22 +1,24 @@
-test_id: API-inspect_indexes-T04
-name: Empty Input test for inspect_indexes
 category: api_database
-tool: inspect_indexes
-layer: 1
-test_type: T04
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Empty Input test for inspect_indexes
+expected:
+  status: ok
 fixture: simple-python
 input:
   connection_string: fixtures/repositories/simple-python/main.py
+  file_path: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
   table: fixtures/repositories/simple-python/main.py
   tool_context: fixtures/repositories/simple-python/main.py
-expected:
-  status: ok
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Empty Input test for inspect_indexes
 performance:
   max_duration_ms: 5000
 severity: high
+test_id: API-inspect_indexes-T04
+test_type: T04
+tool: inspect_indexes

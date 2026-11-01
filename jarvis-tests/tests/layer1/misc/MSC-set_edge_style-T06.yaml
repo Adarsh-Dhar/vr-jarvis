@@ -1,23 +1,25 @@
-test_id: MSC-set_edge_style-T06
-name: Large Input test for set_edge_style
 category: misc
-tool: set_edge_style
-layer: 1
-test_type: T06
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Large Input test for set_edge_style
-fixture: polyglot-monorepo
-input:
-  src: placeholder
-  dst: placeholder
-  style: placeholder
-  tool_context: placeholder
 expected:
   status: ok
+fixture: polyglot-monorepo
+input:
+  dst: placeholder
+  file_path: fixtures/repositories/polyglot-monorepo/main.py
+  repository_path: fixtures/repositories/polyglot-monorepo
+  src: placeholder
+  style: placeholder
+  tool_context: placeholder
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Large Input test for set_edge_style
 performance:
   max_duration_ms: 3000
 severity: medium
+test_id: MSC-set_edge_style-T06
+test_type: T06
+tool: set_edge_style

@@ -1,23 +1,25 @@
-test_id: MSC-register_voice_command-T01
-name: Happy Path test for register_voice_command
 category: misc
-tool: register_voice_command
-layer: 1
-test_type: T01
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Happy Path test for register_voice_command
-fixture: simple-python
-input:
-  command_text: placeholder
-  action: placeholder
-  tool_context: placeholder
 expected:
   status: ok
+fixture: simple-python
+input:
+  action: placeholder
+  command_text: placeholder
+  file_path: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
+  tool_context: placeholder
+layer: 1
 must_not:
 - error
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Happy Path test for register_voice_command
 performance:
   max_duration_ms: 3000
 severity: critical
+test_id: MSC-register_voice_command-T01
+test_type: T01
+tool: register_voice_command

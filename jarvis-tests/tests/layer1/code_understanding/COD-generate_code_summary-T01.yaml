@@ -1,22 +1,24 @@
-test_id: COD-generate_code_summary-T01
-name: Happy Path test for generate_code_summary
 category: code_understanding
-tool: generate_code_summary
-layer: 1
-test_type: T01
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Happy Path test for generate_code_summary
-fixture: simple-python
-input:
-  element_id: fixtures/repositories/simple-python/main.py
-  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
+fixture: simple-python
+input:
+  element_id: placeholder
+  file_path: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
+  tool_context: placeholder
+layer: 1
 must_not:
 - error
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Happy Path test for generate_code_summary
 performance:
   max_duration_ms: 3000
 severity: critical
+test_id: COD-generate_code_summary-T01
+test_type: T01
+tool: generate_code_summary

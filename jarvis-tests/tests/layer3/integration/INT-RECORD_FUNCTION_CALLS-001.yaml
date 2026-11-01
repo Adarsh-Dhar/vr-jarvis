@@ -1,23 +1,25 @@
-test_id: INT-RECORD_FUNCTION_CALLS-001
-name: Integration test for record_function_calls
 category: integration
-tool: record_function_calls
-layer: 3
-test_type: INTEGRATION
+checks:
+- required_fields:
+  - status
+  type: schema_validity
+- type: integration_connectivity
 description: Record function calls during execution
-fixture:
-  type: runtime
-  path: integration-test-infrastructure/runtime/sample_app.py
-input:
-  program_path: integration-test-infrastructure/runtime/sample_app.py
 expected:
   status: ok
-checks:
-- type: schema_validity
-  required_fields:
-  - status
-- type: integration_connectivity
+fixture:
+  path: integration-test-infrastructure/runtime/sample_app.py
+  type: runtime
+input:
+  file_path: 'fixtures/repositories/{''type'': ''runtime'', ''path'': ''integration-test-infrastructure/runtime/sample_app.py''}/main.py'
+  program_path: integration-test-infrastructure/runtime/sample_app.py
+  repository_path: 'fixtures/repositories/{''type'': ''runtime'', ''path'': ''integration-test-infrastructure/runtime/sample_app.py''}'
+layer: 3
+name: Integration test for record_function_calls
 performance:
   max_duration_ms: 5000
-severity: high
 requires_infrastructure: true
+severity: high
+test_id: INT-RECORD_FUNCTION_CALLS-001
+test_type: INTEGRATION
+tool: record_function_calls

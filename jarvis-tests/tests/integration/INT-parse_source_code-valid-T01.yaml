@@ -1,10 +1,25 @@
-test_id: INT-parse_source_code-valid-T01
-name: Parse source code with real parser
 category: integration
-tool: parse_source_code
-layer: 3
-test_type: T01
+checks:
+- required_content:
+  - functions
+  - classes
+  type: content_validation
+- parser_was_real: true
+  type: infrastructure_check
 description: Integration test - parse valid Python file with real parser
+expected:
+  classes_found:
+  - ExampleClass
+  functions_found:
+  - alpha
+  - beta
+  - gamma
+  - delta
+  - target
+  parsed_ast:
+    exists: true
+  status: error
+expected_error: 'File not found: /Users/adarsh/Documents/vr-agent/main.py'
 fixture: simple-python
 infrastructure:
 - temp_copy
@@ -12,31 +27,17 @@ infrastructure:
 input:
   file_path: main.py
   language: python
-expected:
-  status: error
-  parsed_ast:
-    exists: true
-  functions_found:
-  - alpha
-  - beta
-  - gamma
-  - delta
-  - target
-  classes_found:
-  - ExampleClass
+  repository_path: fixtures/repositories/simple-python
+layer: 3
 must_not:
 - parse_error
 - syntax_error
-checks:
-- type: content_validation
-  required_content:
-  - functions
-  - classes
-- type: infrastructure_check
-  parser_was_real: true
+name: Parse source code with real parser
 performance:
   max_duration_ms: 1000
+requires_real_infrastructure: true
 severity: critical
 stub_should_fail: true
-requires_real_infrastructure: true
-expected_error: 'File not found: /Users/adarsh/Documents/vr-agent/main.py'
+test_id: INT-parse_source_code-valid-T01
+test_type: T01
+tool: parse_source_code

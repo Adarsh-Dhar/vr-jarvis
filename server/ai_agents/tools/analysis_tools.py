@@ -49,7 +49,7 @@ def parse_source_code(file_path: str, tool_context: ToolContext) -> dict:
     try:
         path = Path(file_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            path = resolve_in_repo(path)
         
         if not path.exists():
             return {
@@ -95,7 +95,7 @@ def extract_symbols(file_path: str, tool_context: ToolContext) -> dict:
     try:
         path = Path(file_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            path = resolve_in_repo(path)
         
         if not path.exists():
             return {
@@ -169,7 +169,7 @@ def resolve_types(file_path: str, tool_context: ToolContext) -> dict:
     try:
         path = Path(file_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            path = resolve_in_repo(path)
         
         if not path.exists():
             return {
@@ -233,7 +233,7 @@ def resolve_references(file_path: str, tool_context: ToolContext) -> dict:
     try:
         path = Path(file_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            path = resolve_in_repo(path)
         
         if not path.exists():
             return {
@@ -406,7 +406,7 @@ def analyze_code_complexity(file_path: str, tool_context: ToolContext) -> dict:
     try:
         path = Path(file_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            path = resolve_in_repo(path)
         
         if not path.exists():
             return {
@@ -525,7 +525,7 @@ def analyze_exceptions(file_path: str, tool_context: ToolContext) -> dict:
     try:
         path = Path(file_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            path = resolve_in_repo(path)
         
         if not path.exists():
             return {
@@ -582,7 +582,7 @@ def analyze_annotations(file_path: str, tool_context: ToolContext) -> dict:
     try:
         path = Path(file_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            path = resolve_in_repo(path)
         
         if not path.exists():
             return {
@@ -642,7 +642,7 @@ def analyze_generated_code(file_path: str, tool_context: ToolContext) -> dict:
     try:
         path = Path(file_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            path = resolve_in_repo(path)
         
         if not path.exists():
             return {

@@ -1,25 +1,26 @@
-test_id: INT-GET_BRANCH_INFO-001
-name: Integration test for get_branch_info
 category: integration
-tool: get_branch_info
-layer: 3
-test_type: INTEGRATION
+checks:
+- required_fields:
+  - status
+  type: schema_validity
+- type: integration_connectivity
 description: Get git branch information
-fixture:
-  type: git
-  path: integration-test-infrastructure/git-repos/simple-repo
-input:
-  repository_path: integration-test-infrastructure/git-repos/simple-repo
 expected:
   status: error
-checks:
-- type: schema_validity
-  required_fields:
-  - status
-- type: integration_connectivity
-performance:
-  max_duration_ms: 5000
-severity: high
-requires_infrastructure: true
 expected_error: 'TypeError: get_branch_info() takes 1 positional argument but 2 were
   given'
+fixture:
+  path: integration-test-infrastructure/git-repos/simple-repo
+  type: git
+input:
+  file_path: 'fixtures/repositories/{''type'': ''git'', ''path'': ''integration-test-infrastructure/git-repos/simple-repo''}/main.py'
+  repository_path: integration-test-infrastructure/git-repos/simple-repo
+layer: 3
+name: Integration test for get_branch_info
+performance:
+  max_duration_ms: 5000
+requires_infrastructure: true
+severity: high
+test_id: INT-GET_BRANCH_INFO-001
+test_type: INTEGRATION
+tool: get_branch_info

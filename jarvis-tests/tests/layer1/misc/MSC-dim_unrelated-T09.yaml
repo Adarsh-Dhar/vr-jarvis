@@ -1,23 +1,25 @@
-test_id: MSC-dim_unrelated-T09
-name: Dependency Failure test for dim_unrelated
 category: misc
-tool: dim_unrelated
-layer: 1
-test_type: T09
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Dependency Failure test for dim_unrelated
-fixture: simple-python
-input:
-  keep_ids: placeholder
-  tool_context: placeholder
 expected:
   status: ok
+fixture: simple-python
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+  keep_ids: placeholder
+  repository_path: fixtures/repositories/simple-python
+  tool_context: placeholder
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Dependency Failure test for dim_unrelated
 performance:
   max_duration_ms: 3000
 severity: high
 skip: true
 skip_reason: 'Tool execution issue: '
+test_id: MSC-dim_unrelated-T09
+test_type: T09
+tool: dim_unrelated

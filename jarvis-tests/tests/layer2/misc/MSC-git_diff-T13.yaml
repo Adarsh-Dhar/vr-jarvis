@@ -12,6 +12,7 @@ input:
   file_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/simple-python/main.py
 expected:
   status: ok
+  file_path_contains: main.py
 must_not: []
 checks:
 - type: schema_validity
@@ -22,3 +23,68 @@ checks:
 performance:
   max_duration_ms: 3000
 severity: medium
+expected_repository_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/simple-python
+expected_diff: "duration += test_time\n+                    \n+                  \
+  \  if testcase.find('failure') is not None:\n+                        failed +=\
+  \ 1\n+                        failure_elem = testcase.find('failure')\n+       \
+  \                 failures.append({\n+                            'test': test_name,\n\
+  +                            'error': failure_elem.get('message', 'Test failed')\
+  \ if failure_elem is not None else 'Test failed'\n+                        })\n\
+  +                    elif testcase.find('error') is not None:\n+               \
+  \         failed += 1\n+                        error_elem = testcase.find('error')\n\
+  +                        failures.append({\n+                            'test':\
+  \ test_name,\n+                            'error': error_elem.get('message', 'Test\
+  \ error') if error_elem is not None else 'Test error'\n+                       \
+  \ })\n+                    elif testcase.find('skipped') is not None:\n+       \
+  \                 skipped += 1\n+                    else:\n+                  \
+  \      passed += 1\n+                \n+                # Clean up\n+          \
+  \      junit_path.unlink()\n+            except Exception as e:\n+             \
+  \   # Fall back to parsing stdout if XML fails\n+                for line in result.stdout.splitlines():\n\
+  +                    if 'PASSED' in line:\n+                        passed += 1\n\
+  +                    elif 'FAILED' in line:\n+                        failed +=\
+  \ 1\n+                        failures.append({'test': 'unknown', 'error': 'Test\
+  \ failed'})\n+                    elif 'SKIPPED' in line:\n+                   \
+  \     skipped += 1\n+        else:\n+            # Fallback to stdout parsing\n\
+  +            for line in result.stdout.splitlines():\n+                if 'PASSED'\
+  \ in line:\n+                    passed += 1\n+                elif 'FAILED' in\
+  \ line:\n+                    failed += 1\n+                    failures.append({'test':\
+  \ 'unknown', 'error': 'Test failed'})\n+                elif 'SKIPPED' in line:\n\
+  +                    skipped += 1\n         \n         return {\n             'status':\
+  \ 'ok' if result.returncode == 0 else 'failed',\n@@ -255,7 +359,8 @@ def run_regression_tests(\n\
+  \             'passed': passed,\n             'failed': failed,\n             'skipped':\
+  \ skipped,\n-            'duration': 0.0,\n+            'duration': duration,\n\
+  +            'failures': failures[:10],\n             'output': result.stdout[-2000:]\
+  \ if result.stdout else result.stderr[-2000:]\n         }\n     except subprocess.TimeoutExpired:\n\
+  @@ -277,7 +382,7 @@ def run_property_tests(\n ) -> dict:\n     \"\"\"Execute property-based\
+  \ tests.\"\"\"\n     try:\n-        cwd = Path.cwd()\n+        cwd = repo_root()\n\
+  \         \n         cmd = ['python3', '-m', 'pytest', '-v', '-m', 'property']\n\
+  \         if test_files:\n@@ -327,7 +432,7 @@ def run_fuzz_tests(\n     \"\"\"Fuzz\
+  \ inputs and behavior.\"\"\"\n     try:\n         # Try to use Hypothesis for property-based\
+  \ testing\n-        cwd = Path.cwd()\n+        cwd = repo_root()\n         \n  \
+  \       result = subprocess.run(\n             ['python3', '-m', 'hypothesis', 'test',\
+  \ target_function],\n@@ -513,7 +618,7 @@ def measure_test_coverage(\n     try:\n\
+  \         path = Path(repository_path)\n         if not path.is_absolute():\n- \
+  \           path = Path.cwd() / path\n+            path = resolve_in_repo(path)\n\
+  \         \n         result = subprocess.run(\n             ['python3', '-m', 'pytest',\
+  \ '--cov=.', '--cov-report=term'],\n@@ -571,7 +676,7 @@ def measure_branch_coverage(\n\
+  \     try:\n         path = Path(repository_path)\n         if not path.is_absolute():\n\
+  -            path = Path.cwd() / path\n+            path = resolve_in_repo(path)\n\
+  \         \n         result = subprocess.run(\n             ['python3', '-m', 'pytest',\
+  \ '--cov=.', '--cov-branch', '--cov-report=term'],\n@@ -621,7 +726,7 @@ def map_tests_to_functions(\n\
+  \         # Real implementation would use AST analysis of test files\n         path\
+  \ = Path(repository_path)\n         if not path.is_absolute():\n-            path\
+  \ = Path.cwd() / path\n+            path = resolve_in_repo(path)\n         \n  \
+  \       test_mapping = []\n         \n@@ -701,7 +806,7 @@ def verify_compilation(\n\
+  \     try:\n         path = Path(repository_path)\n         if not path.is_absolute():\n\
+  -            path = Path.cwd() / path\n+            path = resolve_in_repo(path)\n\
+  \         \n         # Try to compile based on language\n         if (path / 'setup.py').exists()\
+  \ or (path / 'pyproject.toml').exists():\n@@ -735,7 +840,7 @@ def verify_types(\n\
+  \     try:\n         path = Path(repository_path)\n         if not path.is_absolute():\n\
+  -            path = Path.cwd() / path\n+            path = resolve_in_repo(path)\n\
+  \         \n         result = subprocess.run(['python3', '-m', 'mypy', str(path)],\
+  \ capture_output=True, text=True, timeout=60)\n         \n@@ -773,7 +878,7 @@ def\
+  \ verify_lint(\n     try:\n         path = Path(repository_path)\n         if not\
+  \ path.is_absolute():\n-            path = Path.cwd() / path\n+            path\
+  \ = resolve_in_repo(path)\n         \n         if linter == 'auto':\n          \
+  \   linter = 'pylint'\n"
+expected_exit_code: 0

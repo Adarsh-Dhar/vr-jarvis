@@ -1,21 +1,23 @@
-test_id: API-inspect_database_connection-T03
-name: Output Validation test for inspect_database_connection
 category: api_database
-tool: inspect_database_connection
-layer: 1
-test_type: T03
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Output Validation test for inspect_database_connection
+expected:
+  status: ok
 fixture: simple-python
 input:
   connection_string: placeholder
+  file_path: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
   tool_context: placeholder
-expected:
-  status: ok
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Output Validation test for inspect_database_connection
 performance:
   max_duration_ms: 5000
 severity: critical
+test_id: API-inspect_database_connection-T03
+test_type: T03
+tool: inspect_database_connection

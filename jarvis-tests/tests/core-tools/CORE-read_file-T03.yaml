@@ -1,33 +1,34 @@
-test_id: CORE-read_file-T03
-name: Output validation - content structure
 category: core
-tool: read_file
-layer: 1
-test_type: T03
+checks:
+- content_type: str
+  file_path_type: str
+  type: field_type_validation
+- fields:
+  - content
+  - file_path
+  type: non_empty_check
 description: Output validation - verify returned content has correct structure
+expected:
+  content_contains: def
+  content_not_empty: true
+  content_type: string
+  file_path_contains: main.py
+  file_path_type: string
+  line_count: 93
+  status: error
+expected[key]: ok
+expected_error: 'Path is not a file: /Users/adarsh/Documents/vr-agent/fixtures/repositories/simple-python/main.py'
 fixture: simple-python
 input:
   file_path: fixtures/repositories/simple-python/main.py
-expected:
-  status: error
-  content_type: string
-  content_not_empty: true
-  file_path_type: string
-  file_path_contains: main.py
-  content_contains: def
-  line_count: 93
+  repository_path: fixtures/repositories/simple-python
+layer: 1
 must_not:
 - error
-checks:
-- type: field_type_validation
-  content_type: str
-  file_path_type: str
-- type: non_empty_check
-  fields:
-  - content
-  - file_path
+name: Output validation - content structure
 performance:
   max_duration_ms: 500
 severity: critical
-expected[key]: ok
-expected_error: 'File does not exist: /Users/adarsh/Documents/vr-agent/fixtures/repositories/simple-python/main.py'
+test_id: CORE-read_file-T03
+test_type: T03
+tool: read_file

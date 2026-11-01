@@ -1,25 +1,26 @@
-test_id: COD-explain_expression-T09
-name: Dependency Failure test for explain_expression
 category: code_understanding
-tool: explain_expression
-layer: 1
-test_type: T09
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Dependency Failure test for explain_expression
+expected:
+  status: ok
 fixture: simple-python
 input:
   expression: placeholder
   file_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/simple-python/main.py
   line: placeholder
+  repository_path: fixtures/repositories/simple-python
   tool_context: placeholder
-expected:
-  status: ok
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Dependency Failure test for explain_expression
 performance:
   max_duration_ms: 3000
 severity: high
 skip: true
 skip_reason: 'Tool execution issue: '
+test_id: COD-explain_expression-T09
+test_type: T09
+tool: explain_expression

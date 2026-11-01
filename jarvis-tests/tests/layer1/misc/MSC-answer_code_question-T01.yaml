@@ -1,25 +1,27 @@
-test_id: MSC-answer_code_question-T01
-name: Happy Path test for answer_code_question
 category: misc
-tool: answer_code_question
-layer: 1
-test_type: T01
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Happy Path test for answer_code_question
-fixture: simple-python
-input:
-  question: placeholder
-  context: placeholder
-  tool_context: placeholder
 expected:
   status: ok
+fixture: simple-python
+input:
+  context: placeholder
+  file_path: fixtures/repositories/simple-python/main.py
+  question: placeholder
+  repository_path: fixtures/repositories/simple-python
+  tool_context: placeholder
+layer: 1
 must_not:
 - error
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Happy Path test for answer_code_question
 performance:
   max_duration_ms: 3000
 severity: critical
 skip: true
 skip_reason: 'Tool execution issue: '
+test_id: MSC-answer_code_question-T01
+test_type: T01
+tool: answer_code_question

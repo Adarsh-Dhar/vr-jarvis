@@ -1,23 +1,25 @@
-test_id: MSC-set_edge_style-T15
-name: Recovery test for set_edge_style
 category: misc
-tool: set_edge_style
-layer: 2
-test_type: T15
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Recovery test for set_edge_style
-fixture: simple-python
-input:
-  src: fixtures/repositories/simple-python/main.py
-  dst: fixtures/repositories/simple-python/main.py
-  style: fixtures/repositories/simple-python/main.py
-  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
+fixture: simple-python
+input:
+  dst: fixtures/repositories/simple-python/main.py
+  file_path: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
+  src: fixtures/repositories/simple-python/main.py
+  style: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
+layer: 2
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Recovery test for set_edge_style
 performance:
   max_duration_ms: 3000
 severity: high
+test_id: MSC-set_edge_style-T15
+test_type: T15
+tool: set_edge_style

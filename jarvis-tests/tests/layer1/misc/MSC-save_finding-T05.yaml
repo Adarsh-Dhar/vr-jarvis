@@ -1,22 +1,24 @@
-test_id: MSC-save_finding-T05
-name: Boundary Conditions test for save_finding
 category: misc
-tool: save_finding
-layer: 1
-test_type: T05
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Boundary Conditions test for save_finding
-fixture: simple-python
-input:
-  summary: placeholder
-  node_ids: placeholder
-  tool_context: placeholder
 expected:
   status: ok
+fixture: simple-python
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+  node_ids: placeholder
+  repository_path: fixtures/repositories/simple-python
+  summary: placeholder
+  tool_context: placeholder
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Boundary Conditions test for save_finding
 performance:
   max_duration_ms: 3000
 severity: high
+test_id: MSC-save_finding-T05
+test_type: T05
+tool: save_finding

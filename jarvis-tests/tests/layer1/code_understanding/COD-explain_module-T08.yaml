@@ -1,25 +1,27 @@
-test_id: COD-explain_module-T08
-name: Malformed Input test for explain_module
 category: code_understanding
-tool: explain_module
-layer: 1
-test_type: T08
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Malformed Input test for explain_module
-fixture: corrupted-inputs
-input:
-  module_path: placeholder
-  tool_context: placeholder
 expected:
   status: error
+expected_error: argument should be a str or an os.PathLike object where __fspath__
+  returns a str, not 'NoneType'
+fixture: corrupted-inputs
+input:
+  file_path: fixtures/repositories/corrupted-inputs/main.py
+  module_path: placeholder
+  repository_path: fixtures/repositories/corrupted-inputs
+  tool_context: placeholder
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Malformed Input test for explain_module
 performance:
   max_duration_ms: 3000
 severity: critical
 skip: true
 skip_reason: 'Tool execution issue: '
-expected_error: argument should be a str or an os.PathLike object where __fspath__
-  returns a str, not 'NoneType'
+test_id: COD-explain_module-T08
+test_type: T08
+tool: explain_module

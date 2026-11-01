@@ -1,20 +1,22 @@
-test_id: MSC-list_tools-T12
-name: Security test for list_tools
 category: misc
-tool: list_tools
-layer: 2
-test_type: T12
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Security test for list_tools
-fixture: simple-python
-input:
-  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
+fixture: simple-python
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
+  tool_context: fixtures/repositories/simple-python/main.py
+layer: 2
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Security test for list_tools
 performance:
   max_duration_ms: 3000
 severity: critical
+test_id: MSC-list_tools-T12
+test_type: T12
+tool: list_tools

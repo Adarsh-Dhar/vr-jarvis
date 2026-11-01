@@ -1,37 +1,38 @@
-test_id: INT-index_repository-real-T01
-name: Index repository with real incremental indexing
 category: integration
-tool: index_repository
-layer: 3
-test_type: T01
+checks:
+- required_content:
+  - files_indexed
+  type: content_validation
+- graph_store_was_real: true
+  type: infrastructure_check
+- type: isolation_check
+  used_temp_copy: true
 description: Integration test - index repository with real incremental indexing
+expected:
+  files_indexed:
+  - main.py
+  - subpackage/__init__.py
+  - subpackage/helper.py
+  indexing_complete: true
+  status: ok
 fixture: simple-python
 infrastructure:
-  - temp_copy
-  - graph_store
+- temp_copy
+- graph_store
 input:
-  repository_path: .
+  file_path: fixtures/repositories/simple-python/main.py
   incremental: false
-expected:
-  status: ok
-  indexing_complete: true
-  files_indexed:
-    - main.py
-    - subpackage/__init__.py
-    - subpackage/helper.py
+  repository_path: .
+layer: 3
 must_not:
-  - indexing_error
-  - graph_corrupted
-checks:
-  - type: content_validation
-    required_content:
-      - files_indexed
-  - type: infrastructure_check
-    graph_store_was_real: true
-  - type: isolation_check
-    used_temp_copy: true
+- indexing_error
+- graph_corrupted
+name: Index repository with real incremental indexing
 performance:
   max_duration_ms: 30000
+requires_real_infrastructure: true
 severity: critical
 stub_should_fail: true
-requires_real_infrastructure: true
+test_id: INT-index_repository-real-T01
+test_type: T01
+tool: index_repository

@@ -1,22 +1,24 @@
-test_id: DFL-trace_parameter_flow-T02
-name: Input Validation test for trace_parameter_flow
 category: data_flow
-tool: trace_parameter_flow
-layer: 1
-test_type: T02
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Input Validation test for trace_parameter_flow
-fixture: simple-python
-input:
-  function_id: alpha
-  parameter: fixtures/repositories/simple-python/main.py
-  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: error
+fixture: simple-python
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+  function_id: alpha
+  parameter: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
+  tool_context: fixtures/repositories/simple-python/main.py
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Input Validation test for trace_parameter_flow
 performance:
   max_duration_ms: 5000
 severity: critical
+test_id: DFL-trace_parameter_flow-T02
+test_type: T02
+tool: trace_parameter_flow

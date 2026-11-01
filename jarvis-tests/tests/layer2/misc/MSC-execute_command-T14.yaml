@@ -1,21 +1,31 @@
-test_id: MSC-execute_command-T14
-name: Regression test for execute_command
 category: misc
-tool: execute_command
-layer: 2
-test_type: T14
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Regression test for execute_command
+expected:
+  status: ok
+expected_command: fixtures/repositories/simple-python/main.py
+expected_exit_code: 127
+expected_stderr: '/bin/sh: fixtures/repositories/simple-python/main.py: No such file
+  or directory
+
+  '
+expected_stdout: ''
+expected_working_directory: /Users/adarsh/Documents/vr-agent/repository/rp
 fixture: simple-python
 input:
   command: fixtures/repositories/simple-python/main.py
+  file_path: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
   tool_context: fixtures/repositories/simple-python/main.py
-expected:
-  status: ok
+layer: 2
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Regression test for execute_command
 performance:
   max_duration_ms: 3000
 severity: high
+test_id: MSC-execute_command-T14
+test_type: T14
+tool: execute_command

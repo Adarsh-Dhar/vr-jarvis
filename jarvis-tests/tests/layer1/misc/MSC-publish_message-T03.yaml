@@ -1,22 +1,24 @@
-test_id: MSC-publish_message-T03
-name: Output Validation test for publish_message
 category: misc
-tool: publish_message
-layer: 1
-test_type: T03
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Output Validation test for publish_message
-fixture: simple-python
-input:
-  topic: placeholder
-  message: placeholder
-  tool_context: placeholder
 expected:
   status: ok
+fixture: simple-python
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+  message: placeholder
+  repository_path: fixtures/repositories/simple-python
+  tool_context: placeholder
+  topic: placeholder
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Output Validation test for publish_message
 performance:
   max_duration_ms: 3000
 severity: critical
+test_id: MSC-publish_message-T03
+test_type: T03
+tool: publish_message

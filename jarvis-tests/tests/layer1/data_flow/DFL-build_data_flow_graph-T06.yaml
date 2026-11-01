@@ -1,21 +1,23 @@
-test_id: DFL-build_data_flow_graph-T06
-name: Large Input test for build_data_flow_graph
 category: data_flow
-tool: build_data_flow_graph
-layer: 1
-test_type: T06
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Large Input test for build_data_flow_graph
-fixture: polyglot-monorepo
-input:
-  scope: fixtures/repositories/simple-python/main.py
-  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
+fixture: polyglot-monorepo
+input:
+  file_path: fixtures/repositories/polyglot-monorepo/main.py
+  repository_path: fixtures/repositories/polyglot-monorepo
+  scope: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Large Input test for build_data_flow_graph
 performance:
   max_duration_ms: 5000
 severity: medium
+test_id: DFL-build_data_flow_graph-T06
+test_type: T06
+tool: build_data_flow_graph

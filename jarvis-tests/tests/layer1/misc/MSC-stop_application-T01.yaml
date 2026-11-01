@@ -1,22 +1,24 @@
-test_id: MSC-stop_application-T01
-name: Happy Path test for stop_application
 category: misc
-tool: stop_application
-layer: 1
-test_type: T01
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Happy Path test for stop_application
+expected:
+  status: ok
 fixture: simple-python
 input:
   application_id: placeholder
+  file_path: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
   tool_context: placeholder
-expected:
-  status: ok
+layer: 1
 must_not:
 - error
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Happy Path test for stop_application
 performance:
   max_duration_ms: 3000
 severity: critical
+test_id: MSC-stop_application-T01
+test_type: T01
+tool: stop_application

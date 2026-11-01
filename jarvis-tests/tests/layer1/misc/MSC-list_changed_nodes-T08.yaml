@@ -1,22 +1,24 @@
-test_id: MSC-list_changed_nodes-T08
-name: Malformed Input test for list_changed_nodes
 category: misc
-tool: list_changed_nodes
-layer: 1
-test_type: T08
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Malformed Input test for list_changed_nodes
-fixture: corrupted-inputs
-input:
-  tool_context: placeholder
 expected:
   status: ok
+fixture: corrupted-inputs
+input:
+  file_path: fixtures/repositories/corrupted-inputs/main.py
+  repository_path: fixtures/repositories/corrupted-inputs
+  tool_context: placeholder
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Malformed Input test for list_changed_nodes
 performance:
   max_duration_ms: 3000
 severity: critical
 skip: true
 skip_reason: 'Tool execution issue: '
+test_id: MSC-list_changed_nodes-T08
+test_type: T08
+tool: list_changed_nodes

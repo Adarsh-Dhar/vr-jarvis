@@ -1,21 +1,23 @@
-test_id: API-analyze_api_security-T14
-name: Regression test for analyze_api_security
 category: api_database
-tool: analyze_api_security
-layer: 2
-test_type: T14
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Regression test for analyze_api_security
+expected:
+  status: ok
 fixture: simple-python
 input:
   endpoint: fixtures/repositories/simple-python/main.py
+  file_path: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
   tool_context: fixtures/repositories/simple-python/main.py
-expected:
-  status: ok
+layer: 2
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Regression test for analyze_api_security
 performance:
   max_duration_ms: 5000
 severity: high
+test_id: API-analyze_api_security-T14
+test_type: T14
+tool: analyze_api_security

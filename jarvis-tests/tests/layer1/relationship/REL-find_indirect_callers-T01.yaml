@@ -1,26 +1,28 @@
-test_id: REL-find_indirect_callers-T01
-name: Happy Path test for find_indirect_callers
 category: relationship
-tool: find_indirect_callers
-layer: 1
-test_type: T01
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Happy Path test for find_indirect_callers
-fixture: simple-python
-input:
-  function_id: placeholder
-  tool_context: placeholder
 expected:
   status: not_found
+expected_message: Symbol definition not found
+expected_symbol_name: placeholder
+fixture: simple-python
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+  function_id: placeholder
+  repository_path: fixtures/repositories/simple-python
+  tool_context: placeholder
+layer: 1
 must_not:
 - error
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Happy Path test for find_indirect_callers
 performance:
   max_duration_ms: 3000
 severity: critical
 skip: true
 skip_reason: 'Tool execution issue: '
-expected_symbol_name: placeholder
-expected_message: Symbol definition not found
+test_id: REL-find_indirect_callers-T01
+test_type: T01
+tool: find_indirect_callers

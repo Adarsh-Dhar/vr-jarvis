@@ -1,20 +1,22 @@
-test_id: MSC-list_tools-T07
-name: Complex Input test for list_tools
 category: misc
-tool: list_tools
-layer: 1
-test_type: T07
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Complex Input test for list_tools
-fixture: polyglot-monorepo
-input:
-  tool_context: placeholder
 expected:
   status: ok
+fixture: polyglot-monorepo
+input:
+  file_path: fixtures/repositories/polyglot-monorepo/main.py
+  repository_path: fixtures/repositories/polyglot-monorepo
+  tool_context: placeholder
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Complex Input test for list_tools
 performance:
   max_duration_ms: 3000
 severity: high
+test_id: MSC-list_tools-T07
+test_type: T07
+tool: list_tools

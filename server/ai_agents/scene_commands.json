@@ -1,0 +1,99 @@
+{
+  "commands": [
+    {
+      "name": "select_node",
+      "fields": ["node_id"],
+      "description": "Select a node in the graph"
+    },
+    {
+      "name": "expand_node",
+      "fields": ["node_id", "depth"],
+      "description": "Expand a node to show its connections"
+    },
+    {
+      "name": "collapse_node",
+      "fields": ["node_id"],
+      "description": "Collapse a node to hide its connections"
+    },
+    {
+      "name": "set_depth",
+      "fields": ["depth"],
+      "description": "Set the visualization depth"
+    },
+    {
+      "name": "set_scope",
+      "fields": ["scope"],
+      "description": "Set the visualization scope"
+    },
+    {
+      "name": "set_filters",
+      "fields": ["filters"],
+      "description": "Set visualization filters"
+    },
+    {
+      "name": "create_group",
+      "fields": ["group_id", "node_ids"],
+      "description": "Create a spatial group of nodes"
+    },
+    {
+      "name": "annotate",
+      "fields": ["node_id", "text"],
+      "description": "Add an annotation to a node"
+    },
+    {
+      "name": "bookmark",
+      "fields": ["node_id", "label"],
+      "description": "Bookmark a node for later"
+    },
+    {
+      "name": "compare",
+      "fields": ["node_id1", "node_id2"],
+      "description": "Compare two nodes side by side"
+    },
+    {
+      "name": "show_graph",
+      "fields": ["nodes", "edges"],
+      "description": "Replace the visible graph with a new node/edge list"
+    },
+    {
+      "name": "highlight_path",
+      "fields": ["path"],
+      "description": "Highlight a path through the graph"
+    },
+    {
+      "name": "dim_unrelated",
+      "fields": ["node_ids"],
+      "description": "Dim nodes not in the list"
+    },
+    {
+      "name": "open_code_panel",
+      "fields": ["file_path", "line"],
+      "description": "Open code panel at a specific location"
+    },
+    {
+      "name": "focus_camera",
+      "fields": ["target", "position"],
+      "description": "Move camera to focus on a target"
+    },
+    {
+      "name": "set_edge_style",
+      "fields": ["edge_id", "style"],
+      "description": "Change the visual style of an edge"
+    },
+    {
+      "name": "show_ghost_diff",
+      "fields": ["diff"],
+      "description": "Show a ghost overlay of code changes"
+    },
+    {
+      "name": "show_test_badges",
+      "fields": ["test_results"],
+      "description": "Show test pass/fail badges on nodes"
+    },
+    {
+      "name": "show_approval_prompt",
+      "fields": ["action", "description"],
+      "description": "Show a prompt for user approval"
+    }
+  ]
+}

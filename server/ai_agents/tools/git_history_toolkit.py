@@ -4,10 +4,14 @@ Understand how a codebase evolved.
 """
 
 from typing import Optional, List, Dict, Any
+from ._common import repo_root, resolve_in_repo
 from pathlib import Path
+from ._common import repo_root, resolve_in_repo
 import subprocess
 from google.adk.tools import ToolContext
+from ._common import repo_root, resolve_in_repo
 from ._safe import safe
+from ._common import repo_root, resolve_in_repo
 
 
 @safe
@@ -20,7 +24,7 @@ def find_introducing_commit(
     try:
         path = Path(repository_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            path = resolve_in_repo(path)
         
         # Use git blame to find introducing commit
         result = subprocess.run(
@@ -78,7 +82,7 @@ def analyze_commit_impact(
     try:
         path = Path(repository_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            path = resolve_in_repo(path)
         
         # Get commit diff
         result = subprocess.run(
@@ -111,7 +115,7 @@ def trace_file_history(
     try:
         path = Path(repository_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            path = resolve_in_repo(path)
         
         result = subprocess.run(
             ['git', 'log', '--follow', '--format=%H|%s|%an|%ad', '--', file_path],

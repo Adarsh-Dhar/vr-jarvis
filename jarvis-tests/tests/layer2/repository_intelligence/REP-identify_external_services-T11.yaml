@@ -1,21 +1,22 @@
-test_id: REP-identify_external_services-T11
-name: Concurrency test for identify_external_services
 category: repository_intelligence
-tool: identify_external_services
-layer: 2
-test_type: T11
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Concurrency test for identify_external_services
-fixture: simple-python
-input:
-  repository_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/simple-python
-  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
+fixture: simple-python
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+  repository_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/simple-python
+  tool_context: fixtures/repositories/simple-python/main.py
+layer: 2
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Concurrency test for identify_external_services
 performance:
   max_duration_ms: 10000
 severity: high
+test_id: REP-identify_external_services-T11
+test_type: T11
+tool: identify_external_services

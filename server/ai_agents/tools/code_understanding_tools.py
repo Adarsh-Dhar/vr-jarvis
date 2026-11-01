@@ -4,12 +4,18 @@ Understand what the code actually means.
 """
 
 from typing import Optional, List, Dict, Any
+from ._common import repo_root, resolve_in_repo
 import ast
 from pathlib import Path
+from ._common import repo_root, resolve_in_repo
 from google.adk.tools import ToolContext
+from ._common import repo_root, resolve_in_repo
 from ._safe import safe
+from ._common import repo_root, resolve_in_repo
 from .navigation_tools import get_symbol_definition, get_symbol_hover_info
+from ._common import repo_root, resolve_in_repo
 from .analysis_tools import parse_source_code, analyze_code_complexity, analyze_control_flow
+from ._common import repo_root, resolve_in_repo
 
 
 def _is_python_file(file_path: str) -> bool:
@@ -214,7 +220,7 @@ def explain_module(module_path: str, tool_context: ToolContext) -> dict:
         
         path = Path(module_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            path = resolve_in_repo(path)
         
         if not path.exists():
             return {

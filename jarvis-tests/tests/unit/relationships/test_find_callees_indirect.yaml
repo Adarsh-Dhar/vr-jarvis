@@ -1,41 +1,45 @@
-test_id: REL-CALLEE-002
-name: Indirect function callee discovery
 category: relationship_intelligence
-tool: find_callees
-description: 'Verify that the tool identifies all indirect callees of a selected function
-  with depth > 1.
-
-  '
-fixture:
-  repository: simple-python
-  target_symbol: gamma
-input:
-  depth: 2
-expected:
-  status: not_found
-  callees:
-  - name: alpha
-    file: main.py
-    line: 18
-    depth: 1
-  - name: target
-    file: main.py
-    line: 6
-    depth: 2
-    path:
-    - gamma
-    - alpha
-    - target
-must_not:
-- beta
-- delta
 checks:
 - correct_callees
 - correct_depth
 - correct_paths
 - valid_response_schema
+description: 'Verify that the tool identifies all indirect callees of a selected function
+  with depth > 1.
+
+  '
+expected:
+  callees:
+  - depth: 1
+    file: main.py
+    line: 18
+    name: alpha
+  - depth: 2
+    file: main.py
+    line: 6
+    name: target
+    path:
+    - gamma
+    - alpha
+    - target
+  status: not_found
+expected_message: Symbol definition not found
+expected_symbol_name: null
+fixture:
+  repository: simple-python
+  target_symbol: gamma
+input:
+  depth: 2
+  file_path: 'fixtures/repositories/{''repository'': ''simple-python'', ''target_symbol'':
+    ''gamma''}/main.py'
+  repository_path: 'fixtures/repositories/{''repository'': ''simple-python'', ''target_symbol'':
+    ''gamma''}'
+must_not:
+- beta
+- delta
+name: Indirect function callee discovery
 performance:
   max_duration_ms: 3000
 severity: critical
-expected_symbol_name: null
-expected_message: Symbol definition not found
+test_id: REL-CALLEE-002
+tool: find_callees

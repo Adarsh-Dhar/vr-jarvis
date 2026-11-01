@@ -1,21 +1,23 @@
-test_id: COD-extract_function_contract-T14
-name: Regression test for extract_function_contract
 category: code_understanding
-tool: extract_function_contract
-layer: 2
-test_type: T14
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Regression test for extract_function_contract
-fixture: simple-python
-input:
-  function_id: alpha
-  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
+fixture: simple-python
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+  function_id: alpha
+  repository_path: fixtures/repositories/simple-python
+  tool_context: fixtures/repositories/simple-python/main.py
+layer: 2
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Regression test for extract_function_contract
 performance:
   max_duration_ms: 3000
 severity: high
+test_id: COD-extract_function_contract-T14
+test_type: T14
+tool: extract_function_contract

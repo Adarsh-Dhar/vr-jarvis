@@ -1,21 +1,23 @@
-test_id: REL-build_reference_graph-T03
-name: Output Validation test for build_reference_graph
 category: relationship
-tool: build_reference_graph
-layer: 1
-test_type: T03
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Output Validation test for build_reference_graph
-fixture: simple-python
-input:
-  scope: fixtures/repositories/simple-python/main.py
-  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
+fixture: simple-python
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
+  scope: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Output Validation test for build_reference_graph
 performance:
   max_duration_ms: 3000
 severity: critical
+test_id: REL-build_reference_graph-T03
+test_type: T03
+tool: build_reference_graph

@@ -1,24 +1,26 @@
-test_id: MSC-set_spatial_audio-T02
-name: Input Validation test for set_spatial_audio
 category: misc
-tool: set_spatial_audio
-layer: 1
-test_type: T02
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Input Validation test for set_spatial_audio
-fixture: simple-python
-input:
-  source_id: placeholder
-  position: placeholder
-  tool_context: placeholder
 expected:
   status: ok
+fixture: simple-python
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+  position: placeholder
+  repository_path: fixtures/repositories/simple-python
+  source_id: placeholder
+  tool_context: placeholder
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Input Validation test for set_spatial_audio
 performance:
   max_duration_ms: 3000
 severity: critical
 skip: true
 skip_reason: 'Tool execution issue: '
+test_id: MSC-set_spatial_audio-T02
+test_type: T02
+tool: set_spatial_audio

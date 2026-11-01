@@ -1,24 +1,26 @@
-test_id: MSC-set_edge_style-T01
-name: Happy Path test for set_edge_style
 category: misc
-tool: set_edge_style
-layer: 1
-test_type: T01
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Happy Path test for set_edge_style
-fixture: simple-python
-input:
-  src: placeholder
-  dst: placeholder
-  style: placeholder
-  tool_context: placeholder
 expected:
   status: ok
+fixture: simple-python
+input:
+  dst: placeholder
+  file_path: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
+  src: placeholder
+  style: placeholder
+  tool_context: placeholder
+layer: 1
 must_not:
 - error
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Happy Path test for set_edge_style
 performance:
   max_duration_ms: 3000
 severity: critical
+test_id: MSC-set_edge_style-T01
+test_type: T01
+tool: set_edge_style

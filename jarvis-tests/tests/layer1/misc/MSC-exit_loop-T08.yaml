@@ -1,23 +1,25 @@
-test_id: MSC-exit_loop-T08
-name: Malformed Input test for exit_loop
 category: misc
-tool: exit_loop
-layer: 1
-test_type: T08
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Malformed Input test for exit_loop
-fixture: corrupted-inputs
-input:
-  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
+fixture: corrupted-inputs
+input:
+  file_path: fixtures/repositories/corrupted-inputs/main.py
+  repository_path: fixtures/repositories/corrupted-inputs
+  tool_context: fixtures/repositories/simple-python/main.py
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Malformed Input test for exit_loop
 performance:
   max_duration_ms: 3000
 severity: critical
 skip: true
 skip_reason: 'Tool execution issue: Tool execution failed: ''MockToolContext'' object
   ha'
+test_id: MSC-exit_loop-T08
+test_type: T08
+tool: exit_loop

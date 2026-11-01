@@ -1,21 +1,23 @@
-test_id: MSC-visualize_dependency_graph-T03
-name: Output Validation test for visualize_dependency_graph
 category: misc
-tool: visualize_dependency_graph
-layer: 1
-test_type: T03
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Output Validation test for visualize_dependency_graph
+expected:
+  status: ok
 fixture: simple-python
 input:
   component_id: fixtures/repositories/simple-python/main.py
+  file_path: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
   tool_context: fixtures/repositories/simple-python/main.py
-expected:
-  status: ok
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Output Validation test for visualize_dependency_graph
 performance:
   max_duration_ms: 3000
 severity: critical
+test_id: MSC-visualize_dependency_graph-T03
+test_type: T03
+tool: visualize_dependency_graph

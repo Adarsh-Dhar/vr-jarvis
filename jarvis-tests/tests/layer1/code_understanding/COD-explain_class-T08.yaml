@@ -1,25 +1,27 @@
-test_id: COD-explain_class-T08
-name: Malformed Input test for explain_class
 category: code_understanding
-tool: explain_class
-layer: 1
-test_type: T08
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Malformed Input test for explain_class
+expected:
+  status: not_found
+expected_message: 'Symbol definition not found: placeholder'
+expected_symbol_name: placeholder
 fixture: corrupted-inputs
 input:
   class_id: placeholder
+  file_path: fixtures/repositories/corrupted-inputs/main.py
+  repository_path: fixtures/repositories/corrupted-inputs
   tool_context: placeholder
-expected:
-  status: not_found
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Malformed Input test for explain_class
 performance:
   max_duration_ms: 3000
 severity: critical
 skip: true
 skip_reason: 'Tool execution issue: '
-expected_symbol_name: placeholder
-expected_message: 'Symbol definition not found: placeholder'
+test_id: COD-explain_class-T08
+test_type: T08
+tool: explain_class

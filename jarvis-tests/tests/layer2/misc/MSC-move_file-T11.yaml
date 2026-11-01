@@ -1,22 +1,25 @@
-test_id: MSC-move_file-T11
-name: Concurrency test for move_file
 category: misc
-tool: move_file
-layer: 2
-test_type: T11
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Concurrency test for move_file
+expected:
+  status: error
+expected_error: 'TypeError: move_file() missing 1 required positional argument: ''tool_context'''
 fixture: simple-python
 input:
-  source: fixtures/repositories/simple-python/main.py
   destination: fixtures/repositories/simple-python/main.py
+  file_path: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
+  source: fixtures/repositories/simple-python/main.py
   tool_context: fixtures/repositories/simple-python/main.py
-expected:
-  status: ok
+layer: 2
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Concurrency test for move_file
 performance:
   max_duration_ms: 3000
 severity: high
+test_id: MSC-move_file-T11
+test_type: T11
+tool: move_file

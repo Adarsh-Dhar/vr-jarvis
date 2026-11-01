@@ -7,7 +7,9 @@ from typing import Optional, List, Dict, Any
 from pathlib import Path
 import subprocess
 import re
+import xml.etree.ElementTree as ET
 from google.adk.tools import ToolContext
+from ._common import repo_root, resolve_in_repo
 from ._safe import safe
 
 
@@ -21,7 +23,7 @@ def discover_tests(
     try:
         path = Path(repository_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            path = resolve_in_repo(path)
         
         if not path.exists():
             return {
@@ -69,37 +71,83 @@ def run_unit_tests(
     tool_context: ToolContext,
     test_files: Optional[List[str]] = None
 ) -> dict:
-    """Execute unit tests."""
+    """Execute unit tests using pytest with JUnit XML output for reliable parsing."""
     try:
-        cwd = Path.cwd()
+        worktree = tool_context.state.get('worktree')
+        if not worktree:
+            return {
+                'status': 'blocked',
+                'reason': 'Create a sandbox worktree first with create_worktree.'
+            }
         
-        cmd = ['python3', '-m', 'pytest', '-v']
+        cwd = Path(worktree)
+        
+        # Use JUnit XML for reliable parsing
+        junit_path = cwd / '.pytest_junit.xml'
+        cmd = ['python3', '-m', 'pytest', '--junitxml', str(junit_path), '-v']
         if test_files:
             cmd.extend(test_files)
         
         result = subprocess.run(cmd, cwd=str(cwd), capture_output=True, text=True, timeout=60)
         
-        # Parse pytest output
+        # Parse JUnit XML if it exists
         passed = 0
         failed = 0
         skipped = 0
         failures = []
+        duration = 0.0
         
-        for line in result.stdout.splitlines():
-            if line.startswith('PASSED'):
-                passed += 1
-            elif line.startswith('FAILED'):
-                failed += 1
-                failures.append({'test': line.split()[1], 'error': 'Test failed'})
-            elif line.startswith('SKIPPED'):
-                skipped += 1
-        
-        # Also parse summary line
-        summary_match = re.search(r'(\d+) passed, (\d+) failed, (\d+) skipped', result.stdout)
-        if summary_match:
-            passed = int(summary_match.group(1))
-            failed = int(summary_match.group(2))
-            skipped = int(summary_match.group(3))
+        if junit_path.exists():
+            try:
+                tree = ET.parse(junit_path)
+                root = tree.getroot()
+                
+                for testcase in root.findall('.//testcase'):
+                    test_name = testcase.get('name', 'unknown')
+                    test_time = float(testcase.get('time', 0))
+                    duration += test_time
+                    
+                    if testcase.find('failure') is not None:
+                        failed += 1
+                        failure_elem = testcase.find('failure')
+                        failures.append({
+                            'test': test_name,
+                            'error': failure_elem.get('message', 'Test failed') if failure_elem is not None else 'Test failed'
+                        })
+                    elif testcase.find('error') is not None:
+                        failed += 1
+                        error_elem = testcase.find('error')
+                        failures.append({
+                            'test': test_name,
+                            'error': error_elem.get('message', 'Test error') if error_elem is not None else 'Test error'
+                        })
+                    elif testcase.find('skipped') is not None:
+                        skipped += 1
+                    else:
+                        passed += 1
+                
+                # Clean up
+                junit_path.unlink()
+            except Exception as e:
+                # Fall back to parsing stdout if XML fails
+                for line in result.stdout.splitlines():
+                    if line.startswith('PASSED'):
+                        passed += 1
+                    elif line.startswith('FAILED'):
+                        failed += 1
+                        failures.append({'test': line.split()[1] if len(line.split()) > 1 else 'unknown', 'error': 'Test failed'})
+                    elif line.startswith('SKIPPED'):
+                        skipped += 1
+        else:
+            # Fallback to stdout parsing
+            for line in result.stdout.splitlines():
+                if line.startswith('PASSED'):
+                    passed += 1
+                elif line.startswith('FAILED'):
+                    failed += 1
+                    failures.append({'test': line.split()[1] if len(line.split()) > 1 else 'unknown', 'error': 'Test failed'})
+                elif line.startswith('SKIPPED'):
+                    skipped += 1
         
         return {
             'status': 'ok' if result.returncode == 0 else 'failed',
@@ -107,7 +155,7 @@ def run_unit_tests(
             'passed': passed,
             'failed': failed,
             'skipped': skipped,
-            'duration': 0.0,
+            'duration': duration,
             'failures': failures[:10],
             'output': result.stdout[-2000:] if result.stdout else result.stderr[-2000:]
         }
@@ -130,7 +178,7 @@ def run_integration_tests(
 ) -> dict:
     """Execute integration tests."""
     try:
-        cwd = Path.cwd()
+        cwd = repo_root()
         
         cmd = ['python3', '-m', 'pytest', '-v', '-m', 'integration']
         if test_files:
@@ -181,7 +229,7 @@ def run_end_to_end_tests(
 ) -> dict:
     """Execute end-to-end tests."""
     try:
-        cwd = Path.cwd()
+        cwd = repo_root()
         
         cmd = ['python3', '-m', 'pytest', '-v', '-m', 'e2e']
         if test_files:
@@ -227,27 +275,83 @@ def run_regression_tests(
     tool_context: ToolContext,
     test_files: Optional[List[str]] = None
 ) -> dict:
-    """Execute regression tests."""
+    """Execute regression tests using pytest with JUnit XML output for reliable parsing."""
     try:
-        cwd = Path.cwd()
+        worktree = tool_context.state.get('worktree')
+        if not worktree:
+            return {
+                'status': 'blocked',
+                'reason': 'Create a sandbox worktree first with create_worktree.'
+            }
         
-        cmd = ['python3', '-m', 'pytest', '-v', '-m', 'regression']
+        cwd = Path(worktree)
+        
+        # Use JUnit XML for reliable parsing
+        junit_path = cwd / '.pytest_junit_regression.xml'
+        cmd = ['python3', '-m', 'pytest', '--junitxml', str(junit_path), '-v', '-m', 'regression']
         if test_files:
             cmd.extend(test_files)
         
         result = subprocess.run(cmd, cwd=str(cwd), capture_output=True, text=True, timeout=90)
         
+        # Parse JUnit XML if it exists
         passed = 0
         failed = 0
         skipped = 0
+        failures = []
+        duration = 0.0
         
-        for line in result.stdout.splitlines():
-            if 'PASSED' in line:
-                passed += 1
-            elif 'FAILED' in line:
-                failed += 1
-            elif 'SKIPPED' in line:
-                skipped += 1
+        if junit_path.exists():
+            try:
+                tree = ET.parse(junit_path)
+                root = tree.getroot()
+                
+                for testcase in root.findall('.//testcase'):
+                    test_name = testcase.get('name', 'unknown')
+                    test_time = float(testcase.get('time', 0))
+                    duration += test_time
+                    
+                    if testcase.find('failure') is not None:
+                        failed += 1
+                        failure_elem = testcase.find('failure')
+                        failures.append({
+                            'test': test_name,
+                            'error': failure_elem.get('message', 'Test failed') if failure_elem is not None else 'Test failed'
+                        })
+                    elif testcase.find('error') is not None:
+                        failed += 1
+                        error_elem = testcase.find('error')
+                        failures.append({
+                            'test': test_name,
+                            'error': error_elem.get('message', 'Test error') if error_elem is not None else 'Test error'
+                        })
+                    elif testcase.find('skipped') is not None:
+                        skipped += 1
+                    else:
+                        passed += 1
+                
+                # Clean up
+                junit_path.unlink()
+            except Exception as e:
+                # Fall back to parsing stdout if XML fails
+                for line in result.stdout.splitlines():
+                    if 'PASSED' in line:
+                        passed += 1
+                    elif 'FAILED' in line:
+                        failed += 1
+                        failures.append({'test': 'unknown', 'error': 'Test failed'})
+                    elif 'SKIPPED' in line:
+                        skipped += 1
+        else:
+            # Fallback to stdout parsing
+            for line in result.stdout.splitlines():
+                if 'PASSED' in line:
+                    passed += 1
+                elif 'FAILED' in line:
+                    failed += 1
+                    failures.append({'test': 'unknown', 'error': 'Test failed'})
+                elif 'SKIPPED' in line:
+                    skipped += 1
         
         return {
             'status': 'ok' if result.returncode == 0 else 'failed',
@@ -255,7 +359,8 @@ def run_regression_tests(
             'passed': passed,
             'failed': failed,
             'skipped': skipped,
-            'duration': 0.0,
+            'duration': duration,
+            'failures': failures[:10],
             'output': result.stdout[-2000:] if result.stdout else result.stderr[-2000:]
         }
     except subprocess.TimeoutExpired:
@@ -277,7 +382,7 @@ def run_property_tests(
 ) -> dict:
     """Execute property-based tests."""
     try:
-        cwd = Path.cwd()
+        cwd = repo_root()
         
         cmd = ['python3', '-m', 'pytest', '-v', '-m', 'property']
         if test_files:
@@ -327,7 +432,7 @@ def run_fuzz_tests(
     """Fuzz inputs and behavior."""
     try:
         # Try to use Hypothesis for property-based testing
-        cwd = Path.cwd()
+        cwd = repo_root()
         
         result = subprocess.run(
             ['python3', '-m', 'hypothesis', 'test', target_function],
@@ -513,7 +618,7 @@ def measure_test_coverage(
     try:
         path = Path(repository_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            path = resolve_in_repo(path)
         
         result = subprocess.run(
             ['python3', '-m', 'pytest', '--cov=.', '--cov-report=term'],
@@ -571,7 +676,7 @@ def measure_branch_coverage(
     try:
         path = Path(repository_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            path = resolve_in_repo(path)
         
         result = subprocess.run(
             ['python3', '-m', 'pytest', '--cov=.', '--cov-branch', '--cov-report=term'],
@@ -621,7 +726,7 @@ def map_tests_to_functions(
         # Real implementation would use AST analysis of test files
         path = Path(repository_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            path = resolve_in_repo(path)
         
         test_mapping = []
         
@@ -701,7 +806,7 @@ def verify_compilation(
     try:
         path = Path(repository_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            path = resolve_in_repo(path)
         
         # Try to compile based on language
         if (path / 'setup.py').exists() or (path / 'pyproject.toml').exists():
@@ -735,7 +840,16 @@ def verify_types(
     try:
         path = Path(repository_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            path = resolve_in_repo(path)
+        
+        # Check if mypy is available
+        check_result = subprocess.run(['python3', '-m', 'mypy', '--version'], capture_output=True, text=True)
+        if check_result.returncode != 0:
+            return {
+                'status': 'unavailable',
+                'reason': 'mypy not found',
+                'hint': 'Install with: pip install mypy'
+            }
         
         result = subprocess.run(['python3', '-m', 'mypy', str(path)], capture_output=True, text=True, timeout=60)
         
@@ -773,10 +887,19 @@ def verify_lint(
     try:
         path = Path(repository_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            path = resolve_in_repo(path)
         
         if linter == 'auto':
             linter = 'pylint'
+        
+        # Check if linter is available
+        check_result = subprocess.run(['which', linter], capture_output=True, text=True)
+        if check_result.returncode != 0:
+            return {
+                'status': 'unavailable',
+                'reason': f'Linter {linter} not found',
+                'hint': f'Install with: pip install {linter}'
+            }
         
         result = subprocess.run([linter, str(path)], capture_output=True, text=True, timeout=60)
         

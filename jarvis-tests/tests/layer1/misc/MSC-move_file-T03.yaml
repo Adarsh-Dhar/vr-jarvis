@@ -1,22 +1,24 @@
-test_id: MSC-move_file-T03
-name: Output Validation test for move_file
 category: misc
-tool: move_file
-layer: 1
-test_type: T03
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Output Validation test for move_file
-fixture: simple-python
-input:
-  source: fixtures/repositories/simple-python/main.py
-  destination: fixtures/repositories/simple-python/main.py
-  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
+fixture: simple-python
+input:
+  destination: fixtures/repositories/simple-python/main.py
+  file_path: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
+  source: fixtures/repositories/simple-python/main.py
+  tool_context: fixtures/repositories/simple-python/main.py
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Output Validation test for move_file
 performance:
   max_duration_ms: 3000
 severity: critical
+test_id: MSC-move_file-T03
+test_type: T03
+tool: move_file

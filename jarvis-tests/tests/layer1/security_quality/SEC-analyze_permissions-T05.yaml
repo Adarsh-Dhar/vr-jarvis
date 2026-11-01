@@ -1,21 +1,22 @@
-test_id: SEC-analyze_permissions-T05
-name: Boundary Conditions test for analyze_permissions
 category: security_quality
-tool: analyze_permissions
-layer: 1
-test_type: T05
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Boundary Conditions test for analyze_permissions
-fixture: simple-python
-input:
-  repository_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/simple-python
-  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
+fixture: simple-python
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+  repository_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/simple-python
+  tool_context: fixtures/repositories/simple-python/main.py
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Boundary Conditions test for analyze_permissions
 performance:
   max_duration_ms: 5000
 severity: high
+test_id: SEC-analyze_permissions-T05
+test_type: T05
+tool: analyze_permissions

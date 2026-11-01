@@ -1,48 +1,49 @@
-test_id: SEARCH_SYMBOLS-T01
-name: Verified search_symbols - Analysis
 category: verified
-tool: search_symbols
-layer: 1
-test_type: T01
-description: Verified analysis test for search_symbols
-fixture: simple-python
-verified: true
-input:
-  query: target
-  repository_path: fixtures/repositories/simple-python
-expected:
-  status: ok
-  results: &id001
-  - name: target
-    type: function
+checks:
+- expected_set: &id001
+  - definition:
+      end_line: 50
+      start_line: 45
     file: main.py
     line: 45
-    definition:
-      start_line: 45
-      end_line: 50
-  - name: dependency_injection_example
+    name: target
     type: function
-    file: main.py
+  - file: main.py
     line: 15
     matches_target: true
-must_not:
-- placeholder_results
-- fabricated_matches
-checks:
-- type: set_equals
+    name: dependency_injection_example
+    type: function
   field: results
-  expected_set: *id001
-- type: precision_recall
-  min_precision: 0.95
+  type: set_equals
+- min_precision: 0.95
   min_recall: 0.9
-performance:
-  max_duration_ms: 500
-severity: critical
+  type: precision_recall
+description: Verified analysis test for search_symbols
+expected:
+  results: *id001
+  status: ok
+fixture: simple-python
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+  query: target
+  repository_path: fixtures/repositories/simple-python
+isolation: temp_copy
+layer: 1
 limitations:
 - Exact match only - no fuzzy search
 - Limited to specified repository
 - Does not search content of files
-isolation: temp_copy
-stub_should_fail: true
+must_not:
+- placeholder_results
+- fabricated_matches
 mutants_should_fail: true
+name: Verified search_symbols - Analysis
+performance:
+  max_duration_ms: 500
+severity: critical
+stub_should_fail: true
+test_id: SEARCH_SYMBOLS-T01
+test_type: T01
+tool: search_symbols
 uncertain_handling: explicit
+verified: true

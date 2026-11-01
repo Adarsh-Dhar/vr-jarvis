@@ -1,25 +1,27 @@
-test_id: MSC-kubernetes_exec_command-T06
-name: Large Input test for kubernetes_exec_command
 category: misc
-tool: kubernetes_exec_command
-layer: 1
-test_type: T06
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Large Input test for kubernetes_exec_command
-fixture: polyglot-monorepo
-input:
-  pod_name: fixtures/repositories/simple-python/main.py
-  namespace: fixtures/repositories/simple-python/main.py
-  command: fixtures/repositories/simple-python/main.py
-  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
+fixture: polyglot-monorepo
+input:
+  command: fixtures/repositories/simple-python/main.py
+  file_path: fixtures/repositories/polyglot-monorepo/main.py
+  namespace: fixtures/repositories/simple-python/main.py
+  pod_name: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/polyglot-monorepo
+  tool_context: fixtures/repositories/simple-python/main.py
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Large Input test for kubernetes_exec_command
 performance:
   max_duration_ms: 3000
 severity: medium
 skip: true
 skip_reason: 'Tool execution issue: '
+test_id: MSC-kubernetes_exec_command-T06
+test_type: T06
+tool: kubernetes_exec_command

@@ -1,24 +1,26 @@
-test_id: MSC-show_test_badges-T01
-name: Happy Path test for show_test_badges
 category: misc
-tool: show_test_badges
-layer: 1
-test_type: T01
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Happy Path test for show_test_badges
-fixture: simple-python
-input:
-  passed_ids: placeholder
-  failed_ids: placeholder
-  not_run_ids: placeholder
-  tool_context: placeholder
 expected:
   status: ok
+fixture: simple-python
+input:
+  failed_ids: placeholder
+  file_path: fixtures/repositories/simple-python/main.py
+  not_run_ids: placeholder
+  passed_ids: placeholder
+  repository_path: fixtures/repositories/simple-python
+  tool_context: placeholder
+layer: 1
 must_not:
 - error
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Happy Path test for show_test_badges
 performance:
   max_duration_ms: 3000
 severity: critical
+test_id: MSC-show_test_badges-T01
+test_type: T01
+tool: show_test_badges

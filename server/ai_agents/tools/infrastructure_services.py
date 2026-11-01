@@ -4,14 +4,18 @@ The underlying services that make the tool ecosystem possible.
 """
 
 from typing import Optional, List, Dict, Any
+from ._common import repo_root, resolve_in_repo
 import json
 import time
 import uuid
 import subprocess
 import random
 from pathlib import Path
+from ._common import repo_root, resolve_in_repo
 from google.adk.tools import ToolContext
+from ._common import repo_root, resolve_in_repo
 from ._safe import safe
+from ._common import repo_root, resolve_in_repo
 
 # In-memory permission and tool registry
 _permission_store = {}
@@ -358,7 +362,7 @@ def discover_tools(
     try:
         path = Path(module_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            path = resolve_in_repo(path)
         
         if not path.exists():
             return {
@@ -643,7 +647,7 @@ def start_indexing(
     try:
         path = Path(repository_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            path = resolve_in_repo(path)
         
         if not path.exists():
             return {

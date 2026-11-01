@@ -1,22 +1,23 @@
-test_id: MSC-analyze_framework_lifecycle-T04
-name: Empty Input test for analyze_framework_lifecycle
 category: misc
-tool: analyze_framework_lifecycle
-layer: 1
-test_type: T04
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Empty Input test for analyze_framework_lifecycle
-fixture: simple-python
-input:
-  repository_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/simple-python
-  framework: placeholder
-  tool_context: placeholder
 expected:
   status: ok
+fixture: simple-python
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+  framework: placeholder
+  repository_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/simple-python
+  tool_context: placeholder
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Empty Input test for analyze_framework_lifecycle
 performance:
   max_duration_ms: 3000
 severity: high
+test_id: MSC-analyze_framework_lifecycle-T04
+test_type: T04
+tool: analyze_framework_lifecycle

@@ -1,21 +1,23 @@
-test_id: MSC-list_supported_frameworks-T04
-name: Empty Input test for list_supported_frameworks
 category: misc
-tool: list_supported_frameworks
-layer: 1
-test_type: T04
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Empty Input test for list_supported_frameworks
-fixture: simple-python
-input:
-  tool_context: fixtures/repositories/simple-python/main.py
-  language: python
 expected:
   status: ok
+fixture: simple-python
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+  language: python
+  repository_path: fixtures/repositories/simple-python
+  tool_context: fixtures/repositories/simple-python/main.py
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Empty Input test for list_supported_frameworks
 performance:
   max_duration_ms: 3000
 severity: high
+test_id: MSC-list_supported_frameworks-T04
+test_type: T04
+tool: list_supported_frameworks

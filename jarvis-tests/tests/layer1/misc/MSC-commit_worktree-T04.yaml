@@ -1,24 +1,26 @@
-test_id: MSC-commit_worktree-T04
-name: Empty Input test for commit_worktree
 category: misc
-tool: commit_worktree
-layer: 1
-test_type: T04
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Empty Input test for commit_worktree
-fixture: simple-python
-input:
-  worktree: fixtures/repositories/simple-python/main.py
-  message: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
+fixture: simple-python
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+  message: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
+  worktree: fixtures/repositories/simple-python/main.py
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Empty Input test for commit_worktree
 performance:
   max_duration_ms: 3000
 severity: high
 skip: true
 skip_reason: 'Tool execution issue: Tool execution failed: commit_worktree() got an
   un'
+test_id: MSC-commit_worktree-T04
+test_type: T04
+tool: commit_worktree

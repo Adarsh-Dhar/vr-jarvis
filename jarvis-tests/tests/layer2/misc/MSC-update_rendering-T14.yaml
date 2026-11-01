@@ -1,22 +1,24 @@
-test_id: MSC-update_rendering-T14
-name: Regression test for update_rendering
 category: misc
-tool: update_rendering
-layer: 2
-test_type: T14
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Regression test for update_rendering
-fixture: simple-python
-input:
-  graph_id: fixtures/repositories/simple-python/main.py
-  updates: fixtures/repositories/simple-python/main.py
-  tool_context: fixtures/repositories/simple-python/main.py
 expected:
   status: ok
+fixture: simple-python
+input:
+  file_path: fixtures/repositories/simple-python/main.py
+  graph_id: fixtures/repositories/simple-python/main.py
+  repository_path: fixtures/repositories/simple-python
+  tool_context: fixtures/repositories/simple-python/main.py
+  updates: fixtures/repositories/simple-python/main.py
+layer: 2
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Regression test for update_rendering
 performance:
   max_duration_ms: 3000
 severity: high
+test_id: MSC-update_rendering-T14
+test_type: T14
+tool: update_rendering
