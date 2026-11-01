@@ -1,0 +1,37 @@
+test_id: INT-create_graph-real-T01
+name: Create graph against real store
+category: integration
+tool: create_graph
+layer: 3
+test_type: T01
+description: Integration test - create graph against real graph store
+fixture: simple-python
+infrastructure:
+  - temp_copy
+  - graph_store
+input:
+  scope: .
+  graph_type: call_graph
+expected:
+  status: ok
+  graph_created: true
+  nodes_count: > 0
+  edges_count: > 0
+must_not:
+  - graph_store_error
+  - graph_corrupted
+checks:
+  - type: content_validation
+    required_content:
+      - graph
+      - nodes
+      - edges
+  - type: infrastructure_check
+    graph_store_was_real: true
+  - type: isolation_check
+    used_temp_copy: true
+performance:
+  max_duration_ms: 5000
+severity: critical
+stub_should_fail: true
+requires_real_infrastructure: true

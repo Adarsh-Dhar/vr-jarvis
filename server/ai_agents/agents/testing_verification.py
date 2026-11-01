@@ -5,8 +5,8 @@ Finds tests, runs them, measures coverage, verifies changes.
 
 from google.adk.agents import LlmAgent
 from ..config import MODEL
-from ..base import make_specialist, create_agent_spec
-from ..toolsets import TOOLSETS
+from .base import make_specialist, create_agent_spec
+from .toolsets import TOOLSETS
 
 
 INSTRUCTION = '''

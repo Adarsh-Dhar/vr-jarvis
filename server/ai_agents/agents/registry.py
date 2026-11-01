@@ -10,6 +10,9 @@ from google.adk.agents import Agent
 # Global agent registry
 AGENTS: Dict[str, Agent] = {}
 
+# Agent configuration for permissions and budgets (stored separately from agents)
+AGENT_CONFIG: Dict[str, Dict[str, Any]] = {}
+
 
 def register_agent(name: str, agent: Agent) -> None:
     """
@@ -120,8 +123,8 @@ def _register_all_agents():
         pass
 
     try:
-        from .data_flow import data_flow_agent
-        register_agent("data_flow", data_flow_agent)
+        from .data_flow import data_flow_intelligence_agent
+        register_agent("data_flow", data_flow_intelligence_agent)
     except ImportError:
         pass
 

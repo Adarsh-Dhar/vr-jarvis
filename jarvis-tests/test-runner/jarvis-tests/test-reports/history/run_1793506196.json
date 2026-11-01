@@ -1,0 +1,18 @@
+{
+  "timestamp": "2026-11-01T09:39:56.419568",
+  "run_id": "run_1793506196",
+  "version": "dev",
+  "summary": {
+    "total": 0,
+    "passed": 0,
+    "failed": 0,
+    "skipped": 0,
+    "not_validated": 0,
+    "errors": 0
+  },
+  "success_rate": 0,
+  "failed_tests": [],
+  "error_tests": [],
+  "duration": 0.0006101131439208984,
+  "tool_results": {}
+}

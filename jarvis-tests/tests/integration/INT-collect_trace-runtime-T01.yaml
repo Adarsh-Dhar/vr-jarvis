@@ -1,0 +1,37 @@
+test_id: INT-collect_trace-runtime-T01
+name: Collect execution trace on runtime fixture
+category: integration
+tool: collect_execution_trace
+layer: 3
+test_type: T01
+description: Integration test - collect execution trace on runtime-heavy fixture
+fixture: runtime-heavy
+infrastructure:
+  - temp_copy
+  - runtime
+  - trace_collector
+input:
+  target_function: slow_function
+  duration_seconds: 5
+expected:
+  status: ok
+  trace_collected: true
+  function_calls_recorded: true
+  timing_data_available: true
+must_not:
+  - trace_error
+  - runtime_corrupted
+checks:
+  - type: content_validation
+    required_content:
+      - trace
+      - calls
+  - type: infrastructure_check
+    runtime_was_real: true
+  - type: isolation_check
+    used_temp_copy: true
+performance:
+  max_duration_ms: 10000
+severity: critical
+stub_should_fail: true
+requires_real_infrastructure: true

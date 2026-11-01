@@ -1,0 +1,36 @@
+test_id: INT-measure_coverage-real-T01
+name: Measure test coverage with real pytest-cov
+category: integration
+tool: measure_test_coverage
+layer: 3
+test_type: T01
+description: Integration test - measure test coverage with real pytest-cov
+fixture: simple-python
+infrastructure:
+  - temp_copy
+  - test_runner
+  - coverage_tool
+input:
+  repository_path: .
+  coverage_format: json
+expected:
+  status: ok
+  coverage_report_generated: true
+  coverage_percentage: >= 0
+must_not:
+  - coverage_error
+  - import_error
+checks:
+  - type: content_validation
+    required_content:
+      - coverage
+      - percentage
+  - type: infrastructure_check
+    pytest_cov_was_real: true
+  - type: isolation_check
+    used_temp_copy: true
+performance:
+  max_duration_ms: 10000
+severity: critical
+stub_should_fail: true
+requires_real_infrastructure: true

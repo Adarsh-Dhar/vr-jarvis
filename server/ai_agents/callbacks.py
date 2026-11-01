@@ -36,6 +36,10 @@ PERMISSION_LEVELS = {
     "write": 2,
 }
 
+
+# Tool budget tracking per agent
+TOOL_BUDGETS = {}
+
 # Tool permission assignments (from toolsets.py)
 TOOL_PERMISSIONS = {
     # Write tools
@@ -65,6 +69,7 @@ def permission_guard(tool, args, tool_context):
     calling_agent = tool_context.state.get('calling_agent')
     if calling_agent:
         from .agents.toolsets import PERMISSION_CEILINGS
+        from .agents.registry import AGENT_CONFIG
         agent_ceiling = PERMISSION_CEILINGS.get(calling_agent, "read")
         tool_perm = TOOL_PERMISSIONS.get(name, "read")
 
@@ -74,6 +79,19 @@ def permission_guard(tool, args, tool_context):
                 'status': 'blocked',
                 'reason': f'Tool {name} requires {tool_perm} permission, agent {calling_agent} has {agent_ceiling}'
             }
+
+        # Check tool budget
+        if calling_agent not in TOOL_BUDGETS:
+            TOOL_BUDGETS[calling_agent] = 0
+        # Get agent's tool budget from AGENT_CONFIG
+        agent_config = AGENT_CONFIG.get(calling_agent, {})
+        budget = agent_config.get("tool_budget", 20)  # Default budget
+        if TOOL_BUDGETS[calling_agent] >= budget:
+            return {
+                'status': 'blocked',
+                'reason': f'Agent {calling_agent} exceeded tool budget of {budget}'
+            }
+        TOOL_BUDGETS[calling_agent] += 1
 
     # Original tier2 checks
     if name in TIER2_TOOLS and not tool_context.state.get('approved'):

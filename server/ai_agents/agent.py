@@ -10,7 +10,7 @@ from .agents.scene_director import make_scene_director
 from .agents.repository_intelligence import repository_intelligence_agent
 from .agents.code_understanding import code_understanding_agent
 from .agents.relationship_intelligence import relationship_intelligence_agent
-from .agents.data_flow import data_flow_agent
+from .agents.data_flow import data_flow_intelligence_agent
 from .agents.runtime import runtime_intelligence_agent
 from .agents.debugging import debugging_intelligence_agent
 from .agents.security_quality import security_quality_agent
@@ -100,6 +100,11 @@ Route each request by delegating to exactly one sub-agent:
 - fix_pipeline: add, fix or change code, propose a patch.
 - briefing_pipeline: the user opens a project, asks for a status, or asks what is new.
 
+For security, debugging, or engineering requests, use the appropriate specialists:
+- Security review: delegate to security_quality_agent with repository_intelligence_agent and data_flow_intelligence_agent
+- Debugging: delegate to debugging_intelligence_agent with code_understanding_agent and runtime_intelligence_agent
+- Code changes: delegate to software_engineering_agent followed by testing_verification_agent
+
 Rules:
 - Do not answer code questions yourself. You have no code tools.
 - Before any step that would change code outside the sandbox, call request_approval and wait.
@@ -113,7 +118,9 @@ root_agent = LlmAgent(
     description='Voice-and-hands assistant for understanding and changing code in VR.',
     instruction=ROOT_INSTRUCTION,
     tools=[request_approval],
-    sub_agents=[phase2_pipeline, investigate_pipeline, impact_pipeline, fix_pipeline, briefing_pipeline],
+    sub_agents=[phase2_pipeline, investigate_pipeline, impact_pipeline, fix_pipeline, briefing_pipeline,
+                data_flow_intelligence_agent, runtime_intelligence_agent, debugging_intelligence_agent,
+                security_quality_agent, software_engineering_agent, testing_verification_agent],
     before_agent_callback=init_state,
     before_model_callback=trim_history,
 )

@@ -15,20 +15,24 @@ class TestRegistry:
     """Central registry for all JARVIS tests"""
 
     def __init__(self, test_root: Path):
-        self.test_root = test_root
+        self.test_root = test_root.resolve()
         self.tests: Dict[str, Dict] = {}
         self.tests_by_category: Dict[str, List[str]] = {}
         self.tests_by_tool: Dict[str, List[str]] = {}
         self.tests_by_severity: Dict[str, List[str]] = {}
         self.tests_by_layer: Dict[int, List[str]] = {}
         self.tests_by_test_type: Dict[str, List[str]] = {}
+        # Fix: tests are in jarvis-tests/tests, not test_root/tests
+        self.tests_path = self.test_root / 'tests'
         
     def load_test_definitions(self):
         """Load all test definitions from YAML and Python files"""
         # Load YAML test definitions
-        yaml_tests_path = self.test_root / 'tests'
+        yaml_tests_path = self.tests_path
+        print(f"Loading tests from: {yaml_tests_path}")
         for yaml_file in yaml_tests_path.rglob('*.yaml'):
             self._load_yaml_test(yaml_file)
+        print(f"Total tests loaded: {len(self.tests)}")
         
         # Load Python test files
         python_tests_path = self.test_root / 'tests'

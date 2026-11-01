@@ -81,6 +81,14 @@ def make_specialist(spec: AgentSpec) -> LlmAgent:
         output_key=spec.output_key,
     )
 
+    # Store permission ceiling and tool budget in registry for callbacks
+    # (Can't set attributes on Pydantic models directly)
+    from .registry import AGENT_CONFIG
+    AGENT_CONFIG[spec.name] = {
+        "permission_ceiling": spec.permission_ceiling,
+        "tool_budget": spec.tool_budget,
+    }
+
     return agent
 
 

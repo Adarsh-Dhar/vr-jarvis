@@ -5,8 +5,8 @@ Finds the root cause of errors and unexpected behavior.
 
 from google.adk.agents import LlmAgent
 from ..config import MODEL
-from ..base import make_specialist, create_agent_spec
-from ..toolsets import TOOLSETS
+from .base import make_specialist, create_agent_spec
+from .toolsets import TOOLSETS
 
 
 INSTRUCTION = '''

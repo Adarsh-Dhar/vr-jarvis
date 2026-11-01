@@ -1,0 +1,38 @@
+test_id: INT-traverse_graph-real-T01
+name: Traverse graph against real store
+category: integration
+tool: traverse_graph
+layer: 3
+test_type: T01
+description: Integration test - traverse graph against real graph store
+fixture: simple-python
+infrastructure:
+  - temp_copy
+  - graph_store
+input:
+  start_node: alpha
+  traversal_type: bfs
+  max_depth: 3
+expected:
+  status: ok
+  traversal_complete: true
+  visited_nodes: > 0
+  path_found: true
+must_not:
+  - traversal_error
+  - graph_corrupted
+  - infinite_loop
+checks:
+  - type: content_validation
+    required_content:
+      - traversal
+      - visited
+  - type: infrastructure_check
+    graph_store_was_real: true
+  - type: isolation_check
+    used_temp_copy: true
+performance:
+  max_duration_ms: 2000
+severity: critical
+stub_should_fail: true
+requires_real_infrastructure: true

@@ -1,0 +1,42 @@
+test_id: INT-apply_patch-exact-T01
+name: Apply patch with exact diff
+category: integration
+tool: apply_patch
+layer: 3
+test_type: T01
+description: Integration test - apply patch changes exactly intended file and lines
+fixture: simple-python
+infrastructure:
+  - temp_copy
+  - git
+input:
+  patch_content: |
+    --- a/main.py
+    +++ b/main.py
+    @@ -1,3 +1,3 @@
+     def alpha():
+    -    return "original"
+    +    return "modified"
+  target_file: main.py
+expected:
+  status: ok
+  files_modified:
+    - main.py
+  lines_modified:
+    - 2
+  other_files_unchanged: true
+must_not:
+  - modified_other_files
+  - corrupted_diff
+checks:
+  - type: content_validation
+    required_content:
+      - files_modified
+  - type: isolation_check
+    used_temp_copy: true
+    shared_fixture_unchanged: true
+performance:
+  max_duration_ms: 1000
+severity: critical
+stub_should_fail: true
+requires_real_infrastructure: true

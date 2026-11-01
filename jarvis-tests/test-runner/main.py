@@ -21,7 +21,7 @@ from regression_detector import RegressionDetector
 
 def main():
     parser = argparse.ArgumentParser(description='JARVIS Test Runner')
-    parser.add_argument('--test-root', type=str, default='jarvis-tests',
+    parser.add_argument('--test-root', type=str, default='..',
                         help='Path to test root directory')
     parser.add_argument('--category', type=str, action='append',
                         help='Test category to run (can specify multiple)')

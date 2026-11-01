@@ -1,0 +1,37 @@
+test_id: INT-resolve_types-real-T01
+name: Resolve types with real language server
+category: integration
+tool: resolve_types
+layer: 3
+test_type: T01
+description: Integration test - resolve types with real language server on typed fixture
+fixture: complex-typescript
+infrastructure:
+  - temp_copy
+  - language_server
+input:
+  file_path: main.ts
+  symbol: processData
+  line: 10
+expected:
+  status: ok
+  type_info:
+    type: not null
+    parameters: not null
+    return_type: not null
+must_not:
+  - type_error
+  - language_server_error
+checks:
+  - type: content_validation
+    required_content:
+      - type_info
+  - type: infrastructure_check
+    language_server_was_real: true
+  - type: isolation_check
+    used_temp_copy: true
+performance:
+  max_duration_ms: 3000
+severity: critical
+stub_should_fail: true
+requires_real_infrastructure: true

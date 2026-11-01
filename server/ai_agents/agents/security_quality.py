@@ -5,8 +5,8 @@ Finds vulnerabilities, secrets, injection risks, authorization gaps, complexity,
 
 from google.adk.agents import LlmAgent
 from ..config import MODEL
-from ..base import make_specialist, create_agent_spec
-from ..toolsets import TOOLSETS
+from .base import make_specialist, create_agent_spec
+from .toolsets import TOOLSETS
 
 
 INSTRUCTION = '''

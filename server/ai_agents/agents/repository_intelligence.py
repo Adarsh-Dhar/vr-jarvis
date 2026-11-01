@@ -5,8 +5,8 @@ Understands codebase structure, languages, frameworks, build system, and what ch
 
 from google.adk.agents import LlmAgent
 from ..config import MODEL
-from ..base import make_specialist, create_agent_spec
-from ..toolsets import TOOLSETS
+from .base import make_specialist, create_agent_spec
+from .toolsets import TOOLSETS
 
 
 # Instruction template for Repository Intelligence agent

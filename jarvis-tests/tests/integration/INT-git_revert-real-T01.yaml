@@ -1,0 +1,35 @@
+test_id: INT-git_revert-real-T01
+name: Git revert on real repository
+category: integration
+tool: git_revert
+layer: 3
+test_type: T01
+description: Integration test - git revert operations on real repository
+fixture: simple-python
+infrastructure:
+  - temp_copy
+  - git
+input:
+  commit_hash: HEAD~1
+expected:
+  status: ok
+  revert_successful: true
+  working_directory_clean: true
+must_not:
+  - git_error
+  - repository_corrupted
+  - merge_conflict
+checks:
+  - type: content_validation
+    required_content:
+      - revert_commit
+  - type: infrastructure_check
+    git_was_real: true
+  - type: isolation_check
+    used_temp_copy: true
+    shared_fixture_unchanged: true
+performance:
+  max_duration_ms: 2000
+severity: critical
+stub_should_fail: true
+requires_real_infrastructure: true

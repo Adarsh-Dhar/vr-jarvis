@@ -1,0 +1,17 @@
+{
+  "generated_at": "2026-11-01T10:10:03.394730",
+  "run_id": "run_1793508003",
+  "duration": 9.179115295410156e-05,
+  "summary": {
+    "total": 0,
+    "passed": 0,
+    "failed": 0,
+    "skipped": 0,
+    "not_validated": 0,
+    "errors": 0
+  },
+  "success_rate": 0,
+  "failed_tests": [],
+  "error_tests": [],
+  "results": {}
+}

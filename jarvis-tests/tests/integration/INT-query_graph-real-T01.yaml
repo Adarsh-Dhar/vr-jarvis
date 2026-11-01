@@ -1,0 +1,35 @@
+test_id: INT-query_graph-real-T01
+name: Query graph against real store
+category: integration
+tool: query_graph
+layer: 3
+test_type: T01
+description: Integration test - query graph against real graph store
+fixture: simple-python
+infrastructure:
+  - temp_copy
+  - graph_store
+input:
+  query_type: find_path
+  from: alpha
+  to: target
+expected:
+  status: ok
+  path_found: true
+  path_length: > 0
+must_not:
+  - query_error
+  - invalid_path
+checks:
+  - type: content_validation
+    required_content:
+      - path
+  - type: infrastructure_check
+    graph_store_was_real: true
+  - type: isolation_check
+    used_temp_copy: true
+performance:
+  max_duration_ms: 1000
+severity: critical
+stub_should_fail: true
+requires_real_infrastructure: true

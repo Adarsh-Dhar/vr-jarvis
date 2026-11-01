@@ -1,0 +1,36 @@
+test_id: INT-git_blame-real-T01
+name: Git blame on real repository
+category: integration
+tool: git_blame
+layer: 3
+test_type: T01
+description: Integration test - git blame operations on real repository
+fixture: simple-python
+infrastructure:
+  - temp_copy
+  - git
+input:
+  file_path: main.py
+  line: 18
+expected:
+  status: ok
+  blame_info:
+    commit: not null
+    author: not null
+    line: 18
+must_not:
+  - git_error
+  - repository_corrupted
+checks:
+  - type: content_validation
+    required_content:
+      - blame_info
+  - type: infrastructure_check
+    git_was_real: true
+  - type: isolation_check
+    used_temp_copy: true
+performance:
+  max_duration_ms: 2000
+severity: critical
+stub_should_fail: true
+requires_real_infrastructure: true

@@ -1,0 +1,15 @@
+test_id: CODE-001
+tool: get_type_hierarchy
+agent: code_understanding
+fixture: simple-python
+input:
+  symbol_name: "target"
+  file_path: "main.py"
+expected:
+  hierarchy:
+    - type: "function"
+      parent: null
+      children: []
+  error: null
+evidence_required: true
+notes: "Should return type hierarchy for target function"

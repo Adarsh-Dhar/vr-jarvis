@@ -1,0 +1,36 @@
+test_id: INT-run_unit_tests-real-T01
+name: Run unit tests with real pytest
+category: integration
+tool: run_unit_tests
+layer: 3
+test_type: T01
+description: Integration test - run actual pytest with known pass/fail counts
+fixture: simple-python
+infrastructure:
+  - temp_copy
+  - test_runner
+input:
+  test_files:
+    - main.py
+  pytest_args:
+    - "-v"
+expected:
+  status: ok
+  tests_executed: true
+  results_available: true
+must_not:
+  - test_runner_error
+  - import_error
+checks:
+  - type: content_validation
+    required_content:
+      - test_results
+  - type: infrastructure_check
+    pytest_was_real: true
+  - type: isolation_check
+    used_temp_copy: true
+performance:
+  max_duration_ms: 5000
+severity: critical
+stub_should_fail: true
+requires_real_infrastructure: true

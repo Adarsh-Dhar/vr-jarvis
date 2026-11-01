@@ -1,0 +1,35 @@
+test_id: INT-read_file_permissions-T12
+name: Read file with permission checks
+category: integration
+tool: read_file
+layer: 3
+test_type: T12
+description: Integration test - read file respects permission boundaries
+fixture: simple-python
+infrastructure:
+  - temp_copy
+  - filesystem
+  - permissions
+input:
+  file_path: /etc/passwd
+  sandbox_enabled: true
+expected:
+  status: error
+  error_type: permission_denied
+  did_not_escape_sandbox: true
+must_not:
+  - read_sensitive_file
+  - escaped_sandbox
+checks:
+  - type: content_validation
+    required_content:
+      - error
+  - type: sandbox_check
+    did_not_escape: true
+  - type: isolation_check
+    used_temp_copy: true
+performance:
+  max_duration_ms: 500
+severity: critical
+stub_should_fail: true
+requires_real_infrastructure: true
