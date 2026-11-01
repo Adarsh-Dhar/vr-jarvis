@@ -10,6 +10,7 @@ import subprocess
 from datetime import datetime
 from google.adk.tools import ToolContext
 from ._safe import safe
+from ._common import repo_root, resolve_in_repo
 
 
 # Language detection by file extension

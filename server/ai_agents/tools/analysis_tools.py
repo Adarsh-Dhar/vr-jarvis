@@ -9,6 +9,7 @@ import ast
 import re
 from google.adk.tools import ToolContext
 from ._safe import safe
+from ._common import resolve_in_repo
 
 
 def _is_python_file(file_path: str) -> bool:

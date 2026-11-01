@@ -10,7 +10,7 @@ import ast
 import subprocess
 from google.adk.tools import ToolContext
 from ._safe import safe
-from ._common import repo_root
+from ._common import repo_root, resolve_in_repo
 
 
 def _is_python_file(file_path: str) -> bool:

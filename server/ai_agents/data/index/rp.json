@@ -346,24 +346,30 @@
   },
   {
    "src": "eutro.features.build_features",
-   "dst": "eutro.features.nutrient_features",
-   "type": "calls",
-   "kind": "confirmed"
-  },
-  {
-   "src": "eutro.features.build_features",
    "dst": "eutro.features.rain_features",
    "type": "calls",
    "kind": "confirmed"
   },
   {
+   "src": "eutro.features.build_features",
+   "dst": "eutro.features.nutrient_features",
+   "type": "calls",
+   "kind": "confirmed"
+  },
+  {
+   "src": "eutro.io.load_rain",
+   "dst": "eutro.io._read",
+   "type": "calls",
+   "kind": "confirmed"
+  },
+  {
    "src": "eutro.io.load_rain",
    "dst": "eutro.io._find",
    "type": "calls",
    "kind": "confirmed"
   },
   {
-   "src": "eutro.io.load_rain",
+   "src": "eutro.io.load_temp",
    "dst": "eutro.io._read",
    "type": "calls",
    "kind": "confirmed"
@@ -381,7 +387,7 @@
    "kind": "confirmed"
   },
   {
-   "src": "eutro.io.load_temp",
+   "src": "eutro.io.load_nutrients",
    "dst": "eutro.io._read",
    "type": "calls",
    "kind": "confirmed"
@@ -395,30 +401,24 @@
   {
    "src": "eutro.io.load_nutrients",
    "dst": "eutro.io._find",
-   "type": "calls",
-   "kind": "confirmed"
-  },
-  {
-   "src": "eutro.io.load_nutrients",
-   "dst": "eutro.io._read",
-   "type": "calls",
-   "kind": "confirmed"
-  },
-  {
-   "src": "eutro.io.load_obs",
-   "dst": "eutro.io._find",
-   "type": "calls",
-   "kind": "confirmed"
-  },
-  {
-   "src": "eutro.io.load_obs",
-   "dst": "eutro.io._read",
    "type": "calls",
    "kind": "confirmed"
   },
   {
    "src": "eutro.io.load_obs",
    "dst": "eutro.tsi.tsi_chl",
+   "type": "calls",
+   "kind": "confirmed"
+  },
+  {
+   "src": "eutro.io.load_obs",
+   "dst": "eutro.io._read",
+   "type": "calls",
+   "kind": "confirmed"
+  },
+  {
+   "src": "eutro.io.load_obs",
+   "dst": "eutro.io._find",
    "type": "calls",
    "kind": "confirmed"
   },
@@ -460,27 +460,15 @@
   },
   {
    "src": "eutro.predict.predict",
-   "dst": "eutro.io.load_temp",
+   "dst": "eutro.io.load_rain",
    "type": "calls",
    "kind": "confirmed"
   },
   {
    "src": "eutro.predict.predict",
-   "dst": "eutro.tsi.chl_from_tsi",
+   "dst": "eutro.features.nutrient_features",
    "type": "calls",
    "kind": "confirmed"
-  },
-  {
-   "src": "eutro.predict.predict",
-   "dst": "eutro.features.build_features",
-   "type": "calls",
-   "kind": "confirmed"
-  },
-  {
-   "src": "eutro.predict.predict",
-   "dst": "eutro.models.SeasonalBaseline.predict",
-   "type": "calls",
-   "kind": "inferred"
   },
   {
    "src": "eutro.predict.predict",
@@ -490,7 +478,7 @@
   },
   {
    "src": "eutro.predict.predict",
-   "dst": "eutro.predict._cdf",
+   "dst": "eutro.features.build_features",
    "type": "calls",
    "kind": "confirmed"
   },
@@ -502,7 +490,25 @@
   },
   {
    "src": "eutro.predict.predict",
-   "dst": "eutro.io.load_rain",
+   "dst": "eutro.io.load_temp",
+   "type": "calls",
+   "kind": "confirmed"
+  },
+  {
+   "src": "eutro.predict.predict",
+   "dst": "eutro.models.SeasonalBaseline.predict",
+   "type": "calls",
+   "kind": "inferred"
+  },
+  {
+   "src": "eutro.predict.predict",
+   "dst": "eutro.tsi.chl_from_tsi",
+   "type": "calls",
+   "kind": "confirmed"
+  },
+  {
+   "src": "eutro.predict.predict",
+   "dst": "eutro.predict._cdf",
    "type": "calls",
    "kind": "confirmed"
   },
@@ -514,25 +520,31 @@
   },
   {
    "src": "eutro.simulate.make_synthetic",
-   "dst": "eutro.simulate._rain_base",
-   "type": "calls",
-   "kind": "confirmed"
-  },
-  {
-   "src": "eutro.simulate.make_synthetic",
    "dst": "eutro.simulate._adj",
    "type": "calls",
    "kind": "confirmed"
   },
   {
-   "src": "eutro.train.train",
-   "dst": "eutro.io.load_temp",
+   "src": "eutro.simulate.make_synthetic",
+   "dst": "eutro.simulate._rain_base",
    "type": "calls",
    "kind": "confirmed"
   },
   {
    "src": "eutro.train.train",
-   "dst": "eutro.models.metrics",
+   "dst": "eutro.io.load_obs",
+   "type": "calls",
+   "kind": "confirmed"
+  },
+  {
+   "src": "eutro.train.train",
+   "dst": "eutro.io.load_rain",
+   "type": "calls",
+   "kind": "confirmed"
+  },
+  {
+   "src": "eutro.train.train",
+   "dst": "eutro.data.make_dataset",
    "type": "calls",
    "kind": "confirmed"
   },
@@ -544,21 +556,33 @@
   },
   {
    "src": "eutro.train.train",
-   "dst": "eutro.features.build_features",
+   "dst": "eutro.io.load_nutrients",
    "type": "calls",
    "kind": "confirmed"
   },
   {
    "src": "eutro.train.train",
-   "dst": "eutro.models.SeasonalBaseline.predict",
+   "dst": "eutro.io.load_temp",
    "type": "calls",
    "kind": "confirmed"
   },
   {
    "src": "eutro.train.train",
-   "dst": "eutro.predict.predict",
+   "dst": "eutro.models.cv_rmse",
    "type": "calls",
-   "kind": "inferred"
+   "kind": "confirmed"
+  },
+  {
+   "src": "eutro.train.train",
+   "dst": "eutro.models.quantile_model",
+   "type": "calls",
+   "kind": "confirmed"
+  },
+  {
+   "src": "eutro.train.train",
+   "dst": "eutro.models.SeasonalBaseline",
+   "type": "calls",
+   "kind": "confirmed"
   },
   {
    "src": "eutro.train.train",
@@ -574,55 +598,37 @@
   },
   {
    "src": "eutro.train.train",
-   "dst": "eutro.models.quantile_model",
+   "dst": "eutro.models.SeasonalBaseline.predict",
    "type": "calls",
    "kind": "confirmed"
   },
   {
    "src": "eutro.train.train",
-   "dst": "eutro.models.candidates",
+   "dst": "eutro.predict.predict",
+   "type": "calls",
+   "kind": "inferred"
+  },
+  {
+   "src": "eutro.train.train",
+   "dst": "eutro.features.build_features",
    "type": "calls",
    "kind": "confirmed"
   },
   {
    "src": "eutro.train.train",
-   "dst": "eutro.models.cv_rmse",
-   "type": "calls",
-   "kind": "confirmed"
-  },
-  {
-   "src": "eutro.train.train",
-   "dst": "eutro.models.SeasonalBaseline",
-   "type": "calls",
-   "kind": "confirmed"
-  },
-  {
-   "src": "eutro.train.train",
-   "dst": "eutro.data.make_dataset",
-   "type": "calls",
-   "kind": "confirmed"
-  },
-  {
-   "src": "eutro.train.train",
-   "dst": "eutro.io.load_rain",
-   "type": "calls",
-   "kind": "confirmed"
-  },
-  {
-   "src": "eutro.train.train",
-   "dst": "eutro.io.load_nutrients",
-   "type": "calls",
-   "kind": "confirmed"
-  },
-  {
-   "src": "eutro.train.train",
-   "dst": "eutro.io.load_obs",
+   "dst": "eutro.models.metrics",
    "type": "calls",
    "kind": "confirmed"
   },
   {
    "src": "main.main",
    "dst": "eutro.train.train",
+   "type": "calls",
+   "kind": "confirmed"
+  },
+  {
+   "src": "main.main",
+   "dst": "eutro.simulate.make_synthetic",
    "type": "calls",
    "kind": "confirmed"
   },
@@ -635,12 +641,6 @@
   {
    "src": "main.main",
    "dst": "eutro.predict.predict",
-   "type": "calls",
-   "kind": "confirmed"
-  },
-  {
-   "src": "main.main",
-   "dst": "eutro.simulate.make_synthetic",
    "type": "calls",
    "kind": "confirmed"
   }

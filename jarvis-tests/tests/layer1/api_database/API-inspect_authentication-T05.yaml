@@ -1,22 +1,21 @@
+test_id: API-inspect_authentication-T05
+name: Boundary Conditions test for inspect_authentication
 category: api_database
-checks:
-- required_fields:
-  - status
-  type: schema_validity
+tool: inspect_authentication
+layer: 1
+test_type: T05
 description: Boundary Conditions test for inspect_authentication
-expected:
-  status: ok
 fixture: simple-python
 input:
-  file_path: fixtures/repositories/simple-python/main.py
   repository_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/simple-python
-  tool_context: fixtures/repositories/simple-python/main.py
-layer: 1
+  tool_context: placeholder
+expected:
+  status: ok
 must_not: []
-name: Boundary Conditions test for inspect_authentication
+checks:
+- type: schema_validity
+  required_fields:
+  - status
 performance:
   max_duration_ms: 5000
 severity: high
-test_id: API-inspect_authentication-T05
-test_type: T05
-tool: inspect_authentication

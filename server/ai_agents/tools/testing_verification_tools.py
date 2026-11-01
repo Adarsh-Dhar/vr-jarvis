@@ -493,7 +493,8 @@ def generate_unit_tests(
             if params:
                 param_test = f"def test_{function_id}_with_params():\n"
                 param_test += f"    \"\"\"Test {function_id} with parameters\"\"\"\n"
-                param_test += f"    params = {{'{p['name']}': None for p in params}}\n"
+                param_literal = ', '.join(f"'{p['name']}': None" for p in params)
+                param_test += f"    params = {{{param_literal}}}\n"
                 param_test += f"    result = {function_id}(**params)\n"
                 param_test += f"    assert result is not None\n"
                 tests.append({'name': f'test_{function_id}_with_params', 'code': param_test})

@@ -695,7 +695,8 @@ def check_advisories(
     """Check security advisories."""
     try:
         # Get dependencies
-        dep_result = analyze_dependencies(repository_path, tool_context)
+        from .repository_intelligence_tools import analyze_dependencies_manifest
+        dep_result = analyze_dependencies_manifest(repository_path, tool_context)
         
         if dep_result.get('status') != 'ok':
             return dep_result
