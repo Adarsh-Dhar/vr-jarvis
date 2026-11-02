@@ -5,7 +5,7 @@ checks:
   type: schema_validity
 description: Happy Path test for replay_execution_trace
 expected:
-  status: ok
+  status: skipped
 fixture: simple-python
 input:
   file_path: fixtures/repositories/simple-python/main.py

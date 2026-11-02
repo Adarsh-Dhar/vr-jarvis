@@ -5,14 +5,14 @@ checks:
   type: schema_validity
 description: Empty Input test for request_more_evidence
 expected:
-  status: ok
+  status: skipped
 fixture: simple-python
 input:
-  evidence_type: placeholder
+  evidence_type: HV23BJX1
   file_path: fixtures/repositories/simple-python/main.py
   repository_path: fixtures/repositories/simple-python
-  task_id: placeholder
-  tool_context: placeholder
+  task_id: ONK2I5GV
+  tool_context: example_value
 layer: 1
 must_not: []
 name: Empty Input test for request_more_evidence

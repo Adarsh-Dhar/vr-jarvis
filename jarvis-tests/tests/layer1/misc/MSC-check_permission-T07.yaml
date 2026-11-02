@@ -8,12 +8,12 @@ expected:
   status: ok
 fixture: polyglot-monorepo
 input:
-  agent_id: placeholder
+  agent_id: IJTKUPY8
   file_path: fixtures/repositories/polyglot-monorepo/main.py
-  operation: placeholder
+  operation: write
   repository_path: fixtures/repositories/polyglot-monorepo
-  tool_context: placeholder
-  tool_name: placeholder
+  tool_context: example_value
+  tool_name: example_zzeak
 layer: 1
 must_not: []
 name: Complex Input test for check_permission

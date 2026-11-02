@@ -1,54 +1,44 @@
-test_id: MULTI-SEC-001
-name: Multi-Agent - Security Audit
+agent_sequence:
+- action: create_investigation_plan
+  agent: orchestrator
+  output: audit_plan
+- action: identify_entry_points
+  agent: repository_intelligence
+  input: audit_plan
+  output: entry_points
+- action: explain_function
+  agent: code_understanding
+  input: entry_points
+  output: auth_code
+- action: analyze_authentication
+  agent: security_quality
+  input: auth_code
+  output: auth_analysis
+- action: trace_sensitive_data
+  agent: security_quality
+  input: auth_code
+  output: data_flow
+- action: generate_security_report
+  agent: documentation_toolkit
+  input: auth_analysis
+  output: security_report
 category: multi_agent
-layer: 5
-test_type: MULTI_AGENT_COORDINATION
+checks:
+- correct_delegation
+- context_sharing
+- complete_audit
+- actionable_report
 description: Multi-agent security audit scenario
-
+expected_outcomes:
+- security_vulnerabilities_identified
+- sensitive_data_traced
+- report_generated
+- recommendations_provided
+layer: 5
+name: Multi-Agent - Security Audit
 scenario:
   name: security_audit
-  task: "Perform a security audit of the authentication system"
-
-agent_sequence:
-  - agent: orchestrator
-    action: create_investigation_plan
-    output: audit_plan
-
-  - agent: repository_intelligence
-    action: identify_entry_points
-    input: audit_plan
-    output: entry_points
-
-  - agent: code_understanding
-    action: explain_function
-    input: entry_points
-    output: auth_code
-
-  - agent: security_quality
-    action: analyze_authentication
-    input: auth_code
-    output: auth_analysis
-
-  - agent: security_quality
-    action: trace_sensitive_data
-    input: auth_code
-    output: data_flow
-
-  - agent: documentation_toolkit
-    action: generate_security_report
-    input: auth_analysis
-    output: security_report
-
-expected_outcomes:
-  - security_vulnerabilities_identified
-  - sensitive_data_traced
-  - report_generated
-  - recommendations_provided
-
-checks:
-  - correct_delegation
-  - context_sharing
-  - complete_audit
-  - actionable_report
-
+  task: Perform a security audit of the authentication system
 severity: critical
+test_id: MULTI-SEC-001
+test_type: MULTI_AGENT_COORDINATION

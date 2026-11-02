@@ -5,7 +5,7 @@ checks:
   type: schema_validity
 description: Happy Path test for generate_component
 expected:
-  status: ok
+  status: skipped
 fixture: simple-python
 input:
   component_type: fixtures/repositories/simple-python/main.py

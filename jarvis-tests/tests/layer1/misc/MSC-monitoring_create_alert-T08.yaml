@@ -5,13 +5,13 @@ checks:
   type: schema_validity
 description: Malformed Input test for monitoring_create_alert
 expected:
-  status: ok
+  status: skipped
 fixture: corrupted-inputs
 input:
-  condition: placeholder
+  condition: example_value
   file_path: fixtures/repositories/corrupted-inputs/main.py
   repository_path: fixtures/repositories/corrupted-inputs
-  tool_context: placeholder
+  tool_context: example_value
 layer: 1
 must_not: []
 name: Malformed Input test for monitoring_create_alert

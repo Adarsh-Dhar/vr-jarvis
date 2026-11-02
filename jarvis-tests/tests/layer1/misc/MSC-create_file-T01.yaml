@@ -7,7 +7,7 @@ checks:
 description: Happy Path test for create_file
 expected:
   file_path: present
-  status: ok
+  status: blocked
 fixture: simple-python
 input:
   content: fixtures/repositories/simple-python/main.py

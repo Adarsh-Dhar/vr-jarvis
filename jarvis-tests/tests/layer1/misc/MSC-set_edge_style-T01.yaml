@@ -8,12 +8,12 @@ expected:
   status: ok
 fixture: simple-python
 input:
-  dst: placeholder
+  dst: example_value
   file_path: fixtures/repositories/simple-python/main.py
   repository_path: fixtures/repositories/simple-python
-  src: placeholder
-  style: placeholder
-  tool_context: placeholder
+  src: example_value
+  style: example_value
+  tool_context: example_value
 layer: 1
 must_not:
 - error

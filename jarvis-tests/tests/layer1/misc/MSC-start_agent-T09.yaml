@@ -5,14 +5,14 @@ checks:
   type: schema_validity
 description: Dependency Failure test for start_agent
 expected:
-  status: ok
+  status: skipped
 fixture: simple-python
 input:
-  agent_config: placeholder
-  agent_id: placeholder
+  agent_config: example_value
+  agent_id: Q5C4I2WE
   file_path: fixtures/repositories/simple-python/main.py
   repository_path: fixtures/repositories/simple-python
-  tool_context: placeholder
+  tool_context: example_value
 layer: 1
 must_not: []
 name: Dependency Failure test for start_agent

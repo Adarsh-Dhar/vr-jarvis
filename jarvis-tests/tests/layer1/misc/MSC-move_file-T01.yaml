@@ -5,14 +5,14 @@ checks:
   type: schema_validity
 description: Happy Path test for move_file
 expected:
-  status: ok
+  status: blocked
 fixture: simple-python
 input:
-  destination: placeholder
+  destination: example_value
   file_path: fixtures/repositories/simple-python/main.py
   repository_path: fixtures/repositories/simple-python
-  source: placeholder
-  tool_context: placeholder
+  source: example_value
+  tool_context: example_value
 layer: 1
 must_not:
 - error

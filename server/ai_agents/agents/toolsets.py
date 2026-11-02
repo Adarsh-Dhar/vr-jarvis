@@ -245,6 +245,22 @@ TOOL_LEVELS = {
     "visualize_data_flow": "read",
     "visualize_test_coverage": "read",
     "watch_expression": "read",
+    # Aliases for missing spatial tools
+    "focus_on_graph_node": "read",
+    "set_graph_depth": "read",
+    "navigate_to_code_element": "read",
+    "navigate_to_relationship": "read",
+    "set_visualization_scope": "read",
+    "set_visualization_filters": "read",
+    "create_spatial_group": "read",
+    "compare_spatial_objects": "read",
+    "bookmark_investigation": "read",
+    "annotate_visualization": "read",
+    "synchronize_visualizations": "read",
+    "transition_visualization": "read",
+    "get_selected_node_details": "read",
+    "get_current_spatial_context": "read",
+    "focus_on_code_element": "read",
 }
 
 # Curated toolsets for each agent (using string names)
@@ -497,6 +513,22 @@ TOOLSETS: Dict[str, List[str]] = {
         "summarize_graph",
         "get_current_selection",
         "verify_citations",
+        # Aliases for missing spatial tools
+        "focus_on_graph_node",
+        "set_graph_depth",
+        "navigate_to_code_element",
+        "navigate_to_relationship",
+        "set_visualization_scope",
+        "set_visualization_filters",
+        "create_spatial_group",
+        "compare_spatial_objects",
+        "bookmark_investigation",
+        "annotate_visualization",
+        "synchronize_visualizations",
+        "transition_visualization",
+        "get_selected_node_details",
+        "get_current_spatial_context",
+        "focus_on_code_element",
     ],
 }
 

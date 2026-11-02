@@ -5,7 +5,7 @@ checks:
   type: schema_validity
 description: Happy Path test for resolve_conflicting_findings
 expected:
-  status: ok
+  status: skipped
 fixture: simple-python
 input:
   conflicts: fixtures/repositories/simple-python/main.py

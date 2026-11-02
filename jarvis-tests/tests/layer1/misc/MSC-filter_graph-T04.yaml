@@ -5,14 +5,14 @@ checks:
   type: schema_validity
 description: Empty Input test for filter_graph
 expected:
-  status: ok
+  status: error
 fixture: simple-python
 input:
   file_path: fixtures/repositories/simple-python/main.py
-  filters: placeholder
-  graph_id: placeholder
+  filters: example_value
+  graph_id: RU9FGVM5
   repository_path: fixtures/repositories/simple-python
-  tool_context: placeholder
+  tool_context: example_value
 layer: 1
 must_not: []
 name: Empty Input test for filter_graph

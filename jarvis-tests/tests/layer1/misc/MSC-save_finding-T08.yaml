@@ -9,10 +9,10 @@ expected:
 fixture: corrupted-inputs
 input:
   file_path: fixtures/repositories/corrupted-inputs/main.py
-  node_ids: placeholder
+  node_ids: IAVF28T1
   repository_path: fixtures/repositories/corrupted-inputs
-  summary: placeholder
-  tool_context: placeholder
+  summary: example_value
+  tool_context: example_value
 layer: 1
 must_not: []
 name: Malformed Input test for save_finding

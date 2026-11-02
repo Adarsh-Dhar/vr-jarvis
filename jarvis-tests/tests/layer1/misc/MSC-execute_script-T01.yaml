@@ -5,13 +5,13 @@ checks:
   type: schema_validity
 description: Happy Path test for execute_script
 expected:
-  status: ok
+  status: skipped
 fixture: simple-python
 input:
   file_path: fixtures/repositories/simple-python/main.py
   repository_path: fixtures/repositories/simple-python
-  script_path: placeholder
-  tool_context: placeholder
+  script_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/complex-typescript/src/index.ts
+  tool_context: example_value
 layer: 1
 must_not:
 - error

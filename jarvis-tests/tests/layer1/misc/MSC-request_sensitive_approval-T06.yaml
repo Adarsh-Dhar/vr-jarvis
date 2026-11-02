@@ -5,14 +5,14 @@ checks:
   type: schema_validity
 description: Large Input test for request_sensitive_approval
 expected:
-  status: ok
+  status: pending_approval
 fixture: polyglot-monorepo
 input:
-  description: placeholder
+  description: Process customer order
   file_path: fixtures/repositories/polyglot-monorepo/main.py
-  operation: placeholder
+  operation: write
   repository_path: fixtures/repositories/polyglot-monorepo
-  tool_context: placeholder
+  tool_context: example_value
 layer: 1
 must_not: []
 name: Large Input test for request_sensitive_approval

@@ -8,11 +8,11 @@ expected:
   status: ok
 fixture: simple-python
 input:
-  diff: placeholder
+  diff: example_value
   file_path: fixtures/repositories/simple-python/main.py
-  node_id: placeholder
+  node_id: node_003
   repository_path: fixtures/repositories/simple-python
-  tool_context: placeholder
+  tool_context: example_value
 layer: 1
 must_not:
 - error

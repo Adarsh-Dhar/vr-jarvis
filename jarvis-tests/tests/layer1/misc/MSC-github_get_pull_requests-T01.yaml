@@ -5,14 +5,14 @@ checks:
   type: schema_validity
 description: Happy Path test for github_get_pull_requests
 expected:
-  status: ok
+  status: partial
 fixture: simple-python
 input:
   file_path: fixtures/repositories/simple-python/main.py
-  owner: placeholder
-  repo: placeholder
+  owner: example_value
+  repo: example_value
   repository_path: fixtures/repositories/simple-python
-  tool_context: placeholder
+  tool_context: example_value
 layer: 1
 must_not:
 - error

@@ -1,24 +1,15 @@
-test_id: AGT-REL-001
-name: Relationship Intelligence Agent - Trace Call Chain
 category: agent_capabilities
-tool: trace_call_chain
-layer: 4
-test_type: AGENT_CAPABILITY
+checks:
+- correct_tool_selection
+- complete_call_trace
+- no_missed_relationships
+- correct_path_enumeration
+- no_hallucinations
 description: 'Test whether the Relationship Intelligence Agent can trace call chains
   between symbols, identifying all paths and relationships.
 
   '
-task:
-  agent: relationship_intelligence
-  input: Trace the call chain from handle_request() down to database operations. Show
-    all possible paths.
 expected:
-  tool_selection:
-  - trace_call_chain
-  - find_callers
-  - find_callees
-  - find_indirect_callers
-  - build_call_graph
   actions:
   - Find starting function
   - Trace all call paths
@@ -32,10 +23,19 @@ expected:
   - Correct path enumeration
   - No hallucinated paths
   status: skipped
-checks:
-- correct_tool_selection
-- complete_call_trace
-- no_missed_relationships
-- correct_path_enumeration
-- no_hallucinations
+  tool_selection:
+  - trace_call_chain
+  - find_callers
+  - find_callees
+  - find_indirect_callers
+  - build_call_graph
+layer: 4
+name: Relationship Intelligence Agent - Trace Call Chain
 severity: critical
+task:
+  agent: relationship_intelligence
+  input: Trace the call chain from handle_request() down to database operations. Show
+    all possible paths.
+test_id: AGT-REL-001
+test_type: AGENT_CAPABILITY
+tool: trace_call_chain

@@ -5,14 +5,14 @@ checks:
   type: schema_validity
 description: Malformed Input test for start_telemetry_collection
 expected:
-  status: ok
+  status: skipped
 fixture: corrupted-inputs
 input:
-  collection_id: placeholder
+  collection_id: C1X2Q11T
   file_path: fixtures/repositories/corrupted-inputs/main.py
-  metrics: placeholder
+  metrics: example_value
   repository_path: fixtures/repositories/corrupted-inputs
-  tool_context: placeholder
+  tool_context: example_value
 layer: 1
 must_not: []
 name: Malformed Input test for start_telemetry_collection

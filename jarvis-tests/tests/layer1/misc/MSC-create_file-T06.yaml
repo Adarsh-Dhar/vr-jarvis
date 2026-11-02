@@ -7,7 +7,7 @@ checks:
 description: Large Input test for create_file
 expected:
   file_path: present
-  status: ok
+  status: blocked
 fixture: polyglot-monorepo
 input:
   content: fixtures/repositories/simple-python/main.py

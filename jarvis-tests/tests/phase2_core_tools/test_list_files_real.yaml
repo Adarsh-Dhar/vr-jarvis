@@ -10,8 +10,8 @@ expected_directory: /Users/adarsh/Documents/vr-agent/fixtures/repositories/simpl
 expected_error: 'Directory does not exist: /Users/adarsh/Documents/vr-agent/fixtures/repositories/simple-python'
 expected_files:
 - path: main.py
-  type: directory
   size: 0
+  type: directory
 input:
   directory: fixtures/repositories/simple-python
   file_path: fixtures/repositories/simple-python/main.py

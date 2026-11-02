@@ -1,45 +1,38 @@
-test_id: STRESS-CONC-001
-name: Stress - Concurrent Agents
 category: stress
-layer: 7
-test_type: STRESS
-description: Test system behavior with multiple concurrent agents
-
-scenarios:
-  - name: single_agent
-    agents: 1
-    expected:
-      success_rate: "100%"
-      avg_response_time: "less than 5s"
-
-  - name: five_agents
-    agents: 5
-    expected:
-      success_rate: "greater than 95%"
-      avg_response_time: "less than 10s"
-
-  - name: ten_agents
-    agents: 10
-    expected:
-      success_rate: "greater than 90%"
-      avg_response_time: "less than 20s"
-
-  - name: twenty_five_agents
-    agents: 25
-    expected:
-      success_rate: "greater than 80%"
-      avg_response_time: "less than 60s"
-
-metrics:
-  - success_rate
-  - avg_response_time
-  - queue_wait_time
-  - agent_coordination_errors
-  - duplicate_work
-
 checks:
-  - high_success_rate
-  - no_coordination_errors
-  - no_duplicate_work
-
+- high_success_rate
+- no_coordination_errors
+- no_duplicate_work
+description: Test system behavior with multiple concurrent agents
+layer: 7
+metrics:
+- success_rate
+- avg_response_time
+- queue_wait_time
+- agent_coordination_errors
+- duplicate_work
+name: Stress - Concurrent Agents
+scenarios:
+- agents: 1
+  expected:
+    avg_response_time: less than 5s
+    success_rate: 100%
+  name: single_agent
+- agents: 5
+  expected:
+    avg_response_time: less than 10s
+    success_rate: greater than 95%
+  name: five_agents
+- agents: 10
+  expected:
+    avg_response_time: less than 20s
+    success_rate: greater than 90%
+  name: ten_agents
+- agents: 25
+  expected:
+    avg_response_time: less than 60s
+    success_rate: greater than 80%
+  name: twenty_five_agents
 severity: high
+test_id: STRESS-CONC-001
+test_type: STRESS

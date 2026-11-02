@@ -10,10 +10,10 @@ expected_message: 'Symbol definition not found: placeholder'
 expected_symbol_name: placeholder
 fixture: simple-python
 input:
-  class_id: placeholder
+  class_id: ER99YUA1
   file_path: fixtures/repositories/simple-python/main.py
   repository_path: fixtures/repositories/simple-python
-  tool_context: placeholder
+  tool_context: example_value
 layer: 1
 must_not: []
 name: Dependency Failure test for explain_class

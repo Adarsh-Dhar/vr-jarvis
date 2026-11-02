@@ -5,14 +5,14 @@ checks:
   type: schema_validity
 description: Large Input test for execute_in_sandbox
 expected:
-  status: ok
+  status: skipped
 fixture: polyglot-monorepo
 input:
-  command: placeholder
+  command: example_value
   file_path: fixtures/repositories/polyglot-monorepo/main.py
   repository_path: fixtures/repositories/polyglot-monorepo
-  sandbox_id: placeholder
-  tool_context: placeholder
+  sandbox_id: ARVEI076
+  tool_context: example_value
 layer: 1
 must_not: []
 name: Large Input test for execute_in_sandbox

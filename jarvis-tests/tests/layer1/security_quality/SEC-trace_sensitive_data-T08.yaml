@@ -1,23 +1,23 @@
-test_id: SEC-trace_sensitive_data-T08
-name: Malformed Input test for trace_sensitive_data
 category: security_quality
-tool: trace_sensitive_data
-layer: 1
-test_type: T08
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Malformed Input test for trace_sensitive_data
+expected:
+  status: skipped
 fixture: corrupted-inputs
 input:
   repository_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/corrupted-inputs
-  tool_context: placeholder
-expected:
-  status: ok
+  tool_context: example_value
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Malformed Input test for trace_sensitive_data
 performance:
   max_duration_ms: 5000
 severity: critical
 skip: true
 skip_reason: 'Tool execution issue: '
+test_id: SEC-trace_sensitive_data-T08
+test_type: T08
+tool: trace_sensitive_data

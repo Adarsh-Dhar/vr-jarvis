@@ -5,14 +5,14 @@ checks:
   type: schema_validity
 description: Dependency Failure test for subscribe_to_topic
 expected:
-  status: ok
+  status: skipped
 fixture: simple-python
 input:
-  callback: placeholder
+  callback: example_value
   file_path: fixtures/repositories/simple-python/main.py
   repository_path: fixtures/repositories/simple-python
-  tool_context: placeholder
-  topic: placeholder
+  tool_context: example_value
+  topic: example_value
 layer: 1
 must_not: []
 name: Dependency Failure test for subscribe_to_topic

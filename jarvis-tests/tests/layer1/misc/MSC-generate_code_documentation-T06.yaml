@@ -8,10 +8,10 @@ expected:
   status: ok
 fixture: polyglot-monorepo
 input:
-  element_id: placeholder
+  element_id: elem_003
   file_path: fixtures/repositories/polyglot-monorepo/main.py
   repository_path: fixtures/repositories/polyglot-monorepo
-  tool_context: placeholder
+  tool_context: example_value
 layer: 1
 must_not: []
 name: Large Input test for generate_code_documentation

@@ -5,14 +5,14 @@ checks:
   type: schema_validity
 description: Boundary Conditions test for request_more_evidence
 expected:
-  status: ok
+  status: skipped
 fixture: simple-python
 input:
-  evidence_type: placeholder
+  evidence_type: A1OLYLRB
   file_path: fixtures/repositories/simple-python/main.py
   repository_path: fixtures/repositories/simple-python
-  task_id: placeholder
-  tool_context: placeholder
+  task_id: ZC8H2SPU
+  tool_context: example_value
 layer: 1
 must_not: []
 name: Boundary Conditions test for request_more_evidence

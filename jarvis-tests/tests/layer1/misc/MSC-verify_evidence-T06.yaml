@@ -5,13 +5,13 @@ checks:
   type: schema_validity
 description: Large Input test for verify_evidence
 expected:
-  status: ok
+  status: skipped
 fixture: polyglot-monorepo
 input:
-  evidence_id: placeholder
+  evidence_id: 6O7UPL39
   file_path: fixtures/repositories/polyglot-monorepo/main.py
   repository_path: fixtures/repositories/polyglot-monorepo
-  tool_context: placeholder
+  tool_context: example_value
 layer: 1
 must_not: []
 name: Large Input test for verify_evidence

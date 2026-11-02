@@ -10,8 +10,8 @@ expected:
   file_path_contains: main.py
   status: ok
 expected_complexity:
-  cyclomatic: 1
   cognitive: 0
+  cyclomatic: 1
   lines_of_code: 1
 expected_error: 'File not found: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/simple-python/main.py'
 fixture: simple-python

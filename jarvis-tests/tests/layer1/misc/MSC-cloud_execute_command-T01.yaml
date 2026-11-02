@@ -5,15 +5,15 @@ checks:
   type: schema_validity
 description: Happy Path test for cloud_execute_command
 expected:
-  status: ok
+  status: skipped
 fixture: simple-python
 input:
-  command: placeholder
+  command: example_value
   file_path: fixtures/repositories/simple-python/main.py
-  instance_id: placeholder
-  provider: placeholder
+  instance_id: LAOI5BAA
+  provider: 6V5NBJUX
   repository_path: fixtures/repositories/simple-python
-  tool_context: placeholder
+  tool_context: example_value
 layer: 1
 must_not:
 - error

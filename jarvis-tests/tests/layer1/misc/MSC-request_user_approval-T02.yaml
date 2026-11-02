@@ -5,14 +5,14 @@ checks:
   type: schema_validity
 description: Input Validation test for request_user_approval
 expected:
-  status: ok
+  status: skipped
 fixture: simple-python
 input:
-  description: placeholder
+  description: Query database
   file_path: fixtures/repositories/simple-python/main.py
-  operation: placeholder
+  operation: read
   repository_path: fixtures/repositories/simple-python
-  tool_context: placeholder
+  tool_context: example_value
 layer: 1
 must_not: []
 name: Input Validation test for request_user_approval

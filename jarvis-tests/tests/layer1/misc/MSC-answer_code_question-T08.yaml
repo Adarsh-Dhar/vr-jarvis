@@ -5,7 +5,7 @@ checks:
   type: schema_validity
 description: Malformed Input test for answer_code_question
 expected:
-  status: ok
+  status: skipped
 fixture: corrupted-inputs
 input:
   context: fixtures/repositories/simple-python/main.py

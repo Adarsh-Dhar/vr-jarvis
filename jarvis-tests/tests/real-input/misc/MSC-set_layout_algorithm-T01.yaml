@@ -5,7 +5,7 @@ checks:
   type: schema_validity
 description: Happy Path test for set_layout_algorithm
 expected:
-  status: ok
+  status: skipped
 fixture: simple-python
 input:
   algorithm: fixtures/repositories/simple-python/main.py

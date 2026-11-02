@@ -5,7 +5,7 @@ checks:
   type: schema_validity
 description: Dependency Failure test for request_sensitive_approval
 expected:
-  status: ok
+  status: pending_approval
 fixture: simple-python
 input:
   description: fixtures/repositories/simple-python/main.py

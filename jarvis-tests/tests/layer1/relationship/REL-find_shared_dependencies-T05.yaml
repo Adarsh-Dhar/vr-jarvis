@@ -1,21 +1,21 @@
-test_id: REL-find_shared_dependencies-T05
-name: Boundary Conditions test for find_shared_dependencies
 category: relationship
-tool: find_shared_dependencies
-layer: 1
-test_type: T05
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Boundary Conditions test for find_shared_dependencies
+expected:
+  status: skipped
 fixture: simple-python
 input:
-  module_ids: placeholder
-  tool_context: placeholder
-expected:
-  status: ok
+  module_ids: I099FWCA
+  tool_context: example_value
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Boundary Conditions test for find_shared_dependencies
 performance:
   max_duration_ms: 3000
 severity: high
+test_id: REL-find_shared_dependencies-T05
+test_type: T05
+tool: find_shared_dependencies

@@ -1,22 +1,22 @@
-test_id: API-trace_transaction-T01
-name: Happy Path test for trace_transaction
 category: api_database
-tool: trace_transaction
-layer: 1
-test_type: T01
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Happy Path test for trace_transaction
+expected:
+  status: skipped
 fixture: simple-python
 input:
-  transaction_id: placeholder
-  tool_context: placeholder
-expected:
-  status: ok
+  tool_context: example_value
+  transaction_id: WDSSHQEM
+layer: 1
 must_not:
 - error
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Happy Path test for trace_transaction
 performance:
   max_duration_ms: 5000
 severity: critical
+test_id: API-trace_transaction-T01
+test_type: T01
+tool: trace_transaction

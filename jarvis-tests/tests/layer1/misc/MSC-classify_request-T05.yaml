@@ -10,8 +10,8 @@ fixture: simple-python
 input:
   file_path: fixtures/repositories/simple-python/main.py
   repository_path: fixtures/repositories/simple-python
-  tool_context: placeholder
-  user_query: placeholder
+  tool_context: example_value
+  user_query: example query
 layer: 1
 must_not: []
 name: Boundary Conditions test for classify_request

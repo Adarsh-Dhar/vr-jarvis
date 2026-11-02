@@ -1,21 +1,21 @@
-test_id: API-analyze_api_contract-T04
-name: Empty Input test for analyze_api_contract
 category: api_database
-tool: analyze_api_contract
-layer: 1
-test_type: T04
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Empty Input test for analyze_api_contract
-fixture: simple-python
-input:
-  endpoint: placeholder
-  tool_context: placeholder
 expected:
   status: ok
+fixture: simple-python
+input:
+  endpoint: example_value
+  tool_context: example_value
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Empty Input test for analyze_api_contract
 performance:
   max_duration_ms: 5000
 severity: high
+test_id: API-analyze_api_contract-T04
+test_type: T04
+tool: analyze_api_contract

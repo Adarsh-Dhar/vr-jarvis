@@ -8,12 +8,12 @@ expected:
   status: ok
 fixture: simple-python
 input:
-  agent_id: placeholder
+  agent_id: EJNKXTNJ
   file_path: fixtures/repositories/simple-python/main.py
-  permission_level: placeholder
+  permission_level: example_value
   repository_path: fixtures/repositories/simple-python
-  tool_context: placeholder
-  tool_name: placeholder
+  tool_context: example_value
+  tool_name: example_igcak
 layer: 1
 must_not:
 - error

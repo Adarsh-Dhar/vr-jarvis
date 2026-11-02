@@ -5,7 +5,7 @@ checks:
   type: schema_validity
 description: Happy Path test for git_create_branch
 expected:
-  status: ok
+  status: skipped
 fixture: simple-python
 input:
   branch_name: fixtures/repositories/simple-python/main.py

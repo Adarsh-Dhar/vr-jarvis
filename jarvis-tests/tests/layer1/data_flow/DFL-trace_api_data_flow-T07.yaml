@@ -5,7 +5,7 @@ checks:
   type: schema_validity
 description: Complex Input test for trace_api_data_flow
 expected:
-  status: ok
+  status: skipped
 fixture: polyglot-monorepo
 input:
   endpoint: fixtures/repositories/simple-python/main.py

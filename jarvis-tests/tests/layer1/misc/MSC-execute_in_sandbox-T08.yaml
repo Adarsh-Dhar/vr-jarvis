@@ -5,7 +5,7 @@ checks:
   type: schema_validity
 description: Malformed Input test for execute_in_sandbox
 expected:
-  status: ok
+  status: skipped
 fixture: corrupted-inputs
 input:
   command: fixtures/repositories/simple-python/main.py

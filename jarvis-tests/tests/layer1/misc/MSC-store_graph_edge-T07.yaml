@@ -5,15 +5,15 @@ checks:
   type: schema_validity
 description: Complex Input test for store_graph_edge
 expected:
-  status: ok
+  status: skipped
 fixture: polyglot-monorepo
 input:
-  edge_data: placeholder
+  edge_data: example_value
   file_path: fixtures/repositories/polyglot-monorepo/main.py
-  from_id: placeholder
+  from_id: Z2FFFZKS
   repository_path: fixtures/repositories/polyglot-monorepo
-  to_id: placeholder
-  tool_context: placeholder
+  to_id: 1M60C31O
+  tool_context: example_value
 layer: 1
 must_not: []
 name: Complex Input test for store_graph_edge

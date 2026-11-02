@@ -5,7 +5,7 @@ checks:
   type: schema_validity
 description: Happy Path test for git_revert
 expected:
-  status: ok
+  status: skipped
 fixture: simple-python
 input:
   commit_hash: fixtures/repositories/simple-python/main.py

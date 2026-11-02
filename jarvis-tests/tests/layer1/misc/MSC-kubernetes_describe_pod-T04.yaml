@@ -5,14 +5,14 @@ checks:
   type: schema_validity
 description: Empty Input test for kubernetes_describe_pod
 expected:
-  status: ok
+  status: skipped
 fixture: simple-python
 input:
   file_path: fixtures/repositories/simple-python/main.py
-  namespace: placeholder
-  pod_name: placeholder
+  namespace: example_dnocr
+  pod_name: example_uqyft
   repository_path: fixtures/repositories/simple-python
-  tool_context: placeholder
+  tool_context: example_value
 layer: 1
 must_not: []
 name: Empty Input test for kubernetes_describe_pod

@@ -5,14 +5,14 @@ checks:
   type: schema_validity
 description: Empty Input test for start_agent
 expected:
-  status: ok
+  status: skipped
 fixture: simple-python
 input:
-  agent_config: placeholder
-  agent_id: placeholder
+  agent_config: example_value
+  agent_id: X8G9O2XB
   file_path: fixtures/repositories/simple-python/main.py
   repository_path: fixtures/repositories/simple-python
-  tool_context: placeholder
+  tool_context: example_value
 layer: 1
 must_not: []
 name: Empty Input test for start_agent

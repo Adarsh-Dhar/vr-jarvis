@@ -8,10 +8,10 @@ expected:
   status: ok
 fixture: simple-python
 input:
-  environment_id: placeholder
+  environment_id: ZNSKZHWI
   file_path: fixtures/repositories/simple-python/main.py
   repository_path: fixtures/repositories/simple-python
-  tool_context: placeholder
+  tool_context: example_value
 layer: 1
 must_not: []
 name: Boundary Conditions test for set_vr_environment

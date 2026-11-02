@@ -8,11 +8,11 @@ expected:
   status: ok
 fixture: simple-python
 input:
-  agent_id: placeholder
+  agent_id: 9990X0WY
   file_path: fixtures/repositories/simple-python/main.py
   repository_path: fixtures/repositories/simple-python
-  tool_context: placeholder
-  tool_name: placeholder
+  tool_context: example_value
+  tool_name: example_rwxmd
 layer: 1
 must_not: []
 name: Dependency Failure test for revoke_permission

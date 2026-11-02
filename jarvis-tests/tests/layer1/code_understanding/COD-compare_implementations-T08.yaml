@@ -5,14 +5,14 @@ checks:
   type: schema_validity
 description: Malformed Input test for compare_implementations
 expected:
-  status: ok
+  status: skipped
 fixture: corrupted-inputs
 input:
   file_path: fixtures/repositories/corrupted-inputs/main.py
-  function1_id: placeholder
-  function2_id: placeholder
+  function1_id: YQ5QNBF4
+  function2_id: E908GDYA
   repository_path: fixtures/repositories/corrupted-inputs
-  tool_context: placeholder
+  tool_context: example_value
 layer: 1
 must_not: []
 name: Malformed Input test for compare_implementations

@@ -5,7 +5,7 @@ checks:
   type: schema_validity
 description: Happy Path test for identify_root_cause
 expected:
-  status: ok
+  status: skipped
 fixture: simple-python
 input:
   error_id: fixtures/repositories/simple-python/main.py

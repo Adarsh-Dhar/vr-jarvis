@@ -11,7 +11,7 @@ input:
   file_path: fixtures/repositories/polyglot-monorepo/main.py
   query: test
   repository_path: fixtures/repositories/polyglot-monorepo
-  tool_context: placeholder
+  tool_context: example_value
 layer: 1
 must_not: []
 name: Large Input test for search_external_docs

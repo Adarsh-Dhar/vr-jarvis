@@ -20,15 +20,21 @@ def _emit_command(tool_context: ToolContext, command: str, **kwargs):
 
 # Helper functions for session-scoped state
 def _get_session_state(tool_context: ToolContext, state_key: str, default=None):
-    """Get session-scoped state for a given key."""
+    """Get session-scoped state for a given key using session_id."""
+    # Try to get session_id from state or use a session-specific key
+    session_id = tool_context.state.get('session_id', 'default')
     session_states = tool_context.state.get('session_states', {})
-    return session_states.get(state_key, default)
+    session_data = session_states.get(session_id, {})
+    return session_data.get(state_key, default)
 
 
 def _set_session_state(tool_context: ToolContext, state_key: str, value):
-    """Set session-scoped state for a given key."""
+    """Set session-scoped state for a given key using session_id."""
+    session_id = tool_context.state.get('session_id', 'default')
     session_states = tool_context.state.get('session_states', {})
-    session_states[state_key] = value
+    if session_id not in session_states:
+        session_states[session_id] = {}
+    session_states[session_id][state_key] = value
     tool_context.state['session_states'] = session_states
 
 
@@ -1461,6 +1467,7 @@ def show_graph(
         }
 
 
+
 @safe
 def pin_investigation(
     investigation_id: str,
@@ -1744,3 +1751,151 @@ def get_spatial_object_details(
             'status': 'error',
             'error': str(e)
         }
+
+
+# Aliases for missing spatial tools to match expected tool names
+# These are wrapper functions that alias to existing implementations
+@safe
+def focus_on_graph_node(
+    graph_id: str,
+    node_id: str,
+    tool_context: ToolContext,
+    depth: int = 1
+) -> dict:
+    """Alias for expand_graph_node."""
+    return expand_graph_node(graph_id, node_id, tool_context, depth)
+
+
+@safe
+def set_graph_depth(
+    visualization_id: str,
+    depth: int,
+    tool_context: ToolContext
+) -> dict:
+    """Alias for change_visualization_depth."""
+    return change_visualization_depth(visualization_id, depth, tool_context)
+
+
+@safe
+def navigate_to_code_element(
+    node_id: str,
+    tool_context: ToolContext
+) -> dict:
+    """Alias for select_code_element."""
+    return select_code_element(node_id, tool_context)
+
+
+@safe
+def navigate_to_relationship(
+    node_id: str,
+    tool_context: ToolContext
+) -> dict:
+    """Alias for trace_relationship_path."""
+    return trace_relationship_path(node_id, tool_context)
+
+
+@safe
+def set_visualization_scope(
+    visualization_id: str,
+    scope: str,
+    tool_context: ToolContext
+) -> dict:
+    """Alias for change_visualization_scope."""
+    return change_visualization_scope(visualization_id, scope, tool_context)
+
+
+@safe
+def set_visualization_filters(
+    graph_id: str,
+    filters: Dict,
+    tool_context: ToolContext
+) -> dict:
+    """Alias for filter_graph."""
+    return filter_graph(graph_id, filters, tool_context)
+
+
+@safe
+def create_spatial_group(
+    graph_id: str,
+    group_id: str,
+    node_ids: List[str],
+    tool_context: ToolContext
+) -> dict:
+    """Alias for create_graph with group semantics."""
+    return create_graph(graph_id, 'group', tool_context)
+
+
+@safe
+def compare_spatial_objects(
+    node_id1: str,
+    node_id2: str,
+    tool_context: ToolContext
+) -> dict:
+    """Alias for compare_code_regions."""
+    return compare_code_regions(node_id1, node_id2, tool_context)
+
+
+@safe
+def bookmark_investigation(
+    node_id: str,
+    label: str,
+    tool_context: ToolContext
+) -> dict:
+    """Alias for create_spatial_bookmark."""
+    return create_spatial_bookmark(node_id, label, tool_context)
+
+
+@safe
+def annotate_visualization(
+    node_id: str,
+    text: str,
+    tool_context: ToolContext
+) -> dict:
+    """Alias for annotate_code_element."""
+    return annotate_code_element(node_id, text, tool_context)
+
+
+@safe
+def synchronize_visualizations(
+    viz_id1: str,
+    viz_id2: str,
+    tool_context: ToolContext
+) -> dict:
+    """Alias for synchronize_graphs."""
+    return synchronize_graphs(viz_id1, viz_id2, tool_context)
+
+
+@safe
+def transition_visualization(
+    visualization_id: str,
+    target_type: str,
+    tool_context: ToolContext
+) -> dict:
+    """Alias for request_visualization."""
+    return request_visualization(visualization_id, target_type, tool_context)
+
+
+@safe
+def get_selected_node_details(
+    object_id: str,
+    tool_context: ToolContext
+) -> dict:
+    """Alias for get_spatial_object_details."""
+    return get_spatial_object_details(object_id, tool_context)
+
+
+@safe
+def get_current_spatial_context(
+    tool_context: ToolContext
+) -> dict:
+    """Alias for get_spatial_selection_context."""
+    return get_spatial_selection_context(tool_context)
+
+
+@safe
+def focus_on_code_element(
+    node_id: str,
+    tool_context: ToolContext
+) -> dict:
+    """Alias for focus_on_object."""
+    return focus_on_object(node_id, tool_context)

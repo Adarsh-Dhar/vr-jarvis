@@ -8,11 +8,11 @@ expected:
   status: ok
 fixture: polyglot-monorepo
 input:
-  api_name: placeholder
+  api_name: example_kftts
   file_path: fixtures/repositories/polyglot-monorepo/main.py
   query: test
   repository_path: fixtures/repositories/polyglot-monorepo
-  tool_context: placeholder
+  tool_context: example_value
 layer: 1
 must_not: []
 name: Complex Input test for search_api_docs

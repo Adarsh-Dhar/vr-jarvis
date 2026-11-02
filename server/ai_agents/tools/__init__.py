@@ -399,6 +399,22 @@ from .visualization_spatial_tools import (
     change_visualization_scope,
     get_visualization_state,
     get_spatial_object_details,
+    # Aliases for missing spatial tools
+    focus_on_graph_node,
+    set_graph_depth,
+    navigate_to_code_element,
+    navigate_to_relationship,
+    set_visualization_scope,
+    set_visualization_filters,
+    create_spatial_group,
+    compare_spatial_objects,
+    bookmark_investigation,
+    annotate_visualization,
+    synchronize_visualizations,
+    transition_visualization,
+    get_selected_node_details,
+    get_current_spatial_context,
+    focus_on_code_element,
 )
 
 # Specialist Toolkit A - API and Database Intelligence

@@ -8,6 +8,8 @@ checks:
 description: Performance test for run_linter
 expected:
   status: error
+expected_error: 'Path /Users/adarsh/Documents/vr-agent/fixtures/repositories/simple-python
+  resolves outside repository root: /Users/adarsh/Documents/vr-agent/fixtures/repositories/simple-python'
 expected_message: Linter auto not available
 fixture: simple-python
 input:
@@ -23,5 +25,3 @@ severity: medium
 test_id: MSC-run_linter-T13
 test_type: T13
 tool: run_linter
-expected_error: 'Path /Users/adarsh/Documents/vr-agent/fixtures/repositories/simple-python
-  resolves outside repository root: /Users/adarsh/Documents/vr-agent/fixtures/repositories/simple-python'

@@ -20,8 +20,11 @@ expected:
     target: dependency_injection_example
     type: return_value
   status: ok
+expected_data_flow: []
 expected_error: argument should be a str or an os.PathLike object where __fspath__
   returns a str, not 'NoneType'
+expected_note: Full data flow analysis requires additional infrastructure
+expected_variable_name: /Users/adarsh/Documents/vr-agent/fixtures/repositories/simple-python/main.py
 fixture: simple-python
 input:
   file_path: fixtures/repositories/simple-python/main.py
@@ -47,6 +50,3 @@ test_type: T01
 tool: analyze_data_flow
 uncertain_handling: explicit
 verified: true
-expected_variable_name: /Users/adarsh/Documents/vr-agent/fixtures/repositories/simple-python/main.py
-expected_data_flow: []
-expected_note: Full data flow analysis requires additional infrastructure

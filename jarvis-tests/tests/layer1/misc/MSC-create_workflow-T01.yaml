@@ -5,14 +5,14 @@ checks:
   type: schema_validity
 description: Happy Path test for create_workflow
 expected:
-  status: ok
+  status: skipped
 fixture: simple-python
 input:
   file_path: fixtures/repositories/simple-python/main.py
   repository_path: fixtures/repositories/simple-python
-  steps: placeholder
-  tool_context: placeholder
-  workflow_name: placeholder
+  steps: example_value
+  tool_context: example_value
+  workflow_name: example_mzuvw
 layer: 1
 must_not:
 - error

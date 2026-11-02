@@ -10,8 +10,8 @@ fixture: polyglot-monorepo
 input:
   file_path: fixtures/repositories/polyglot-monorepo/main.py
   repository_path: fixtures/repositories/polyglot-monorepo
-  tool_context: placeholder
-  tool_name: placeholder
+  tool_context: example_value
+  tool_name: example_hssyq
 layer: 1
 must_not: []
 name: Large Input test for unregister_tool

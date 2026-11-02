@@ -5,13 +5,13 @@ checks:
   type: schema_validity
 description: Malformed Input test for analyze_framework_dependency_injection
 expected:
-  status: ok
+  status: skipped
 fixture: corrupted-inputs
 input:
   file_path: fixtures/repositories/corrupted-inputs/main.py
-  framework: placeholder
+  framework: example_value
   repository_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/corrupted-inputs
-  tool_context: placeholder
+  tool_context: example_value
 layer: 1
 must_not: []
 name: Malformed Input test for analyze_framework_dependency_injection

@@ -1,21 +1,21 @@
-test_id: SEC-analyze_permissions-T03
-name: Output Validation test for analyze_permissions
 category: security_quality
-tool: analyze_permissions
-layer: 1
-test_type: T03
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Output Validation test for analyze_permissions
+expected:
+  status: ok
 fixture: simple-python
 input:
   repository_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/simple-python
-  tool_context: placeholder
-expected:
-  status: ok
+  tool_context: example_value
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Output Validation test for analyze_permissions
 performance:
   max_duration_ms: 5000
 severity: critical
+test_id: SEC-analyze_permissions-T03
+test_type: T03
+tool: analyze_permissions

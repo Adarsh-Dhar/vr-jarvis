@@ -5,14 +5,14 @@ checks:
   type: schema_validity
 description: Malformed Input test for record_function_arguments
 expected:
-  status: ok
+  status: not_implemented
 fixture: corrupted-inputs
 input:
-  application_id: placeholder
+  application_id: 49WNI5R5
   file_path: fixtures/repositories/corrupted-inputs/main.py
   function_id: alpha
   repository_path: fixtures/repositories/corrupted-inputs
-  tool_context: placeholder
+  tool_context: example_value
 layer: 1
 must_not: []
 name: Malformed Input test for record_function_arguments

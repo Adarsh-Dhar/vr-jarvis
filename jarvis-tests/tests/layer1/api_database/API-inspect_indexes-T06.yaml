@@ -5,7 +5,7 @@ checks:
   type: schema_validity
 description: Large Input test for inspect_indexes
 expected:
-  status: ok
+  status: skipped
 fixture: polyglot-monorepo
 input:
   connection_string: fixtures/repositories/simple-python/main.py

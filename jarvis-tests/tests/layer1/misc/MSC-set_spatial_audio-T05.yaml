@@ -9,10 +9,10 @@ expected:
 fixture: simple-python
 input:
   file_path: fixtures/repositories/simple-python/main.py
-  position: placeholder
+  position: example_value
   repository_path: fixtures/repositories/simple-python
-  source_id: placeholder
-  tool_context: placeholder
+  source_id: D7UR67U3
+  tool_context: example_value
 layer: 1
 must_not: []
 name: Boundary Conditions test for set_spatial_audio

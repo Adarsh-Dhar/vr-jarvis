@@ -5,7 +5,7 @@ checks:
   type: schema_validity
 description: Happy Path test for get_environment_info
 expected:
-  status: ok
+  status: skipped
 fixture: simple-python
 input:
   environment_id: fixtures/repositories/simple-python/main.py

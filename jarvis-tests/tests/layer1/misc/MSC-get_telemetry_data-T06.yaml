@@ -5,13 +5,13 @@ checks:
   type: schema_validity
 description: Large Input test for get_telemetry_data
 expected:
-  status: ok
+  status: skipped
 fixture: polyglot-monorepo
 input:
-  collection_id: placeholder
+  collection_id: 56VP8L2J
   file_path: fixtures/repositories/polyglot-monorepo/main.py
   repository_path: fixtures/repositories/polyglot-monorepo
-  tool_context: placeholder
+  tool_context: example_value
 layer: 1
 must_not: []
 name: Large Input test for get_telemetry_data

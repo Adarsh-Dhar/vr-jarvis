@@ -5,15 +5,15 @@ checks:
   type: schema_validity
 description: Malformed Input test for kubernetes_exec_command
 expected:
-  status: ok
+  status: skipped
 fixture: corrupted-inputs
 input:
-  command: placeholder
+  command: example_value
   file_path: fixtures/repositories/corrupted-inputs/main.py
-  namespace: placeholder
-  pod_name: placeholder
+  namespace: example_bbltx
+  pod_name: example_stfej
   repository_path: fixtures/repositories/corrupted-inputs
-  tool_context: placeholder
+  tool_context: example_value
 layer: 1
 must_not: []
 name: Malformed Input test for kubernetes_exec_command

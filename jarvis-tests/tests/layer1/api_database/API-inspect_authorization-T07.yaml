@@ -1,21 +1,21 @@
-test_id: API-inspect_authorization-T07
-name: Complex Input test for inspect_authorization
 category: api_database
-tool: inspect_authorization
-layer: 1
-test_type: T07
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Complex Input test for inspect_authorization
+expected:
+  status: ok
 fixture: polyglot-monorepo
 input:
   repository_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/polyglot-monorepo
-  tool_context: placeholder
-expected:
-  status: ok
+  tool_context: example_value
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Complex Input test for inspect_authorization
 performance:
   max_duration_ms: 5000
 severity: high
+test_id: API-inspect_authorization-T07
+test_type: T07
+tool: inspect_authorization

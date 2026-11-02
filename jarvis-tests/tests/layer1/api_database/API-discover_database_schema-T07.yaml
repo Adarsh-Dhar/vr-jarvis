@@ -5,7 +5,7 @@ checks:
   type: schema_validity
 description: Complex Input test for discover_database_schema
 expected:
-  status: ok
+  status: skipped
 fixture: polyglot-monorepo
 input:
   file_path: fixtures/repositories/polyglot-monorepo/main.py

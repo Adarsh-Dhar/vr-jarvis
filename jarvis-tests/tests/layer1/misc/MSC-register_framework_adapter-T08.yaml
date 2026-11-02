@@ -5,7 +5,7 @@ checks:
   type: schema_validity
 description: Malformed Input test for register_framework_adapter
 expected:
-  status: ok
+  status: error
 fixture: corrupted-inputs
 input:
   adapter_config: fixtures/repositories/simple-python/main.py

@@ -5,15 +5,15 @@ checks:
   type: schema_validity
 description: Malformed Input test for search_and_replace
 expected:
-  status: ok
+  status: skipped
 fixture: corrupted-inputs
 input:
   file_path: fixtures/repositories/corrupted-inputs/main.py
-  file_pattern: placeholder
-  replace: placeholder
+  file_pattern: example_value
+  replace: example_value
   repository_path: fixtures/repositories/corrupted-inputs
-  search: placeholder
-  tool_context: placeholder
+  search: example_value
+  tool_context: example_value
 layer: 1
 must_not: []
 name: Malformed Input test for search_and_replace

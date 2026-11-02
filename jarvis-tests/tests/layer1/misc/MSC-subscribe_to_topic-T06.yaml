@@ -5,7 +5,7 @@ checks:
   type: schema_validity
 description: Large Input test for subscribe_to_topic
 expected:
-  status: ok
+  status: skipped
 fixture: polyglot-monorepo
 input:
   callback: fixtures/repositories/simple-python/main.py

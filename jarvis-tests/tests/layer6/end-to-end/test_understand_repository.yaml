@@ -1,38 +1,38 @@
-test_id: E2E-REPO-001
-name: End-to-End - Understand Repository
 category: end_to_end
-layer: 6
-test_type: END_TO_END
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Complete repository understanding investigation
-scenario:
-  name: understand_repository
-  task: 'Understand this repository: identify languages, frameworks, entry points,
-    and architecture'
-fixture:
-  repository: simple-python
+expected:
+  status: ok
+expected_outcome:
+  complete_analysis: true
+  evidence_cited: true
+  repository_overview:
+    architecture: monolithic
+    dependencies: []
+    entry_points:
+    - main.py
+    frameworks: []
+    languages:
+    - python
 expected_steps:
 - detect_languages
 - detect_frameworks
 - identify_entry_points
 - analyze_repository_structure
 - build_dependency_graph
-expected_outcome:
-  repository_overview:
-    languages:
-    - python
-    frameworks: []
-    entry_points:
-    - main.py
-    architecture: monolithic
-    dependencies: []
-  evidence_cited: true
-  complete_analysis: true
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+fixture:
+  repository: simple-python
+layer: 6
+name: End-to-End - Understand Repository
+scenario:
+  name: understand_repository
+  task: 'Understand this repository: identify languages, frameworks, entry points,
+    and architecture'
 severity: critical
 skip: true
 skip_reason: 'Tool execution issue: No tool specified in test definition'
-expected:
-  status: ok
+test_id: E2E-REPO-001
+test_type: END_TO_END

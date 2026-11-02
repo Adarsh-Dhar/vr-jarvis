@@ -1,24 +1,24 @@
-test_id: API-inspect_columns-T08
-name: Malformed Input test for inspect_columns
 category: api_database
-tool: inspect_columns
-layer: 1
-test_type: T08
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Malformed Input test for inspect_columns
+expected:
+  status: skipped
 fixture: corrupted-inputs
 input:
-  connection_string: placeholder
-  table: placeholder
-  tool_context: placeholder
-expected:
-  status: ok
+  connection_string: example_value
+  table: example_value
+  tool_context: example_value
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Malformed Input test for inspect_columns
 performance:
   max_duration_ms: 5000
 severity: critical
 skip: true
 skip_reason: 'Tool execution issue: '
+test_id: API-inspect_columns-T08
+test_type: T08
+tool: inspect_columns

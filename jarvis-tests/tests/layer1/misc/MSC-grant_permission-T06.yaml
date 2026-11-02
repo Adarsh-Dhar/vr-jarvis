@@ -8,12 +8,12 @@ expected:
   status: ok
 fixture: polyglot-monorepo
 input:
-  agent_id: placeholder
+  agent_id: 57Z3WW06
   file_path: fixtures/repositories/polyglot-monorepo/main.py
-  permission_level: placeholder
+  permission_level: example_value
   repository_path: fixtures/repositories/polyglot-monorepo
-  tool_context: placeholder
-  tool_name: placeholder
+  tool_context: example_value
+  tool_name: example_jrzmv
 layer: 1
 must_not: []
 name: Large Input test for grant_permission

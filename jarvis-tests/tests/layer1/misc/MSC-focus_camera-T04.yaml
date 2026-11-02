@@ -9,9 +9,9 @@ expected:
 fixture: simple-python
 input:
   file_path: fixtures/repositories/simple-python/main.py
-  node_id: placeholder
+  node_id: node_002
   repository_path: fixtures/repositories/simple-python
-  tool_context: placeholder
+  tool_context: example_value
 layer: 1
 must_not: []
 name: Empty Input test for focus_camera

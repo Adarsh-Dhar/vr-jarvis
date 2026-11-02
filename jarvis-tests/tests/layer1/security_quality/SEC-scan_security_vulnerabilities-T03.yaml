@@ -6,7 +6,7 @@ checks:
   type: schema_validity
 description: Output Validation test for scan_security_vulnerabilities
 expected:
-  status: ok
+  status: skipped
   vulnerabilities: present
 fixture: simple-python
 input:

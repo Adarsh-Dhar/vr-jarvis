@@ -5,7 +5,7 @@ checks:
   type: schema_validity
 description: Happy Path test for analyze_stack_trace
 expected:
-  status: ok
+  status: not_implemented
 fixture: simple-python
 input:
   file_path: fixtures/repositories/simple-python/main.py

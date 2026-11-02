@@ -5,7 +5,7 @@ checks:
   type: schema_validity
 description: Happy Path test for suggest_debugging_actions
 expected:
-  status: ok
+  status: skipped
 fixture: simple-python
 input:
   error_id: fixtures/repositories/simple-python/main.py

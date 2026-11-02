@@ -8,8 +8,8 @@ expected:
   file_path_contains: main.py
   status: ok
 expected_complexity:
-  cyclomatic: 1
   cognitive: 0
+  cyclomatic: 1
   lines_of_code: 1
 fixture: simple-python
 input:

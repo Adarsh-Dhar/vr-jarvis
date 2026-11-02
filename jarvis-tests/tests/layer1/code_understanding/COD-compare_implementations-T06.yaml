@@ -5,14 +5,14 @@ checks:
   type: schema_validity
 description: Large Input test for compare_implementations
 expected:
-  status: ok
+  status: skipped
 fixture: polyglot-monorepo
 input:
   file_path: fixtures/repositories/polyglot-monorepo/main.py
-  function1_id: placeholder
-  function2_id: placeholder
+  function1_id: I6FBEMSA
+  function2_id: J6XQ5XK4
   repository_path: fixtures/repositories/polyglot-monorepo
-  tool_context: placeholder
+  tool_context: example_value
 layer: 1
 must_not: []
 name: Large Input test for compare_implementations

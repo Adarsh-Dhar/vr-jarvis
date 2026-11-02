@@ -1,23 +1,23 @@
-test_id: SEC-check_code_quality-T03
-name: Output Validation test for check_code_quality
 category: security_quality
-tool: check_code_quality
-layer: 1
-test_type: T03
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Output Validation test for check_code_quality
+expected:
+  status: error
 fixture: simple-python
 input:
   repository_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/simple-python
-  tool_context: placeholder
-expected:
-  status: ok
+  tool_context: example_value
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Output Validation test for check_code_quality
 performance:
   max_duration_ms: 5000
 severity: critical
 skip: true
 skip_reason: 'Tool execution issue: '
+test_id: SEC-check_code_quality-T03
+test_type: T03
+tool: check_code_quality

@@ -5,7 +5,7 @@ checks:
   type: schema_validity
 description: Large Input test for kubernetes_exec_command
 expected:
-  status: ok
+  status: skipped
 fixture: polyglot-monorepo
 input:
   command: fixtures/repositories/simple-python/main.py

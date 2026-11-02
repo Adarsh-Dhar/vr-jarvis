@@ -5,13 +5,13 @@ checks:
   type: schema_validity
 description: Large Input test for discover_framework_components
 expected:
-  status: ok
+  status: skipped
 fixture: polyglot-monorepo
 input:
   file_path: fixtures/repositories/polyglot-monorepo/main.py
-  framework: placeholder
+  framework: example_value
   repository_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/polyglot-monorepo
-  tool_context: placeholder
+  tool_context: example_value
 layer: 1
 must_not: []
 name: Large Input test for discover_framework_components

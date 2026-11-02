@@ -5,14 +5,14 @@ checks:
   type: schema_validity
 description: Output Validation test for request_more_evidence
 expected:
-  status: ok
+  status: skipped
 fixture: simple-python
 input:
-  evidence_type: placeholder
+  evidence_type: OXW29SAF
   file_path: fixtures/repositories/simple-python/main.py
   repository_path: fixtures/repositories/simple-python
-  task_id: placeholder
-  tool_context: placeholder
+  task_id: V905KU4M
+  tool_context: example_value
 layer: 1
 must_not: []
 name: Output Validation test for request_more_evidence

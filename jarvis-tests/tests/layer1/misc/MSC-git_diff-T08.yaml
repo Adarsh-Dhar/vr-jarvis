@@ -1,24 +1,24 @@
-test_id: MSC-git_diff-T08
-name: Malformed Input test for git_diff
 category: misc
-tool: git_diff
-layer: 1
-test_type: T08
-description: Malformed Input test for git_diff
-fixture: corrupted-inputs
-input:
-  repository_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/corrupted-inputs
-  tool_context: fixtures/repositories/simple-python/main.py
-  file_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/corrupted-inputs/nonexistent.py
-expected:
-  status: ok
-  file_path: present
-must_not: []
 checks:
-- type: schema_validity
-  required_fields:
+- required_fields:
   - status
   - file_path
+  type: schema_validity
+description: Malformed Input test for git_diff
+expected:
+  file_path: present
+  status: ok
+fixture: corrupted-inputs
+input:
+  file_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/corrupted-inputs/nonexistent.py
+  repository_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/corrupted-inputs
+  tool_context: fixtures/repositories/simple-python/main.py
+layer: 1
+must_not: []
+name: Malformed Input test for git_diff
 performance:
   max_duration_ms: 3000
 severity: critical
+test_id: MSC-git_diff-T08
+test_type: T08
+tool: git_diff

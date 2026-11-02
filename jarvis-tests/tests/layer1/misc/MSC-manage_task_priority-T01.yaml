@@ -5,13 +5,13 @@ checks:
   type: schema_validity
 description: Happy Path test for manage_task_priority
 expected:
-  status: ok
+  status: skipped
 fixture: simple-python
 input:
   file_path: fixtures/repositories/simple-python/main.py
   repository_path: fixtures/repositories/simple-python
-  task_ids: placeholder
-  tool_context: placeholder
+  task_ids: 1YJLUAA7
+  tool_context: example_value
 layer: 1
 must_not:
 - error

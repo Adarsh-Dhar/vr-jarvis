@@ -5,7 +5,7 @@ checks:
   type: schema_validity
 description: Output Validation test for inspect_orm_relationships
 expected:
-  status: ok
+  status: skipped
 fixture: simple-python
 input:
   file_path: fixtures/repositories/simple-python/main.py

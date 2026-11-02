@@ -10,9 +10,9 @@ fixture: polyglot-monorepo
 input:
   file_path: fixtures/repositories/polyglot-monorepo/main.py
   repository_path: fixtures/repositories/polyglot-monorepo
-  tool_context: placeholder
-  tool_definition: placeholder
-  tool_name: placeholder
+  tool_context: example_value
+  tool_definition: example_value
+  tool_name: example_udrca
 layer: 1
 must_not: []
 name: Complex Input test for register_tool

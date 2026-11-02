@@ -5,13 +5,13 @@ checks:
   type: schema_validity
 description: Boundary Conditions test for check_approval_status
 expected:
-  status: ok
+  status: not_found
 fixture: simple-python
 input:
-  approval_id: placeholder
+  approval_id: Y203RU79
   file_path: fixtures/repositories/simple-python/main.py
   repository_path: fixtures/repositories/simple-python
-  tool_context: placeholder
+  tool_context: example_value
 layer: 1
 must_not: []
 name: Boundary Conditions test for check_approval_status

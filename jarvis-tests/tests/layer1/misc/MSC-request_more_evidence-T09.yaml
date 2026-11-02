@@ -5,14 +5,14 @@ checks:
   type: schema_validity
 description: Dependency Failure test for request_more_evidence
 expected:
-  status: ok
+  status: skipped
 fixture: simple-python
 input:
-  evidence_type: placeholder
+  evidence_type: 74JEMJTL
   file_path: fixtures/repositories/simple-python/main.py
   repository_path: fixtures/repositories/simple-python
-  task_id: placeholder
-  tool_context: placeholder
+  task_id: J4ZEMYWG
+  tool_context: example_value
 layer: 1
 must_not: []
 name: Dependency Failure test for request_more_evidence

@@ -6,14 +6,17 @@ checks:
 description: Boundary Conditions test for analyze_data_flow
 expected:
   status: ok
+expected_data_flow: []
 expected_error: argument should be a str or an os.PathLike object where __fspath__
   returns a str, not 'NoneType'
+expected_note: Full data flow analysis requires additional infrastructure
+expected_variable_name: /Users/adarsh/Documents/vr-agent/fixtures/repositories/simple-python/main.py
 fixture: simple-python
 input:
   file_path: fixtures/repositories/simple-python/main.py
   repository_path: fixtures/repositories/simple-python
-  tool_context: placeholder
-  variable_name: placeholder
+  tool_context: example_value
+  variable_name: quantity
 layer: 1
 must_not: []
 name: Boundary Conditions test for analyze_data_flow
@@ -23,6 +26,3 @@ severity: high
 test_id: ANL-analyze_data_flow-T05
 test_type: T05
 tool: analyze_data_flow
-expected_variable_name: /Users/adarsh/Documents/vr-agent/fixtures/repositories/simple-python/main.py
-expected_data_flow: []
-expected_note: Full data flow analysis requires additional infrastructure

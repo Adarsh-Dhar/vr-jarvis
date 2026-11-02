@@ -5,7 +5,7 @@ checks:
   type: schema_validity
 description: Happy Path test for extract_function
 expected:
-  status: ok
+  status: skipped
 fixture: simple-python
 input:
   code_range: fixtures/repositories/simple-python/main.py

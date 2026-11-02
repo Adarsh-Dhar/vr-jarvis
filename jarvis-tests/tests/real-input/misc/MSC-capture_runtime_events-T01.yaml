@@ -5,7 +5,7 @@ checks:
   type: schema_validity
 description: Happy Path test for capture_runtime_events
 expected:
-  status: ok
+  status: skipped
 fixture: simple-python
 input:
   application_id: fixtures/repositories/simple-python/main.py

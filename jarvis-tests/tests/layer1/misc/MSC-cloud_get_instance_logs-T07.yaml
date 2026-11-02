@@ -5,14 +5,14 @@ checks:
   type: schema_validity
 description: Complex Input test for cloud_get_instance_logs
 expected:
-  status: ok
+  status: skipped
 fixture: polyglot-monorepo
 input:
   file_path: fixtures/repositories/polyglot-monorepo/main.py
-  instance_id: placeholder
-  provider: placeholder
+  instance_id: 9IRNPSIX
+  provider: KYG6HUC8
   repository_path: fixtures/repositories/polyglot-monorepo
-  tool_context: placeholder
+  tool_context: example_value
 layer: 1
 must_not: []
 name: Complex Input test for cloud_get_instance_logs

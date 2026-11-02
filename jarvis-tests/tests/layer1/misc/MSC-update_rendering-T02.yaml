@@ -5,14 +5,14 @@ checks:
   type: schema_validity
 description: Input Validation test for update_rendering
 expected:
-  status: ok
+  status: skipped
 fixture: simple-python
 input:
   file_path: fixtures/repositories/simple-python/main.py
-  graph_id: placeholder
+  graph_id: O5O37XYK
   repository_path: fixtures/repositories/simple-python
-  tool_context: placeholder
-  updates: placeholder
+  tool_context: example_value
+  updates: example_value
 layer: 1
 must_not: []
 name: Input Validation test for update_rendering

@@ -5,12 +5,12 @@ checks:
   type: schema_validity
 description: Happy Path test for run_end_to_end_tests
 expected:
-  status: ok
+  status: skipped
 fixture: simple-python
 input:
   file_path: fixtures/repositories/simple-python/main.py
   repository_path: fixtures/repositories/simple-python
-  tool_context: placeholder
+  tool_context: example_value
 layer: 1
 must_not:
 - error

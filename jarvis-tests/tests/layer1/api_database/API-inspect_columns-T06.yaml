@@ -1,22 +1,22 @@
-test_id: API-inspect_columns-T06
-name: Large Input test for inspect_columns
 category: api_database
-tool: inspect_columns
-layer: 1
-test_type: T06
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Large Input test for inspect_columns
+expected:
+  status: skipped
 fixture: polyglot-monorepo
 input:
-  connection_string: placeholder
-  table: placeholder
-  tool_context: placeholder
-expected:
-  status: ok
+  connection_string: example_value
+  table: example_value
+  tool_context: example_value
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Large Input test for inspect_columns
 performance:
   max_duration_ms: 5000
 severity: medium
+test_id: API-inspect_columns-T06
+test_type: T06
+tool: inspect_columns

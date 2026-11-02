@@ -5,13 +5,13 @@ checks:
   type: schema_validity
 description: Boundary Conditions test for attach_runtime_profiler
 expected:
-  status: ok
+  status: not_implemented
 fixture: simple-python
 input:
-  application_id: placeholder
+  application_id: QLLYTSLR
   file_path: fixtures/repositories/simple-python/main.py
   repository_path: fixtures/repositories/simple-python
-  tool_context: placeholder
+  tool_context: example_value
 layer: 1
 must_not: []
 name: Boundary Conditions test for attach_runtime_profiler

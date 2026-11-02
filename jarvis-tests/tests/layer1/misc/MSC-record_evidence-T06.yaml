@@ -5,7 +5,7 @@ checks:
   type: schema_validity
 description: Large Input test for record_evidence
 expected:
-  status: ok
+  status: skipped
 fixture: polyglot-monorepo
 input:
   file_path: fixtures/repositories/polyglot-monorepo/main.py

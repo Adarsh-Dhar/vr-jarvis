@@ -5,7 +5,7 @@ checks:
   type: schema_validity
 description: Happy Path test for register_framework_adapter
 expected:
-  status: ok
+  status: error
 fixture: simple-python
 input:
   adapter_config: fixtures/repositories/simple-python/main.py

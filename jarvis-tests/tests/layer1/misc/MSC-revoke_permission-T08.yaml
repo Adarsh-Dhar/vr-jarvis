@@ -8,11 +8,11 @@ expected:
   status: ok
 fixture: corrupted-inputs
 input:
-  agent_id: placeholder
+  agent_id: XUZL2VUD
   file_path: fixtures/repositories/corrupted-inputs/main.py
   repository_path: fixtures/repositories/corrupted-inputs
-  tool_context: placeholder
-  tool_name: placeholder
+  tool_context: example_value
+  tool_name: example_sfoyb
 layer: 1
 must_not: []
 name: Malformed Input test for revoke_permission

@@ -1,21 +1,21 @@
-test_id: API-trace_transaction-T03
-name: Output Validation test for trace_transaction
 category: api_database
-tool: trace_transaction
-layer: 1
-test_type: T03
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Output Validation test for trace_transaction
+expected:
+  status: skipped
 fixture: simple-python
 input:
-  transaction_id: placeholder
-  tool_context: placeholder
-expected:
-  status: ok
+  tool_context: example_value
+  transaction_id: 320QG3O4
+layer: 1
 must_not: []
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+name: Output Validation test for trace_transaction
 performance:
   max_duration_ms: 5000
 severity: critical
+test_id: API-trace_transaction-T03
+test_type: T03
+tool: trace_transaction

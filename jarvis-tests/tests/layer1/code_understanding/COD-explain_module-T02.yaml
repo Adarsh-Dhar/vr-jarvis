@@ -10,9 +10,9 @@ expected_error: 'Module not found: fixtures/repositories/simple-python/main.py'
 fixture: simple-python
 input:
   file_path: fixtures/repositories/simple-python/main.py
-  module_path: placeholder
+  module_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/complex-typescript/src/index.ts
   repository_path: fixtures/repositories/simple-python
-  tool_context: placeholder
+  tool_context: example_value
 layer: 1
 must_not: []
 name: Input Validation test for explain_module

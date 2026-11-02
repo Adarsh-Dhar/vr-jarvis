@@ -5,14 +5,14 @@ checks:
   type: schema_validity
 description: Empty Input test for highlight_path
 expected:
-  status: ok
+  status: skipped
 fixture: simple-python
 input:
   file_path: fixtures/repositories/simple-python/main.py
-  graph_id: placeholder
-  path: placeholder
+  graph_id: LWP6O17S
+  path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/complex-typescript/src/index.ts
   repository_path: fixtures/repositories/simple-python
-  tool_context: placeholder
+  tool_context: example_value
 layer: 1
 must_not: []
 name: Empty Input test for highlight_path

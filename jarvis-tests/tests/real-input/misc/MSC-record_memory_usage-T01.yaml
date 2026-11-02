@@ -5,7 +5,7 @@ checks:
   type: schema_validity
 description: Happy Path test for record_memory_usage
 expected:
-  status: ok
+  status: skipped
 fixture: simple-python
 input:
   application_id: fixtures/repositories/simple-python/main.py

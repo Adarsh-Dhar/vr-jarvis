@@ -5,13 +5,13 @@ checks:
   type: schema_validity
 description: Empty Input test for generate_code_summary
 expected:
-  status: ok
+  status: skipped
 fixture: simple-python
 input:
-  element_id: placeholder
+  element_id: elem_001
   file_path: fixtures/repositories/simple-python/main.py
   repository_path: fixtures/repositories/simple-python
-  tool_context: placeholder
+  tool_context: example_value
 layer: 1
 must_not: []
 name: Empty Input test for generate_code_summary

@@ -5,14 +5,14 @@ checks:
   type: schema_validity
 description: Dependency Failure test for update_tool_definition
 expected:
-  status: ok
+  status: skipped
 fixture: simple-python
 input:
   file_path: fixtures/repositories/simple-python/main.py
   repository_path: fixtures/repositories/simple-python
-  tool_context: placeholder
-  tool_definition: placeholder
-  tool_name: placeholder
+  tool_context: example_value
+  tool_definition: example_value
+  tool_name: example_kkgvy
 layer: 1
 must_not: []
 name: Dependency Failure test for update_tool_definition

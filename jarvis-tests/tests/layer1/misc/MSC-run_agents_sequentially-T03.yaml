@@ -10,8 +10,8 @@ fixture: simple-python
 input:
   file_path: fixtures/repositories/simple-python/main.py
   repository_path: fixtures/repositories/simple-python
-  task_ids: placeholder
-  tool_context: placeholder
+  task_ids: V09H6QBR
+  tool_context: example_value
 layer: 1
 must_not: []
 name: Output Validation test for run_agents_sequentially

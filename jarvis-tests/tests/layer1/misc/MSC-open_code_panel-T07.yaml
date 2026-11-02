@@ -9,9 +9,9 @@ expected:
 fixture: polyglot-monorepo
 input:
   file_path: fixtures/repositories/polyglot-monorepo/main.py
-  node_id: placeholder
+  node_id: node_001
   repository_path: fixtures/repositories/polyglot-monorepo
-  tool_context: placeholder
+  tool_context: example_value
 layer: 1
 must_not: []
 name: Complex Input test for open_code_panel

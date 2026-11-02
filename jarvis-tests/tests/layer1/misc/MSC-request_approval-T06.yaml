@@ -5,7 +5,7 @@ checks:
   type: schema_validity
 description: Large Input test for request_approval
 expected:
-  status: ok
+  status: awaiting_user_approval
 fixture: polyglot-monorepo
 input:
   action_summary: fixtures/repositories/simple-python/main.py

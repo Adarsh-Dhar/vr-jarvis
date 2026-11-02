@@ -1,27 +1,12 @@
-test_id: MSC-git_diff-T15
-name: Recovery test for git_diff
 category: misc
-tool: git_diff
-layer: 2
-test_type: T15
-description: Recovery test for git_diff
-fixture: simple-python
-input:
-  repository_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/simple-python
-  tool_context: fixtures/repositories/simple-python/main.py
-  file_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/simple-python/main.py
-expected:
-  status: ok
-  file_path_contains: main.py
-must_not: []
 checks:
-- type: schema_validity
-  required_fields:
+- required_fields:
   - status
-performance:
-  max_duration_ms: 3000
-severity: high
-expected_repository_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/simple-python
+  type: schema_validity
+description: Recovery test for git_diff
+expected:
+  file_path_contains: main.py
+  status: ok
 expected_diff: "diff --git a/jarvis-tests/tests/layer1/api_database/API-inspect_indexes-T08.yaml\
   \ b/jarvis-tests/tests/layer1/api_database/API-inspect_indexes-T08.yaml\nindex fda09615..bb922826\
   \ 100644\n--- a/jarvis-tests/tests/layer1/api_database/API-inspect_indexes-T08.yaml\n\
@@ -70,3 +55,18 @@ expected_diff: "diff --git a/jarvis-tests/tests/layer1/api_database/API-inspect_
   \ 5000\n severity: high\n-test_id: API-trace_api_call-T04\n-test_type: T04\n-tool:\
   \ trace_api_call\n"
 expected_exit_code: 0
+expected_repository_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/simple-python
+fixture: simple-python
+input:
+  file_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/simple-python/main.py
+  repository_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/simple-python
+  tool_context: fixtures/repositories/simple-python/main.py
+layer: 2
+must_not: []
+name: Recovery test for git_diff
+performance:
+  max_duration_ms: 3000
+severity: high
+test_id: MSC-git_diff-T15
+test_type: T15
+tool: git_diff

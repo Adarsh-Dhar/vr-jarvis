@@ -5,14 +5,14 @@ checks:
   type: schema_validity
 description: Empty Input test for start_telemetry_collection
 expected:
-  status: ok
+  status: skipped
 fixture: simple-python
 input:
-  collection_id: placeholder
+  collection_id: 8XNWOGE5
   file_path: fixtures/repositories/simple-python/main.py
-  metrics: placeholder
+  metrics: example_value
   repository_path: fixtures/repositories/simple-python
-  tool_context: placeholder
+  tool_context: example_value
 layer: 1
 must_not: []
 name: Empty Input test for start_telemetry_collection

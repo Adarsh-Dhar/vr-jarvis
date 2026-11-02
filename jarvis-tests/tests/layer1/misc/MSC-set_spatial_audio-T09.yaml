@@ -9,10 +9,10 @@ expected:
 fixture: simple-python
 input:
   file_path: fixtures/repositories/simple-python/main.py
-  position: placeholder
+  position: example_value
   repository_path: fixtures/repositories/simple-python
-  source_id: placeholder
-  tool_context: placeholder
+  source_id: U2AAIRWG
+  tool_context: example_value
 layer: 1
 must_not: []
 name: Dependency Failure test for set_spatial_audio

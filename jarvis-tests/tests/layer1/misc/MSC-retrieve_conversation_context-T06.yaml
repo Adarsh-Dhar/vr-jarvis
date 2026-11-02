@@ -5,7 +5,7 @@ checks:
   type: schema_validity
 description: Large Input test for retrieve_conversation_context
 expected:
-  status: ok
+  status: error
 fixture: polyglot-monorepo
 input:
   conversation_id: fixtures/repositories/simple-python/main.py

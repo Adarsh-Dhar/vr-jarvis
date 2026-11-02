@@ -8,11 +8,11 @@ expected:
   status: ok
 fixture: simple-python
 input:
-  agent_id: placeholder
+  agent_id: SFZS7K9U
   file_path: fixtures/repositories/simple-python/main.py
   repository_path: fixtures/repositories/simple-python
-  tool_context: placeholder
-  tool_name: placeholder
+  tool_context: example_value
+  tool_name: example_xqqig
 layer: 1
 must_not: []
 name: Output Validation test for revoke_permission

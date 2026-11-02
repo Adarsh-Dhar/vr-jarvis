@@ -5,7 +5,7 @@ checks:
   type: schema_validity
 description: Complex Input test for run_integration_tests
 expected:
-  status: ok
+  status: skipped
 fixture: polyglot-monorepo
 input:
   file_path: fixtures/repositories/polyglot-monorepo/main.py

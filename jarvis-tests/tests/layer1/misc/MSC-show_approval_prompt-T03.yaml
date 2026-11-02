@@ -10,8 +10,8 @@ fixture: simple-python
 input:
   file_path: fixtures/repositories/simple-python/main.py
   repository_path: fixtures/repositories/simple-python
-  summary: placeholder
-  tool_context: placeholder
+  summary: example_value
+  tool_context: example_value
 layer: 1
 must_not: []
 name: Output Validation test for show_approval_prompt

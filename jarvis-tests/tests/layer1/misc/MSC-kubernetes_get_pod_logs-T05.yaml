@@ -5,14 +5,14 @@ checks:
   type: schema_validity
 description: Boundary Conditions test for kubernetes_get_pod_logs
 expected:
-  status: ok
+  status: skipped
 fixture: simple-python
 input:
   file_path: fixtures/repositories/simple-python/main.py
-  namespace: placeholder
-  pod_name: placeholder
+  namespace: example_aorvq
+  pod_name: example_gbeqc
   repository_path: fixtures/repositories/simple-python
-  tool_context: placeholder
+  tool_context: example_value
 layer: 1
 must_not: []
 name: Boundary Conditions test for kubernetes_get_pod_logs

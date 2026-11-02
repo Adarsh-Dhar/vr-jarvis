@@ -10,8 +10,8 @@ fixture: corrupted-inputs
 input:
   file_path: fixtures/repositories/corrupted-inputs/main.py
   repository_path: fixtures/repositories/corrupted-inputs
-  text: placeholder
-  tool_context: placeholder
+  text: example_value
+  tool_context: example_value
 layer: 1
 must_not: []
 name: Malformed Input test for detect_speaker_intent

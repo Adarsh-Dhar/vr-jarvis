@@ -8,12 +8,12 @@ expected:
   status: ok
 fixture: polyglot-monorepo
 input:
-  agent_id: placeholder
+  agent_id: XS6ADVPE
   file_path: fixtures/repositories/polyglot-monorepo/main.py
-  operation: placeholder
+  operation: execute
   repository_path: fixtures/repositories/polyglot-monorepo
-  tool_context: placeholder
-  tool_name: placeholder
+  tool_context: example_value
+  tool_name: example_uoexo
 layer: 1
 must_not: []
 name: Large Input test for check_permission

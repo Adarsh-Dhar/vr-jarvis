@@ -1,48 +1,39 @@
-test_id: MULTI-PERF-001
-name: Multi-Agent - Performance Analysis
+agent_sequence:
+- action: classify_request
+  agent: orchestrator
+  output: performance_task
+- action: record_function_calls
+  agent: runtime_intelligence
+  output: execution_data
+- action: trace_database_reads
+  agent: data_flow_intelligence
+  input: execution_data
+  output: data_flow
+- action: find_shared_dependencies
+  agent: relationship_intelligence
+  input: data_flow
+  output: dependencies
+- action: calculate_complexity
+  agent: security_quality
+  input: dependencies
+  output: complexity
 category: multi_agent
-layer: 5
-test_type: MULTI_AGENT_COORDINATION
+checks:
+- parallel_execution
+- context_sharing
+- correct_analysis
+- actionable_recommendations
 description: Multi-agent performance analysis scenario
-
+expected_outcomes:
+- performance_bottlenecks_identified
+- database_operations_analyzed
+- complex_functions_flagged
+- recommendations_provided
+layer: 5
+name: Multi-Agent - Performance Analysis
 scenario:
   name: performance_analysis
-  task: "Identify performance bottlenecks in the data processing pipeline"
-
-agent_sequence:
-  - agent: orchestrator
-    action: classify_request
-    output: performance_task
-
-  - agent: runtime_intelligence
-    action: record_function_calls
-    output: execution_data
-
-  - agent: data_flow_intelligence
-    action: trace_database_reads
-    input: execution_data
-    output: data_flow
-
-  - agent: relationship_intelligence
-    action: find_shared_dependencies
-    input: data_flow
-    output: dependencies
-
-  - agent: security_quality
-    action: calculate_complexity
-    input: dependencies
-    output: complexity
-
-expected_outcomes:
-  - performance_bottlenecks_identified
-  - database_operations_analyzed
-  - complex_functions_flagged
-  - recommendations_provided
-
-checks:
-  - parallel_execution
-  - context_sharing
-  - correct_analysis
-  - actionable_recommendations
-
+  task: Identify performance bottlenecks in the data processing pipeline
 severity: high
+test_id: MULTI-PERF-001
+test_type: MULTI_AGENT_COORDINATION

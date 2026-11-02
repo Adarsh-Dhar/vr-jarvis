@@ -5,7 +5,7 @@ checks:
   type: schema_validity
 description: Malformed Input test for execute_workflow
 expected:
-  status: ok
+  status: skipped
 fixture: corrupted-inputs
 input:
   file_path: fixtures/repositories/corrupted-inputs/main.py

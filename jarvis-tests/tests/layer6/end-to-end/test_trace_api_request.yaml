@@ -1,29 +1,29 @@
-test_id: E2E-API-001
-name: End-to-End - Trace API Request
 category: end_to_end
-layer: 6
-test_type: END_TO_END
+checks:
+- required_fields:
+  - status
+  type: schema_validity
 description: Complete API request lifecycle trace
-scenario:
-  name: trace_api_request
-  task: Trace a POST /api/users request through all service layers to the database
+expected:
+  status: ok
+expected_outcome:
+  complete_trace: true
+  evidence_cited: true
+  request_lifecycle:
+    business_logic: UserRepository.save
+    database_operation: INSERT INTO users
+    entry_point: UserController.createUser
+    middleware: []
 fixture:
   api: simple_flask_api
   database: test.db
-expected_outcome:
-  request_lifecycle:
-    entry_point: UserController.createUser
-    middleware: []
-    business_logic: UserRepository.save
-    database_operation: INSERT INTO users
-  complete_trace: true
-  evidence_cited: true
-checks:
-- type: schema_validity
-  required_fields:
-  - status
+layer: 6
+name: End-to-End - Trace API Request
+scenario:
+  name: trace_api_request
+  task: Trace a POST /api/users request through all service layers to the database
 severity: high
 skip: true
 skip_reason: 'Tool execution issue: No tool specified in test definition'
-expected:
-  status: ok
+test_id: E2E-API-001
+test_type: END_TO_END

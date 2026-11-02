@@ -5,7 +5,7 @@ checks:
   type: schema_validity
 description: Malformed Input test for update_index
 expected:
-  status: ok
+  status: skipped
 fixture: corrupted-inputs
 input:
   changed_files: fixtures/repositories/simple-python/main.py

@@ -12,7 +12,7 @@ fixture: corrupted-inputs
 input:
   file_path: fixtures/repositories/corrupted-inputs/main.py
   repository_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/corrupted-inputs
-  tool_context: placeholder
+  tool_context: example_value
 layer: 1
 must_not: []
 name: Malformed Input test for detect_project_type

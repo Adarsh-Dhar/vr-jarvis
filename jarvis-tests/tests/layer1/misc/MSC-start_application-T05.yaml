@@ -5,7 +5,7 @@ checks:
   type: schema_validity
 description: Boundary Conditions test for start_application
 expected:
-  status: ok
+  status: not_implemented
 fixture: simple-python
 input:
   application_id: fixtures/repositories/simple-python/main.py

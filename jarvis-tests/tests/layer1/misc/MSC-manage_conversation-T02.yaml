@@ -5,14 +5,14 @@ checks:
   type: schema_validity
 description: Input Validation test for manage_conversation
 expected:
-  status: ok
+  status: error
 fixture: simple-python
 input:
-  context: placeholder
+  context: example_value
   file_path: fixtures/repositories/simple-python/main.py
   repository_path: fixtures/repositories/simple-python
-  tool_context: placeholder
-  user_message: placeholder
+  tool_context: example_value
+  user_message: example_value
 layer: 1
 must_not: []
 name: Input Validation test for manage_conversation

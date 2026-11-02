@@ -13,8 +13,8 @@ fixture: simple-python
 input:
   file_path: fixtures/repositories/simple-python/main.py
   repository_path: fixtures/repositories/simple-python
-  tool_context: placeholder
-  variable_name: placeholder
+  tool_context: example_value
+  variable_name: price
 layer: 1
 must_not: []
 name: Output Validation test for analyze_data_flow

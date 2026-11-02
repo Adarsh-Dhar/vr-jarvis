@@ -5,13 +5,13 @@ checks:
   type: schema_validity
 description: Dependency Failure test for remove_breakpoint
 expected:
-  status: ok
+  status: not_implemented
 fixture: simple-python
 input:
-  breakpoint_id: placeholder
+  breakpoint_id: TQ0XL8WR
   file_path: fixtures/repositories/simple-python/main.py
   repository_path: fixtures/repositories/simple-python
-  tool_context: placeholder
+  tool_context: example_value
 layer: 1
 must_not: []
 name: Dependency Failure test for remove_breakpoint

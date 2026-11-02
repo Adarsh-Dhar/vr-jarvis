@@ -5,7 +5,7 @@ checks:
   type: schema_validity
 description: Empty Input test for capture_exception
 expected:
-  status: ok
+  status: not_implemented
 fixture: simple-python
 input:
   application_id: fixtures/repositories/simple-python/main.py

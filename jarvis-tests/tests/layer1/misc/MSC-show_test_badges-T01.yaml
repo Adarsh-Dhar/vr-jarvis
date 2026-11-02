@@ -8,12 +8,12 @@ expected:
   status: ok
 fixture: simple-python
 input:
-  failed_ids: placeholder
+  failed_ids: SCRFOS89
   file_path: fixtures/repositories/simple-python/main.py
-  not_run_ids: placeholder
-  passed_ids: placeholder
+  not_run_ids: 3CPHFAW3
+  passed_ids: H2WLPJ3D
   repository_path: fixtures/repositories/simple-python
-  tool_context: placeholder
+  tool_context: example_value
 layer: 1
 must_not:
 - error

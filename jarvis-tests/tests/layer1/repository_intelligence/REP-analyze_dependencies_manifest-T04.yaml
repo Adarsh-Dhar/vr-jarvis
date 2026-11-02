@@ -11,7 +11,7 @@ fixture: simple-python
 input:
   file_path: fixtures/repositories/simple-python/main.py
   repository_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/simple-python
-  tool_context: placeholder
+  tool_context: example_value
 layer: 1
 must_not: []
 name: Empty Input test for analyze_dependencies_manifest

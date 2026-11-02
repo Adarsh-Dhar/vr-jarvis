@@ -5,13 +5,13 @@ checks:
   type: schema_validity
 description: Dependency Failure test for attach_debugger
 expected:
-  status: ok
+  status: not_implemented
 fixture: simple-python
 input:
-  application_id: placeholder
+  application_id: 7LDJ4DDV
   file_path: fixtures/repositories/simple-python/main.py
   repository_path: fixtures/repositories/simple-python
-  tool_context: placeholder
+  tool_context: example_value
 layer: 1
 must_not: []
 name: Dependency Failure test for attach_debugger

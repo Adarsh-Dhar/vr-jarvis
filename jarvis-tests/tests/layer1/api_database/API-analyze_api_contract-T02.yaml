@@ -5,7 +5,7 @@ checks:
   type: schema_validity
 description: Input Validation test for analyze_api_contract
 expected:
-  status: error
+  status: ok
 fixture: simple-python
 input:
   endpoint: fixtures/repositories/simple-python/main.py

@@ -5,14 +5,14 @@ checks:
   type: schema_validity
 description: Malformed Input test for register_language_adapter
 expected:
-  status: ok
+  status: error
 fixture: corrupted-inputs
 input:
-  adapter_config: placeholder
+  adapter_config: example_value
   file_path: fixtures/repositories/corrupted-inputs/main.py
   language: python
   repository_path: fixtures/repositories/corrupted-inputs
-  tool_context: placeholder
+  tool_context: example_value
 layer: 1
 must_not: []
 name: Malformed Input test for register_language_adapter

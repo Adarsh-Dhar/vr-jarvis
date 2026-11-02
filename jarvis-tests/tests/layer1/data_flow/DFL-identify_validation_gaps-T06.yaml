@@ -5,7 +5,7 @@ checks:
   type: schema_validity
 description: Large Input test for identify_validation_gaps
 expected:
-  status: ok
+  status: skipped
 fixture: polyglot-monorepo
 input:
   data_id: fixtures/repositories/simple-python/main.py

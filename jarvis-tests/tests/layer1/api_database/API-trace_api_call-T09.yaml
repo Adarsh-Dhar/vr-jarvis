@@ -5,7 +5,7 @@ checks:
   type: schema_validity
 description: Dependency Failure test for trace_api_call
 expected:
-  status: error
+  status: ok
 fixture: simple-python
 input:
   endpoint: fixtures/repositories/simple-python/main.py

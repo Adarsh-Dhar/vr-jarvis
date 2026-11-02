@@ -9,10 +9,10 @@ expected:
 fixture: simple-python
 input:
   file_path: fixtures/repositories/simple-python/main.py
-  function1_id: placeholder
-  function2_id: placeholder
+  function1_id: L4KUZBBH
+  function2_id: BCCVRV89
   repository_path: fixtures/repositories/simple-python
-  tool_context: placeholder
+  tool_context: example_value
 layer: 1
 must_not:
 - error

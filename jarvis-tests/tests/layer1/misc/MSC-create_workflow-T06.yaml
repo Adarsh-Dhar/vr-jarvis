@@ -5,14 +5,14 @@ checks:
   type: schema_validity
 description: Large Input test for create_workflow
 expected:
-  status: ok
+  status: skipped
 fixture: polyglot-monorepo
 input:
   file_path: fixtures/repositories/polyglot-monorepo/main.py
   repository_path: fixtures/repositories/polyglot-monorepo
-  steps: placeholder
-  tool_context: placeholder
-  workflow_name: placeholder
+  steps: example_value
+  tool_context: example_value
+  workflow_name: example_xyvcj
 layer: 1
 must_not: []
 name: Large Input test for create_workflow

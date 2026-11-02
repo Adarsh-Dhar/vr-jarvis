@@ -10,6 +10,7 @@ expected:
 expected_formatted: false
 expected_formatter: auto
 expected_note: Formatter auto not available or not configured
+expected_reason: Create a sandbox worktree first with create_worktree.
 fixture: simple-python
 input:
   file_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/simple-python/main.py
@@ -24,4 +25,3 @@ severity: high
 test_id: MSC-run_formatter-T10
 test_type: T10
 tool: run_formatter
-expected_reason: Create a sandbox worktree first with create_worktree.

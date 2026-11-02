@@ -5,13 +5,13 @@ checks:
   type: schema_validity
 description: Complex Input test for request_approval
 expected:
-  status: ok
+  status: awaiting_user_approval
 fixture: polyglot-monorepo
 input:
-  action_summary: placeholder
+  action_summary: example_value
   file_path: fixtures/repositories/polyglot-monorepo/main.py
   repository_path: fixtures/repositories/polyglot-monorepo
-  tool_context: placeholder
+  tool_context: example_value
 layer: 1
 must_not: []
 name: Complex Input test for request_approval

@@ -8,11 +8,11 @@ expected:
   status: skipped
 fixture: simple-python
 input:
-  expression: placeholder
+  expression: total * price
   file_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/simple-python/main.py
-  line: placeholder
+  line: 12
   repository_path: fixtures/repositories/simple-python
-  tool_context: placeholder
+  tool_context: example_value
 layer: 1
 must_not:
 - error

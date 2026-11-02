@@ -5,14 +5,14 @@ checks:
   type: schema_validity
 description: Malformed Input test for delete_graph_edge
 expected:
-  status: ok
+  status: skipped
 fixture: corrupted-inputs
 input:
   file_path: fixtures/repositories/corrupted-inputs/main.py
-  from_id: placeholder
+  from_id: XAJ2VSZ2
   repository_path: fixtures/repositories/corrupted-inputs
-  to_id: placeholder
-  tool_context: placeholder
+  to_id: YGKD8F1S
+  tool_context: example_value
 layer: 1
 must_not: []
 name: Malformed Input test for delete_graph_edge

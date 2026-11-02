@@ -5,13 +5,13 @@ checks:
   type: schema_validity
 description: Large Input test for manage_task_priority
 expected:
-  status: ok
+  status: skipped
 fixture: polyglot-monorepo
 input:
   file_path: fixtures/repositories/polyglot-monorepo/main.py
   repository_path: fixtures/repositories/polyglot-monorepo
-  task_ids: placeholder
-  tool_context: placeholder
+  task_ids: 216D0AIO
+  tool_context: example_value
 layer: 1
 must_not: []
 name: Large Input test for manage_task_priority

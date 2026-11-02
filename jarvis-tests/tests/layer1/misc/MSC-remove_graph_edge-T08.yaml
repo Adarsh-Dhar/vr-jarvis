@@ -5,15 +5,15 @@ checks:
   type: schema_validity
 description: Malformed Input test for remove_graph_edge
 expected:
-  status: ok
+  status: error
 fixture: corrupted-inputs
 input:
   file_path: fixtures/repositories/corrupted-inputs/main.py
-  graph_id: placeholder
+  graph_id: DW0FLX1I
   repository_path: fixtures/repositories/corrupted-inputs
-  source_id: placeholder
-  target_id: placeholder
-  tool_context: placeholder
+  source_id: TLZ9T235
+  target_id: XNVNF85M
+  tool_context: example_value
 layer: 1
 must_not: []
 name: Malformed Input test for remove_graph_edge

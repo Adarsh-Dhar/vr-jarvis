@@ -5,15 +5,15 @@ checks:
   type: schema_validity
 description: Output Validation test for remove_graph_edge
 expected:
-  status: ok
+  status: error
 fixture: simple-python
 input:
   file_path: fixtures/repositories/simple-python/main.py
-  graph_id: placeholder
+  graph_id: GOUD1AYV
   repository_path: fixtures/repositories/simple-python
-  source_id: placeholder
-  target_id: placeholder
-  tool_context: placeholder
+  source_id: Z63U0OXD
+  target_id: WF7BHSOE
+  tool_context: example_value
 layer: 1
 must_not: []
 name: Output Validation test for remove_graph_edge

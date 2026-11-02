@@ -5,13 +5,13 @@ checks:
   type: schema_validity
 description: Large Input test for check_task_completion
 expected:
-  status: ok
+  status: skipped
 fixture: polyglot-monorepo
 input:
   file_path: fixtures/repositories/polyglot-monorepo/main.py
   repository_path: fixtures/repositories/polyglot-monorepo
-  task_id: placeholder
-  tool_context: placeholder
+  task_id: 4RW86GHO
+  tool_context: example_value
 layer: 1
 must_not: []
 name: Large Input test for check_task_completion

@@ -5,16 +5,16 @@ checks:
   type: schema_validity
 description: Large Input test for add_graph_edge
 expected:
-  status: ok
+  status: error
 fixture: polyglot-monorepo
 input:
-  edge_data: placeholder
+  edge_data: example_value
   file_path: fixtures/repositories/polyglot-monorepo/main.py
-  graph_id: placeholder
+  graph_id: 9VY0GW1L
   repository_path: fixtures/repositories/polyglot-monorepo
-  source_id: placeholder
-  target_id: placeholder
-  tool_context: placeholder
+  source_id: QXGFIFI2
+  target_id: UD25FDBO
+  tool_context: example_value
 layer: 1
 must_not: []
 name: Large Input test for add_graph_edge

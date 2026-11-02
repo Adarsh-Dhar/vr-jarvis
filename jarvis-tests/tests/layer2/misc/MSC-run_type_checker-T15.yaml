@@ -6,6 +6,8 @@ checks:
 description: Recovery test for run_type_checker
 expected:
   status: error
+expected_error: 'Path /Users/adarsh/Documents/vr-agent/fixtures/repositories/simple-python
+  resolves outside repository root: /Users/adarsh/Documents/vr-agent/fixtures/repositories/simple-python'
 expected_message: Type checker auto not available
 fixture: simple-python
 input:
@@ -21,5 +23,3 @@ severity: high
 test_id: MSC-run_type_checker-T15
 test_type: T15
 tool: run_type_checker
-expected_error: 'Path /Users/adarsh/Documents/vr-agent/fixtures/repositories/simple-python
-  resolves outside repository root: /Users/adarsh/Documents/vr-agent/fixtures/repositories/simple-python'

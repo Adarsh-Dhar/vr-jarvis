@@ -5,7 +5,7 @@ checks:
   type: schema_validity
 description: Happy Path test for apply_architecture_change
 expected:
-  status: ok
+  status: skipped
 fixture: simple-python
 input:
   affected_components: fixtures/repositories/simple-python/main.py

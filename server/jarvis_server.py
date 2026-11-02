@@ -117,6 +117,7 @@ def _turn_state(body):
         'user_request': body.text,
         'repo_path': str(config.REPO_ROOT),
         'available_agents': ', '.join(list_agents()),
+        'session_id': body.session_id,
     }
 
 

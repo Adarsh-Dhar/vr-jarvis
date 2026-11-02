@@ -5,15 +5,15 @@ checks:
   type: schema_validity
 description: Boundary Conditions test for create_issue
 expected:
-  status: ok
+  status: skipped
 fixture: simple-python
 input:
-  description: placeholder
+  description: Calculate total price
   file_path: fixtures/repositories/simple-python/main.py
   repository_path: fixtures/repositories/simple-python
-  title: placeholder
-  tool_context: placeholder
-  tracker: placeholder
+  title: example_value
+  tool_context: example_value
+  tracker: example_value
 layer: 1
 must_not: []
 name: Boundary Conditions test for create_issue

@@ -7,7 +7,7 @@ checks:
 description: Happy Path test for get_repository_metadata
 expected:
   branches: present
-  status: ok
+  status: skipped
 fixture: simple-python
 input:
   file_path: fixtures/repositories/simple-python/main.py

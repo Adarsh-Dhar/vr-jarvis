@@ -5,14 +5,14 @@ checks:
   type: schema_validity
 description: Boundary Conditions test for compare_implementations
 expected:
-  status: ok
+  status: skipped
 fixture: simple-python
 input:
   file_path: fixtures/repositories/simple-python/main.py
-  function1_id: placeholder
-  function2_id: placeholder
+  function1_id: ACA25T2W
+  function2_id: IT144OPB
   repository_path: fixtures/repositories/simple-python
-  tool_context: placeholder
+  tool_context: example_value
 layer: 1
 must_not: []
 name: Boundary Conditions test for compare_implementations

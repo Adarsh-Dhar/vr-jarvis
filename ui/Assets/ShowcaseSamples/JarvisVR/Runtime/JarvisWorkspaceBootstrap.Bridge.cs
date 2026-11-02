@@ -170,8 +170,19 @@ namespace JarvisVR
                 case "show_graph":
                     if (c.nodes != null || c.edges != null)
                     {
-                        // Full graph replacement - would require re-initializing the graph
-                        Debug.Log("JARVIS: show_graph command received (graph replacement not yet implemented)");
+                        // Store new graph data for potential full replacement
+                        // For now, just log and update highlights for any provided nodes
+                        if (c.nodes != null)
+                        {
+                            foreach (var node in c.nodes)
+                            {
+                                if (!string.IsNullOrEmpty(node.id) && _graphObjects.ContainsKey(node.id))
+                                {
+                                    _hot.Add(node.id);
+                                }
+                            }
+                        }
+                        Debug.Log($"JARVIS: show_graph received {c.nodes?.Length ?? 0} nodes, {c.edges?.Length ?? 0} edges");
                     }
                     return true;
                 default:

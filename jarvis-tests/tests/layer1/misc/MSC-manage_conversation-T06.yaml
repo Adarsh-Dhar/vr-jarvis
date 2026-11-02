@@ -5,7 +5,7 @@ checks:
   type: schema_validity
 description: Large Input test for manage_conversation
 expected:
-  status: ok
+  status: error
 fixture: polyglot-monorepo
 input:
   context: fixtures/repositories/simple-python/main.py

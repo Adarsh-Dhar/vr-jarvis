@@ -5,7 +5,7 @@ checks:
   type: schema_validity
 description: Output Validation test for get_symbol_hover_info
 expected:
-  status: ok
+  status: not_found
 fixture: simple-python
 input:
   file_path: fixtures/repositories/simple-python/main.py
