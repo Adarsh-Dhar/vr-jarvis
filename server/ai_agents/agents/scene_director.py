@@ -3,6 +3,7 @@ from google.adk.agents import LlmAgent
 from ..config import MODEL
 from ..tools.scene_tools import (dim_unrelated, focus_camera, highlight_vr_path, open_code_panel,
                                  set_edge_style, show_ghost_diff, show_test_badges)
+from ..callbacks import permission_guard
 
 INSTRUCTION = '''
 You are the Scene Director. You turn verified results into scene commands for the VR headset, then
@@ -46,7 +47,7 @@ Then reply in at most two spoken sentences. No markdown, no node ids.
 
 
 def make_scene_director(name: str) -> LlmAgent:
-    return LlmAgent(
+    agent = LlmAgent(
         name=name,
         model=MODEL,
         include_contents='none',
@@ -54,14 +55,28 @@ def make_scene_director(name: str) -> LlmAgent:
         instruction=INSTRUCTION,
         tools=[highlight_vr_path, dim_unrelated, focus_camera, open_code_panel,
                set_edge_style, show_ghost_diff, show_test_badges],
+        before_tool_callback=permission_guard,
     )
+    from .registry import AGENT_CONFIG
+    AGENT_CONFIG[name] = {
+        "permission_ceiling": "read",
+        "tool_budget": 20,
+    }
+    return agent
 
 
 def make_result_scene_director(name: str, result_key: str) -> LlmAgent:
-    return LlmAgent(
+    agent = LlmAgent(
         name=name, model=MODEL, include_contents='none',
         description='Shows a specialist result in the VR scene and speaks a two-sentence summary.',
         instruction=RESULT_INSTRUCTION.replace('{RESULT}', '{' + result_key + '}'),
         tools=[highlight_vr_path, dim_unrelated, focus_camera, open_code_panel,
                set_edge_style, show_ghost_diff, show_test_badges],
+        before_tool_callback=permission_guard,
     )
+    from .registry import AGENT_CONFIG
+    AGENT_CONFIG[name] = {
+        "permission_ceiling": "read",
+        "tool_budget": 20,
+    }
+    return agent

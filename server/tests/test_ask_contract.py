@@ -3,6 +3,12 @@ Test that /ask response matches Unity's AskResponse contract.
 """
 import pytest
 from fastapi.testclient import TestClient
+import sys
+from pathlib import Path
+
+# Add parent to path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 from jarvis_server import app
 
 # Scene command types that Unity handles in JarvisSpatialWorkspace.ApplyCommand
@@ -15,6 +21,17 @@ VALID_SCENE_COMMAND_TYPES = {
     "show_ghost_diff",
     "show_test_badges",
     "show_approval_prompt",
+    "select_node",
+    "expand_node",
+    "collapse_node",
+    "set_depth",
+    "set_scope",
+    "set_filters",
+    "create_group",
+    "annotate",
+    "bookmark",
+    "compare",
+    "show_graph",
 }
 
 

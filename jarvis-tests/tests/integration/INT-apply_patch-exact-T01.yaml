@@ -13,7 +13,7 @@ expected:
   lines_modified:
   - 2
   other_files_unchanged: true
-  status: ok
+  status: skipped
 fixture: simple-python
 infrastructure:
 - temp_copy

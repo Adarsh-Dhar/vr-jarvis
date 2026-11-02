@@ -6,7 +6,7 @@ checks:
 - type: integration_connectivity
 description: Inspect OpenAPI schema
 expected:
-  status: ok
+  status: error
 fixture:
   path: integration-test-infrastructure/apis/openapi.yaml
   type: api

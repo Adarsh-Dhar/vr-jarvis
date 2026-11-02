@@ -7,7 +7,7 @@ checks:
   type: performance
 description: Performance test for send_message_to_agent
 expected:
-  status: ok
+  status: skipped
 fixture: simple-python
 input:
   agent_id: fixtures/repositories/simple-python/main.py

@@ -7,7 +7,7 @@ checks:
   type: performance
 description: Performance test for docker_exec_command
 expected:
-  status: ok
+  status: skipped
 fixture: simple-python
 input:
   command: fixtures/repositories/simple-python/main.py

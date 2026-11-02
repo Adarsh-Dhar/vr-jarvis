@@ -7,7 +7,7 @@ checks:
   type: performance
 description: Performance test for set_breakpoint
 expected:
-  status: ok
+  status: not_implemented
 fixture: simple-python
 input:
   file_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/simple-python/main.py

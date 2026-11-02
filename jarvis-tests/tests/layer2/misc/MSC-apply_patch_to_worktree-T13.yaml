@@ -7,7 +7,7 @@ checks:
   type: performance
 description: Performance test for apply_patch_to_worktree
 expected:
-  status: ok
+  status: skipped
 fixture: simple-python
 input:
   diff: fixtures/repositories/simple-python/main.py

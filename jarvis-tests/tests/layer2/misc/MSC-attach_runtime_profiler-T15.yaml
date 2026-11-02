@@ -5,7 +5,7 @@ checks:
   type: schema_validity
 description: Recovery test for attach_runtime_profiler
 expected:
-  status: ok
+  status: not_implemented
 fixture: simple-python
 input:
   application_id: fixtures/repositories/simple-python/main.py

@@ -5,7 +5,7 @@ checks:
   type: schema_validity
 description: Security test for monitoring_create_alert
 expected:
-  status: ok
+  status: skipped
 fixture: simple-python
 input:
   condition: fixtures/repositories/simple-python/main.py

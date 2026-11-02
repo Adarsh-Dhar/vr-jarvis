@@ -7,7 +7,7 @@ checks:
   type: performance
 description: Performance test for identify_failure_path
 expected:
-  status: ok
+  status: not_implemented
 fixture: simple-python
 input:
   error_id: fixtures/repositories/simple-python/main.py

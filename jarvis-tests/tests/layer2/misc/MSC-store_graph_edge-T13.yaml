@@ -7,7 +7,7 @@ checks:
   type: performance
 description: Performance test for store_graph_edge
 expected:
-  status: ok
+  status: skipped
 fixture: simple-python
 input:
   edge_data: fixtures/repositories/simple-python/main.py

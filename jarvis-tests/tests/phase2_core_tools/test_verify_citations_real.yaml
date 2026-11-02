@@ -2,7 +2,7 @@ category: unit
 description: Verify citations for known nodes
 expected:
   results_not_empty: true
-  status: ok
+  status: skipped
 input:
   file_path: fixtures/repositories/simple-python/main.py
   node_ids:

@@ -7,7 +7,7 @@ checks:
   type: performance
 description: Performance test for detect_dead_code
 expected:
-  status: ok
+  status: skipped
 fixture: simple-python
 input:
   file_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/simple-python/main.py

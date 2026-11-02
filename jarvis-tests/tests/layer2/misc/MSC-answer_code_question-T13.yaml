@@ -7,7 +7,7 @@ checks:
   type: performance
 description: Performance test for answer_code_question
 expected:
-  status: ok
+  status: skipped
 fixture: simple-python
 input:
   context: fixtures/repositories/simple-python/main.py

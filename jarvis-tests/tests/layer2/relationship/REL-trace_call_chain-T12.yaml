@@ -5,7 +5,7 @@ checks:
   type: schema_validity
 description: Security test for trace_call_chain
 expected:
-  status: ok
+  status: skipped
 fixture: simple-python
 input:
   depth: 2

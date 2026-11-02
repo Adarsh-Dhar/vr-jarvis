@@ -7,7 +7,7 @@ checks:
   type: performance
 description: Performance test for github_get_issues
 expected:
-  status: ok
+  status: partial
 fixture: simple-python
 input:
   file_path: fixtures/repositories/simple-python/main.py

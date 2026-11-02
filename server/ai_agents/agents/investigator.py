@@ -8,6 +8,7 @@ from ..tools.navigation_tools import (get_symbol_definition, get_symbol_referenc
                                        get_call_hierarchy, get_type_hierarchy)
 from ..tools.analysis_tools import (parse_source_code, extract_symbols, resolve_types,
                                      analyze_control_flow, analyze_dependencies)
+from ..callbacks import permission_guard
 
 INSTRUCTION = '''
 You are the Investigator in a VR code-understanding system. You answer where, how and why
@@ -53,4 +54,10 @@ investigator = LlmAgent(
            parse_source_code, extract_symbols, resolve_types,
            analyze_control_flow, analyze_dependencies],
     output_key='answer_draft',
+    before_tool_callback=permission_guard,
 )
+from .registry import AGENT_CONFIG
+AGENT_CONFIG['investigator_agent'] = {
+    "permission_ceiling": "read",
+    "tool_budget": 20,
+}

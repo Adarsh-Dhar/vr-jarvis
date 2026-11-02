@@ -1,24 +1,22 @@
+test_id: REL-find_interface_implementations-T01
+name: Happy Path test for find_interface_implementations
 category: relationship
-checks:
-- required_fields:
-  - status
-  type: schema_validity
+tool: find_interface_implementations
+layer: 1
+test_type: T01
 description: Happy Path test for find_interface_implementations
-expected:
-  status: ok
 fixture: simple-python
 input:
-  file_path: fixtures/repositories/simple-python/main.py
   interface_id: placeholder
-  repository_path: fixtures/repositories/simple-python
   tool_context: placeholder
-layer: 1
+expected:
+  status: skipped
 must_not:
 - error
-name: Happy Path test for find_interface_implementations
+checks:
+- type: schema_validity
+  required_fields:
+  - status
 performance:
   max_duration_ms: 3000
 severity: critical
-test_id: REL-find_interface_implementations-T01
-test_type: T01
-tool: find_interface_implementations

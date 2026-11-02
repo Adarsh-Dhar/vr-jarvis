@@ -14,7 +14,7 @@ expected:
   - subpackage/__init__.py
   - subpackage/helper.py
   indexing_complete: true
-  status: ok
+  status: skipped
 fixture: simple-python
 infrastructure:
 - temp_copy

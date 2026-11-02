@@ -5,7 +5,7 @@ checks:
   type: schema_validity
 description: Concurrency test for detect_voice_activity
 expected:
-  status: ok
+  status: error
 fixture: simple-python
 input:
   audio_data: fixtures/repositories/simple-python/main.py

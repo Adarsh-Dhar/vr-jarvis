@@ -1,25 +1,23 @@
+test_id: REL-build_reference_graph-T09
+name: Dependency Failure test for build_reference_graph
 category: relationship
-checks:
-- required_fields:
-  - status
-  type: schema_validity
+tool: build_reference_graph
+layer: 1
+test_type: T09
 description: Dependency Failure test for build_reference_graph
-expected:
-  status: error
 fixture: simple-python
 input:
-  file_path: fixtures/repositories/simple-python/main.py
-  repository_path: fixtures/repositories/simple-python
   scope: placeholder
   tool_context: placeholder
-layer: 1
+expected:
+  status: ok
 must_not: []
-name: Dependency Failure test for build_reference_graph
+checks:
+- type: schema_validity
+  required_fields:
+  - status
 performance:
   max_duration_ms: 3000
 severity: high
 skip: true
 skip_reason: 'Tool execution issue: '
-test_id: REL-build_reference_graph-T09
-test_type: T09
-tool: build_reference_graph

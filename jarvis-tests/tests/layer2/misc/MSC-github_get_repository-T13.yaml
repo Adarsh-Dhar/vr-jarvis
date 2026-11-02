@@ -7,7 +7,7 @@ checks:
   type: performance
 description: Performance test for github_get_repository
 expected:
-  status: ok
+  status: success
 fixture: simple-python
 input:
   file_path: fixtures/repositories/simple-python/main.py

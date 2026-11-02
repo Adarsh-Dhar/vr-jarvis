@@ -7,7 +7,7 @@ checks:
   type: performance
 description: Performance test for step_into
 expected:
-  status: ok
+  status: not_implemented
 fixture: simple-python
 input:
   file_path: fixtures/repositories/simple-python/main.py

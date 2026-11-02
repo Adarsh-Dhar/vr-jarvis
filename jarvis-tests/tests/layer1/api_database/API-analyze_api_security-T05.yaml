@@ -1,23 +1,21 @@
+test_id: API-analyze_api_security-T05
+name: Boundary Conditions test for analyze_api_security
 category: api_database
-checks:
-- required_fields:
-  - status
-  type: schema_validity
+tool: analyze_api_security
+layer: 1
+test_type: T05
 description: Boundary Conditions test for analyze_api_security
-expected:
-  status: ok
 fixture: simple-python
 input:
-  endpoint: fixtures/repositories/simple-python/main.py
-  file_path: fixtures/repositories/simple-python/main.py
-  repository_path: fixtures/repositories/simple-python
-  tool_context: fixtures/repositories/simple-python/main.py
-layer: 1
+  endpoint: placeholder
+  tool_context: placeholder
+expected:
+  status: ok
 must_not: []
-name: Boundary Conditions test for analyze_api_security
+checks:
+- type: schema_validity
+  required_fields:
+  - status
 performance:
   max_duration_ms: 5000
 severity: high
-test_id: API-analyze_api_security-T05
-test_type: T05
-tool: analyze_api_security

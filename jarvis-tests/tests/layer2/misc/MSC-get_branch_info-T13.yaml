@@ -7,7 +7,7 @@ checks:
   type: performance
 description: Performance test for get_branch_info
 expected:
-  status: error
+  status: ok
 expected_error: 'TypeError: get_branch_info() takes 1 positional argument but 2 were
   given'
 fixture: simple-python

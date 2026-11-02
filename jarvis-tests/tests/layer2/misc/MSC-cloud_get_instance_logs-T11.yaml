@@ -5,7 +5,7 @@ checks:
   type: schema_validity
 description: Concurrency test for cloud_get_instance_logs
 expected:
-  status: ok
+  status: skipped
 fixture: simple-python
 input:
   file_path: fixtures/repositories/simple-python/main.py

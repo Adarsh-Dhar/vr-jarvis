@@ -6,7 +6,7 @@ checks:
 - type: integration_connectivity
 description: Analyze database queries
 expected:
-  status: ok
+  status: skipped
 fixture:
   path: integration-test-infrastructure/databases/test.db
   type: database

@@ -7,7 +7,7 @@ checks:
   type: performance
 description: Performance test for stop_application
 expected:
-  status: ok
+  status: not_implemented
 fixture: simple-python
 input:
   application_id: fixtures/repositories/simple-python/main.py

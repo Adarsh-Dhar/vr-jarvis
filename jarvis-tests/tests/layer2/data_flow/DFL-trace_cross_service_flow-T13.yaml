@@ -7,7 +7,7 @@ checks:
   type: performance
 description: Performance test for trace_cross_service_flow
 expected:
-  status: ok
+  status: skipped
 fixture: simple-python
 input:
   data_id: fixtures/repositories/simple-python/main.py

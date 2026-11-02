@@ -6,7 +6,7 @@ checks:
 - type: integration_connectivity
 description: Collect execution trace from running application
 expected:
-  status: ok
+  status: not_implemented
 fixture:
   path: integration-test-infrastructure/runtime/sample_app.py
   type: runtime

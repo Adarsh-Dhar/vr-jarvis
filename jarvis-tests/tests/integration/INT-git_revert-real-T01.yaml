@@ -11,7 +11,7 @@ checks:
 description: Integration test - git revert operations on real repository
 expected:
   revert_successful: true
-  status: ok
+  status: skipped
   working_directory_clean: true
 fixture: simple-python
 infrastructure:

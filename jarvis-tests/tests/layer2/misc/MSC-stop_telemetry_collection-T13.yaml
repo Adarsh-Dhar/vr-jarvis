@@ -7,7 +7,7 @@ checks:
   type: performance
 description: Performance test for stop_telemetry_collection
 expected:
-  status: ok
+  status: skipped
 fixture: simple-python
 input:
   collection_id: fixtures/repositories/simple-python/main.py

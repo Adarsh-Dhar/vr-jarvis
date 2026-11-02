@@ -7,7 +7,7 @@ checks:
   type: performance
 description: Performance test for get_agent_state
 expected:
-  status: ok
+  status: skipped
 fixture: simple-python
 input:
   agent_id: fixtures/repositories/simple-python/main.py

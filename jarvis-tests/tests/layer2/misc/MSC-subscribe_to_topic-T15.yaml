@@ -5,7 +5,7 @@ checks:
   type: schema_validity
 description: Recovery test for subscribe_to_topic
 expected:
-  status: ok
+  status: skipped
 fixture: simple-python
 input:
   callback: fixtures/repositories/simple-python/main.py

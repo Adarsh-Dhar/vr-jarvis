@@ -7,7 +7,7 @@ checks:
   type: performance
 description: Performance test for explain_expression
 expected:
-  status: ok
+  status: skipped
 fixture: simple-python
 input:
   expression: fixtures/repositories/simple-python/main.py

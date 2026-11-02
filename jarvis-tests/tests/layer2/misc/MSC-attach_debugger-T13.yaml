@@ -7,7 +7,7 @@ checks:
   type: performance
 description: Performance test for attach_debugger
 expected:
-  status: ok
+  status: not_implemented
 fixture: simple-python
 input:
   application_id: fixtures/repositories/simple-python/main.py

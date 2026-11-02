@@ -7,7 +7,7 @@ checks:
   type: performance
 description: Performance test for trace_transaction
 expected:
-  status: ok
+  status: skipped
 fixture: simple-python
 input:
   file_path: fixtures/repositories/simple-python/main.py

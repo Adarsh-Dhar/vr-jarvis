@@ -1,24 +1,22 @@
+test_id: API-inspect_columns-T07
+name: Complex Input test for inspect_columns
 category: api_database
-checks:
-- required_fields:
-  - status
-  type: schema_validity
+tool: inspect_columns
+layer: 1
+test_type: T07
 description: Complex Input test for inspect_columns
-expected:
-  status: ok
 fixture: polyglot-monorepo
 input:
   connection_string: placeholder
-  file_path: fixtures/repositories/polyglot-monorepo/main.py
-  repository_path: fixtures/repositories/polyglot-monorepo
   table: placeholder
   tool_context: placeholder
-layer: 1
+expected:
+  status: ok
 must_not: []
-name: Complex Input test for inspect_columns
+checks:
+- type: schema_validity
+  required_fields:
+  - status
 performance:
   max_duration_ms: 5000
 severity: high
-test_id: API-inspect_columns-T07
-test_type: T07
-tool: inspect_columns

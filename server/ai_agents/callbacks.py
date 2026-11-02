@@ -28,6 +28,9 @@ def init_state(callback_context):
     # Initialize tool budgets in session state (not module global)
     if 'tool_budgets' not in state:
         state['tool_budgets'] = {}
+    # Initialize session-scoped spatial state
+    if 'session_states' not in state:
+        state['session_states'] = {}
     return None
 
 

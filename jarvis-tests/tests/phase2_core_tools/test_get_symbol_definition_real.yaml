@@ -2,7 +2,7 @@ category: unit
 description: Get symbol definition from simple-python fixture
 expected:
   results_not_empty: true
-  status: error
+  status: not_found
 expected_error: 'TypeError: get_symbol_definition() takes 2 positional arguments but
   3 were given'
 input:

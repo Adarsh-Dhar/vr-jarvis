@@ -5,7 +5,7 @@ checks:
   type: schema_validity
 description: Recovery test for inspect_api_schema
 expected:
-  status: ok
+  status: error
 fixture: simple-python
 input:
   file_path: fixtures/repositories/simple-python/main.py

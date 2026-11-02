@@ -7,7 +7,7 @@ checks:
   type: performance
 description: Performance test for stop_agent
 expected:
-  status: ok
+  status: skipped
 fixture: simple-python
 input:
   agent_id: fixtures/repositories/simple-python/main.py

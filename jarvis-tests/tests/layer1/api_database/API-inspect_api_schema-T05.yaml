@@ -1,26 +1,24 @@
+test_id: API-inspect_api_schema-T05
+name: Boundary Conditions test for inspect_api_schema
 category: api_database
-checks:
-- required_fields:
-  - status
-  type: schema_validity
+tool: inspect_api_schema
+layer: 1
+test_type: T05
 description: Boundary Conditions test for inspect_api_schema
-expected:
-  status: ok
 fixture: simple-python
 input:
-  file_path: fixtures/repositories/simple-python/main.py
-  repository_path: fixtures/repositories/simple-python
   schema_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/simple-python/openapi.yaml
-  schema_type: openapi
   tool_context: placeholder
-layer: 1
+  schema_type: openapi
+expected:
+  status: ok
 must_not: []
-name: Boundary Conditions test for inspect_api_schema
+checks:
+- type: schema_validity
+  required_fields:
+  - status
 performance:
   max_duration_ms: 5000
 severity: high
 skip: true
 skip_reason: 'Tool execution issue: '
-test_id: API-inspect_api_schema-T05
-test_type: T05
-tool: inspect_api_schema

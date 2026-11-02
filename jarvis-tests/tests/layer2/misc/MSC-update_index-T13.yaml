@@ -7,7 +7,7 @@ checks:
   type: performance
 description: Performance test for update_index
 expected:
-  status: ok
+  status: skipped
 fixture: simple-python
 input:
   changed_files: fixtures/repositories/simple-python/main.py

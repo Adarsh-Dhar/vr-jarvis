@@ -6,6 +6,7 @@ expected:
   - confidence: 0.95
     file_count: 1
     name: python
+  status: skipped
 fixture: simple-python
 input:
   file_path: fixtures/repositories/simple-python/main.py

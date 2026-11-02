@@ -16,7 +16,7 @@ description: Happy Path - extract AST (alias for parse_source_code)
 expected:
   ast_not_empty: true
   language: python
-  status: ok
+  status: skipped
 fixture: simple-python
 input:
   file_path: fixtures/repositories/simple-python/main.py

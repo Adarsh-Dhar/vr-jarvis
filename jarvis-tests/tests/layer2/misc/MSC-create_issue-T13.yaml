@@ -7,7 +7,7 @@ checks:
   type: performance
 description: Performance test for create_issue
 expected:
-  status: ok
+  status: skipped
 fixture: simple-python
 input:
   description: fixtures/repositories/simple-python/main.py

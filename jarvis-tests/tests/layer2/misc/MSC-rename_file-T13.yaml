@@ -7,7 +7,7 @@ checks:
   type: performance
 description: Performance test for rename_file
 expected:
-  status: error
+  status: blocked
 expected_error: 'TypeError: rename_file() missing 1 required positional argument:
   ''tool_context'''
 fixture: simple-python

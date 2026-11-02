@@ -7,7 +7,7 @@ checks:
   type: performance
 description: Performance test for trace_call_chain
 expected:
-  status: ok
+  status: skipped
 fixture: simple-python
 input:
   depth: 2

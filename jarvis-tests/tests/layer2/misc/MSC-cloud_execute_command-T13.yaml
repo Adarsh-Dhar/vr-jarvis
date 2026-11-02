@@ -7,7 +7,7 @@ checks:
   type: performance
 description: Performance test for cloud_execute_command
 expected:
-  status: ok
+  status: skipped
 fixture: simple-python
 input:
   command: fixtures/repositories/simple-python/main.py

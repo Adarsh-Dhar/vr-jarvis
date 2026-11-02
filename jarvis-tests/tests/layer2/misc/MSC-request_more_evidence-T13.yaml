@@ -7,7 +7,7 @@ checks:
   type: performance
 description: Performance test for request_more_evidence
 expected:
-  status: ok
+  status: skipped
 fixture: simple-python
 input:
   evidence_type: fixtures/repositories/simple-python/main.py

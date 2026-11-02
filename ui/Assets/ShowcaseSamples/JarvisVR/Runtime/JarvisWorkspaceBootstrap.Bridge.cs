@@ -16,6 +16,12 @@ namespace JarvisVR
         private readonly Dictionary<LineRenderer, Color> _edgeOriginal = new();
         private string _ghostDiff;
         private string _pendingApproval;
+        private int _depth = 1;                                             // set_depth
+        private string _scope = "local";                                    // set_scope
+        private Dictionary<string, object> _filters = new();              // set_filters
+        private Dictionary<string, List<string>> _groups = new();         // create_group
+        private Dictionary<string, string> _annotations = new();           // annotate
+        private Dictionary<string, string> _bookmarks = new();            // bookmark
 
         private void InitBridge()
         {
@@ -106,6 +112,68 @@ namespace JarvisVR
                 case "show_approval_prompt":
                     _pendingApproval = c.summary;
                     return false;
+                case "select_node":
+                    if (!string.IsNullOrEmpty(c.node_id) && _graphObjects.ContainsKey(c.node_id))
+                    {
+                        _selectedNode = c.node_id;
+                        FetchSource(c.node_id);
+                    }
+                    return true;
+                case "expand_node":
+                    if (!string.IsNullOrEmpty(c.node_id) && _graphObjects.ContainsKey(c.node_id))
+                    {
+                        _depth = c.depth > 0 ? c.depth : _depth;
+                        _selectedNode = c.node_id;
+                        FetchSource(c.node_id);
+                    }
+                    return true;
+                case "collapse_node":
+                    if (!string.IsNullOrEmpty(c.node_id) && _graphObjects.ContainsKey(c.node_id))
+                    {
+                        _selectedNode = c.node_id;
+                    }
+                    return true;
+                case "set_depth":
+                    _depth = c.depth > 0 ? c.depth : _depth;
+                    return true;
+                case "set_scope":
+                    if (!string.IsNullOrEmpty(c.scope)) _scope = c.scope;
+                    return true;
+                case "set_filters":
+                    _filters = new Dictionary<string, object>();
+                    return true;
+                case "create_group":
+                    if (!string.IsNullOrEmpty(c.group_id) && c.node_ids != null)
+                    {
+                        _groups[c.group_id] = new List<string>(c.node_ids);
+                    }
+                    return true;
+                case "annotate":
+                    if (!string.IsNullOrEmpty(c.node_id) && !string.IsNullOrEmpty(c.text))
+                    {
+                        _annotations[c.node_id] = c.text;
+                    }
+                    return false;
+                case "bookmark":
+                    if (!string.IsNullOrEmpty(c.node_id) && !string.IsNullOrEmpty(c.label))
+                    {
+                        _bookmarks[c.node_id] = c.label;
+                    }
+                    return false;
+                case "compare":
+                    if (!string.IsNullOrEmpty(c.node_id1) && !string.IsNullOrEmpty(c.node_id2))
+                    {
+                        _selectedNode = c.node_id1;
+                        FetchSource(c.node_id1);
+                    }
+                    return true;
+                case "show_graph":
+                    if (c.nodes != null || c.edges != null)
+                    {
+                        // Full graph replacement - would require re-initializing the graph
+                        Debug.Log("JARVIS: show_graph command received (graph replacement not yet implemented)");
+                    }
+                    return true;
                 default:
                     Debug.LogWarning("JARVIS: unknown scene command " + c.type);
                     return false;

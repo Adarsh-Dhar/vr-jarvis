@@ -6,7 +6,7 @@ checks:
 - type: integration_connectivity
 description: Get git diff between branches
 expected:
-  status: error
+  status: ok
 expected_error: 'TypeError: get_diff() takes 1 positional argument but 2 were given'
 fixture:
   path: integration-test-infrastructure/git-repos/simple-repo

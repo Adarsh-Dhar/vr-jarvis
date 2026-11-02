@@ -4,7 +4,7 @@ expected:
   known_symbols_present:
   - target
   - main
-  status: ok
+  status: skipped
   symbol_count_min: 2
 input:
   file_path: fixtures/repositories/simple-python/main.py

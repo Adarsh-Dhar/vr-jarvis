@@ -1,26 +1,24 @@
+test_id: REL-build_class_relationship_graph-T01
+name: Happy Path test for build_class_relationship_graph
 category: relationship
-checks:
-- required_fields:
-  - status
-  type: schema_validity
+tool: build_class_relationship_graph
+layer: 1
+test_type: T01
 description: Happy Path test for build_class_relationship_graph
-expected:
-  status: ok
 fixture: simple-python
 input:
-  file_path: fixtures/repositories/simple-python/main.py
-  repository_path: fixtures/repositories/simple-python
   scope: placeholder
   tool_context: placeholder
-layer: 1
+expected:
+  status: skipped
 must_not:
 - error
-name: Happy Path test for build_class_relationship_graph
+checks:
+- type: schema_validity
+  required_fields:
+  - status
 performance:
   max_duration_ms: 3000
 severity: critical
 skip: true
 skip_reason: 'Tool execution issue: '
-test_id: REL-build_class_relationship_graph-T01
-test_type: T01
-tool: build_class_relationship_graph

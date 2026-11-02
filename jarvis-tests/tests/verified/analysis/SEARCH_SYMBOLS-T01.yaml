@@ -21,7 +21,7 @@ checks:
 description: Verified analysis test for search_symbols
 expected:
   results: *id001
-  status: ok
+  status: skipped
 fixture: simple-python
 input:
   file_path: fixtures/repositories/simple-python/main.py

@@ -13,7 +13,7 @@ expected:
   commit_created: true
   commit_hash: not null
   status: error
-expected_commit_hash: 3398e23c5489f11e883c1712c8dc421e3a20e5a7
+expected_commit_hash: 8923dbae13fa2f60ff37edda65ded9697bee1b34
 expected_committed: false
 expected_message: Test commit
 expected_repository_path: /Users/adarsh/Documents/vr-agent/fixtures/repositories/simple-python

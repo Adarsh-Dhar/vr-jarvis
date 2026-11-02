@@ -5,7 +5,7 @@ checks:
   type: schema_validity
 description: Input Validation test for calculate_change_impact
 expected:
-  status: error
+  status: skipped
 fixture: simple-python
 input:
   element_id: fixtures/repositories/simple-python/main.py

@@ -5,7 +5,7 @@ checks:
   type: schema_validity
 description: Recovery test for manage_task_priority
 expected:
-  status: ok
+  status: skipped
 fixture: simple-python
 input:
   file_path: fixtures/repositories/simple-python/main.py

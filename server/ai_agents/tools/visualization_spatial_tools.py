@@ -13,17 +13,23 @@ from ._safe import safe
 def _emit_command(tool_context: ToolContext, command: str, **kwargs):
     """Queue a scene command to state['scene_commands']."""
     commands = tool_context.state.get('scene_commands', [])
-    cmd_entry = {'command': command, **kwargs}
+    cmd_entry = {'type': command, **kwargs}
     commands.append(cmd_entry)
     tool_context.state['scene_commands'] = commands
 
-# In-memory graph and visualization state
-_graph_state = {}
-_visualization_state = {}
-_spatial_state = {}
-_bookmarks = {}
-_annotations = {}
-_investigations = {}
+
+# Helper functions for session-scoped state
+def _get_session_state(tool_context: ToolContext, state_key: str, default=None):
+    """Get session-scoped state for a given key."""
+    session_states = tool_context.state.get('session_states', {})
+    return session_states.get(state_key, default)
+
+
+def _set_session_state(tool_context: ToolContext, state_key: str, value):
+    """Set session-scoped state for a given key."""
+    session_states = tool_context.state.get('session_states', {})
+    session_states[state_key] = value
+    tool_context.state['session_states'] = session_states
 
 
 # Graph Tools
@@ -39,12 +45,14 @@ def create_graph(
         if not graph_id:
             graph_id = str(uuid.uuid4())
         
-        _graph_state[graph_id] = {
+        graph_state = _get_session_state(tool_context, 'graph_state', {})
+        graph_state[graph_id] = {
             'type': graph_type,
             'nodes': {},
             'edges': {},
             'created_at': time.time()
         }
+        _set_session_state(tool_context, 'graph_state', graph_state)
         
         return {
             'status': 'ok',
@@ -68,13 +76,15 @@ def add_graph_node(
 ) -> dict:
     """Add a node to the graph."""
     try:
-        if graph_id not in _graph_state:
+        graph_state = _get_session_state(tool_context, 'graph_state', {})
+        if graph_id not in graph_state:
             return {
                 'status': 'error',
                 'error': f'Graph {graph_id} not found'
             }
         
-        _graph_state[graph_id]['nodes'][node_id] = node_data
+        graph_state[graph_id]['nodes'][node_id] = node_data
+        _set_session_state(tool_context, 'graph_state', graph_state)
         
         return {
             'status': 'ok',
@@ -97,19 +107,21 @@ def remove_graph_node(
 ) -> dict:
     """Remove a node from the graph."""
     try:
-        if graph_id not in _graph_state:
+        graph_state = _get_session_state(tool_context, 'graph_state', {})
+        if graph_id not in graph_state:
             return {
                 'status': 'error',
                 'error': f'Graph {graph_id} not found'
             }
         
-        if node_id in _graph_state[graph_id]['nodes']:
-            del _graph_state[graph_id]['nodes'][node_id]
+        if node_id in graph_state[graph_id]['nodes']:
+            del graph_state[graph_id]['nodes'][node_id]
             # Remove associated edges
-            edges_to_remove = [k for k in _graph_state[graph_id]['edges'].keys() 
+            edges_to_remove = [k for k in graph_state[graph_id]['edges'].keys()
                              if node_id in k]
             for edge in edges_to_remove:
-                del _graph_state[graph_id]['edges'][edge]
+                del graph_state[graph_id]['edges'][edge]
+            _set_session_state(tool_context, 'graph_state', graph_state)
         
         return {
             'status': 'ok',
@@ -134,14 +146,16 @@ def add_graph_edge(
 ) -> dict:
     """Add an edge to the graph."""
     try:
-        if graph_id not in _graph_state:
+        graph_state = _get_session_state(tool_context, 'graph_state', {})
+        if graph_id not in graph_state:
             return {
                 'status': 'error',
                 'error': f'Graph {graph_id} not found'
             }
         
         edge_key = f"{source_id}->{target_id}"
-        _graph_state[graph_id]['edges'][edge_key] = edge_data
+        graph_state[graph_id]['edges'][edge_key] = edge_data
+        _set_session_state(tool_context, 'graph_state', graph_state)
         
         return {
             'status': 'ok',
@@ -165,15 +179,17 @@ def remove_graph_edge(
 ) -> dict:
     """Remove an edge from the graph."""
     try:
-        if graph_id not in _graph_state:
+        graph_state = _get_session_state(tool_context, 'graph_state', {})
+        if graph_id not in graph_state:
             return {
                 'status': 'error',
                 'error': f'Graph {graph_id} not found'
             }
         
         edge_key = f"{source_id}->{target_id}"
-        if edge_key in _graph_state[graph_id]['edges']:
-            del _graph_state[graph_id]['edges'][edge_key]
+        if edge_key in graph_state[graph_id]['edges']:
+            del graph_state[graph_id]['edges'][edge_key]
+            _set_session_state(tool_context, 'graph_state', graph_state)
         
         return {
             'status': 'ok',
@@ -198,18 +214,19 @@ def expand_graph_node(
     """Expand a node to show its connections. Emits expand_node command."""
     try:
         _emit_command(tool_context, 'expand_node', node_id=node_id, depth=depth)
-        
-        if graph_id not in _graph_state:
+
+        graph_state = _get_session_state(tool_context, 'graph_state', {})
+        if graph_id not in graph_state:
             return {
                 'status': 'error',
                 'error': f'Graph {graph_id} not found'
             }
-        
+
         # Expand node by adding related nodes based on depth
         from .relationship_intelligence_tools import find_downstream_dependencies, find_shared_dependencies
-        
-        graph = _graph_state[graph_id]
-        
+
+        graph = graph_state[graph_id]
+
         # Add downstream dependencies
         dep_result = find_downstream_dependencies(node_id, tool_context)
         if dep_result.get('status') == 'ok':
@@ -217,7 +234,7 @@ def expand_graph_node(
                 if dep not in [n['id'] for n in graph['nodes']]:
                     graph['nodes'].append({'id': dep, 'type': 'dependency'})
                     graph['edges'].append({'from': node_id, 'to': dep})
-        
+
         # Add shared dependencies
         shared_result = find_shared_dependencies(node_id, tool_context)
         if shared_result.get('status') == 'ok':
@@ -225,10 +242,11 @@ def expand_graph_node(
                 if shared not in [n['id'] for n in graph['nodes']]:
                     graph['nodes'].append({'id': shared, 'type': 'shared'})
                     graph['edges'].append({'from': node_id, 'to': shared})
-        
+
         node_count = len(graph['nodes'])
         edge_count = len(graph['edges'])
-        
+        _set_session_state(tool_context, 'graph_state', graph_state)
+
         return {
             'status': 'ok',
             'graph_id': graph_id,
@@ -252,14 +270,17 @@ def collapse_graph_node(
     node_id: str,
     tool_context: ToolContext
 ) -> dict:
-    """Collapse a node to hide its connections."""
+    """Collapse a node to hide its connections. Emits collapse_node command."""
     try:
-        if graph_id not in _graph_state:
+        _emit_command(tool_context, 'collapse_node', node_id=node_id)
+
+        graph_state = _get_session_state(tool_context, 'graph_state', {})
+        if graph_id not in graph_state:
             return {
                 'status': 'error',
                 'error': f'Graph {graph_id} not found'
             }
-        
+
         # In a real implementation, this would hide connected nodes in the visualization
         return {
             'status': 'ok',
@@ -281,17 +302,20 @@ def filter_graph(
     filters: Dict,
     tool_context: ToolContext
 ) -> dict:
-    """Filter graph by criteria."""
+    """Filter graph by criteria. Emits set_filters command."""
     try:
-        if graph_id not in _graph_state:
+        _emit_command(tool_context, 'set_filters', filters=filters)
+
+        graph_state = _get_session_state(tool_context, 'graph_state', {})
+        if graph_id not in graph_state:
             return {
                 'status': 'error',
                 'error': f'Graph {graph_id} not found'
             }
-        
+
         # Apply filters to nodes
         visible_nodes = []
-        for node_id, node_data in _graph_state[graph_id]['nodes'].items():
+        for node_id, node_data in graph_state[graph_id]['nodes'].items():
             matches = True
             for key, value in filters.items():
                 if key in node_data and node_data[key] != value:
@@ -299,7 +323,7 @@ def filter_graph(
                     break
             if matches:
                 visible_nodes.append(node_id)
-        
+
         return {
             'status': 'ok',
             'graph_id': graph_id,
@@ -322,16 +346,17 @@ def search_graph(
 ) -> dict:
     """Search for nodes in the graph."""
     try:
-        if graph_id not in _graph_state:
+        graph_state = _get_session_state(tool_context, 'graph_state', {})
+        if graph_id not in graph_state:
             return {
                 'status': 'error',
                 'error': f'Graph {graph_id} not found'
             }
-        
+
         matches = []
         query_lower = query.lower()
-        
-        for node_id, node_data in _graph_state[graph_id]['nodes'].items():
+
+        for node_id, node_data in graph_state[graph_id]['nodes'].items():
             # Search in node data
             for key, value in node_data.items():
                 if query_lower in str(value).lower():
@@ -341,7 +366,7 @@ def search_graph(
                         'field': key
                     })
                     break
-        
+
         return {
             'status': 'ok',
             'graph_id': graph_id,
@@ -363,15 +388,17 @@ def highlight_path(
 ) -> dict:
     """Highlight a path in the graph."""
     try:
-        if graph_id not in _graph_state:
+        graph_state = _get_session_state(tool_context, 'graph_state', {})
+        if graph_id not in graph_state:
             return {
                 'status': 'error',
                 'error': f'Graph {graph_id} not found'
             }
-        
+
         # Store highlight state
-        _graph_state[graph_id]['highlighted_path'] = path
-        
+        graph_state[graph_id]['highlighted_path'] = path
+        _set_session_state(tool_context, 'graph_state', graph_state)
+
         return {
             'status': 'ok',
             'graph_id': graph_id,
@@ -395,21 +422,23 @@ def highlight_dependencies(
 ) -> dict:
     """Highlight dependencies of a node."""
     try:
-        if graph_id not in _graph_state:
+        graph_state = _get_session_state(tool_context, 'graph_state', {})
+        if graph_id not in graph_state:
             return {
                 'status': 'error',
                 'error': f'Graph {graph_id} not found'
             }
-        
+
         # Find connected nodes
         connected_nodes = set()
-        for edge_key in _graph_state[graph_id]['edges'].keys():
+        for edge_key in graph_state[graph_id]['edges'].keys():
             if node_id in edge_key:
                 parts = edge_key.split('->')
                 connected_nodes.update(parts)
-        
-        _graph_state[graph_id]['highlighted_nodes'] = list(connected_nodes)
-        
+
+        graph_state[graph_id]['highlighted_nodes'] = list(connected_nodes)
+        _set_session_state(tool_context, 'graph_state', graph_state)
+
         return {
             'status': 'ok',
             'graph_id': graph_id,
@@ -433,14 +462,16 @@ def isolate_subgraph(
 ) -> dict:
     """Show only a selected subgraph."""
     try:
-        if graph_id not in _graph_state:
+        graph_state = _get_session_state(tool_context, 'graph_state', {})
+        if graph_id not in graph_state:
             return {
                 'status': 'error',
                 'error': f'Graph {graph_id} not found'
             }
-        
-        _graph_state[graph_id]['visible_nodes'] = node_ids
-        
+
+        graph_state[graph_id]['visible_nodes'] = node_ids
+        _set_session_state(tool_context, 'graph_state', graph_state)
+
         return {
             'status': 'ok',
             'graph_id': graph_id,
@@ -463,28 +494,29 @@ def compare_graphs(
 ) -> dict:
     """Compare two graphs."""
     try:
-        if graph1_id not in _graph_state or graph2_id not in _graph_state:
+        graph_state = _get_session_state(tool_context, 'graph_state', {})
+        if graph1_id not in graph_state or graph2_id not in graph_state:
             return {
                 'status': 'error',
                 'error': 'One or both graphs not found'
             }
-        
-        graph1 = _graph_state[graph1_id]
-        graph2 = _graph_state[graph2_id]
-        
+
+        graph1 = graph_state[graph1_id]
+        graph2 = graph_state[graph2_id]
+
         nodes1 = set(graph1['nodes'].keys())
         nodes2 = set(graph2['nodes'].keys())
-        
+
         edges1 = set(graph1['edges'].keys())
         edges2 = set(graph2['edges'].keys())
-        
+
         differences = {
             'nodes_only_in_1': list(nodes1 - nodes2),
             'nodes_only_in_2': list(nodes2 - nodes1),
             'edges_only_in_1': list(edges1 - edges2),
             'edges_only_in_2': list(edges2 - edges1)
         }
-        
+
         return {
             'status': 'ok',
             'graph1_id': graph1_id,
@@ -506,16 +538,17 @@ def calculate_graph_layout(
 ) -> dict:
     """Calculate graph layout."""
     try:
-        if graph_id not in _graph_state:
+        graph_state = _get_session_state(tool_context, 'graph_state', {})
+        if graph_id not in graph_state:
             return {
                 'status': 'error',
                 'error': f'Graph {graph_id} not found'
             }
-        
+
         # Simple circular layout for demo
-        nodes = list(_graph_state[graph_id]['nodes'].keys())
+        nodes = list(graph_state[graph_id]['nodes'].keys())
         positions = {}
-        
+
         import math
         for i, node in enumerate(nodes):
             angle = 2 * math.pi * i / len(nodes)
@@ -524,9 +557,10 @@ def calculate_graph_layout(
                 'x': radius * math.cos(angle),
                 'y': radius * math.sin(angle)
             }
-        
-        _graph_state[graph_id]['positions'] = positions
-        
+
+        graph_state[graph_id]['positions'] = positions
+        _set_session_state(tool_context, 'graph_state', graph_state)
+
         return {
             'status': 'ok',
             'graph_id': graph_id,
@@ -548,21 +582,23 @@ def calculate_graph_clusters(
 ) -> dict:
     """Calculate graph clusters."""
     try:
-        if graph_id not in _graph_state:
+        graph_state = _get_session_state(tool_context, 'graph_state', {})
+        if graph_id not in graph_state:
             return {
                 'status': 'error',
                 'error': f'Graph {graph_id} not found'
             }
-        
+
         # Simple clustering by connected components
-        nodes = list(_graph_state[graph_id]['nodes'].keys())
+        nodes = list(graph_state[graph_id]['nodes'].keys())
         clusters = {
             'cluster1': nodes[:len(nodes)//2],
             'cluster2': nodes[len(nodes)//2:] if len(nodes) > 1 else []
         }
-        
-        _graph_state[graph_id]['clusters'] = clusters
-        
+
+        graph_state[graph_id]['clusters'] = clusters
+        _set_session_state(tool_context, 'graph_state', graph_state)
+
         return {
             'status': 'ok',
             'graph_id': graph_id,
@@ -585,22 +621,23 @@ def calculate_graph_centrality(
 ) -> dict:
     """Calculate graph centrality metrics."""
     try:
-        if graph_id not in _graph_state:
+        graph_state = _get_session_state(tool_context, 'graph_state', {})
+        if graph_id not in graph_state:
             return {
                 'status': 'error',
                 'error': f'Graph {graph_id} not found'
             }
-        
+
         # Simple degree centrality
-        nodes = list(_graph_state[graph_id]['nodes'].keys())
+        nodes = list(graph_state[graph_id]['nodes'].keys())
         scores = {}
-        
+
         for node in nodes:
             # Count edges connected to this node
-            degree = sum(1 for edge in _graph_state[graph_id]['edges'].keys() 
+            degree = sum(1 for edge in graph_state[graph_id]['edges'].keys()
                        if node in edge)
             scores[node] = degree / len(nodes) if nodes else 0
-        
+
         return {
             'status': 'ok',
             'graph_id': graph_id,
@@ -623,29 +660,30 @@ def calculate_graph_depth(
 ) -> dict:
     """Calculate graph depth from root."""
     try:
-        if graph_id not in _graph_state:
+        graph_state = _get_session_state(tool_context, 'graph_state', {})
+        if graph_id not in graph_state:
             return {
                 'status': 'error',
                 'error': f'Graph {graph_id} not found'
             }
-        
+
         # BFS to calculate depths
         depths = {root_node: 0}
         visited = {root_node}
         queue = [root_node]
-        
+
         while queue:
             current = queue.pop(0)
             current_depth = depths[current]
-            
-            for edge_key in _graph_state[graph_id]['edges'].keys():
+
+            for edge_key in graph_state[graph_id]['edges'].keys():
                 if edge_key.startswith(current + '->'):
                     neighbor = edge_key.split('->')[1]
                     if neighbor not in visited:
                         visited.add(neighbor)
                         depths[neighbor] = current_depth + 1
                         queue.append(neighbor)
-        
+
         return {
             'status': 'ok',
             'graph_id': graph_id,
@@ -666,25 +704,26 @@ def summarize_graph(
 ) -> dict:
     """Summarize graph statistics."""
     try:
-        if graph_id not in _graph_state:
+        graph_state = _get_session_state(tool_context, 'graph_state', {})
+        if graph_id not in graph_state:
             return {
                 'status': 'error',
                 'error': f'Graph {graph_id} not found'
             }
-        
-        graph = _graph_state[graph_id]
+
+        graph = graph_state[graph_id]
         node_count = len(graph['nodes'])
         edge_count = len(graph['edges'])
-        
+
         avg_degree = (2 * edge_count / node_count) if node_count > 0 else 0
-        
+
         summary = {
             'total_nodes': node_count,
             'total_edges': edge_count,
             'avg_degree': avg_degree,
             'graph_type': graph.get('type', 'unknown')
         }
-        
+
         return {
             'status': 'ok',
             'graph_id': graph_id,
@@ -708,14 +747,16 @@ def visualize_call_graph(
     """Visualize call graph."""
     try:
         viz_id = str(uuid.uuid4())
-        
-        _visualization_state[viz_id] = {
+
+        viz_state = _get_session_state(tool_context, 'visualization_state', {})
+        viz_state[viz_id] = {
             'type': 'call_graph',
             'function_id': function_id,
             'scope': scope,
             'created_at': time.time()
         }
-        
+        _set_session_state(tool_context, 'visualization_state', viz_state)
+
         return {
             'status': 'ok',
             'function_id': function_id,
@@ -739,13 +780,15 @@ def visualize_dependency_graph(
     """Visualize dependency graph."""
     try:
         viz_id = str(uuid.uuid4())
-        
-        _visualization_state[viz_id] = {
+
+        viz_state = _get_session_state(tool_context, 'visualization_state', {})
+        viz_state[viz_id] = {
             'type': 'dependency_graph',
             'component_id': component_id,
             'scope': scope,
             'created_at': time.time()
         }
+        _set_session_state(tool_context, 'visualization_state', viz_state)
         
         return {
             'status': 'ok',
@@ -769,12 +812,14 @@ def visualize_control_flow(
     """Visualize control flow."""
     try:
         viz_id = str(uuid.uuid4())
-        
-        _visualization_state[viz_id] = {
+
+        viz_state = _get_session_state(tool_context, 'visualization_state', {})
+        viz_state[viz_id] = {
             'type': 'control_flow',
             'function_id': function_id,
             'created_at': time.time()
         }
+        _set_session_state(tool_context, 'visualization_state', viz_state)
         
         return {
             'status': 'ok',
@@ -798,11 +843,13 @@ def visualize_data_flow(
     try:
         viz_id = str(uuid.uuid4())
         
-        _visualization_state[viz_id] = {
+        viz_state = _get_session_state(tool_context, 'visualization_state', {})
+        viz_state[viz_id] = {
             'type': 'data_flow',
             'variable_id': variable_id,
             'created_at': time.time()
         }
+        _set_session_state(tool_context, 'visualization_state', viz_state)
         
         return {
             'status': 'ok',
@@ -826,11 +873,13 @@ def visualize_execution_flow(
     try:
         viz_id = str(uuid.uuid4())
         
-        _visualization_state[viz_id] = {
+        viz_state = _get_session_state(tool_context, 'visualization_state', {})
+        viz_state[viz_id] = {
             'type': 'execution_flow',
             'trace_id': trace_id,
             'created_at': time.time()
         }
+        _set_session_state(tool_context, 'visualization_state', viz_state)
         
         return {
             'status': 'ok',
@@ -854,11 +903,13 @@ def visualize_class_hierarchy(
     try:
         viz_id = str(uuid.uuid4())
         
-        _visualization_state[viz_id] = {
+        viz_state = _get_session_state(tool_context, 'visualization_state', {})
+        viz_state[viz_id] = {
             'type': 'class_hierarchy',
             'class_id': class_id,
             'created_at': time.time()
         }
+        _set_session_state(tool_context, 'visualization_state', viz_state)
         
         return {
             'status': 'ok',
@@ -882,11 +933,13 @@ def visualize_architecture(
     try:
         viz_id = str(uuid.uuid4())
         
-        _visualization_state[viz_id] = {
+        viz_state = _get_session_state(tool_context, 'visualization_state', {})
+        viz_state[viz_id] = {
             'type': 'architecture',
             'scope': scope,
             'created_at': time.time()
         }
+        _set_session_state(tool_context, 'visualization_state', viz_state)
         
         return {
             'status': 'ok',
@@ -910,11 +963,13 @@ def visualize_database_relationships(
     try:
         viz_id = str(uuid.uuid4())
         
-        _visualization_state[viz_id] = {
+        viz_state = _get_session_state(tool_context, 'visualization_state', {})
+        viz_state[viz_id] = {
             'type': 'database_relationships',
             'table_name': table_name,
             'created_at': time.time()
         }
+        _set_session_state(tool_context, 'visualization_state', viz_state)
         
         return {
             'status': 'ok',
@@ -938,11 +993,13 @@ def visualize_api_relationships(
     try:
         viz_id = str(uuid.uuid4())
         
-        _visualization_state[viz_id] = {
+        viz_state = _get_session_state(tool_context, 'visualization_state', {})
+        viz_state[viz_id] = {
             'type': 'api_relationships',
             'endpoint': endpoint,
             'created_at': time.time()
         }
+        _set_session_state(tool_context, 'visualization_state', viz_state)
         
         return {
             'status': 'ok',
@@ -966,11 +1023,13 @@ def visualize_event_flow(
     try:
         viz_id = str(uuid.uuid4())
         
-        _visualization_state[viz_id] = {
+        viz_state = _get_session_state(tool_context, 'visualization_state', {})
+        viz_state[viz_id] = {
             'type': 'event_flow',
             'event_source': event_source,
             'created_at': time.time()
         }
+        _set_session_state(tool_context, 'visualization_state', viz_state)
         
         return {
             'status': 'ok',
@@ -994,11 +1053,13 @@ def visualize_memory_usage(
     try:
         viz_id = str(uuid.uuid4())
         
-        _visualization_state[viz_id] = {
+        viz_state = _get_session_state(tool_context, 'visualization_state', {})
+        viz_state[viz_id] = {
             'type': 'memory_usage',
             'application_id': application_id,
             'created_at': time.time()
         }
+        _set_session_state(tool_context, 'visualization_state', viz_state)
         
         return {
             'status': 'ok',
@@ -1023,12 +1084,14 @@ def visualize_performance(
     try:
         viz_id = str(uuid.uuid4())
         
-        _visualization_state[viz_id] = {
+        viz_state = _get_session_state(tool_context, 'visualization_state', {})
+        viz_state[viz_id] = {
             'type': 'performance',
             'application_id': application_id,
             'metric': metric,
             'created_at': time.time()
         }
+        _set_session_state(tool_context, 'visualization_state', viz_state)
         
         return {
             'status': 'ok',
@@ -1053,11 +1116,13 @@ def visualize_security_flow(
     try:
         viz_id = str(uuid.uuid4())
         
-        _visualization_state[viz_id] = {
+        viz_state = _get_session_state(tool_context, 'visualization_state', {})
+        viz_state[viz_id] = {
             'type': 'security_flow',
             'component_id': component_id,
             'created_at': time.time()
         }
+        _set_session_state(tool_context, 'visualization_state', viz_state)
         
         return {
             'status': 'ok',
@@ -1082,12 +1147,14 @@ def visualize_git_history(
     try:
         viz_id = str(uuid.uuid4())
         
-        _visualization_state[viz_id] = {
+        viz_state = _get_session_state(tool_context, 'visualization_state', {})
+        viz_state[viz_id] = {
             'type': 'git_history',
             'repository_path': repository_path,
             'branch': branch,
             'created_at': time.time()
         }
+        _set_session_state(tool_context, 'visualization_state', viz_state)
         
         return {
             'status': 'ok',
@@ -1117,12 +1184,14 @@ def visualize_test_coverage(
         if coverage_result.get('status') == 'ok':
             viz_id = str(uuid.uuid4())
             
-            _visualization_state[viz_id] = {
+            viz_state = _get_session_state(tool_context, 'visualization_state', {})
+            viz_state[viz_id] = {
                 'type': 'test_coverage',
                 'repository_path': repository_path,
                 'coverage': coverage_result.get('coverage'),
                 'created_at': time.time()
             }
+            _set_session_state(tool_context, 'visualization_state', viz_state)
             
             return {
                 'status': 'ok',
@@ -1148,11 +1217,13 @@ def visualize_change_impact(
     try:
         viz_id = str(uuid.uuid4())
         
-        _visualization_state[viz_id] = {
+        viz_state = _get_session_state(tool_context, 'visualization_state', {})
+        viz_state[viz_id] = {
             'type': 'change_impact',
             'element_id': element_id,
             'created_at': time.time()
         }
+        _set_session_state(tool_context, 'visualization_state', viz_state)
         
         return {
             'status': 'ok',
@@ -1173,9 +1244,10 @@ def visualize_change_impact(
 def get_current_selection(tool_context: ToolContext) -> dict:
     """Identify the currently selected code element or graph node."""
     try:
+        spatial_state = _get_session_state(tool_context, 'spatial_state', {})
         return {
             'status': 'ok',
-            'selection': _spatial_state.get('current_selection', {
+            'selection': spatial_state.get('current_selection', {
                 'type': 'none',
                 'id': None
             }),
@@ -1192,13 +1264,15 @@ def get_current_selection(tool_context: ToolContext) -> dict:
 def get_spatial_selection_context(tool_context: ToolContext) -> dict:
     """Understand the selected object's surrounding relationships."""
     try:
-        selection = _spatial_state.get('current_selection', {})
+        spatial_state = _get_session_state(tool_context, 'spatial_state', {})
+        selection = spatial_state.get('current_selection', {})
         node_id = selection.get('id')
-        
-        if node_id and node_id in _graph_state:
-            graph = _graph_state[node_id]
+
+        graph_state = _get_session_state(tool_context, 'graph_state', {})
+        if node_id and node_id in graph_state:
+            graph = graph_state[node_id]
             connected = [k for k in graph['edges'].keys() if node_id in k]
-            
+
             return {
                 'status': 'ok',
                 'context': {
@@ -1206,7 +1280,7 @@ def get_spatial_selection_context(tool_context: ToolContext) -> dict:
                     'connected_nodes': connected
                 }
             }
-        
+
         return {
             'status': 'ok',
             'context': {
@@ -1226,13 +1300,17 @@ def select_code_element(
     element_id: str,
     tool_context: ToolContext
 ) -> dict:
-    """Select a function, class, file or other code element."""
+    """Select a function, class, file or other code element. Emits select_node command."""
     try:
-        _spatial_state['current_selection'] = {
+        _emit_command(tool_context, 'select_node', node_id=element_id)
+
+        spatial_state = _get_session_state(tool_context, 'spatial_state', {})
+        spatial_state['current_selection'] = {
             'type': 'code_element',
             'id': element_id
         }
-        
+        _set_session_state(tool_context, 'spatial_state', spatial_state)
+
         return {
             'status': 'ok',
             'element_id': element_id,
@@ -1252,8 +1330,10 @@ def focus_on_object(
 ) -> dict:
     """Bring an object into focus."""
     try:
-        _spatial_state['focused_object'] = object_id
-        
+        spatial_state = _get_session_state(tool_context, 'spatial_state', {})
+        spatial_state['focused_object'] = object_id
+        _set_session_state(tool_context, 'spatial_state', spatial_state)
+
         return {
             'status': 'ok',
             'object_id': object_id,
@@ -1321,8 +1401,10 @@ def isolate_relationship_path(
 ) -> dict:
     """Show only a particular investigation path."""
     try:
-        _spatial_state['isolated_path'] = path
-        
+        spatial_state = _get_session_state(tool_context, 'spatial_state', {})
+        spatial_state['isolated_path'] = path
+        _set_session_state(tool_context, 'spatial_state', spatial_state)
+
         return {
             'status': 'ok',
             'path': path,
@@ -1342,11 +1424,36 @@ def compare_code_regions(
     region2_id: str,
     tool_context: ToolContext
 ) -> dict:
-    """Compare multiple selected code elements."""
+    """Compare multiple selected code elements. Emits compare command."""
     try:
+        _emit_command(tool_context, 'compare', node_id1=region1_id, node_id2=region2_id)
+
         from .code_understanding_tools import compare_implementations
-        
+
         return compare_implementations(region1_id, region2_id, tool_context)
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
+
+
+@safe
+def show_graph(
+    nodes: List[Dict],
+    edges: List[Dict],
+    tool_context: ToolContext
+) -> dict:
+    """Replace the visible graph with a new node/edge list. Emits show_graph command."""
+    try:
+        _emit_command(tool_context, 'show_graph', nodes=nodes, edges=edges)
+
+        return {
+            'status': 'ok',
+            'node_count': len(nodes),
+            'edge_count': len(edges),
+            'command_queued': True
+        }
     except Exception as e:
         return {
             'status': 'error',
@@ -1361,11 +1468,13 @@ def pin_investigation(
 ) -> dict:
     """Preserve an investigation for later."""
     try:
-        _investigations[investigation_id] = {
+        investigations = _get_session_state(tool_context, 'investigations', {})
+        investigations[investigation_id] = {
             'pinned_at': time.time(),
             'state': 'preserved'
         }
-        
+        _set_session_state(tool_context, 'investigations', investigations)
+
         return {
             'status': 'ok',
             'investigation_id': investigation_id,
@@ -1385,14 +1494,15 @@ def restore_investigation(
 ) -> dict:
     """Restore a previous investigation."""
     try:
-        if investigation_id in _investigations:
+        investigations = _get_session_state(tool_context, 'investigations', {})
+        if investigation_id in investigations:
             return {
                 'status': 'ok',
                 'investigation_id': investigation_id,
                 'restored': True,
-                'state': _investigations[investigation_id]
+                'state': investigations[investigation_id]
             }
-        
+
         return {
             'status': 'error',
             'error': f'Investigation {investigation_id} not found'
@@ -1410,14 +1520,19 @@ def create_spatial_bookmark(
     description: str,
     tool_context: ToolContext
 ) -> dict:
-    """Bookmark a location in the code intelligence environment."""
+    """Bookmark a location in the code intelligence environment. Emits bookmark command."""
     try:
-        _bookmarks[bookmark_id] = {
+        _emit_command(tool_context, 'bookmark', node_id=bookmark_id, label=description)
+
+        bookmarks = _get_session_state(tool_context, 'bookmarks', {})
+        spatial_state = _get_session_state(tool_context, 'spatial_state', {})
+        bookmarks[bookmark_id] = {
             'description': description,
-            'spatial_state': _spatial_state.copy(),
+            'spatial_state': spatial_state.copy(),
             'created_at': time.time()
         }
-        
+        _set_session_state(tool_context, 'bookmarks', bookmarks)
+
         return {
             'status': 'ok',
             'bookmark_id': bookmark_id,
@@ -1437,16 +1552,20 @@ def annotate_code_element(
     annotation: str,
     tool_context: ToolContext
 ) -> dict:
-    """Attach an explanation or note to a code element."""
+    """Attach an explanation or note to a code element. Emits annotate command."""
     try:
-        if element_id not in _annotations:
-            _annotations[element_id] = []
-        
-        _annotations[element_id].append({
+        _emit_command(tool_context, 'annotate', node_id=element_id, text=annotation)
+
+        annotations = _get_session_state(tool_context, 'annotations', {})
+        if element_id not in annotations:
+            annotations[element_id] = []
+
+        annotations[element_id].append({
             'annotation': annotation,
             'created_at': time.time()
         })
-        
+        _set_session_state(tool_context, 'annotations', annotations)
+
         return {
             'status': 'ok',
             'element_id': element_id,
@@ -1494,11 +1613,13 @@ def request_visualization(
     try:
         viz_id = str(uuid.uuid4())
         
-        _visualization_state[viz_id] = {
+        viz_state = _get_session_state(tool_context, 'visualization_state', {})
+        viz_state[viz_id] = {
             'type': visualization_type,
             'parameters': parameters,
             'created_at': time.time()
         }
+        _set_session_state(tool_context, 'visualization_state', viz_state)
         
         return {
             'status': 'ok',
@@ -1520,11 +1641,15 @@ def change_visualization_depth(
     depth: int,
     tool_context: ToolContext
 ) -> dict:
-    """Expand or reduce graph depth."""
+    """Expand or reduce graph depth. Emits set_depth command."""
     try:
-        if visualization_id in _visualization_state:
-            _visualization_state[visualization_id]['depth'] = depth
-        
+        _emit_command(tool_context, 'set_depth', depth=depth)
+
+        viz_state = _get_session_state(tool_context, 'visualization_state', {})
+        if visualization_id in viz_state:
+            viz_state[visualization_id]['depth'] = depth
+            _set_session_state(tool_context, 'visualization_state', viz_state)
+
         return {
             'status': 'ok',
             'visualization_id': visualization_id,
@@ -1544,11 +1669,15 @@ def change_visualization_scope(
     scope: str,
     tool_context: ToolContext
 ) -> dict:
-    """Switch between local, direct, extended and runtime scopes."""
+    """Switch between local, direct, extended and runtime scopes. Emits set_scope command."""
     try:
-        if visualization_id in _visualization_state:
-            _visualization_state[visualization_id]['scope'] = scope
-        
+        _emit_command(tool_context, 'set_scope', scope=scope)
+
+        viz_state = _get_session_state(tool_context, 'visualization_state', {})
+        if visualization_id in viz_state:
+            viz_state[visualization_id]['scope'] = scope
+            _set_session_state(tool_context, 'visualization_state', viz_state)
+
         return {
             'status': 'ok',
             'visualization_id': visualization_id,
@@ -1569,13 +1698,14 @@ def get_visualization_state(
 ) -> dict:
     """Understand what is currently being visualized."""
     try:
-        if visualization_id in _visualization_state:
+        viz_state = _get_session_state(tool_context, 'visualization_state', {})
+        if visualization_id in viz_state:
             return {
                 'status': 'ok',
                 'visualization_id': visualization_id,
-                'state': _visualization_state[visualization_id]
+                'state': viz_state[visualization_id]
             }
-        
+
         return {
             'status': 'error',
             'error': f'Visualization {visualization_id} not found'
@@ -1594,15 +1724,16 @@ def get_spatial_object_details(
 ) -> dict:
     """Retrieve information about a selected spatial object."""
     try:
+        graph_state = _get_session_state(tool_context, 'graph_state', {})
         # Try to find object in graph state
-        for graph_id, graph in _graph_state.items():
+        for graph_id, graph in graph_state.items():
             if object_id in graph['nodes']:
                 return {
                     'status': 'ok',
                     'object_id': object_id,
                     'details': graph['nodes'][object_id]
                 }
-        
+
         return {
             'status': 'not_found',
             'object_id': object_id,

@@ -2,6 +2,7 @@ from google.adk.agents import LlmAgent
 
 from ..config import MODEL
 from ..tools.graph_tools import get_node, verify_citations
+from ..callbacks import permission_guard
 
 TEMPLATE = '''
 You are the Grounding Critic. You check findings against evidence.
@@ -22,7 +23,7 @@ claims (list with confidence), and changes_made (list of notes).
 
 
 def make_critic(name: str, review_key: str) -> LlmAgent:
-    return LlmAgent(
+    agent = LlmAgent(
         name=name,
         model=MODEL,
         include_contents='none',
@@ -30,4 +31,12 @@ def make_critic(name: str, review_key: str) -> LlmAgent:
         instruction=TEMPLATE.replace('{findings}', '{' + review_key + '}'),
         tools=[verify_citations, get_node],
         output_key='verified_answer',
+        before_tool_callback=permission_guard,
     )
+    # Store config for callbacks
+    from .registry import AGENT_CONFIG
+    AGENT_CONFIG[name] = {
+        "permission_ceiling": "read",
+        "tool_budget": 20,
+    }
+    return agent

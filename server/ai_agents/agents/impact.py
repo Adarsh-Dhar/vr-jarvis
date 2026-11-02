@@ -4,6 +4,7 @@ from ..config import MODEL
 from ..tools.git_tools import get_diff, list_changed_nodes
 from ..tools.graph_tools import (find_tests_for_node, get_callers, get_coverage, get_dependents,
                                  get_node, trace_path)
+from ..callbacks import permission_guard
 
 change_loader = LlmAgent(
     name='change_loader_agent',
@@ -21,6 +22,7 @@ diff_summary (at most two sentences).
 ''',
     tools=[list_changed_nodes, get_diff, get_node],
     output_key='changed_nodes',
+    before_tool_callback=permission_guard,
 )
 
 static_impact = LlmAgent(
@@ -42,6 +44,7 @@ unresolved (same, plus reason), counts (confirmed and unresolved totals).
 ''',
     tools=[get_dependents, get_callers, trace_path, get_node],
     output_key='impact_static',
+    before_tool_callback=permission_guard,
 )
 
 test_mapper = LlmAgent(
@@ -59,6 +62,7 @@ tests), low_coverage_nodes (node ids with coverage below 0.5).
 ''',
     tools=[get_callers, find_tests_for_node, get_coverage],
     output_key='tests_relevant',
+    before_tool_callback=permission_guard,
 )
 
 impact_synthesizer = LlmAgent(
@@ -83,4 +87,11 @@ affected (list of objects with id, risk, edge_kind, reason, untested), inferred_
 reason), recommended_tests (list), claims (list of objects with text, node_ids, confidence).
 ''',
     output_key='impact_report',
+    before_tool_callback=permission_guard,
 )
+
+from .registry import AGENT_CONFIG
+AGENT_CONFIG['change_loader_agent'] = {"permission_ceiling": "read", "tool_budget": 20}
+AGENT_CONFIG['static_impact_agent'] = {"permission_ceiling": "read", "tool_budget": 20}
+AGENT_CONFIG['test_mapper_agent'] = {"permission_ceiling": "read", "tool_budget": 20}
+AGENT_CONFIG['impact_synthesizer_agent'] = {"permission_ceiling": "read", "tool_budget": 20}

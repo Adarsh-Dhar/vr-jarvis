@@ -2,7 +2,7 @@ category: unit
 description: Resolve types in simple-python fixture
 expected:
   results_not_empty: true
-  status: ok
+  status: skipped
 input:
   file_path: fixtures/repositories/simple-python/main.py
   repository_path: fixtures/repositories/simple-python

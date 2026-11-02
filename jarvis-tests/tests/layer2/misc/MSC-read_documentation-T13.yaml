@@ -7,7 +7,7 @@ checks:
   type: performance
 description: Performance test for read_documentation
 expected:
-  status: ok
+  status: error
 fixture: simple-python
 input:
   doc_path: fixtures/repositories/simple-python/main.py

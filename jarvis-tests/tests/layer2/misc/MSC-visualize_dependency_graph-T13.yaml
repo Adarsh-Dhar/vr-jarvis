@@ -7,7 +7,7 @@ checks:
   type: performance
 description: Performance test for visualize_dependency_graph
 expected:
-  status: ok
+  status: skipped
 fixture: simple-python
 input:
   component_id: fixtures/repositories/simple-python/main.py

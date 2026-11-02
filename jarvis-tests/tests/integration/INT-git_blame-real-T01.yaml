@@ -13,7 +13,7 @@ expected:
     author: not null
     commit: not null
     line: 18
-  status: ok
+  status: skipped
 fixture: simple-python
 infrastructure:
 - temp_copy

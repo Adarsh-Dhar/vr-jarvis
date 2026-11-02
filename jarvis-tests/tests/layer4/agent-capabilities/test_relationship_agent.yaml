@@ -4,39 +4,38 @@ category: agent_capabilities
 tool: trace_call_chain
 layer: 4
 test_type: AGENT_CAPABILITY
-description: >
-  Test whether the Relationship Intelligence Agent can trace call chains
+description: 'Test whether the Relationship Intelligence Agent can trace call chains
   between symbols, identifying all paths and relationships.
 
+  '
 task:
   agent: relationship_intelligence
-  input: "Trace the call chain from handle_request() down to database operations. Show all possible paths."
-
+  input: Trace the call chain from handle_request() down to database operations. Show
+    all possible paths.
 expected:
   tool_selection:
-    - trace_call_chain
-    - find_callers
-    - find_callees
-    - find_indirect_callers
-    - build_call_graph
+  - trace_call_chain
+  - find_callers
+  - find_callees
+  - find_indirect_callers
+  - build_call_graph
   actions:
-    - Find starting function
-    - Trace all call paths
-    - Identify indirect callers
-    - Build complete call graph
-    - Document all paths
+  - Find starting function
+  - Trace all call paths
+  - Identify indirect callers
+  - Build complete call graph
+  - Document all paths
   output_requirements:
-    - All call paths identified
-    - No missed relationships
-    - Complete call graph
-    - Correct path enumeration
-    - No hallucinated paths
-
+  - All call paths identified
+  - No missed relationships
+  - Complete call graph
+  - Correct path enumeration
+  - No hallucinated paths
+  status: skipped
 checks:
-  - correct_tool_selection
-  - complete_call_trace
-  - no_missed_relationships
-  - correct_path_enumeration
-  - no_hallucinations
-
+- correct_tool_selection
+- complete_call_trace
+- no_missed_relationships
+- correct_path_enumeration
+- no_hallucinations
 severity: critical

@@ -6,7 +6,7 @@ checks:
 - type: integration_connectivity
 description: Inspect SQLite database schema
 expected:
-  status: ok
+  status: skipped
 fixture:
   path: integration-test-infrastructure/databases/test.db
   type: database

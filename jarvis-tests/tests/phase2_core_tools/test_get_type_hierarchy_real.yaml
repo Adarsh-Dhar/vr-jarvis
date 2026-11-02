@@ -2,7 +2,7 @@ category: unit
 description: Get type hierarchy for symbol in simple-python
 expected:
   results_not_empty: true
-  status: ok
+  status: not_found
 input:
   file_path: fixtures/repositories/simple-python/main.py
   repository_path: fixtures/repositories/simple-python

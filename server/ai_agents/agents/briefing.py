@@ -4,6 +4,7 @@ from ..config import MODEL
 from ..tools.git_tools import get_branch_info, list_changed_nodes
 from ..tools.graph_tools import find_tests_for_node, get_callers, get_coverage
 from ..tools.memory_tools import load_project_memory
+from ..callbacks import permission_guard
 
 briefing_agent = LlmAgent(
     name='briefing_agent',
@@ -23,4 +24,10 @@ claims (list of objects with text, node_ids, confidence).
     tools=[load_project_memory, get_branch_info, list_changed_nodes, get_callers,
            find_tests_for_node, get_coverage],
     output_key='briefing',
+    before_tool_callback=permission_guard,
 )
+from .registry import AGENT_CONFIG
+AGENT_CONFIG['briefing_agent'] = {
+    "permission_ceiling": "read",
+    "tool_budget": 20,
+}

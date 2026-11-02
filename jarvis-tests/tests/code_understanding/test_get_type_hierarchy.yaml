@@ -6,6 +6,7 @@ expected:
   - children: []
     parent: null
     type: function
+  status: not_found
 fixture: simple-python
 input:
   file_path: main.py

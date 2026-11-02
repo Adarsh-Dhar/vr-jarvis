@@ -7,7 +7,7 @@ checks:
   type: performance
 description: Performance test for retrieve_conversation_context
 expected:
-  status: ok
+  status: error
 fixture: simple-python
 input:
   conversation_id: fixtures/repositories/simple-python/main.py

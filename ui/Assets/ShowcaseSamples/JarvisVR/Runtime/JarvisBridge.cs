@@ -12,6 +12,14 @@ namespace JarvisVR
   {
     public string type, color, node_id, src, dst, style, diff, summary;
     public string[] node_ids, keep_ids, passed, failed, not_run;
+    public int depth;
+    public string scope;
+    public string group_id;
+    public string text;
+    public string label;
+    public string node_id1, node_id2;
+    public GraphNodeDto[] nodes;
+    public GraphEdgeDto[] edges;
   }
   [Serializable] public class AskResponse
   {

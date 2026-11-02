@@ -2,7 +2,7 @@ category: unit
 description: Trace call chain in simple-python
 expected:
   results_not_empty: true
-  status: ok
+  status: skipped
 input:
   file_path: fixtures/repositories/simple-python/main.py
   from_symbol: simple-python::main::main

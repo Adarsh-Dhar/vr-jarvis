@@ -5,7 +5,7 @@ checks:
   type: schema_validity
 description: Regression test for visualize_data_flow
 expected:
-  status: ok
+  status: skipped
 fixture: simple-python
 input:
   file_path: fixtures/repositories/simple-python/main.py

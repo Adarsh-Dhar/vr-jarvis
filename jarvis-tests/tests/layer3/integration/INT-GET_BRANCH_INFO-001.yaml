@@ -6,7 +6,7 @@ checks:
 - type: integration_connectivity
 description: Get git branch information
 expected:
-  status: error
+  status: ok
 expected_error: 'TypeError: get_branch_info() takes 1 positional argument but 2 were
   given'
 fixture:

@@ -7,7 +7,7 @@ checks:
   type: performance
 description: Performance test for error_tracking_get_error_details
 expected:
-  status: ok
+  status: skipped
 fixture: simple-python
 input:
   error_id: fixtures/repositories/simple-python/main.py

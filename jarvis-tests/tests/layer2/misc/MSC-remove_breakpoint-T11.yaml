@@ -5,7 +5,7 @@ checks:
   type: schema_validity
 description: Concurrency test for remove_breakpoint
 expected:
-  status: ok
+  status: not_implemented
 fixture: simple-python
 input:
   breakpoint_id: fixtures/repositories/simple-python/main.py

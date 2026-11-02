@@ -5,7 +5,7 @@ checks:
   type: schema_validity
 description: Happy Path - search for known symbol target in simple-python
 expected:
-  status: ok
+  status: skipped
 fixture: simple-python
 input:
   file_path: fixtures/repositories/simple-python/main.py

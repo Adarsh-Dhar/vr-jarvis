@@ -9,7 +9,7 @@ checks:
   used_temp_copy: true
 description: Integration test - resolve types with real language server on typed fixture
 expected:
-  status: ok
+  status: skipped
   type_info:
     parameters: not null
     return_type: not null

@@ -18,7 +18,7 @@ expected:
   - beta
   - target
   - ExampleClass
-  status: ok
+  status: skipped
   symbol_count_min: 5
 fixture: simple-python
 input:

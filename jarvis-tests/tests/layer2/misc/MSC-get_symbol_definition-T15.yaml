@@ -5,7 +5,7 @@ checks:
   type: schema_validity
 description: Recovery test for get_symbol_definition
 expected:
-  status: error
+  status: not_found
 expected_error: 'TypeError: get_symbol_definition() takes 2 positional arguments but
   3 were given'
 fixture: simple-python

@@ -7,7 +7,7 @@ checks:
   type: performance
 description: Performance test for get_diff
 expected:
-  status: error
+  status: ok
 expected_error: 'TypeError: get_diff() takes 1 positional argument but 2 were given'
 fixture: simple-python
 input:

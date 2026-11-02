@@ -5,7 +5,7 @@ checks:
   type: schema_validity
 description: Concurrency test for move_file
 expected:
-  status: error
+  status: blocked
 expected_error: 'TypeError: move_file() missing 1 required positional argument: ''tool_context'''
 fixture: simple-python
 input:

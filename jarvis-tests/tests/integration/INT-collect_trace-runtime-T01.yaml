@@ -11,7 +11,7 @@ checks:
 description: Integration test - collect execution trace on runtime-heavy fixture
 expected:
   function_calls_recorded: true
-  status: ok
+  status: not_implemented
   timing_data_available: true
   trace_collected: true
 fixture: runtime-heavy

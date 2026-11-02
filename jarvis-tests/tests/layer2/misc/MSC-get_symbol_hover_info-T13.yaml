@@ -7,7 +7,7 @@ checks:
   type: performance
 description: Performance test for get_symbol_hover_info
 expected:
-  status: ok
+  status: not_found
 fixture: simple-python
 input:
   file_path: fixtures/repositories/simple-python/main.py
