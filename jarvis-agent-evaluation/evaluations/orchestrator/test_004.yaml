@@ -1,0 +1,59 @@
+test_id: AG-E2E-001
+agent: orchestrator
+scenario: end_to_end_architecture_analysis
+layer: layer6_end_to_end
+severity: critical
+description: Complete architecture analysis from user request to verified outcome
+input:
+  task: "Analyze the architecture of this monorepo and explain how the services interact"
+  context:
+    repository: monorepo-java-microservices
+expected_output:
+  final_result:
+    architecture_summary: "Java monorepo with 3 microservices (user-service, order-service, payment-service) sharing a common library"
+    service_interactions:
+      - service: order-service
+        depends_on:
+          - user-service (API calls)
+          - payment-service (API calls)
+        shared_dependency: shared-library
+    build_system: Maven multi-module
+    entry_points:
+      - user-service/src/main/java/com/example/UserApplication.java
+      - order-service/src/main/java/com/example/OrderApplication.java
+      - payment-service/src/main/java/com/example/PaymentApplication.java
+  execution_trace:
+    - agent: orchestrator
+      action: decompose_task
+    - agent: repository_intelligence
+      action: detect_structure
+    - agent: repository_intelligence
+      action: identify_entry_points
+    - agent: relationship_intelligence
+      action: analyze_dependencies
+    - agent: orchestrator
+      action: aggregate_results
+    - agent: conversational
+      action: explain_findings
+  verification:
+    structure_correct: true
+    dependencies_correct: true
+    entry_points_correct: true
+    explanation_clear: true
+expected_result:
+  task_completed: true
+  all_agents_used: true
+  results_aggregated: true
+  verification_passed: true
+  explanation_provided: true
+fixture:
+  type: repository
+  name: monorepo-java-microservices
+evidence_requirements:
+  - claim: architecture_summary
+    requires_evidence: true
+  - claim: service_interactions
+    requires_evidence: true
+boundary_checks:
+  - must_not: modify_production_code
+  - must_not: execute_build

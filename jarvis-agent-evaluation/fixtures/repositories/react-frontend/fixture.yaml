@@ -1,0 +1,94 @@
+name: react-frontend
+description: A React TypeScript frontend application with component complexity
+languages:
+  - TypeScript
+  - JavaScript
+frameworks:
+  - React
+  - Redux
+  - React Router
+project_type: frontend
+entry_points:
+  - file: src/index.tsx
+    function: render
+build_system:
+  type: npm
+  configuration:
+    package_manager: npm
+    build_command: npm run build
+    test_command: npm test
+dependencies:
+  runtime:
+    - Node.js 18+
+    - React 18+
+  development:
+    - typescript
+    - "@types/react"
+    - "@types/node"
+monorepo_structure: None
+generated_files:
+  - dist/
+  - node_modules/
+ground_truth:
+  functions:
+    - name: render
+      file: src/index.tsx
+      line: 10
+      parameters:
+        - name: element
+          type: ReactElement
+      return_type: void
+    - name: App
+      file: src/App.tsx
+      line: 5
+      parameters: []
+      return_type: JSX.Element
+    - name: useSelector
+      file: src/hooks/useStore.ts
+      line: 10
+      parameters:
+        - name: selector
+          type: Function
+      return_type: any
+    - name: useDispatch
+      file: src/hooks/useStore.ts
+      line: 15
+      parameters: []
+      return_type: Function
+  relationships:
+    - type: imports
+      from: src/index.tsx
+      to: src/App
+      line: 3
+      direct: true
+    - type: imports
+      from: src/App.tsx
+      to: src/components
+      line: 5
+      direct: true
+    - type: uses
+      from: src/App.tsx
+      to: hooks/useStore
+      line: 7
+      direct: true
+    - type: prop_drill
+      from: src/App.tsx
+      to: src/components/Header
+      line: 12
+      direct: true
+  files:
+    - path: src/index.tsx
+      lines: 15
+      complexity: low
+    - path: src/App.tsx
+      lines: 50
+      complexity: medium
+    - path: src/components/Header.tsx
+      lines: 30
+      complexity: low
+    - path: src/components/Dashboard.tsx
+      lines: 80
+      complexity: high
+    - path: src/hooks/useStore.ts
+      lines: 25
+      complexity: medium

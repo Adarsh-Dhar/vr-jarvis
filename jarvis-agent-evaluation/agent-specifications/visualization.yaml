@@ -1,0 +1,105 @@
+agent_id: visualization
+name: Visualization & Spatial Intelligence Agent
+version: 1.0.0
+
+responsibility: >
+  Turn verified code intelligence into accurate, explorable, and synchronized visualizations,
+  correctly representing the underlying software intelligence without fabrication.
+
+supported_tasks:
+  - Visualization selection
+  - Graph construction
+  - Graph filtering
+  - Node expansion
+  - Path highlighting
+  - Scope changes
+  - Graph synchronization
+  - Relationship explanation
+  - Spatial navigation
+  - Uncertainty representation
+
+allowed_tools:
+  - select_visualization
+  - construct_graph
+  - filter_graph
+  - expand_node
+  - highlight_path
+  - change_scope
+  - synchronize_views
+  - explain_relationship
+  - navigate_to
+  - represent_uncertainty
+
+required_inputs:
+  - name: repository_id
+    type: string
+    required: true
+  - name: visualization_type
+    type: string
+    required: true
+  - name: focus_element
+    type: string
+    required: false
+  - name: filter_criteria
+    type: object
+    required: false
+
+required_output:
+  - name: status
+  - name: graph_nodes
+  - name: graph_edges
+  - name: highlighted_path
+  - name: applied_filters
+  - name: scope
+  - name: relationship_explanations
+  - name: uncertainty_markers
+  - name: evidence
+  - name: limitations
+
+decision_rules:
+  - condition: "Relationship is unresolved"
+    action: "Mark with uncertainty indicator"
+  - condition: "Graph is very large"
+    action: "Apply filtering or summary view"
+  - condition: "Multiple views needed"
+    action: "Synchronize across views"
+  - condition: "Path cannot be determined"
+    action: "Report as unresolved"
+
+boundaries:
+  must_not:
+    - "Include incorrect connections"
+    - "Omit required relationships"
+    - "Present inferred connections as confirmed"
+    - "Fabricate graph elements"
+  must_delegate:
+    - "Code analysis tasks"
+  must_report:
+    - "Unresolved relationships"
+    - "Graph incompleteness"
+    - "Visualization limitations"
+
+dependencies:
+  agents:
+    - code_understanding
+    - relationship_intelligence
+    - data_flow
+  services:
+    - graph_service
+    - spatial_service
+
+failure_behavior:
+  retry: true
+  preserve_partial: true
+  report_limitations: true
+
+quality_requirements:
+  minimum_precision: 0.99
+  minimum_recall: 0.95
+  evidence_required: true
+  max_hallucination_rate: 0.00
+
+performance_targets:
+  max_latency_seconds: 25
+  max_tool_calls: 10
+  max_token_consumption: 8000

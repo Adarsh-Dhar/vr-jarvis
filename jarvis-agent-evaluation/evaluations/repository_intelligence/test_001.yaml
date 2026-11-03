@@ -1,0 +1,70 @@
+test_id: AG-REPO-001
+agent: repository_intelligence
+scenario: language_detection
+description: >
+  Verify that the agent correctly identifies the programming
+  languages in a repository.
+
+layer: layer2_responsibility
+severity: high
+
+fixture:
+  repository: complex-typescript
+  additional_context:
+    analysis_scope: "full"
+
+user_request: >
+  What programming languages are used in this project?
+
+expected_behavior:
+  - Scan repository files
+  - Identify file extensions
+  - Detect TypeScript
+  - Detect JavaScript
+  - Report languages found
+
+expected_results:
+  languages:
+    - TypeScript
+    - JavaScript
+  frameworks: []
+  project_type: application
+  entry_points: []
+  build_system: {}
+  dependencies: {}
+  monorepo_structure: {}
+  generated_files: []
+  evidence:
+    - source: "src/index.ts"
+      detected_as: "TypeScript"
+    - source: "package.json"
+      indicates: "TypeScript project"
+  confidence: 0.98
+  status: ok
+  limitations: []
+
+must_not:
+  - Invent languages
+  - Miss TypeScript files
+  - Confuse TypeScript with JavaScript
+
+grading:
+  result_correctness: 40
+  evidence_quality: 25
+  tool_selection: 15
+  completeness: 10
+  output_schema: 10
+
+limits:
+  max_tool_calls: 10
+  max_duration_seconds: 20
+  max_token_consumption: 5000
+  timeout_seconds: 40
+
+metadata:
+  author: "JARVIS Team"
+  created: "2026-11-03T00:00:00Z"
+  tags:
+    - "repository"
+    - "language-detection"
+    - "high"

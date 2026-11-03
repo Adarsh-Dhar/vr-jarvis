@@ -1,0 +1,47 @@
+test_id: AG-DATA-002
+agent: data_flow
+scenario: contract_validation
+layer: layer1_contract
+severity: critical
+description: Validate data flow contract and configuration
+input:
+  task: "Validate contract"
+  context:
+    validation_type: contract_check
+expected_output:
+  contract:
+    agent_id: data_flow
+    version: 1.0.0
+    responsibilities:
+      - source_to_sink_tracing
+      - transformation_identification
+      - sensitive_data_tracking
+    allowed_tools:
+      - data_flow_analyzer
+      - transformation_detector
+      - sensitive_data_tracker
+    boundaries:
+      must_not:
+        - modify_production_code
+        - execute_data_operations
+      must_delegate:
+        - complex_multi_system_analysis
+      must_report:
+        - incomplete_trace
+        - external_system
+    quality_requirements:
+      min_precision: 0.85
+      min_recall: 0.80
+      max_hallucination_rate: 0.05
+expected_result:
+  contract_valid: true
+  all_responsibilities_defined: true
+  all_tools_allowed: true
+  all_boundaries_defined: true
+  quality_metrics_defined: true
+fixture:
+  type: none
+evidence_requirements: []
+boundary_checks:
+  - must_not: modify_production_code
+  - must_not: execute_data_operations

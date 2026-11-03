@@ -1,0 +1,48 @@
+test_id: AG-REP-003
+agent: repository_intelligence
+scenario: contract_validation
+layer: layer1_contract
+severity: critical
+description: Validate repository intelligence contract and configuration
+input:
+  task: "Validate contract"
+  context:
+    validation_type: contract_check
+expected_output:
+  contract:
+    agent_id: repository_intelligence
+    version: 1.0.0
+    responsibilities:
+      - language_detection
+      - framework_detection
+      - entry_point_identification
+      - build_system_analysis
+    allowed_tools:
+      - file_scanner
+      - language_detector
+      - dependency_analyzer
+    boundaries:
+      must_not:
+        - modify_production_code
+        - execute_build
+      must_delegate:
+        - complex_code_analysis
+      must_report:
+        - unknown_language
+        - build_system_unsupported
+    quality_requirements:
+      min_precision: 0.95
+      min_recall: 0.90
+      max_hallucination_rate: 0.02
+expected_result:
+  contract_valid: true
+  all_responsibilities_defined: true
+  all_tools_allowed: true
+  all_boundaries_defined: true
+  quality_metrics_defined: true
+fixture:
+  type: none
+evidence_requirements: []
+boundary_checks:
+  - must_not: modify_production_code
+  - must_not: execute_build

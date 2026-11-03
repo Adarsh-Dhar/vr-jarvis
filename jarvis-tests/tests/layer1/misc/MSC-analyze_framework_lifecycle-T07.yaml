@@ -5,7 +5,7 @@ checks:
   type: schema_validity
 description: Complex Input test for analyze_framework_lifecycle
 expected:
-  status: skipped
+  status: error
 fixture: polyglot-monorepo
 input:
   file_path: fixtures/repositories/polyglot-monorepo/main.py

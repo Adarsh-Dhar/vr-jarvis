@@ -1,0 +1,49 @@
+test_id: AG-CODE-003
+agent: code_understanding
+scenario: contract_validation
+layer: layer1_contract
+severity: critical
+description: Validate code understanding contract and configuration
+input:
+  task: "Validate contract"
+  context:
+    validation_type: contract_check
+expected_output:
+  contract:
+    agent_id: code_understanding
+    version: 1.0.0
+    responsibilities:
+      - function_comprehension
+      - class_comprehension
+      - side_effect_analysis
+      - contract_identification
+    allowed_tools:
+      - ast_parser
+      - function_analyzer
+      - side_effect_detector
+    boundaries:
+      must_not:
+        - modify_production_code
+        - execute_function
+      must_delegate:
+        - relationship_analysis
+        - data_flow_analysis
+      must_report:
+        - parsing_failure
+        - complexity_limit
+    quality_requirements:
+      min_precision: 0.90
+      min_recall: 0.85
+      max_hallucination_rate: 0.05
+expected_result:
+  contract_valid: true
+  all_responsibilities_defined: true
+  all_tools_allowed: true
+  all_boundaries_defined: true
+  quality_metrics_defined: true
+fixture:
+  type: none
+evidence_requirements: []
+boundary_checks:
+  - must_not: modify_production_code
+  - must_not: execute_function

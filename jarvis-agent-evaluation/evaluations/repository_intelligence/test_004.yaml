@@ -1,0 +1,38 @@
+test_id: AG-REP-004
+agent: repository_intelligence
+scenario: tool_integration_language_detection
+layer: layer3_tool_integration
+severity: high
+description: Correctly uses language detection tool with proper arguments
+input:
+  task: "Detect the programming language of this repository"
+  context:
+    repository: react-frontend
+expected_output:
+  tool_calls:
+    - tool: language_detector
+      arguments:
+        scan_directory: /
+        confidence_threshold: 0.8
+      result:
+        languages:
+          - language: TypeScript
+            confidence: 0.95
+          - language: JavaScript
+            confidence: 0.85
+  languages_detected: ["TypeScript", "JavaScript"]
+  confidence_scores: [0.95, 0.85]
+expected_result:
+  tool_selected: language_detector
+  arguments_correct: true
+  result_interpreted: true
+  no_unauthorized_tools: true
+fixture:
+  type: repository
+  name: react-frontend
+evidence_requirements:
+  - claim: languages_detected
+    requires_evidence: true
+boundary_checks:
+  - must_not: modify_production_code
+  - must_not: execute_build

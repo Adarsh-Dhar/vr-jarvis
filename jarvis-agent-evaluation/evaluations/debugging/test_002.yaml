@@ -1,0 +1,47 @@
+test_id: AG-DBG-002
+agent: debugging
+scenario: contract_validation
+layer: layer1_contract
+severity: critical
+description: Validate debugging contract and configuration
+input:
+  task: "Validate contract"
+  context:
+    validation_type: contract_check
+expected_output:
+  contract:
+    agent_id: debugging
+    version: 1.0.0
+    responsibilities:
+      - error_interpretation
+      - root_cause_identification
+      - hypothesis_testing
+    allowed_tools:
+      - error_analyzer
+      - root_cause_detector
+      - hypothesis_tester
+    boundaries:
+      must_not:
+        - modify_production_code
+        - execute_bug_reproduction
+      must_delegate:
+        - complex_multi_system_debugging
+      must_report:
+        - root_cause_uncertain
+        - reproduction_unavailable
+    quality_requirements:
+      min_precision: 0.85
+      min_recall: 0.80
+      max_hallucination_rate: 0.05
+expected_result:
+  contract_valid: true
+  all_responsibilities_defined: true
+  all_tools_allowed: true
+  all_boundaries_defined: true
+  quality_metrics_defined: true
+fixture:
+  type: none
+evidence_requirements: []
+boundary_checks:
+  - must_not: modify_production_code
+  - must_not: execute_bug_reproduction

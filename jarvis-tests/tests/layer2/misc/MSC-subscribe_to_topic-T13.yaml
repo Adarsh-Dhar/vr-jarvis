@@ -7,7 +7,7 @@ checks:
   type: performance
 description: Performance test for subscribe_to_topic
 expected:
-  status: skipped
+  status: error
 fixture: simple-python
 input:
   callback: fixtures/repositories/simple-python/main.py

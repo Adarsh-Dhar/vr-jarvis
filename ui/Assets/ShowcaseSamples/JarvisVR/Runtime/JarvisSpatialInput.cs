@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 
 namespace JarvisVR
@@ -76,6 +77,10 @@ namespace JarvisVR
 
     private void Update()
     {
+      // Test keyboard input detection
+      if (Input.GetKeyDown(KeyCode.Return))
+        Debug.Log("JARVIS: GLOBAL - Enter key pressed (detected at Update start)");
+
       for (int i = 0; i < 2; i++)
       {
         Slot s = _slots[i];
@@ -89,11 +94,17 @@ namespace JarvisVR
         }
       }
       // Touch controllers: used only while that side's hand is not tracked, so a hand and a controller never fight.
+      // Skip controller input in editor simulator mode - only editor mouse should be used
+      bool simulatorMode = false;
+#if UNITY_EDITOR
+      simulatorMode = true;
+#endif
       for (int i = 0; i < 2; i++)
       {
         Slot c = _slots[3 + i];
-        OVRInput.Controller ctrl = i == 0 ? OVRInput.Controller.LTouch : OVRInput.Controller.RTouch;
         c.Valid = false; c.Down = false;
+        if (simulatorMode) continue;  // Skip controllers in simulator mode
+        OVRInput.Controller ctrl = i == 0 ? OVRInput.Controller.LTouch : OVRInput.Controller.RTouch;
         if (_slots[i].Valid || !OVRInput.IsControllerConnected(ctrl)) continue;
         Vector3 lp = OVRInput.GetLocalControllerPosition(ctrl);
         Quaternion lr = OVRInput.GetLocalControllerRotation(ctrl);
@@ -109,17 +120,21 @@ namespace JarvisVR
       if (m.Valid) { m.Ray = _cam.ScreenPointToRay(Input.mousePosition); m.Down = Input.GetMouseButton(0); }
       if (Input.GetKeyDown(KeyCode.Space) && _toggleVoice != null) _toggleVoice();
 
-      // XR Simulator fallback: if hands are not tracked, use mouse ray for hand slots too
-      bool anyHandValid = _slots[0].Valid || _slots[1].Valid;
-      if (!anyHandValid && _cam != null)
+      // In simulator mode, invalidate hand slots so only editor mouse works
+      _slots[0].Valid = false;
+      _slots[1].Valid = false;
+
+      if (m.Valid)
       {
-        for (int i = 0; i < 2; i++)
+        // Keyboard fallback: use Enter key to simulate mouse click when hovering over a button
+        if (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter))
         {
-          Slot s = _slots[i];
-          s.Valid = true;
-          s.Ray = _cam.ScreenPointToRay(Input.mousePosition);
-          s.Down = Input.GetMouseButton(0);
+          m.Down = true;
+          Debug.Log("JARVIS: Keyboard Enter pressed to simulate click");
         }
+        Debug.Log("JARVIS: Editor mouse slot: Valid=" + m.Valid + ", Down=" + m.Down + ", WasDown=" + m.WasDown + ", mousePos=" + Input.mousePosition);
+        if (Input.GetMouseButtonDown(0))
+          Debug.Log("JARVIS: Editor mouse click at " + Input.mousePosition + ", cam pos=" + _cam.transform.position + ", ray=" + m.Ray);
       }
 #endif
       foreach (Slot s in _slots) Process(s);
@@ -178,6 +193,7 @@ namespace JarvisVR
 
       if (s.Down && !s.WasDown)
       {
+        Debug.Log("JARVIS: Press-down detected! hoverBtn=" + (hoverBtn != null ? hoverBtn.name : "null") + ", Interactable=" + (hoverBtn != null && hoverBtn.Interactable));
         if (hoverBtn != null && hoverBtn.Interactable)
         {
           s.Btn = hoverBtn; s.Btn.SetPressed(true); s.BtnTime = Time.unscaledTime; s.BtnFired = false;
@@ -192,6 +208,7 @@ namespace JarvisVR
         }
         else if (hoverNode != null)
         {
+          Debug.Log("JARVIS: Clicked on node");
           s.Node = hoverNode; s.NodeDist = dist; s.NodeStart = s.NodeLast = s.Ray.GetPoint(dist); s.NodeDragging = false;
           s.NodeTime = Time.unscaledTime; s.NodeHeld = false;
         }
@@ -204,7 +221,28 @@ namespace JarvisVR
         {
           s.Resize = hoverResize; s.ResizeDist = dist;
           s.ResizeStartScale = hoverResize.Panel.UserScale;
-          s.ResizeStartDistance = Mathf.Max(0.05f, Vector3.Distance(s.Ray.GetPoint(dist), hoverResize.Panel.transform.position));
+          s.ResizeStartDistance = Mathf.Max(0.05f, Vector3.Distance(s.Ray.GetPoint(s.ResizeDist), hoverResize.Panel.transform.position));
+        }
+        else if (hasHit)
+        {
+          // We hit something but it wasn't an interactive target - try clicking on the hover button if we have one
+          if (s.Hover != null && s.Hover.Interactable)
+          {
+            s.Btn = s.Hover; s.Btn.SetPressed(true); s.BtnTime = Time.unscaledTime; s.BtnFired = false;
+            if (s.Btn.HoldSeconds <= 0f)
+            {
+              s.BtnFired = true;
+              FireButton(s.Btn);
+            }
+          }
+          else
+          {
+            Debug.Log("JARVIS: Click hit something but no interactive target (hasHit=" + hasHit + ")");
+          }
+        }
+        else
+        {
+          Debug.Log("JARVIS: Click hit nothing (hasHit=" + hasHit + ")");
         }
       }
 
@@ -258,6 +296,7 @@ namespace JarvisVR
       if (hits == null || hits.Length == 0) { selected = default; return false; }
       Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
       selected = hits[0];
+      Debug.Log("JARVIS: Raycast found " + hits.Length + " hits, nearest on " + selected.collider.gameObject.name);
 
       // 1) Buttons take priority over their own panel's backing collider. This also avoids
       // unrelated non-interactive scene colliders swallowing a UI click.
@@ -306,7 +345,7 @@ namespace JarvisVR
       if (button == null || !button.Interactable) return;
       if (playCue) JarvisAudio.Play(JarvisAudio.Cue.SelectTick);
       button.Focus();
-      Debug.Log("JARVIS input: clicked " + button.name);
+      Debug.Log("JARVIS input: firing button click on " + button.name + " (OnClick=" + (button.OnClick != null ? "set" : "null") + ")");
       button.Click();
     }
 

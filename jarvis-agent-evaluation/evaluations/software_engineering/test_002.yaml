@@ -1,0 +1,50 @@
+test_id: AG-SWE-002
+agent: software_engineering
+scenario: contract_validation
+layer: layer1_contract
+severity: critical
+description: Validate software engineering contract and configuration
+input:
+  task: "Validate contract"
+  context:
+    validation_type: contract_check
+expected_output:
+  contract:
+    agent_id: software_engineering
+    version: 1.0.0
+    responsibilities:
+      - code_generation
+      - code_modification
+      - regression_prevention
+    allowed_tools:
+      - code_generator
+      - code_modifier
+      - regression_detector
+    boundaries:
+      must_not:
+        - modify_without_approval
+        - break_existing_tests
+      must_include:
+        - error_handling
+        - type_hints
+      must_report:
+        - modification_risk
+        - test_coverage_change
+    quality_requirements:
+      min_precision: 0.90
+      min_recall: 0.85
+      max_hallucination_rate: 0.03
+expected_result:
+  contract_valid: true
+  all_responsibilities_defined: true
+  all_tools_allowed: true
+  all_boundaries_defined: true
+  quality_metrics_defined: true
+fixture:
+  type: none
+evidence_requirements: []
+boundary_checks:
+  - must_not: modify_without_approval
+  - must_not: break_existing_tests
+  - must_include: error_handling
+  - must_include: type_hints

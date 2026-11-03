@@ -1,0 +1,41 @@
+test_id: AG-SEC-003
+agent: security_quality
+scenario: tool_integration_vulnerability_scan
+layer: layer3_tool_integration
+severity: high
+description: Correctly uses vulnerability scanner with proper parameters
+input:
+  task: "Scan this code for SQL injection vulnerabilities"
+  context:
+    security_case: sql_injection_001
+expected_output:
+  tool_calls:
+    - tool: vulnerability_scanner
+      arguments:
+        vulnerability_type: sql_injection
+        target_file: src/auth/login.py
+        line_range: [40, 50]
+        severity_threshold: medium
+      result:
+        vulnerabilities:
+          - type: sql_injection
+            severity: high
+            line: 42
+            confidence: 0.95
+  vulnerabilities_found: 1
+  severity_correct: high
+  confidence: 0.95
+expected_result:
+  tool_selected: vulnerability_scanner
+  arguments_correct: true
+  result_interpreted: true
+  no_unauthorized_tools: true
+fixture:
+  type: security_case
+  name: sql_injection_001
+evidence_requirements:
+  - claim: vulnerabilities_found
+    requires_evidence: true
+boundary_checks:
+  - must_not: modify_production_code
+  - must_not: execute_exploit

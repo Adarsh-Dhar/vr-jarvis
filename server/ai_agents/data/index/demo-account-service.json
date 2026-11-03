@@ -1,0 +1,98 @@
+{
+ "nodes": [
+  {
+   "id": "auth.owner.checkOwner",
+   "name": "checkOwner",
+   "kind": "function",
+   "file": "auth/owner.ts",
+   "start": 2,
+   "end": 4,
+   "cluster": "auth",
+   "loc": 3
+  },
+  {
+   "id": "auth.requireAuth.requireAuth",
+   "name": "requireAuth",
+   "kind": "function",
+   "file": "auth/requireAuth.ts",
+   "start": 6,
+   "end": 11,
+   "cluster": "auth",
+   "loc": 6
+  },
+  {
+   "id": "db.client.query",
+   "name": "query",
+   "kind": "function",
+   "file": "db/client.ts",
+   "start": 1,
+   "end": 3,
+   "cluster": "db",
+   "loc": 3
+  },
+  {
+   "id": "db.users.repo.deleteUser",
+   "name": "deleteUser",
+   "kind": "function",
+   "file": "db/users.repo.ts",
+   "start": 3,
+   "end": 5,
+   "cluster": "db",
+   "loc": 3
+  },
+  {
+   "id": "lib.token.verifyToken",
+   "name": "verifyToken",
+   "kind": "function",
+   "file": "lib/token.ts",
+   "start": 1,
+   "end": 4,
+   "cluster": "lib",
+   "loc": 4
+  },
+  {
+   "id": "services.account.getAccount",
+   "name": "getAccount",
+   "kind": "function",
+   "file": "services/account.ts",
+   "start": 3,
+   "end": 5,
+   "cluster": "services",
+   "loc": 3
+  },
+  {
+   "id": "services.account.deleteAccount",
+   "name": "deleteAccount",
+   "kind": "function",
+   "file": "services/account.ts",
+   "start": 7,
+   "end": 10,
+   "cluster": "services",
+   "loc": 4
+  }
+ ],
+ "edges": [
+  {
+   "src": "auth.requireAuth.requireAuth",
+   "dst": "lib.token.verifyToken",
+   "type": "calls",
+   "kind": "confirmed"
+  },
+  {
+   "src": "db.users.repo.deleteUser",
+   "dst": "db.client.query",
+   "type": "calls",
+   "kind": "confirmed"
+  }
+ ],
+ "tests": [
+  {
+   "id": "test.tests.account.test",
+   "file": "tests/account.test.ts",
+   "covers": [
+    "services.account.deleteAccount"
+   ]
+  }
+ ],
+ "coverage": {}
+}

@@ -1,0 +1,41 @@
+test_id: AG-SEC-004
+agent: security_quality
+scenario: judgment_false_positive_control
+layer: layer4_judgment
+severity: high
+description: Correctly identifies potential false positives with confidence
+input:
+  task: "Analyze this code for security vulnerabilities"
+  context:
+    repository: python-api-with-tests
+    additional_context:
+      target_file: app/routes/users.py
+      target_function: get_user
+expected_output:
+  vulnerabilities:
+    - type: sql_injection
+      severity: medium
+      confidence: 0.40
+      false_positive_probability: 0.60
+      reason: "Parameterized query used, but string formatting in logging"
+  analysis:
+    false_positive_likely: true
+    requires_manual_review: true
+    explanation: "The actual database query uses parameterized arguments, but there is string formatting in error logging that could be mistaken for SQL injection"
+expected_result:
+  vulnerability_detected: true
+  false_positive_probability_reported: true
+  manual_review_flagged: true
+  explanation_provided: true
+  no_overconfidence: true
+fixture:
+  type: repository
+  name: python-api-with-tests
+evidence_requirements:
+  - claim: vulnerabilities
+    requires_evidence: true
+  - claim: false_positive_likely
+    requires_evidence: true
+boundary_checks:
+  - must_not: modify_production_code
+  - must_not: execute_exploit

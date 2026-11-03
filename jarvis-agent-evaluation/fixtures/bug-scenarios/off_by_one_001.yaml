@@ -1,0 +1,24 @@
+name: off_by_one_001
+description: Off-by-one error in array iteration
+bug_type: off_by_one
+severity: medium
+location:
+  file: src/utils/array.py
+  line: 20
+  function: process_array
+root_cause:
+  description: Loop iterates one past the array length
+  vulnerable_code: "for i in range(len(arr) + 1): result[i] = arr[i]"
+reproduction_steps: "Call process_array with [1, 2, 3]; Observe IndexError"
+expected_fix:
+  description: Fix loop range to not exceed array length
+  fixed_code: "for i in range(len(arr)): result[i] = arr[i]"
+test_case:
+  file: tests/test_array.py
+  function: test_off_by_one
+  expected_to_fail: true
+  should_pass_after_fix: true
+ground_truth:
+  is_bug: true
+  reproducible: true
+  fixable: true

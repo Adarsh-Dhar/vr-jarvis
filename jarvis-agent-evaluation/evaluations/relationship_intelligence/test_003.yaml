@@ -1,0 +1,48 @@
+test_id: AG-REL-003
+agent: relationship_intelligence
+scenario: contract_validation
+layer: layer1_contract
+severity: critical
+description: Validate relationship intelligence contract and configuration
+input:
+  task: "Validate contract"
+  context:
+    validation_type: contract_check
+expected_output:
+  contract:
+    agent_id: relationship_intelligence
+    version: 1.0.0
+    responsibilities:
+      - direct_caller_identification
+      - indirect_caller_identification
+      - dependency_analysis
+      - impact_analysis
+    allowed_tools:
+      - call_graph_builder
+      - dependency_analyzer
+      - impact_calculator
+    boundaries:
+      must_not:
+        - modify_production_code
+        - execute_code
+      must_delegate:
+        - complex_multi_repo_analysis
+      must_report:
+        - circular_dependency
+        - incomplete_graph
+    quality_requirements:
+      min_precision: 0.85
+      min_recall: 0.80
+      max_hallucination_rate: 0.05
+expected_result:
+  contract_valid: true
+  all_responsibilities_defined: true
+  all_tools_allowed: true
+  all_boundaries_defined: true
+  quality_metrics_defined: true
+fixture:
+  type: none
+evidence_requirements: []
+boundary_checks:
+  - must_not: modify_production_code
+  - must_not: execute_code

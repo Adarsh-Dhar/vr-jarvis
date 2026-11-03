@@ -1,0 +1,68 @@
+name: trace_002
+description: Async execution with callbacks and promises
+application_id: async-app
+trace_id: trace-20261103-002
+timestamp: "2026-11-03T11:00:00Z"
+events:
+  - timestamp: "2026-11-03T11:00:00.000Z"
+    event_type: function_call
+    function_name: handleRequest
+    file: src/handler.js
+    line: 10
+    thread_id: main
+    arguments:
+      request_id: "req-002"
+  - timestamp: "2026-11-03T11:00:00.050Z"
+    event_type: async_start
+    function_name: fetchData
+    file: src/api.js
+    line: 20
+    thread_id: main
+    caller: handleRequest
+    promise_id: promise-001
+  - timestamp: "2026-11-03T11:00:00.100Z"
+    event_type: async_start
+    function_name: fetchUser
+    file: src/user.js
+    line: 15
+    thread_id: main
+    caller: fetchData
+    promise_id: promise-002
+  - timestamp: "2026-11-03T11:00:00.300Z"
+    event_type: async_end
+    function_name: fetchUser
+    file: src/user.js
+    line: 25
+    thread_id: main
+    promise_id: promise-002
+    return_value:
+      id: 123
+      name: "John Doe"
+  - timestamp: "2026-11-03T11:00:00.350Z"
+    event_type: async_end
+    function_name: fetchData
+    file: src/api.js
+    line: 30
+    thread_id: main
+    promise_id: promise-001
+    return_value:
+      status: success
+      data: user
+  - timestamp: "2026-11-03T11:00:00.400Z"
+    event_type: function_return
+    function_name: handleRequest
+    file: src/handler.js
+    line: 25
+    thread_id: main
+    return_value:
+      status: success
+ground_truth:
+  call_hierarchy:
+    - handleRequest -> fetchData (async)
+    - fetchData -> fetchUser (async)
+  execution_order: [handleRequest, fetchData, fetchUser]
+  async_operations: 2
+  total_duration_ms: 400
+  promise_chain:
+    - promise-001 (fetchData)
+    - promise-002 (fetchUser)

@@ -1,0 +1,50 @@
+test_id: AG-CODE-004
+agent: code_understanding
+scenario: tool_integration_ast_parsing
+layer: layer3_tool_integration
+severity: high
+description: Correctly uses AST parser to analyze function structure
+input:
+  task: "Analyze the structure of the createUser function"
+  context:
+    repository: python-api-with-tests
+    additional_context:
+      target_file: app/routes/users.py
+      target_function: create_user
+expected_output:
+  tool_calls:
+    - tool: ast_parser
+      arguments:
+        file: app/routes/users.py
+        target: create_user
+        include_decorators: true
+      result:
+        function:
+          name: create_user
+          parameters:
+            - name: user_id
+              type: int
+            - name: user
+              type: UserCreate
+          decorators:
+            - "@router.post"
+          return_type: UserResponse
+  function_structure:
+    name: create_user
+    parameters: 2
+    decorators: 1
+    return_type: UserResponse
+expected_result:
+  tool_selected: ast_parser
+  arguments_correct: true
+  result_interpreted: true
+  no_unauthorized_tools: true
+fixture:
+  type: repository
+  name: python-api-with-tests
+evidence_requirements:
+  - claim: function_structure
+    requires_evidence: true
+boundary_checks:
+  - must_not: modify_production_code
+  - must_not: execute_function

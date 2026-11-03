@@ -1,0 +1,52 @@
+test_id: AG-REP-002
+agent: repository_intelligence
+scenario: detect_monorepo_structure
+layer: layer2_responsibility
+severity: high
+description: Detect and describe monorepo structure
+input:
+  task: "Analyze the repository structure"
+  context:
+    repository: monorepo-java-microservices
+expected_output:
+  structure:
+    type: monorepo
+    monorepo_type: multi_module_maven
+    modules:
+      - name: user-service
+        type: microservice
+        entry_point: user-service/src/main/java/com/example/UserApplication.java
+      - name: order-service
+        type: microservice
+        entry_point: order-service/src/main/java/com/example/OrderApplication.java
+      - name: payment-service
+        type: microservice
+        entry_point: payment-service/src/main/java/com/example/PaymentApplication.java
+      - name: shared-library
+        type: library
+        purpose: shared_code
+    build_system:
+      type: maven
+      root_pom: pom.xml
+  languages:
+    - Java
+    - Kotlin
+  frameworks:
+    - Spring Boot
+    - Spring Cloud
+expected_result:
+  structure_correct: true
+  modules_identified: true
+  build_system_correct: true
+  monorepo_type_correct: true
+fixture:
+  type: repository
+  name: monorepo-java-microservices
+evidence_requirements:
+  - claim: structure
+    requires_evidence: true
+  - claim: modules
+    requires_evidence: true
+boundary_checks:
+  - must_not: modify_production_code
+  - must_not: execute_build

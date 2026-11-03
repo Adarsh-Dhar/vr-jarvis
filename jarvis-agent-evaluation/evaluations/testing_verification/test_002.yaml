@@ -1,0 +1,50 @@
+test_id: AG-TST-002
+agent: testing_verification
+scenario: contract_validation
+layer: layer1_contract
+severity: critical
+description: Validate testing & verification contract and configuration
+input:
+  task: "Validate contract"
+  context:
+    validation_type: contract_check
+expected_output:
+  contract:
+    agent_id: testing_verification
+    version: 1.0.0
+    responsibilities:
+      - test_generation
+      - coverage_analysis
+      - verification_independence
+    allowed_tools:
+      - test_generator
+      - coverage_analyzer
+      - verification_runner
+    boundaries:
+      must_not:
+        - modify_production_code
+        - execute_tests_without_approval
+      must_include:
+        - edge_cases
+        - assertions
+      must_report:
+        - coverage_insufficient
+        - test_flaky
+    quality_requirements:
+      min_precision: 0.90
+      min_recall: 0.85
+      max_hallucination_rate: 0.03
+expected_result:
+  contract_valid: true
+  all_responsibilities_defined: true
+  all_tools_allowed: true
+  all_boundaries_defined: true
+  quality_metrics_defined: true
+fixture:
+  type: none
+evidence_requirements: []
+boundary_checks:
+  - must_not: modify_production_code
+  - must_not: execute_tests_without_approval
+  - must_include: edge_cases
+  - must_include: assertions

@@ -1,0 +1,99 @@
+name: python-api-with-tests
+description: A Python FastAPI application with comprehensive test coverage
+languages:
+  - Python
+frameworks:
+  - FastAPI
+  - Pydantic
+  - pytest
+project_type: backend_api
+entry_points:
+  - file: app/main.py
+    function: app
+build_system:
+  type: pip
+  configuration:
+    package_manager: pip
+    build_command: pip install -r requirements.txt
+    test_command: pytest
+dependencies:
+  runtime:
+    - Python 3.10+
+    - fastapi
+    - uvicorn
+  development:
+    - pytest
+    - pytest-asyncio
+monorepo_structure: None
+generated_files:
+  - __pycache__/
+  - .pytest_cache/
+ground_truth:
+  functions:
+    - name: get_user
+      file: app/routes/users.py
+      line: 15
+      parameters:
+        - name: user_id
+          type: int
+      return_type: UserResponse
+    - name: create_user
+      file: app/routes/users.py
+      line: 30
+      parameters:
+        - name: user
+          type: UserCreate
+      return_type: UserResponse
+    - name: update_user
+      file: app/routes/users.py
+      line: 45
+      parameters:
+        - name: user_id
+          type: int
+        - name: user
+          type: UserUpdate
+      return_type: UserResponse
+    - name: delete_user
+      file: app/routes/users.py
+      line: 60
+      parameters:
+        - name: user_id
+          type: int
+      return_type: Message
+  relationships:
+    - type: calls
+      from: get_user
+      to: get_user_by_id
+      line: 18
+      direct: true
+    - type: calls
+      from: create_user
+      to: create_user_in_db
+      line: 33
+      direct: true
+    - type: calls
+      from: update_user
+      to: update_user_in_db
+      line: 48
+      direct: true
+    - type: calls
+      from: delete_user
+      to: delete_user_from_db
+      line: 63
+      direct: true
+  files:
+    - path: app/main.py
+      lines: 20
+      complexity: low
+    - path: app/routes/users.py
+      lines: 70
+      complexity: medium
+    - path: app/models/user.py
+      lines: 30
+      complexity: low
+    - path: app/schemas/user.py
+      lines: 25
+      complexity: low
+    - path: tests/test_users.py
+      lines: 100
+      complexity: medium

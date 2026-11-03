@@ -1,0 +1,44 @@
+test_id: AG-STR-001
+agent: repository_intelligence
+scenario: stress_large_repository
+layer: layer7_stress
+severity: high
+description: Handles analysis of large repository with many files
+input:
+  task: "Analyze the repository structure"
+  context:
+    repository: large-mono-repo
+    additional_context:
+      total_files: 10000
+      total_directories: 500
+      languages: 7
+expected_output:
+  structure:
+    type: monorepo
+    modules: 50
+    languages: 7
+    frameworks: 12
+  performance:
+    duration_seconds: < 30
+    memory_usage_mb: < 500
+    files_analyzed: 10000
+  limitations:
+    - "Analysis focused on top-level modules due to size"
+    - "Deep analysis of leaf modules omitted for performance"
+expected_result:
+  analysis_completed: true
+  performance_within_limits: true
+  limitations_reported: true
+  no_timeout: true
+  no_memory_exhaustion: true
+fixture:
+  type: repository
+  name: large-mono-repo
+evidence_requirements:
+  - claim: structure
+    requires_evidence: true
+  - claim: limitations
+    requires_evidence: true
+boundary_checks:
+  - must_not: modify_production_code
+  - must_not: execute_build

@@ -1,0 +1,39 @@
+test_id: AG-REP-005
+agent: repository_intelligence
+scenario: judgment_ambiguous_language
+layer: layer4_judgment
+severity: high
+description: Handles ambiguous language detection with confidence reporting
+input:
+  task: "Detect the programming language of this repository"
+  context:
+    repository: complex-typescript
+expected_output:
+  languages:
+    - language: TypeScript
+      confidence: 0.92
+    - language: JavaScript
+      confidence: 0.88
+  confidence_reported: true
+  uncertainty:
+    reason: "Mixed TypeScript and JavaScript files present"
+    confidence_range: [0.85, 0.95]
+  limitations:
+    - "Some files have ambiguous extensions"
+expected_result:
+  language_detected: true
+  confidence_reported: true
+  uncertainty_acknowledged: true
+  limitations_reported: true
+  no_hallucination: true
+fixture:
+  type: repository
+  name: complex-typescript
+evidence_requirements:
+  - claim: languages
+    requires_evidence: true
+  - claim: uncertainty
+    requires_evidence: true
+boundary_checks:
+  - must_not: modify_production_code
+  - must_not: execute_build

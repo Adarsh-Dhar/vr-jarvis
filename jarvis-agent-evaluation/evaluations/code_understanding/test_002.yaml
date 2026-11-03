@@ -1,0 +1,64 @@
+test_id: AG-CODE-002
+agent: code_understanding
+scenario: analyze_function_with_side_effects
+layer: layer2_responsibility
+severity: high
+description: Analyze function with complex side effects
+input:
+  task: "Analyze the processUser function for side effects"
+  context:
+    repository: python-api-with-tests
+    additional_context:
+      target_symbol: update_user
+expected_output:
+  analysis:
+    function:
+      name: update_user
+      file: app/routes/users.py
+      line: 45
+    inputs:
+      - name: user_id
+        type: int
+        required: true
+      - name: user
+        type: UserUpdate
+        required: true
+    outputs:
+      type: UserResponse
+      on_success: updated_user
+      on_failure: error_message
+    side_effects:
+      - type: database_write
+        operation: update
+        table: users
+        description: "Updates user record in database"
+      - type: external_dependency
+        dependency: database
+        description: "Requires database connection"
+    dependencies:
+      - symbol: update_user_in_db
+        type: function_call
+        purpose: "Performs database update"
+    contracts:
+      preconditions:
+        - user_id must exist in database
+        - user object must be valid
+      postconditions:
+        - database record is updated
+        - response contains updated user data
+expected_result:
+  function_identified: true
+  side_effects_identified: true
+  dependencies_identified: true
+  contracts_identified: true
+fixture:
+  type: repository
+  name: python-api-with-tests
+evidence_requirements:
+  - claim: side_effects
+    requires_evidence: true
+  - claim: dependencies
+    requires_evidence: true
+boundary_checks:
+  - must_not: modify_production_code
+  - must_not: execute_function

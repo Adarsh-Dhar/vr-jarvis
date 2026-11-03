@@ -5,7 +5,7 @@ checks:
   type: schema_validity
 description: Dependency Failure test for database_execute
 expected:
-  status: skipped
+  status: error
 fixture: simple-python
 input:
   connection_string: fixtures/repositories/simple-python/main.py

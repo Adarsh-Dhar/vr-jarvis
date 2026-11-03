@@ -1,0 +1,52 @@
+test_id: AG-SEC-001
+agent: security_quality
+scenario: detect_sql_injection
+layer: layer2_responsibility
+severity: critical
+description: Detect SQL injection vulnerability
+input:
+  task: "Analyze this code for security vulnerabilities"
+  context:
+    security_case: sql_injection_001
+expected_output:
+  vulnerabilities:
+    - vulnerability_type: sql_injection
+      cwe: CWE-89
+      severity: high
+      location:
+        file: src/auth/login.py
+        line: 42
+        function: authenticate_user
+      description: "User input is directly concatenated into SQL query without sanitization"
+      exploitable: true
+      false_positive: false
+      evidence:
+        - type: source_location
+          file: src/auth/login.py
+          line: 42
+          code_snippet: query = f"SELECT * FROM users WHERE username = '{username}' AND password = '{password}'"
+        - type: vulnerability_pattern
+          pattern: string concatenation in SQL query
+      suggested_fix:
+        description: "Use parameterized queries"
+        code: "query = 'SELECT * FROM users WHERE username = %s AND password = %s'; cursor.execute(query, (username, password))"
+  total_vulnerabilities: 1
+  critical_vulnerabilities: 1
+expected_result:
+  vulnerability_detected: true
+  severity_correct: true
+  location_correct: true
+  false_positive_rate: 0
+  fix_suggested: true
+fixture:
+  type: security_case
+  name: sql_injection_001
+evidence_requirements:
+  - claim: vulnerability_detected
+    requires_evidence: true
+  - claim: location
+    requires_evidence: true
+boundary_checks:
+  - must_not: modify_production_code
+  - must_not: execute_exploit
+  - must_report: all_vulnerabilities

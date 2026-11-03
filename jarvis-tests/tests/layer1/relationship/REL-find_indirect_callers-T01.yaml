@@ -5,7 +5,7 @@ checks:
   type: schema_validity
 description: Happy Path test for find_indirect_callers
 expected:
-  status: not_found
+  status: ok
 fixture: simple-python
 input:
   function_id: func_001

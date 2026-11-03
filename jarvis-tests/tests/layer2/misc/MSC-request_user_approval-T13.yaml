@@ -7,7 +7,7 @@ checks:
   type: performance
 description: Performance test for request_user_approval
 expected:
-  status: skipped
+  status: error
 fixture: simple-python
 input:
   description: fixtures/repositories/simple-python/main.py

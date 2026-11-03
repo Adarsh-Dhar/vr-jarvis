@@ -1,0 +1,64 @@
+test_id: AG-CONV-001
+agent: conversational
+scenario: intent_understanding
+description: >
+  Verify that the agent correctly understands user intent
+  and resolves references accurately.
+
+layer: layer2_responsibility
+severity: high
+
+fixture:
+  conversation_scenario: context_switch_001
+  additional_context:
+    current_investigation: {}
+
+user_request: >
+  Explain the authenticateUser function
+
+expected_behavior:
+  - Understand the intent to explain a function
+  - Provide accurate technical explanation
+  - Use actual code findings
+  - Do not fabricate information
+
+expected_results:
+  understood_intent: "explain_function"
+  response: >
+    The authenticateUser function validates user credentials by checking
+    the username and password against the database using bcrypt for
+    password verification.
+  context_used: {}
+  clarifications_needed: []
+  references_resolved: []
+  evidence_cited:
+    - function: authenticateUser
+      location: "src/auth/login.py"
+  uncertainty: []
+  status: ok
+
+must_not:
+  - Agree with incorrect assumptions
+  - Fabricate explanations
+  - Pretend to know unavailable information
+
+grading:
+  result_correctness: 40
+  evidence_quality: 25
+  tool_selection: 15
+  completeness: 10
+  output_schema: 10
+
+limits:
+  max_tool_calls: 5
+  max_duration_seconds: 15
+  max_token_consumption: 5000
+  timeout_seconds: 30
+
+metadata:
+  author: "JARVIS Team"
+  created: "2026-11-03T00:00:00Z"
+  tags:
+    - "conversational"
+    - "intent-understanding"
+    - "high"

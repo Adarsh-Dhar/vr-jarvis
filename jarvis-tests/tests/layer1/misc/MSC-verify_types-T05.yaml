@@ -5,7 +5,7 @@ checks:
   type: schema_validity
 description: Boundary Conditions test for verify_types
 expected:
-  status: skipped
+  status: error
 fixture: simple-python
 input:
   file_path: fixtures/repositories/simple-python/main.py

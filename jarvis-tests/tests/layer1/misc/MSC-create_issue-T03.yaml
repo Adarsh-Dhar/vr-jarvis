@@ -5,7 +5,7 @@ checks:
   type: schema_validity
 description: Output Validation test for create_issue
 expected:
-  status: skipped
+  status: error
 fixture: simple-python
 input:
   description: Query database

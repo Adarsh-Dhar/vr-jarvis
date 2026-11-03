@@ -1,0 +1,20 @@
+name: multi_task_001
+description: Multiple tasks in sequence
+messages:
+  - role: user
+    content: Analyze the repository structure
+  - role: agent
+    content: The repository has three main modules: user-service, order-service, and payment-service. It's a Java monorepo using Maven for build management.
+  - role: user
+    content: Now find the entry points
+  - role: agent
+    content: Each service has its own entry point: user-service/src/main/java/com/example/UserApplication.java, order-service/src/main/java/com/example/OrderApplication.java, and payment-service/src/main/java/com/example/PaymentApplication.java.
+  - role: user
+    content: What do they depend on?
+  - role: agent
+    content: order-service depends on both user-service and payment-service via API calls. All three services share a common library called shared-library.
+ground_truth:
+  task_switching: true
+  context_retention: true
+  technical_accuracy: true
+  sequential_reasoning: true

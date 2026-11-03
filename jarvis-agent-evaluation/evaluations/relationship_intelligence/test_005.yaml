@@ -1,0 +1,48 @@
+test_id: AG-STR-002
+agent: relationship_intelligence
+scenario: stress_complex_dependency_graph
+layer: layer7_stress
+severity: high
+description: Handles analysis of complex dependency graph with circular dependencies
+input:
+  task: "Analyze all dependencies and identify circular dependencies"
+  context:
+    repository: complex-dependency-graph
+    additional_context:
+      total_modules: 100
+      total_dependencies: 500
+      expected_circular: 5
+expected_output:
+  dependencies:
+    total: 500
+    direct: 300
+    transitive: 200
+  circular_dependencies:
+    total: 5
+    details:
+      - cycle: [module_a, module_b, module_c]
+        severity: high
+      - cycle: [module_x, module_y]
+        severity: medium
+  performance:
+    duration_seconds: < 45
+    memory_usage_mb: < 1000
+  limitations:
+    - "Transitive analysis limited to depth 10"
+expected_result:
+  analysis_completed: true
+  circular_dependencies_identified: true
+  performance_within_limits: true
+  limitations_reported: true
+  no_timeout: true
+fixture:
+  type: repository
+  name: complex-dependency-graph
+evidence_requirements:
+  - claim: circular_dependencies
+    requires_evidence: true
+  - claim: limitations
+    requires_evidence: true
+boundary_checks:
+  - must_not: modify_production_code
+  - must_not: execute_code

@@ -1,0 +1,94 @@
+agent_id: debugging
+name: Debugging Intelligence Agent
+version: 1.0.0
+
+responsibility: >
+  Identify the root cause of failures through evidence-based investigation,
+  hypothesis testing, and verification rather than suggesting random fixes.
+
+supported_tasks:
+  - Error interpretation
+  - Stack-trace analysis
+  - Root-cause identification
+  - Error propagation tracking
+  - Bug reproduction
+  - Failure-path reconstruction
+  - Hypothesis testing
+  - Fix validation
+
+allowed_tools:
+  - interpret_error
+  - analyze_stack_trace
+  - identify_root_cause
+  - reproduce_failure
+  - test_hypothesis
+  - validate_fix
+
+required_inputs:
+  - name: repository_id
+    type: string
+    required: true
+  - name: error_message
+    type: string
+    required: true
+  - name: stack_trace
+    type: array
+    required: false
+  - name: reproduction_steps
+    type: array
+    required: false
+
+required_output:
+  - name: status
+  - name: root_cause
+  - name: hypothesis_ranking
+  - name: tested_hypotheses
+  - name: evidence
+  - name: confidence
+  - name: suggested_fix
+  - name: fix_validation
+  - name: limitations
+
+decision_rules:
+  - condition: "Multiple plausible causes"
+    action: "Test hypotheses systematically"
+  - condition: "Root cause cannot be determined"
+    action: "Report uncertainty with evidence"
+  - condition: "Fix proposed"
+    action: "Validate fix before claiming success"
+
+boundaries:
+  must_not:
+    - "Suggest random fixes"
+    - "Claim root cause without evidence"
+    - "Accept error message as complete explanation"
+  must_delegate:
+    - "Code modification tasks"
+  must_report:
+    - "Uncertain root causes"
+    - "Unreproducible failures"
+    - "Multiple plausible causes"
+
+dependencies:
+  agents:
+    - code_understanding
+    - runtime_intelligence
+    - relationship_intelligence
+  services:
+    - error_analysis_service
+
+failure_behavior:
+  retry: true
+  preserve_partial: true
+  report_limitations: true
+
+quality_requirements:
+  minimum_precision: 0.95
+  minimum_recall: 0.88
+  evidence_required: true
+  max_hallucination_rate: 0.01
+
+performance_targets:
+  max_latency_seconds: 60
+  max_tool_calls: 20
+  max_token_consumption: 15000

@@ -5,7 +5,7 @@ checks:
   type: schema_validity
 description: Timeout test for docker_inspect_container
 expected:
-  status: skipped
+  status: error
 fixture: simple-python
 input:
   container_id: fixtures/repositories/simple-python/main.py

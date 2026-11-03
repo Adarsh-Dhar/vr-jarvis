@@ -7,7 +7,7 @@ checks:
 description: Empty Input test for get_exports
 expected:
   file_path: present
-  status: skipped
+  status: error
 fixture: simple-python
 input:
   file_path: /Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/repositories/simple-python/main.py

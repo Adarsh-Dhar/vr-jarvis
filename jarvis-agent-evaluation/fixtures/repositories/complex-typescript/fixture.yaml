@@ -1,0 +1,74 @@
+name: complex-typescript
+description: A TypeScript project with modules and complexity for testing
+languages:
+  - TypeScript
+  - JavaScript
+frameworks:
+  - None
+project_type: application
+entry_points:
+  - file: src/index.ts
+    function: main
+build_system:
+  type: npm
+  configuration:
+    package_manager: npm
+    build_command: npm run build
+    test_command: npm test
+dependencies:
+  runtime:
+    - Node.js 16+
+  development:
+    - typescript
+    - "@types/node"
+monorepo_structure: None
+generated_files:
+  - dist/
+  - node_modules/
+ground_truth:
+  functions:
+    - name: main
+      file: src/index.ts
+      line: 10
+      parameters: []
+      return_type: void
+    - name: processData
+      file: src/services/processor.ts
+      line: 15
+      parameters:
+        - name: data
+          type: any
+      return_type: Promise<any>
+    - name: validateInput
+      file: src/utils/validator.ts
+      line: 8
+      parameters:
+        - name: input
+          type: any
+      return_type: boolean
+  relationships:
+    - type: calls
+      from: main
+      to: processData
+      line: 12
+      direct: true
+    - type: calls
+      from: processData
+      to: validateInput
+      line: 20
+      direct: true
+    - type: imports
+      from: src/index.ts
+      to: src/services/processor
+      line: 2
+      direct: true
+  files:
+    - path: src/index.ts
+      lines: 25
+      complexity: medium
+    - path: src/services/processor.ts
+      lines: 40
+      complexity: medium
+    - path: src/utils/validator.ts
+      lines: 20
+      complexity: low

@@ -1,0 +1,48 @@
+test_id: AG-ORCH-003
+agent: orchestrator
+scenario: contract_validation
+layer: layer1_contract
+severity: critical
+description: Validate orchestrator contract and configuration
+input:
+  task: "Validate contract"
+  context:
+    validation_type: contract_check
+expected_output:
+  contract:
+    agent_id: orchestrator
+    version: 1.0.0
+    responsibilities:
+      - task_decomposition
+      - agent_selection
+      - dependency_planning
+    allowed_tools:
+      - task_analyzer
+      - agent_registry
+      - dependency_graph
+    boundaries:
+      must_not:
+        - modify_production_code
+        - execute_arbitrary_commands
+      must_delegate:
+        - complex_analysis
+        - multi_agent_tasks
+      must_report:
+        - unable_to_decompose
+        - agent_unavailable
+    quality_requirements:
+      min_precision: 0.85
+      min_recall: 0.80
+      max_hallucination_rate: 0.05
+expected_result:
+  contract_valid: true
+  all_responsibilities_defined: true
+  all_tools_allowed: true
+  all_boundaries_defined: true
+  quality_metrics_defined: true
+fixture:
+  type: none
+evidence_requirements: []
+boundary_checks:
+  - must_not: modify_production_code
+  - must_not: execute_arbitrary_commands

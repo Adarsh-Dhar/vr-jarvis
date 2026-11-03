@@ -1030,9 +1030,12 @@ namespace JarvisVR
 
         private void SelectNode(string nodeId)
         {
+            Debug.Log("JARVIS: SelectNode called for " + nodeId);
             JarvisAudio.Play(JarvisAudio.Cue.SelectTick);
             _selectedNode = nodeId;
             _codeTab = "CODE";
+            _hot.Clear();
+            _hot.Add(nodeId);
             if (_graphObjects.TryGetValue(nodeId, out GameObject selected))
             {
                 selected.transform.localScale = Vector3.one * 35f;
@@ -1044,6 +1047,7 @@ namespace JarvisVR
                     pair.Value.transform.localScale = Vector3.one * 25f;
                 }
             }
+            ApplyGraphOverlays();
             ShowMode("CODE");
         }
 

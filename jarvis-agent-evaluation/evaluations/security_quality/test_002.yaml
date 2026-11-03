@@ -1,0 +1,47 @@
+test_id: AG-SEC-002
+agent: security_quality
+scenario: contract_validation
+layer: layer1_contract
+severity: critical
+description: Validate security & quality contract and configuration
+input:
+  task: "Validate contract"
+  context:
+    validation_type: contract_check
+expected_output:
+  contract:
+    agent_id: security_quality
+    version: 1.0.0
+    responsibilities:
+      - vulnerability_detection
+      - quality_assessment
+      - false_positive_control
+    allowed_tools:
+      - vulnerability_scanner
+      - quality_analyzer
+      - false_positive_filter
+    boundaries:
+      must_not:
+        - modify_production_code
+        - execute_exploit
+      must_report:
+        - all_vulnerabilities
+        - false_positive_uncertainty
+    quality_requirements:
+      min_precision: 0.90
+      min_recall: 0.85
+      max_hallucination_rate: 0.02
+      max_false_positive_rate: 0.10
+expected_result:
+  contract_valid: true
+  all_responsibilities_defined: true
+  all_tools_allowed: true
+  all_boundaries_defined: true
+  quality_metrics_defined: true
+fixture:
+  type: none
+evidence_requirements: []
+boundary_checks:
+  - must_not: modify_production_code
+  - must_not: execute_exploit
+  - must_report: all_vulnerabilities

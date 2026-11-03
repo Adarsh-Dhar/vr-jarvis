@@ -1,0 +1,144 @@
+agent_id: repository_intelligence
+name: Repository Intelligence Agent
+version: 1.0.0
+
+responsibility: >
+  Identify and understand the structure of unfamiliar software repositories,
+  including languages, frameworks, entry points, build systems, and project boundaries.
+
+supported_tasks:
+  - Language detection
+  - Framework detection
+  - Project classification
+  - Entry-point discovery
+  - Build-system discovery
+  - Monorepo analysis
+  - Dependency discovery
+  - Configuration analysis
+  - Generated code detection
+  - Incremental indexing
+
+allowed_tools:
+  - detect_languages
+  - detect_frameworks
+  - classify_project
+  - find_entry_points
+  - detect_build_system
+  - analyze_monorepo
+  - discover_dependencies
+  - analyze_configuration
+  - detect_generated_code
+  - incremental_index
+
+required_inputs:
+  - name: repository_id
+    type: string
+    required: true
+    description: "ID of the repository to analyze"
+  - name: repository_path
+    type: string
+    required: true
+    description: "Path to the repository"
+  - name: analysis_scope
+    type: string
+    required: false
+    description: "Scope of analysis (full, incremental, partial)"
+
+required_output:
+  - name: status
+    type: string
+    required: true
+    description: "Overall status of the analysis"
+  - name: languages
+    type: array
+    required: true
+    description: "Languages detected in the repository"
+  - name: frameworks
+    type: array
+    required: true
+    description: "Frameworks and versions detected"
+  - name: project_type
+    type: string
+    required: true
+    description: "Type of project (application, library, game, service)"
+  - name: entry_points
+    type: array
+    required: true
+    description: "Application entry points discovered"
+  - name: build_system
+    type: object
+    required: true
+    description: "Build and package system information"
+  - name: dependencies
+    type: object
+    required: true
+    description: "Declared and resolved dependencies"
+  - name: monorepo_structure
+    type: object
+    required: true
+    description: "Monorepo structure if applicable"
+  - name: generated_files
+    type: array
+    required: true
+    description: "Files identified as generated"
+  - name: limitations
+    type: array
+    required: true
+    description: "Known limitations or unsupported areas"
+
+decision_rules:
+  - condition: "Language not supported"
+    action: "Report limitation"
+    description: "Agent must report when it cannot analyze a language"
+  - condition: "Framework cannot be determined"
+    action: "Report as unknown"
+    description: "Agent must not guess framework versions"
+  - condition: "Repository is a monorepo"
+    action: "Analyze package boundaries"
+    description: "Agent must identify workspace and package boundaries"
+  - condition: "Files are missing or incomplete"
+    action: "Report partial analysis"
+    description: "Agent must report when analysis is incomplete"
+  - condition: "Generated code detected"
+    action: "Mark and exclude from analysis"
+    description: "Agent must distinguish generated from authored code"
+
+boundaries:
+  must_not:
+    - "Invent languages or frameworks"
+    - "Guess framework versions without evidence"
+    - "Mix packages from different workspaces"
+    - "Treat generated code as authored"
+    - "Claim complete analysis when files are missing"
+    - "Analyze beyond repository boundaries"
+  must_delegate:
+    - "Detailed code understanding tasks"
+    - "Relationship discovery tasks"
+  must_report:
+    - "Unsupported languages"
+    - "Unknown frameworks"
+    - "Partial repository analysis"
+    - "Generated code that could not be identified"
+
+dependencies:
+  agents:
+    - code_understanding
+  services:
+    - code_indexing_service
+    - dependency_resolver_service
+
+failure_behavior:
+  retry: true
+  preserve_partial: true
+  report_limitations: true
+
+quality_requirements:
+  minimum_precision: 0.98
+  minimum_recall: 0.95
+  evidence_required: true
+  max_hallucination_rate: 0.01
+
+performance_targets:
+  max_latency_seconds: 45
+  max_tool_calls: 12
+  max_token_consumption: 8000

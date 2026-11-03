@@ -7,7 +7,7 @@ checks:
   type: performance
 description: Performance test for run_regression_tests
 expected:
-  status: skipped
+  status: blocked
 fixture: simple-python
 input:
   file_path: fixtures/repositories/simple-python/main.py

@@ -13,4 +13,4 @@ MonoBehaviour:
   m_Name: JarvisServerSettings
   m_EditorClassIdentifier: 
   ServerUrl: http://127.0.0.1:8000
-  Token: dev-token
+  Token: 5a9dae73b3572cf05242e21d01fbfef964ab938bf3ec9031e85f448457c63ea1

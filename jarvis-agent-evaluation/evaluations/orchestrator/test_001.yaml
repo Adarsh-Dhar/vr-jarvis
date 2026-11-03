@@ -1,0 +1,43 @@
+test_id: AG-ORCH-001
+agent: orchestrator
+scenario: task_decomposition_simple
+layer: layer2_responsibility
+severity: high
+description: Orchestrator correctly decomposes a simple analysis task into subtasks
+input:
+  task: "Analyze the repository structure and find all entry points"
+  context:
+    repository: simple-python
+expected_output:
+  subtasks:
+    - task: detect_repository_structure
+      assigned_to: repository_intelligence
+      priority: high
+    - task: find_entry_points
+      assigned_to: repository_intelligence
+      priority: high
+  execution_plan:
+    - step: 1
+      agent: repository_intelligence
+      action: detect_repository_structure
+    - step: 2
+      agent: repository_intelligence
+      action: find_entry_points
+  dependencies: []
+expected_result:
+  decomposition_complete: true
+  agents_selected: ["repository_intelligence"]
+  dependencies_identified: []
+  priority_correct: true
+fixture:
+  type: repository
+  name: simple-python
+evidence_requirements:
+  - subtask: detect_repository_structure
+    requires_evidence: true
+  - subtask: find_entry_points
+    requires_evidence: true
+boundary_checks:
+  - must_not: modify_production_code
+  - must_not: execute_arbitrary_commands
+  - must_delegate: complex_analysis

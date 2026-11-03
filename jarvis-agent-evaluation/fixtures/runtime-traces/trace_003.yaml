@@ -1,0 +1,106 @@
+name: trace_003
+description: Parallel execution with multiple threads
+application_id: parallel-app
+trace_id: trace-20261103-003
+timestamp: "2026-11-03T12:00:00Z"
+events:
+  - timestamp: "2026-11-03T12:00:00.000Z"
+    event_type: function_call
+    function_name: processBatch
+    file: src/batch.py
+    line: 10
+    thread_id: main
+    arguments:
+      batch_id: "batch-001"
+      items: 100
+  - timestamp: "2026-11-03T12:00:00.050Z"
+    event_type: thread_start
+    thread_id: worker-1
+    parent_thread: main
+    function: processItem
+  - timestamp: "2026-11-03T12:00:00.050Z"
+    event_type: thread_start
+    thread_id: worker-2
+    parent_thread: main
+    function: processItem
+  - timestamp: "2026-11-03T12:00:00.050Z"
+    event_type: thread_start
+    thread_id: worker-3
+    parent_thread: main
+    function: processItem
+  - timestamp: "2026-11-03T12:00:00.100Z"
+    event_type: function_call
+    function_name: processItem
+    file: src/batch.py
+    line: 30
+    thread_id: worker-1
+    arguments:
+      item_id: 1
+  - timestamp: "2026-11-03T12:00:00.100Z"
+    event_type: function_call
+    function_name: processItem
+    file: src/batch.py
+    line: 30
+    thread_id: worker-2
+    arguments:
+      item_id: 2
+  - timestamp: "2026-11-03T12:00:00.100Z"
+    event_type: function_call
+    function_name: processItem
+    file: src/batch.py
+    line: 30
+    thread_id: worker-3
+    arguments:
+      item_id: 3
+  - timestamp: "2026-11-03T12:00:00.200Z"
+    event_type: function_return
+    function_name: processItem
+    file: src/batch.py
+    line: 40
+    thread_id: worker-1
+    return_value:
+      status: success
+      item_id: 1
+  - timestamp: "2026-11-03T12:00:00.250Z"
+    event_type: function_return
+    function_name: processItem
+    file: src/batch.py
+    line: 40
+    thread_id: worker-2
+    return_value:
+      status: success
+      item_id: 2
+  - timestamp: "2026-11-03T12:00:00.300Z"
+    event_type: function_return
+    function_name: processItem
+    file: src/batch.py
+    line: 40
+    thread_id: worker-3
+    return_value:
+      status: success
+      item_id: 3
+  - timestamp: "2026-11-03T12:00:00.350Z"
+    event_type: thread_end
+    thread_id: worker-1
+  - timestamp: "2026-11-03T12:00:00.350Z"
+    event_type: thread_end
+    thread_id: worker-2
+  - timestamp: "2026-11-03T12:00:00.350Z"
+    event_type: thread_end
+    thread_id: worker-3
+  - timestamp: "2026-11-03T12:00:00.400Z"
+    event_type: function_return
+    function_name: processBatch
+    file: src/batch.py
+    line: 20
+    thread_id: main
+    return_value:
+      status: success
+      processed: 3
+ground_truth:
+  call_hierarchy:
+    - processBatch -> processItem (parallel x3)
+  execution_order: [processBatch, processItem, processItem, processItem]
+  parallel_threads: 3
+  total_duration_ms: 400
+  concurrent_operations: true

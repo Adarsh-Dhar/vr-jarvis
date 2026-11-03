@@ -1,0 +1,58 @@
+test_id: AG-VIS-001
+agent: visualization
+scenario: generate_call_graph
+layer: layer2_responsibility
+severity: high
+description: Generate a call graph visualization from repository analysis
+input:
+  task: "Generate a call graph visualization for this repository"
+  context:
+    repository: simple-python
+    additional_context:
+      focus: main function
+      depth: 2
+expected_output:
+  visualization:
+    type: call_graph
+    format: mermaid
+    graph_definition: "graph TD\n    A[main] --> B[helper]\n    style A fill:#f9f,stroke:#333,stroke-width:2px\n    style B fill:#bbf,stroke:#333,stroke-width:2px"
+  nodes:
+    - id: main
+      label: main
+      file: src/main.py
+      line: 5
+      type: function
+    - id: helper
+      label: helper
+      file: src/helper.py
+      line: 3
+      type: function
+  edges:
+    - from: main
+      to: helper
+      type: calls
+      line: 8
+  metadata:
+    total_nodes: 2
+    total_edges: 1
+    max_depth: 1
+expected_result:
+  visualization_generated: true
+  format_correct: true
+  nodes_correct: true
+  edges_correct: true
+  metadata_accurate: true
+fixture:
+  type: repository
+  name: simple-python
+evidence_requirements:
+  - claim: visualization_generated
+    requires_evidence: true
+  - claim: nodes
+    requires_evidence: true
+  - claim: edges
+    requires_evidence: true
+boundary_checks:
+  - must_not: modify_production_code
+  - must_not: execute_code
+  - must_include: source_locations

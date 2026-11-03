@@ -1,0 +1,345 @@
+# Test Case Schema
+# This schema defines the structure for agent test cases
+
+# Required fields
+test_id:
+  type: string
+  description: Unique identifier for the test (e.g., "AG-REL-001")
+  required: true
+  pattern: "^AG-[A-Z]+-\\d+$"
+
+agent:
+  type: string
+  description: ID of the agent being tested
+  required: true
+  example: "relationship_intelligence"
+
+scenario:
+  type: string
+  description: Name of the scenario being tested
+  required: true
+  example: "direct_and_indirect_callers"
+
+description:
+  type: string
+  description: >
+    Detailed description of what the test validates.
+    Should explain the purpose and expected behavior.
+  required: true
+  example: >
+    Verify that the agent discovers direct and
+    indirect callers without mixing the two.
+
+# Test configuration
+layer:
+  type: string
+  description: Testing layer (1-7 from the testing framework)
+  required: true
+  enum:
+    - layer1_contract
+    - layer2_responsibility
+    - layer3_integration
+    - layer4_judgment
+    - layer5_delegation
+    - layer6_end_to_end
+    - layer7_stress
+  example: "layer2_responsibility"
+
+severity:
+  type: string
+  description: Severity of the test
+  required: true
+  enum:
+    - critical
+    - high
+    - medium
+    - low
+  example: "critical"
+
+# Fixture configuration
+fixture:
+  type: object
+  description: Test fixture to use
+  required: true
+  properties:
+    repository:
+      type: string
+      description: Repository fixture name
+      example: "simple-python"
+    runtime_trace:
+      type: string
+      description: Runtime trace fixture name (if applicable)
+      example: "trace_001"
+    security_case:
+      type: string
+      description: Security case fixture name (if applicable)
+      example: "sql_injection_001"
+    bug_scenario:
+      type: string
+      description: Bug scenario fixture name (if applicable)
+      example: "intermittent_failure_001"
+    conversation_scenario:
+      type: string
+      description: Conversation scenario fixture name (if applicable)
+      example: "context_switch_001"
+    multi_agent_scenario:
+      type: string
+      description: Multi-agent scenario fixture name (if applicable)
+      example: "delegation_001"
+    additional_context:
+      type: object
+      description: Additional context or configuration
+      example:
+        target_symbol: "target"
+        investigation_scope: "repository"
+
+# User request
+user_request:
+  type: string
+  description: The natural language request given to the agent
+  required: true
+  example: >
+    Find all functions that call target directly
+    and indirectly.
+
+# Expected behavior
+expected_behavior:
+  type: array
+  description: >
+    List of behaviors the agent is expected to demonstrate.
+    These are steps or actions the agent should take.
+  required: true
+  items:
+    type: string
+  example:
+    - Find the target function
+    - Retrieve direct callers
+    - Investigate transitive callers
+    - Separate direct and indirect results
+    - Include source locations
+    - Report unresolved relationships
+
+# Expected results
+expected_results:
+  type: object
+  description: >
+    Expected output from the agent.
+    Structure depends on the agent's required_output schema.
+  required: true
+  example:
+    direct_callers:
+      - alpha
+      - beta
+    indirect_callers:
+      - gamma
+      - delta
+    evidence:
+      - source: "src/main.py"
+        line: 42
+        symbol: "alpha"
+        type: "direct_caller"
+    confidence: 0.95
+    status: "ok"
+
+# Forbidden behaviors
+must_not:
+  type: array
+  description: >
+    Behaviors the agent must NOT demonstrate.
+    These are critical violations that will fail the test.
+  required: true
+  items:
+    type: string
+  example:
+    - Invent callers
+    - Include unrelated functions
+    - Claim unresolved calls are confirmed
+    - Mix repositories
+
+# Grading configuration
+grading:
+  type: object
+  description: Scoring weights for this test
+  required: true
+  properties:
+    result_correctness:
+      type: number
+      description: Weight for result correctness (0-100)
+      minimum: 0
+      maximum: 100
+      example: 40
+    evidence_quality:
+      type: number
+      description: Weight for evidence quality (0-100)
+      minimum: 0
+      maximum: 100
+      example: 25
+    tool_selection:
+      type: number
+      description: Weight for tool selection (0-100)
+      minimum: 0
+      maximum: 100
+      example: 15
+    completeness:
+      type: number
+      description: Weight for completeness (0-100)
+      minimum: 0
+      maximum: 100
+      example: 10
+    output_schema:
+      type: number
+      description: Weight for output schema compliance (0-100)
+      minimum: 0
+      maximum: 100
+      example: 10
+    judgment:
+      type: number
+      description: Weight for judgment under uncertainty (0-100)
+      minimum: 0
+      maximum: 100
+      example: 0
+    boundary_compliance:
+      type: number
+      description: Weight for boundary compliance (0-100)
+      minimum: 0
+      maximum: 100
+      example: 0
+    efficiency:
+      type: number
+      description: Weight for efficiency (0-100)
+      minimum: 0
+      maximum: 100
+      example: 0
+
+# Test limits
+limits:
+  type: object
+  description: Limits for the test execution
+  required: true
+  properties:
+    max_tool_calls:
+      type: number
+      description: Maximum allowed tool calls
+      example: 15
+    max_duration_seconds:
+      type: number
+      description: Maximum allowed duration
+      example: 30
+    max_token_consumption:
+      type: number
+      description: Maximum allowed token consumption
+      example: 10000
+    timeout_seconds:
+      type: number
+      description: Timeout for the entire test
+      example: 60
+
+# Metadata
+metadata:
+  type: object
+  description: Additional metadata about the test
+  required: false
+  properties:
+    author:
+      type: string
+      description: Test author
+    created:
+      type: string
+      description: Creation date (ISO 8601)
+    modified:
+      type: string
+      description: Last modification date (ISO 8601)
+    tags:
+      type: array
+      description: Tags for categorization
+      items:
+        type: string
+    related_tests:
+      type: array
+      description: Related test IDs
+      items:
+        type: string
+    notes:
+      type: string
+      description: Additional notes
+
+# Example complete test case
+example_test_case:
+  test_id: AG-REL-001
+  agent: relationship_intelligence
+  scenario: direct_and_indirect_callers
+  description: >
+    Verify that the agent discovers direct and
+    indirect callers without mixing the two.
+
+  layer: layer2_responsibility
+  severity: critical
+
+  fixture:
+    repository: simple-python
+    additional_context:
+      target_symbol: "target"
+      investigation_scope: "repository"
+
+  user_request: >
+    Find all functions that call target directly
+    and indirectly.
+
+  expected_behavior:
+    - Find the target function
+    - Retrieve direct callers
+    - Investigate transitive callers
+    - Separate direct and indirect results
+    - Include source locations
+    - Report unresolved relationships
+
+  expected_results:
+    direct_callers:
+      - alpha
+      - beta
+    indirect_callers:
+      - gamma
+      - delta
+    evidence:
+      - source: "src/main.py"
+        line: 42
+        symbol: "alpha"
+        type: "direct_caller"
+      - source: "src/utils.py"
+        line: 15
+        symbol: "gamma"
+        type: "indirect_caller"
+    confidence: 0.95
+    status: "ok"
+    limitations: []
+
+  must_not:
+    - Invent callers
+    - Include unrelated functions
+    - Claim unresolved calls are confirmed
+    - Mix repositories
+
+  grading:
+    result_correctness: 40
+    evidence_quality: 25
+    tool_selection: 15
+    completeness: 10
+    output_schema: 10
+
+  limits:
+    max_tool_calls: 15
+    max_duration_seconds: 30
+    max_token_consumption: 10000
+    timeout_seconds: 60
+
+  metadata:
+    author: "JARVIS Team"
+    created: "2026-11-03T00:00:00Z"
+    tags:
+      - "relationship"
+      - "callers"
+      - "critical"
+    notes: >
+      This is a foundational test for the Relationship Intelligence
+      agent. It validates the core responsibility of discovering
+      callers and distinguishing between direct and indirect relationships.

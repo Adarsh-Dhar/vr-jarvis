@@ -1,0 +1,365 @@
+# Agent Specification Schema
+# This schema defines the contract for all JARVIS agents
+
+# Required fields
+agent_id:
+  type: string
+  description: Unique identifier for the agent (e.g., "relationship_intelligence")
+  required: true
+  pattern: "^[a-z_]+$"
+
+name:
+  type: string
+  description: Human-readable name of the agent
+  required: true
+  example: "Relationship Intelligence Agent"
+
+version:
+  type: string
+  description: Version of the agent specification
+  required: true
+  pattern: "^\\d+\\.\\d+\\.\\d+$"
+
+# Core responsibility
+responsibility:
+  type: string
+  description: >
+    Exactly what the agent is responsible for.
+    Should be a clear, concise statement of the agent's job.
+  required: true
+  example: "Discover and explain structural relationships between code elements across repositories."
+
+supported_tasks:
+  type: array
+  description: List of tasks the agent is expected to accomplish
+  required: true
+  items:
+    type: string
+  example:
+    - Find direct callers
+    - Find indirect callers
+    - Build call graphs
+    - Calculate change impact
+
+# Tool permissions
+allowed_tools:
+  type: array
+  description: Tools the agent is allowed to use
+  required: true
+  items:
+    type: string
+  example:
+    - search_symbols
+    - get_symbol_definition
+    - get_call_hierarchy
+
+# Input/output contracts
+required_inputs:
+  type: object
+  description: Information the agent needs to operate
+  required: true
+  properties:
+    - name: string
+      type: string
+      description: Input field name
+      required: boolean
+      description: string
+  example:
+    - name: repository_id
+      type: string
+      required: true
+      description: "ID of the repository to analyze"
+    - name: target_symbol
+      type: string
+      required: true
+      description: "Symbol to investigate"
+
+required_output:
+  type: object
+  description: Structured results the agent must produce
+  required: true
+  properties:
+    - name: string
+      type: string
+      description: Output field name
+      required: boolean
+      description: string
+  example:
+    - name: status
+      type: string
+      required: true
+      description: "Overall status of the investigation"
+    - name: discovered_relationships
+      type: array
+      required: true
+      description: "List of discovered relationships"
+    - name: evidence
+      type: object
+      required: true
+      description: "Supporting evidence for findings"
+    - name: confidence
+      type: number
+      required: true
+      description: "Confidence score (0-1)"
+
+# Decision rules
+decision_rules:
+  type: array
+  description: Conditions under which the agent acts, delegates, or stops
+  required: true
+  items:
+    type: object
+    properties:
+      condition: string
+      action: string
+      description: string
+  example:
+    - condition: "Language not supported"
+      action: "Report limitation"
+      description: "Agent must report when it cannot analyze the language"
+    - condition: "Insufficient information"
+      action: "Request clarification"
+      description: "Agent must ask for more information when needed"
+    - condition: "Task requires specialist knowledge"
+      action: "Delegate to appropriate agent"
+      description: "Agent must delegate when outside its expertise"
+
+# Boundaries
+boundaries:
+  type: object
+  description: What the agent must never do
+  required: true
+  properties:
+    must_not:
+      type: array
+      description: Actions the agent is forbidden from taking
+      items:
+        type: string
+      example:
+        - "Invent relationships without evidence"
+        - "Mix repositories in a single analysis"
+        - "Claim runtime execution from static analysis"
+    must_delegate:
+      type: array
+      description: Scenarios where the agent must delegate to another agent
+      items:
+        type: string
+      example:
+        - "Code modification tasks"
+        - "Security vulnerability exploitation"
+    must_report:
+      type: array
+      description: Scenarios where the agent must report inability
+      items:
+        type: string
+      example:
+        - "Unsupported language"
+        - "Incomplete analysis due to missing files"
+
+# Dependencies
+dependencies:
+  type: object
+  description: Other agents or services the agent relies on
+  required: true
+  properties:
+    agents:
+      type: array
+      description: Other agents this agent may delegate to
+      items:
+        type: string
+      example:
+        - "repository_intelligence"
+        - "code_understanding"
+    services:
+      type: array
+      description: External services required
+      items:
+        type: string
+      example:
+        - "code_indexing_service"
+        - "runtime_telemetry_service"
+
+# Failure behavior
+failure_behavior:
+  type: object
+  description: What the agent does when it cannot complete a task
+  required: true
+  properties:
+    retry:
+      type: boolean
+      description: Whether the agent should retry on recoverable errors
+    preserve_partial:
+      type: boolean
+      description: Whether to preserve partial findings with limitations
+    report_limitations:
+      type: boolean
+      description: Whether to report what could not be completed
+    example:
+      retry: true
+      preserve_partial: true
+      report_limitations: true
+
+# Quality requirements
+quality_requirements:
+  type: object
+  description: How the agent's work is evaluated
+  required: true
+  properties:
+    minimum_precision:
+      type: number
+      description: Minimum acceptable precision (0-1)
+      minimum: 0
+      maximum: 1
+      example: 0.98
+    minimum_recall:
+      type: number
+      description: Minimum acceptable recall (0-1)
+      minimum: 0
+      maximum: 1
+      example: 0.95
+    evidence_required:
+      type: boolean
+      description: Whether all claims must be supported by evidence
+      example: true
+    max_hallucination_rate:
+      type: number
+      description: Maximum acceptable rate of unsupported claims (0-1)
+      minimum: 0
+      maximum: 1
+      example: 0.02
+
+# Performance targets
+performance_targets:
+  type: object
+  description: Expected latency and resource consumption
+  required: true
+  properties:
+    max_latency_seconds:
+      type: number
+      description: Maximum acceptable latency for typical tasks
+      example: 30
+    max_tool_calls:
+      type: number
+      description: Maximum acceptable number of tool calls per task
+      example: 15
+    max_token_consumption:
+      type: number
+      description: Maximum acceptable token consumption per task
+      example: 10000
+
+# Example complete specification
+example_specification:
+  agent_id: relationship_intelligence
+  name: Relationship Intelligence Agent
+  version: 1.0.0
+
+  responsibility: >
+    Discover and explain structural relationships
+    between code elements across repositories.
+
+  supported_tasks:
+    - Find direct callers
+    - Find indirect callers
+    - Find outgoing dependencies
+    - Find incoming dependencies
+    - Build call graphs
+    - Trace cross-module relationships
+    - Calculate change impact
+
+  allowed_tools:
+    - search_symbols
+    - get_symbol_definition
+    - get_symbol_references
+    - get_call_hierarchy
+    - build_call_graph
+    - build_dependency_graph
+    - find_all_paths_between_symbols
+
+  required_inputs:
+    - name: repository_id
+      type: string
+      required: true
+      description: ID of the repository to analyze
+    - name: target_symbol
+      type: string
+      required: true
+      description: Symbol to investigate
+    - name: investigation_scope
+      type: string
+      required: false
+      description: Scope of investigation (local, module, repository)
+
+  required_output:
+    - name: status
+      type: string
+      required: true
+      description: Overall status of the investigation
+    - name: discovered_relationships
+      type: array
+      required: true
+      description: List of discovered relationships
+    - name: unresolved_relationships
+      type: array
+      required: true
+      description: List of relationships that could not be resolved
+    - name: evidence
+      type: object
+      required: true
+      description: Supporting evidence for findings
+    - name: confidence
+      type: number
+      required: true
+      description: Confidence score (0-1)
+    - name: limitations
+      type: array
+      required: true
+      description: Known limitations of the analysis
+
+  decision_rules:
+    - condition: "Language not supported"
+      action: "Report limitation"
+      description: "Agent must report when it cannot analyze the language"
+    - condition: "Dynamic relationship detected"
+      action: "Mark as unresolved"
+      description: "Agent must identify relationships that cannot be statically resolved"
+    - condition: "Cross-repository analysis requested"
+      action: "Delegate to Orchestrator"
+      description: "Agent must delegate for multi-repository tasks"
+
+  boundaries:
+    must_not:
+      - "Invent relationships without evidence"
+      - "Distinguish direct and indirect calls incorrectly"
+      - "Mix repositories in a single analysis"
+      - "Claim runtime execution from static analysis"
+      - "Report unresolved calls as confirmed"
+    must_delegate:
+      - "Multi-repository investigations"
+      - "Code modification tasks"
+    must_report:
+      - "Unsupported language"
+      - "Incomplete analysis due to missing files"
+      - "Dynamic relationships that cannot be resolved"
+
+  dependencies:
+    agents:
+      - repository_intelligence
+      - code_understanding
+    services:
+      - code_indexing_service
+
+  failure_behavior:
+    retry: true
+    preserve_partial: true
+    report_limitations: true
+
+  quality_requirements:
+    minimum_precision: 0.98
+    minimum_recall: 0.95
+    evidence_required: true
+    max_hallucination_rate: 0.02
+
+  performance_targets:
+    max_latency_seconds: 30
+    max_tool_calls: 15
+    max_token_consumption: 10000

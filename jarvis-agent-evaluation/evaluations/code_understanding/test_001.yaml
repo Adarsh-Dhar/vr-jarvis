@@ -1,0 +1,72 @@
+test_id: AG-CODE-001
+agent: code_understanding
+scenario: function_with_side_effects
+description: >
+  Verify that the agent correctly identifies side effects
+  and distinguishes actual implementation from comments.
+
+layer: layer2_responsibility
+severity: high
+
+fixture:
+  repository: simple-python
+  additional_context:
+    file_path: "src/helper.py"
+    symbol: "helper"
+
+user_request: >
+  Explain what the helper function does and what side effects it has.
+
+expected_behavior:
+  - Parse the function
+  - Identify the function's purpose
+  - Detect side effects
+  - Trust implementation over comments
+  - Report any uncertainty
+
+expected_results:
+  behavior_description: "The helper function takes an integer and returns its square"
+  inputs:
+    - name: x
+      type: int
+  outputs:
+    - type: int
+  side_effects: []
+  exceptions: []
+  contracts:
+    - precondition: x is a number
+    - postcondition: returns x squared
+  evidence:
+    - source: "src/helper.py"
+      line: 3
+      type: "function_definition"
+  confidence: 0.95
+  status: ok
+  limitations: []
+
+must_not:
+  - Trust incorrect comments over implementation
+  - Ignore actual implementation
+  - Fabricate side effects
+  - Claim certainty for dynamic behavior
+
+grading:
+  result_correctness: 40
+  evidence_quality: 25
+  tool_selection: 15
+  completeness: 10
+  output_schema: 10
+
+limits:
+  max_tool_calls: 10
+  max_duration_seconds: 25
+  max_token_consumption: 8000
+  timeout_seconds: 50
+
+metadata:
+  author: "JARVIS Team"
+  created: "2026-11-03T00:00:00Z"
+  tags:
+    - "code-understanding"
+    - "side-effects"
+    - "high"

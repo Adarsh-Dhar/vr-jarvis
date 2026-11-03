@@ -1,0 +1,45 @@
+name: simple-python
+description: A simple Python project for basic agent testing
+languages:
+  - Python
+frameworks: []
+project_type: application
+entry_points:
+  - file: src/main.py
+    function: main
+build_system:
+  type: None
+  configuration: {}
+dependencies:
+  runtime:
+    - "Python 3.9+"
+  development: []
+monorepo_structure: None
+generated_files: []
+ground_truth:
+  functions:
+    - name: main
+      file: src/main.py
+      line: 5
+      parameters: []
+      return_type: None
+    - name: helper
+      file: src/helper.py
+      line: 3
+      parameters:
+        - name: x
+          type: int
+      return_type: int
+  relationships:
+    - type: calls
+      from: main
+      to: helper
+      line: 8
+      direct: true
+  files:
+    - path: src/main.py
+      lines: 15
+      complexity: low
+    - path: src/helper.py
+      lines: 10
+      complexity: low

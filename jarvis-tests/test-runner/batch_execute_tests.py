@@ -1150,51 +1150,42 @@ def execute_test(test_def):
             result = tool_func(error_info, tool_context)
         # Generic adapters for tools that only take tool_context
         elif tool_name in [
-            'request_user_approval', 'answer_code_question', 'store_memory',
-            'error_tracking_get_errors', 'save_finding', 'load_project_memory',
-            'execute_workflow', 'stream_voice_response', 'get_rendering_state',
+            'stream_voice_response', 'get_rendering_state',
             'get_tool_definition', 'measure_test_coverage', 'get_symbol_references',
-            'cloud_get_instance_logs', 'monitoring_query_metrics',
-            'generate_function_documentation', 'clear_graph', 'database_execute',
-            'show_test_badges', 'render_graph', 'destroy_sandbox',
-            'list_tools', 'create_workflow', 'unregister_tool',
-            'delete_memory', 'commit_worktree', 'stop_telemetry_collection',
-            'execute_script', 'discover_framework_routes', 'list_voice_commands',
-            'verify_types', 'retrieve_conversation_context', 'request_more_evidence',
-            'search_issues', 'database_get_schema', 'create_directory',
+            'show_test_badges', 'unregister_tool',
+            'stop_telemetry_collection',
+            'execute_script', 'list_voice_commands',
+            'verify_types', 'retrieve_conversation_context',
+            'search_issues', 'create_directory',
             'get_symbol_hover_info', 'start_indexing', 'trigger_ci_build',
-            'start_agent', 'get_graph_node', 'cancel_ci_build',
-            'update_issue', 'start_telemetry_collection', 'create_issue',
-            'package_get_version', 'search_graph', 'record_function_arguments',
-            'git_log', 'revoke_permission', 'get_agent_state', 'verify_evidence',
-            'github_get_commits', 'register_framework_adapter', 'find_implementations',
-            'visualize_data_flow', 'get_imports', 'update_knowledge',
+            'cancel_ci_build',
+            'git_log', 'revoke_permission', 'verify_evidence',
+            'get_imports',
             'get_worktree_diff', 'grant_permission', 'verify_lint',
-            'retrieve_memory', 'update_rendering', 'search_api_docs',
+            'search_api_docs',
             'read_documentation', 'generate_unit_tests', 'get_branch_info',
-            'run_type_checker', 'add_graph_node', 'verify_compilation',
-            'run_integration_tests', 'check_permission', 'parse_language_ast',
-            'detect_speaker_intent', 'analyze_framework_dependency_injection',
-            'apply_patch_to_worktree', 'search_discussions', 'read_test_results',
-            'retrieve_knowledge', 'get_agent_status', 'filter_graph',
-            'check_approval_status', 'execute_workflow', 'attach_runtime_profiler',
-            'delete_file', 'store_memory', 'set_vr_environment',
-            'generate_function_documentation', 'database_query', 'run_build',
-            'request_more_evidence', 'run_regression_tests', 'kubernetes_get_pod_logs',
-            'query_graph', 'list_permissions', 'unsubscribe_from_topic', 'list_agents',
-            'set_spatial_audio', 'kubernetes_describe_pod', 'request_sensitive_approval',
-            'get_hand_interaction_state', 'delete_graph_edge', 'package_search',
-            'subscribe_to_topic', 'run_unit_tests', 'set_haptic_feedback',
-            'verify_documentation_coverage', 'highlight_vr_path', 'publish_message',
-            'docker_get_container_logs', 'register_voice_command', 'cloud_list_instances',
-            'generate_code_documentation', 'get_agent_messages', 'docker_list_containers',
-            'get_symbol_documentation', 'get_symbol_definition', 'list_issues',
-            'stop_agent', 'start_application', 'visualize_dependency_graph',
-            'get_telemetry_data', 'kubernetes_get_deployments', 'set_permission_level',
-            'list_changed_nodes', 'record_variable_state', 'discover_framework_middleware',
-            'get_telemetry_data', 'get_agent_messages', 'generate_code_documentation',
-            'docker_list_containers', 'get_symbol_definition', 'get_symbol_documentation',
-            'list_issues', 'stop_agent', 'start_application', 'visualize_dependency_graph',
+            'run_type_checker', 'verify_compilation',
+            'check_permission',
+            'detect_speaker_intent',
+            'read_test_results',
+            'get_agent_status',
+            'check_approval_status', 'attach_runtime_profiler',
+            'delete_file', 'set_vr_environment',
+            'run_build',
+            'run_regression_tests',
+            'list_permissions',
+            'list_agents',
+            'set_spatial_audio',
+            'request_sensitive_approval',
+            'get_hand_interaction_state',
+            'run_unit_tests', 'set_haptic_feedback',
+            'verify_documentation_coverage', 'highlight_vr_path',
+            'register_voice_command',
+            'docker_list_containers',
+            'get_symbol_definition',
+            'stop_agent', 'start_application',
+            'kubernetes_get_deployments', 'set_permission_level',
+            'list_changed_nodes', 'discover_framework_middleware',
             'set_haptic_feedback', 'verify_documentation_coverage', 'highlight_vr_path',
             'publish_message', 'docker_get_container_logs', 'register_voice_command',
             'cloud_list_instances', 'set_spatial_audio', 'kubernetes_describe_pod',
@@ -1239,6 +1230,9 @@ def execute_test(test_def):
             'register_tool', 'get_graph_node', 'package_get_version',
         ]:
             result = tool_func(tool_context)
+        elif tool_name == 'commit_worktree':
+            message = input_data.get('message', '')
+            result = tool_func(message, tool_context)
         elif tool_name == 'set_breakpoint':
             file_path = input_data.get('file_path', '')
             line = input_data.get('line', 0)
@@ -1278,6 +1272,14 @@ def execute_test(test_def):
         # Check result
         expected = test_def.get('expected', {})
         result_status = result.get('status')
+        
+        # Handle results without explicit status field (e.g., commit_worktree returns {'ok': False, ...})
+        if result_status is None and isinstance(result, dict):
+            if 'ok' in result:
+                result_status = 'ok' if result['ok'] else 'error'
+            else:
+                result_status = 'error'  # Default to error if no status
+        
         expected_status = expected.get('status')
 
         # Remove tool_context from result for JSON serialization
@@ -1321,70 +1323,60 @@ def clean_for_json(obj):
         return str(obj)  # Convert other types to string
 
 def main():
-    # Process multiple test directories
+    # Process all test directories for full suite execution
     test_dirs = [
         'jarvis-tests/tests/core-tools',
+        'jarvis-tests/tests/integration',
+        'jarvis-tests/tests/unit/relationships',
+        'jarvis-tests/tests/unit/repository',
+        'jarvis-tests/tests/unit/data-flow',
+        'jarvis-tests/tests/unit/parsing',
+        'jarvis-tests/tests/unit/symbols',
+        'jarvis-tests/tests/unit/runtime',
+        'jarvis-tests/tests/unit/security',
+        'jarvis-tests/tests/unit/visualization',
         'jarvis-tests/tests/real-input/relationship',
         'jarvis-tests/tests/real-input/code_understanding',
         'jarvis-tests/tests/real-input/analysis',
         'jarvis-tests/tests/real-input/api_database',
         'jarvis-tests/tests/real-input/data_flow',
-        'jarvis-tests/tests/real-input/misc',
-        'jarvis-tests/tests/real-input/security_quality',
-        'jarvis-tests/tests/unit/relationships',
-        'jarvis-tests/tests/layer1/code_understanding',
-        'jarvis-tests/tests/layer1/relationship',
-        'jarvis-tests/tests/layer1/repository_intelligence',
         'jarvis-tests/tests/real-input/repository_intelligence',
-        'jarvis-tests/tests/layer1/analysis',
-        'jarvis-tests/tests/layer1/api_database',
-        'jarvis-tests/tests/layer1/data_flow',
+        'jarvis-tests/tests/real-input/security_quality',
+        'jarvis-tests/tests/real-input/misc',
         'jarvis-tests/tests/layer1/misc',
+        'jarvis-tests/tests/layer1/code_understanding',
+        'jarvis-tests/tests/layer1/repository_intelligence',
+        'jarvis-tests/tests/layer1/analysis',
         'jarvis-tests/tests/layer1/security_quality',
-        # Layer2 subdirectories (these have the most tests)
-        'jarvis-tests/tests/layer2/analysis',
-        'jarvis-tests/tests/layer2/api_database',
-        'jarvis-tests/tests/layer2/code_understanding',
-        'jarvis-tests/tests/layer2/data_flow',
-        'jarvis-tests/tests/layer2/relationship',
-        'jarvis-tests/tests/layer2/repository_intelligence',
-        'jarvis-tests/tests/layer2/security_quality',
+        'jarvis-tests/tests/layer1/api_database',
+        'jarvis-tests/tests/layer1/relationship',
+        'jarvis-tests/tests/layer1/data_flow',
         'jarvis-tests/tests/layer2/misc',
-        # Layer3-7
-        'jarvis-tests/tests/layer3',
+        'jarvis-tests/tests/layer2/code_understanding',
+        'jarvis-tests/tests/layer2/repository_intelligence',
+        'jarvis-tests/tests/layer2/analysis',
+        'jarvis-tests/tests/layer2/security_quality',
+        'jarvis-tests/tests/layer2/api_database',
+        'jarvis-tests/tests/layer2/relationship',
+        'jarvis-tests/tests/layer2/data_flow',
         'jarvis-tests/tests/layer3/integration',
-        'jarvis-tests/tests/layer4',
         'jarvis-tests/tests/layer4/agent-capabilities',
-        'jarvis-tests/tests/layer5',
         'jarvis-tests/tests/layer5/multi-agent',
-        'jarvis-tests/tests/layer6',
         'jarvis-tests/tests/layer6/end-to-end',
-        'jarvis-tests/tests/layer7',
         'jarvis-tests/tests/layer7/stress',
-        # Other directories
-        'jarvis-tests/tests/repository_intelligence',
-        'jarvis-tests/tests/security_quality',
-        'jarvis-tests/tests/integration',
-        'jarvis-tests/tests/stress',
-        'jarvis-tests/tests/multi-agent',
-        'jarvis-tests/tests/end-to-end',
         'jarvis-tests/tests/agent-capabilities',
-        'jarvis-tests/tests/chaos',
         'jarvis-tests/tests/code_understanding',
-        'jarvis-tests/tests/load',
+        'jarvis-tests/tests/repository_intelligence',
         'jarvis-tests/tests/phase2_core_tools',
-        'jarvis-tests/tests/regression',
-        'jarvis-tests/tests/security',
-        'jarvis-tests/tests/verified',
         'jarvis-tests/tests/verified/analysis',
-        # Unit tests
-        'jarvis-tests/tests/unit/data-flow',
-        'jarvis-tests/tests/unit/parsing',
-        'jarvis-tests/tests/unit/repository',
-        'jarvis-tests/tests/unit/runtime',
-        'jarvis-tests/tests/unit/security',
-        'jarvis-tests/tests/unit/symbols',
-        'jarvis-tests/tests/unit/visualization',
+        'jarvis-tests/tests/security',
+        'jarvis-tests/tests/security_quality',
+        'jarvis-tests/tests/multi-agent',
+        'jarvis-tests/tests/load',
+        'jarvis-tests/tests/end-to-end',
+        'jarvis-tests/tests/regression',
+        'jarvis-tests/tests/chaos',
+        'jarvis-tests/tests/stress',
     ]
 
     all_tests = []

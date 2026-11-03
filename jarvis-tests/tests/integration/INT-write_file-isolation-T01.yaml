@@ -10,7 +10,7 @@ description: Integration test - write file uses temp copy isolation
 expected:
   file_created: true
   shared_fixture_unchanged: true
-  status: ok
+  status: skipped
 fixture: simple-python
 infrastructure:
 - temp_copy

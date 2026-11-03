@@ -5,7 +5,7 @@ checks:
   type: schema_validity
 description: Timeout test for cloud_list_instances
 expected:
-  status: skipped
+  status: error
 fixture: simple-python
 input:
   file_path: fixtures/repositories/simple-python/main.py

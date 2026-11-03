@@ -1,0 +1,74 @@
+test_id: AG-ORCH-002
+agent: orchestrator
+scenario: multi_agent_coordination
+layer: layer5_delegation
+severity: critical
+description: Orchestrator coordinates multiple agents for a complex analysis
+input:
+  task: "Analyze the full architecture including relationships and data flow"
+  context:
+    repository: monorepo-java-microservices
+expected_output:
+  subtasks:
+    - task: detect_repository_structure
+      assigned_to: repository_intelligence
+      priority: high
+    - task: analyze_code_understanding
+      assigned_to: code_understanding
+      priority: high
+    - task: find_relationships
+      assigned_to: relationship_intelligence
+      priority: high
+    - task: trace_data_flow
+      assigned_to: data_flow
+      priority: medium
+  execution_plan:
+    - step: 1
+      agent: repository_intelligence
+      action: detect_repository_structure
+    - step: 2
+      agent: code_understanding
+      action: analyze_code_understanding
+      depends_on: [1]
+    - step: 3
+      agent: relationship_intelligence
+      action: find_relationships
+      depends_on: [2]
+    - step: 4
+      agent: data_flow
+      action: trace_data_flow
+      depends_on: [2, 3]
+  dependencies:
+    - from: 2
+      to: 1
+      reason: needs_repository_manifest
+    - from: 3
+      to: 2
+      reason: needs_function_analysis
+    - from: 4
+      to: 2
+      reason: needs_function_analysis
+    - from: 4
+      to: 3
+      reason: needs_relationship_graph
+expected_result:
+  decomposition_complete: true
+  agents_selected: ["repository_intelligence", "code_understanding", "relationship_intelligence", "data_flow"]
+  dependencies_identified: 4
+  dependency_graph_valid: true
+fixture:
+  type: repository
+  name: monorepo-java-microservices
+evidence_requirements:
+  - subtask: detect_repository_structure
+    requires_evidence: true
+  - subtask: analyze_code_understanding
+    requires_evidence: true
+  - subtask: find_relationships
+    requires_evidence: true
+  - subtask: trace_data_flow
+    requires_evidence: true
+boundary_checks:
+  - must_not: modify_production_code
+  - must_not: execute_arbitrary_commands
+  - must_delegate: multi_agent_analysis

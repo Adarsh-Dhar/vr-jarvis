@@ -1,0 +1,64 @@
+name: multi_agent_delegation_001
+description: Full repository investigation requiring multiple agents
+agents:
+  - orchestrator
+  - repository_intelligence
+  - code_understanding
+  - relationship_intelligence
+  - visualization
+  - conversational
+expected_sequence:
+  - step: 1
+    agent: orchestrator
+    action: decompose_task
+    delegates_to: repository_intelligence
+  - step: 2
+    agent: repository_intelligence
+    action: analyze_repository
+    returns: repository_manifest
+  - step: 3
+    agent: orchestrator
+    action: delegate_to_code_understanding
+    context: repository_manifest
+  - step: 4
+    agent: code_understanding
+    action: analyze_entry_points
+    returns: entry_point_analysis
+  - step: 5
+    agent: orchestrator
+    action: delegate_to_relationship_intelligence
+    context: entry_point_analysis
+  - step: 6
+    agent: relationship_intelligence
+    action: find_call_graph
+    returns: call_graph
+  - step: 7
+    agent: orchestrator
+    action: delegate_to_visualization
+    context: call_graph
+  - step: 8
+    agent: visualization
+    action: generate_graph
+    returns: visualization
+  - step: 9
+    agent: orchestrator
+    action: aggregate_results
+    delegates_to: conversational
+  - step: 10
+    agent: conversational
+    action: explain_findings
+    returns: explanation
+handoffs:
+  - from: repository_intelligence
+    to: code_understanding
+    context: repository_manifest
+  - from: code_understanding
+    to: relationship_intelligence
+    context: entry_point_analysis
+  - from: relationship_intelligence
+    to: visualization
+    context: call_graph
+ground_truth:
+  all_agents_participated: true
+  handoffs_complete: true
+  final_result_type: architecture_explanation

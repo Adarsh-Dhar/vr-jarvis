@@ -5,7 +5,7 @@ checks:
   type: schema_validity
 description: Complex Input test for get_type_hierarchy
 expected:
-  status: not_found
+  status: not_applicable
 fixture: polyglot-monorepo
 input:
   file_path: fixtures/repositories/polyglot-monorepo/main.py

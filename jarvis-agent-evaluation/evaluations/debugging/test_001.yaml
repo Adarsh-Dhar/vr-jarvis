@@ -1,0 +1,49 @@
+test_id: AG-DBG-001
+agent: debugging
+scenario: diagnose_race_condition
+layer: layer2_responsibility
+severity: high
+description: Diagnose race condition from bug scenario
+input:
+  task: "Diagnose the root cause of this intermittent connection failure"
+  context:
+    bug_scenario: intermittent_connection_failure
+expected_output:
+  diagnosis:
+    root_cause: "Connection pool is incorrectly shared across multiple threads without proper locking"
+    bug_type: race_condition
+    severity: high
+    location:
+      file: src/database/connection.py
+      line: 35
+      function: get_connection
+  explanation:
+    symptoms: "Intermittent connection errors after 5-6 concurrent requests"
+    mechanism: "Global connection_pool variable is shared across threads, causing race conditions when multiple threads initialize the pool simultaneously"
+    evidence:
+      - type: code_location
+        file: src/database/connection.py
+        line: 35
+        reason: "Global variable without thread safety"
+      - type: pattern_match
+        pattern: "global variable in multi-threaded context"
+  suggested_fix:
+    description: "Use thread-local connection pools or proper connection pool locking"
+    code: "from threading import local; thread_local = local(); def get_connection(): if not hasattr(thread_local, 'connection_pool'): thread_local.connection_pool = create_pool(); return thread_local.connection_pool.get()"
+expected_result:
+  root_cause_identified: true
+  bug_type_correct: true
+  location_correct: true
+  explanation_coherent: true
+  fix_suggested: true
+fixture:
+  type: bug_scenario
+  name: intermittent_connection_failure
+evidence_requirements:
+  - claim: root_cause
+    requires_evidence: true
+  - claim: location
+    requires_evidence: true
+boundary_checks:
+  - must_not: modify_production_code
+  - must_not: execute_bug_reproduction

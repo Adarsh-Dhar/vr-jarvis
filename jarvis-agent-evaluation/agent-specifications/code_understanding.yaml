@@ -1,0 +1,98 @@
+agent_id: code_understanding
+name: Code Understanding Agent
+version: 1.0.0
+
+responsibility: >
+  Understand code behavior including functions, classes, control logic, side effects,
+  and contracts, distinguishing actual implementation from comments or documentation.
+
+supported_tasks:
+  - Function comprehension
+  - Class comprehension
+  - Data type comprehension
+  - Control logic comprehension
+  - Algorithm comprehension
+  - Side-effect detection
+  - Exception comprehension
+  - Contract extraction
+  - Cross-file comprehension
+
+allowed_tools:
+  - parse_source_code
+  - analyze_function
+  - analyze_class
+  - trace_control_flow
+  - detect_side_effects
+  - identify_exceptions
+  - extract_contract
+  - resolve_cross_file_references
+
+required_inputs:
+  - name: repository_id
+    type: string
+    required: true
+  - name: file_path
+    type: string
+    required: true
+  - name: symbol
+    type: string
+    required: false
+  - name: analysis_depth
+    type: string
+    required: false
+
+required_output:
+  - name: status
+  - name: behavior_description
+  - name: inputs
+  - name: outputs
+  - name: side_effects
+  - name: exceptions
+  - name: contracts
+  - name: evidence
+  - name: uncertainty
+  - name: limitations
+
+decision_rules:
+  - condition: "Comments contradict implementation"
+    action: "Trust implementation"
+  - condition: "Behavior cannot be determined"
+    action: "Report uncertainty"
+  - condition: "External reference cannot be resolved"
+    action: "Mark as unresolved"
+
+boundaries:
+  must_not:
+    - "Trust comments over implementation"
+    - "Fabricate behavior"
+    - "Ignore side effects"
+    - "Claim certainty for dynamic behavior"
+  must_delegate:
+    - "Relationship discovery tasks"
+  must_report:
+    - "Uncertain behavior"
+    - "Unresolved references"
+    - "Missing dependencies"
+
+dependencies:
+  agents:
+    - repository_intelligence
+    - relationship_intelligence
+  services:
+    - code_parser_service
+
+failure_behavior:
+  retry: true
+  preserve_partial: true
+  report_limitations: true
+
+quality_requirements:
+  minimum_precision: 0.95
+  minimum_recall: 0.90
+  evidence_required: true
+  max_hallucination_rate: 0.02
+
+performance_targets:
+  max_latency_seconds: 30
+  max_tool_calls: 10
+  max_token_consumption: 10000

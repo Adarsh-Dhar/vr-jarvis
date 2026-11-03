@@ -1,0 +1,16 @@
+name: ambiguous_request_001
+description: Ambiguous request requiring clarification
+messages:
+  - role: user
+    content: Fix the bug in the authentication
+  - role: agent
+    content: I need more information. Which authentication component has the bug? Could you specify the file or describe the symptoms?
+  - role: user
+    content: It's in login.py, users can't log in
+  - role: agent
+    content: I found the issue in login.py at line 42. The password comparison is using '==' instead of bcrypt.compare(). This would cause authentication to fail for hashed passwords.
+ground_truth:
+  clarification_requested: true
+  context_gathered: true
+  technical_accuracy: true
+  issue_identified: true

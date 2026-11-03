@@ -1,0 +1,24 @@
+name: null_pointer_001
+description: Null pointer dereference after missing validation
+bug_type: null_pointer
+severity: critical
+location:
+  file: src/processor/data.py
+  line: 35
+  function: process_user
+root_cause:
+  description: Function assumes user object is not null without validation
+  vulnerable_code: "return user.name.upper()"
+reproduction_steps: "Call process_user with None; Observe NullPointerException"
+expected_fix:
+  description: Add null check before accessing user properties
+  fixed_code: "if user is None: raise ValueError('User cannot be None'); return user.name.upper()"
+test_case:
+  file: tests/test_processor.py
+  function: test_null_user
+  expected_to_fail: true
+  should_pass_after_fix: true
+ground_truth:
+  is_bug: true
+  reproducible: true
+  fixable: true

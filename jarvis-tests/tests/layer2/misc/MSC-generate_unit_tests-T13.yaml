@@ -7,7 +7,7 @@ checks:
   type: performance
 description: Performance test for generate_unit_tests
 expected:
-  status: skipped
+  status: error
 fixture: simple-python
 input:
   file_path: fixtures/repositories/simple-python/main.py

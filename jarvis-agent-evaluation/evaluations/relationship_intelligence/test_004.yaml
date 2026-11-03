@@ -1,0 +1,41 @@
+test_id: AG-REL-004
+agent: relationship_intelligence
+scenario: tool_integration_call_graph
+layer: layer3_tool_integration
+severity: high
+description: Correctly uses call graph builder to find callers
+input:
+  task: "Find all functions that call main"
+  context:
+    repository: simple-python
+    additional_context:
+      target_symbol: main
+expected_output:
+  tool_calls:
+    - tool: call_graph_builder
+      arguments:
+        target: main
+        include_indirect: true
+        max_depth: 5
+      result:
+        direct_callers: []
+        indirect_callers: []
+        total_callers: 0
+  callers:
+    direct: []
+    indirect: []
+  total_callers: 0
+expected_result:
+  tool_selected: call_graph_builder
+  arguments_correct: true
+  result_interpreted: true
+  no_unauthorized_tools: true
+fixture:
+  type: repository
+  name: simple-python
+evidence_requirements:
+  - claim: callers
+    requires_evidence: true
+boundary_checks:
+  - must_not: modify_production_code
+  - must_not: execute_code

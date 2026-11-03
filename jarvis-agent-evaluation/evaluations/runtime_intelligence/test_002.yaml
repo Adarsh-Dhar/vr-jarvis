@@ -1,0 +1,47 @@
+test_id: AG-RUN-002
+agent: runtime_intelligence
+scenario: contract_validation
+layer: layer1_contract
+severity: critical
+description: Validate runtime intelligence contract and configuration
+input:
+  task: "Validate contract"
+  context:
+    validation_type: contract_check
+expected_output:
+  contract:
+    agent_id: runtime_intelligence
+    version: 1.0.0
+    responsibilities:
+      - trace_collection
+      - timeline_reconstruction
+      - async_tracking
+    allowed_tools:
+      - trace_parser
+      - timeline_builder
+      - async_tracker
+    boundaries:
+      must_not:
+        - modify_runtime_system
+        - execute_trace_operations
+      must_delegate:
+        - complex_distributed_tracing
+      must_report:
+        - trace_corrupted
+        - timeline_incomplete
+    quality_requirements:
+      min_precision: 0.90
+      min_recall: 0.85
+      max_hallucination_rate: 0.03
+expected_result:
+  contract_valid: true
+  all_responsibilities_defined: true
+  all_tools_allowed: true
+  all_boundaries_defined: true
+  quality_metrics_defined: true
+fixture:
+  type: none
+evidence_requirements: []
+boundary_checks:
+  - must_not: modify_runtime_system
+  - must_not: execute_trace_operations

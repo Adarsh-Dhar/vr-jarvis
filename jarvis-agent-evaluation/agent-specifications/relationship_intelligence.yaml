@@ -1,0 +1,88 @@
+agent_id: relationship_intelligence
+name: Relationship Intelligence Agent
+version: 1.0.0
+
+responsibility: >
+  Discover and explain structural relationships between code elements across repositories,
+  distinguishing direct from indirect relationships and identifying unresolved dynamic calls.
+
+supported_tasks:
+  - Find direct callers
+  - Find indirect callers
+  - Find outgoing dependencies
+  - Find incoming dependencies
+  - Build call graphs
+  - Trace cross-module relationships
+  - Calculate change impact
+
+allowed_tools:
+  - search_symbols
+  - get_symbol_definition
+  - get_symbol_references
+  - get_call_hierarchy
+  - build_call_graph
+  - build_dependency_graph
+  - find_all_paths_between_symbols
+
+required_inputs:
+  - name: repository_id
+    type: string
+    required: true
+  - name: target_symbol
+    type: string
+    required: true
+  - name: investigation_scope
+    type: string
+    required: false
+
+required_output:
+  - name: status
+  - name: discovered_relationships
+  - name: unresolved_relationships
+  - name: evidence
+  - name: confidence
+  - name: limitations
+
+decision_rules:
+  - condition: "Language not supported"
+    action: "Report limitation"
+  - condition: "Dynamic relationship detected"
+    action: "Mark as unresolved"
+  - condition: "Cross-repository analysis requested"
+    action: "Delegate to Orchestrator"
+
+boundaries:
+  must_not:
+    - "Invent relationships"
+    - "Mix direct and indirect calls"
+    - "Mix repositories"
+    - "Claim runtime from static"
+  must_delegate:
+    - "Multi-repository investigations"
+  must_report:
+    - "Unsupported language"
+    - "Incomplete analysis"
+    - "Dynamic relationships"
+
+dependencies:
+  agents:
+    - repository_intelligence
+    - code_understanding
+  services:
+    - code_indexing_service
+
+failure_behavior:
+  retry: true
+  preserve_partial: true
+  report_limitations: true
+
+quality_requirements:
+  minimum_precision: 0.98
+  minimum_recall: 0.95
+  evidence_required: true
+  max_hallucination_rate: 0.02
+
+performance_targets:
+  max_latency_seconds: 30
+  max_tool_calls: 15
+  max_token_consumption: 10000

@@ -1,0 +1,70 @@
+test_id: AG-DATA-001
+agent: data_flow
+scenario: trace_user_input_to_database
+layer: layer2_responsibility
+severity: high
+description: Trace user input from API endpoint to database storage
+input:
+  task: "Trace how user input flows from the login endpoint to the database"
+  context:
+    repository: python-api-with-tests
+    additional_context:
+      entry_point: app/routes/users.py
+      target_symbol: create_user
+expected_output:
+  data_flow:
+    - step: 1
+      location:
+        file: app/routes/users.py
+        line: 30
+      symbol: create_user
+      input_source: api_request
+      data_type: UserCreate
+      transformation: pydantic_validation
+    - step: 2
+      location:
+        file: app/routes/users.py
+        line: 33
+      symbol: create_user_in_db
+      input_source: function_parameter
+      data_type: UserCreate
+      transformation: none
+    - step: 3
+      location:
+        file: app/database/session.py
+        line: 45
+      symbol: db_session.add
+      input_source: function_call
+      data_type: User
+      transformation: orm_mapping
+    - step: 4
+      location:
+        file: app/database/session.py
+        line: 50
+      symbol: db_session.commit
+      input_source: function_call
+      data_type: Transaction
+      transformation: sql_generation
+  source: api_request
+  sink: database
+  total_steps: 4
+  transformations: ["pydantic_validation", "orm_mapping", "sql_generation"]
+expected_result:
+  flow_complete: true
+  source_identified: true
+  sink_identified: true
+  all_steps_traced: true
+  transformations_identified: true
+fixture:
+  type: repository
+  name: python-api-with-tests
+evidence_requirements:
+  - claim: source_identified
+    requires_evidence: true
+  - claim: sink_identified
+    requires_evidence: true
+  - claim: transformation_identified
+    requires_evidence: true
+boundary_checks:
+  - must_not: modify_production_code
+  - must_not: execute_database_operations

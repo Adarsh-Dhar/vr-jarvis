@@ -1,0 +1,26 @@
+name: context_switch_001
+description: Context switching in conversation with pronoun resolution
+messages:
+  - role: user
+    content: "Explain the authenticateUser function"
+  - role: agent
+    content: "The authenticateUser function validates user credentials by checking the username and password against the database."
+  - role: user
+    content: "What calls it?"
+  - role: agent
+    content: "The authenticateUser function is called by the login endpoint in src/auth/routes.py at line 42."
+  - role: user
+    content: "Does it use bcrypt?"
+  - role: agent
+    content: "Yes, authenticateUser uses bcrypt.compare() to verify the password hash."
+  - role: user
+    content: "Go back to the first function"
+  - role: agent
+    content: "The authenticateUser function validates user credentials by checking the username and password against the database."
+ground_truth:
+  context_retention: true
+  pronoun_resolution:
+    - "it" -> authenticateUser
+    - "the first function" -> authenticateUser
+  technical_accuracy: true
+  continuity_maintained: true

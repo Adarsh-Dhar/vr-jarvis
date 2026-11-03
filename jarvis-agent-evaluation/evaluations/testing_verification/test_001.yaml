@@ -1,0 +1,56 @@
+test_id: AG-TST-001
+agent: testing_verification
+scenario: generate_unit_tests
+layer: layer2_responsibility
+severity: high
+description: Generate comprehensive unit tests for a function
+input:
+  task: "Generate unit tests for the helper function"
+  context:
+    repository: simple-python
+    additional_context:
+      target_file: src/helper.py
+      target_function: helper
+expected_output:
+  test_file: tests/test_helper.py
+  test_cases:
+    - name: test_helper_basic
+      description: Test basic functionality
+      input: 5
+      expected_output: 10
+    - name: test_helper_zero
+      description: Test with zero input
+      input: 0
+      expected_output: 0
+    - name: test_helper_negative
+      description: Test with negative input
+      input: -5
+      expected_output: -10
+    - name: test_helper_large
+      description: Test with large input
+      input: 1000
+      expected_output: 2000
+  coverage:
+    lines_covered: 10
+    lines_total: 10
+    coverage_percentage: 100
+  test_framework: pytest
+expected_result:
+  tests_generated: true
+  test_count: 4
+  coverage_adequate: true
+  edge_cases_covered: true
+  framework_correct: true
+fixture:
+  type: repository
+  name: simple-python
+evidence_requirements:
+  - claim: tests_generated
+    requires_evidence: true
+  - claim: coverage
+    requires_evidence: true
+boundary_checks:
+  - must_not: modify_production_code
+  - must_not: execute_tests
+  - must_include: edge_cases
+  - must_include: assertions

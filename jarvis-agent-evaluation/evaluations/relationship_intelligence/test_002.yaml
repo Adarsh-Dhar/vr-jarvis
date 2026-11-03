@@ -1,0 +1,62 @@
+test_id: AG-REL-002
+agent: relationship_intelligence
+scenario: find_all_dependencies
+layer: layer2_responsibility
+severity: high
+description: Find all dependencies including transitive ones
+input:
+  task: "Find all dependencies of the main function"
+  context:
+    repository: monorepo-java-microservices
+    additional_context:
+      target_symbol: processOrder
+      investigation_scope: transitive
+expected_output:
+  direct_dependencies:
+    - symbol: createUser
+      file: user-service/src/main/java/com/example/service/UserService.java
+      type: api_call
+    - symbol: processPayment
+      file: payment-service/src/main/java/com/example/service/PaymentService.java
+      type: api_call
+  transitive_dependencies:
+    - symbol: createUser
+      file: user-service/src/main/java/com/example/service/UserService.java
+      depends_on:
+        - symbol: shared-library
+          type: shared_library
+    - symbol: processPayment
+      file: payment-service/src/main/java/com/example/service/PaymentService.java
+      depends_on:
+        - symbol: shared-library
+          type: shared_library
+  total_dependencies: 4
+  dependency_graph:
+    - from: processOrder
+      to: createUser
+      type: direct
+    - from: processOrder
+      to: processPayment
+      type: direct
+    - from: createUser
+      to: shared-library
+      type: transitive
+    - from: processPayment
+      to: shared-library
+      type: transitive
+expected_result:
+  direct_dependencies_complete: true
+  transitive_dependencies_complete: true
+  dependency_graph_valid: true
+  all_dependencies_identified: true
+fixture:
+  type: repository
+  name: monorepo-java-microservices
+evidence_requirements:
+  - claim: direct_dependencies
+    requires_evidence: true
+  - claim: transitive_dependencies
+    requires_evidence: true
+boundary_checks:
+  - must_not: modify_production_code
+  - must_not: execute_code

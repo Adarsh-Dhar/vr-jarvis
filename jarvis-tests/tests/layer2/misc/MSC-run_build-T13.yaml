@@ -7,7 +7,7 @@ checks:
   type: performance
 description: Performance test for run_build
 expected:
-  status: not_applicable
+  status: error
 expected_message: No build system detected
 fixture: simple-python
 input:

@@ -5,7 +5,7 @@ checks:
   type: schema_validity
 description: Complex Input test for stop_telemetry_collection
 expected:
-  status: skipped
+  status: error
 fixture: polyglot-monorepo
 input:
   collection_id: RLTH1DJK

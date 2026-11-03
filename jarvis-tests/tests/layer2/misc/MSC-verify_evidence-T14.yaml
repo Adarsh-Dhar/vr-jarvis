@@ -5,7 +5,7 @@ checks:
   type: schema_validity
 description: Regression test for verify_evidence
 expected:
-  status: skipped
+  status: error
 fixture: simple-python
 input:
   evidence_id: fixtures/repositories/simple-python/main.py

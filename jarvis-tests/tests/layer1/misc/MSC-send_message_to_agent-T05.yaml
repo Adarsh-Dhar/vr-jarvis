@@ -5,7 +5,7 @@ checks:
   type: schema_validity
 description: Boundary Conditions test for send_message_to_agent
 expected:
-  status: skipped
+  status: error
 fixture: simple-python
 input:
   agent_id: OXZK7FZ1

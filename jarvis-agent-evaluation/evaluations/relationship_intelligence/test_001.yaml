@@ -1,0 +1,71 @@
+test_id: AG-REL-001
+agent: relationship_intelligence
+scenario: direct_and_indirect_callers
+description: >
+  Verify that the agent discovers direct and indirect callers
+  without mixing the two.
+
+layer: layer2_responsibility
+severity: critical
+
+fixture:
+  repository: simple-python
+  additional_context:
+    target_symbol: "helper"
+    investigation_scope: "repository"
+
+user_request: >
+  Find all functions that call helper directly
+  and indirectly.
+
+expected_behavior:
+  - Find the target function
+  - Retrieve direct callers
+  - Investigate transitive callers
+  - Separate direct and indirect results
+  - Include source locations
+  - Report unresolved relationships
+
+expected_results:
+  direct_callers:
+    - main
+  indirect_callers: []
+  evidence:
+    - source: "src/main.py"
+      line: 8
+      symbol: "main"
+      type: "direct_caller"
+  confidence: 0.95
+  status: ok
+  limitations: []
+
+must_not:
+  - Invent callers
+  - Include unrelated functions
+  - Claim unresolved calls as confirmed
+  - Mix repositories
+
+grading:
+  result_correctness: 40
+  evidence_quality: 25
+  tool_selection: 15
+  completeness: 10
+  output_schema: 10
+
+limits:
+  max_tool_calls: 15
+  max_duration_seconds: 30
+  max_token_consumption: 10000
+  timeout_seconds: 60
+
+metadata:
+  author: "JARVIS Team"
+  created: "2026-11-03T00:00:00Z"
+  tags:
+    - "relationship"
+    - "callers"
+    - "critical"
+  notes: >
+    This is a foundational test for the Relationship Intelligence
+    agent. It validates the core responsibility of discovering
+    callers and distinguishing between direct and indirect relationships.

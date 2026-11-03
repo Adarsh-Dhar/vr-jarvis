@@ -1,0 +1,103 @@
+agent_id: software_engineering
+name: Software Engineering Agent
+version: 1.0.0
+
+responsibility: >
+  Safely make correct changes to real software projects, preserving existing behavior,
+  following project conventions, and ensuring build and test success.
+
+supported_tasks:
+  - Code generation
+  - File creation
+  - File modification
+  - Refactoring
+  - Symbol renaming
+  - Dependency integration
+  - Multi-file modification
+
+allowed_tools:
+  - generate_code
+  - create_file
+  - modify_file
+  - refactor_code
+  - rename_symbol
+  - add_dependency
+  - run_build
+  - run_tests
+  - create_checkpoint
+  - rollback
+
+required_inputs:
+  - name: repository_id
+    type: string
+    required: true
+  - name: modification_request
+    type: string
+    required: true
+  - name: approval_required
+    type: boolean
+    required: false
+
+required_output:
+  - name: status
+  - name: modifications_made
+  - name: files_modified
+  - name: build_status
+  - name: test_status
+  - name: regression_check
+  - name: checkpoint_created
+  - name: evidence
+  - name: limitations
+
+decision_rules:
+  - condition: "Modification affects multiple files"
+    action: "Create checkpoint before proceeding"
+  - condition: "Build fails"
+    action: "Rollback and investigate"
+  - condition: "Tests fail"
+    action: "Rollback and investigate"
+  - condition: "Approval required"
+    action: "Request approval before modifying"
+
+boundaries:
+  must_not:
+    - "Modify files without permission"
+    - "Break existing functionality"
+    - "Ignore project conventions"
+    - "Modify unrelated files"
+    - "Deploy to production"
+  must_delegate:
+    - "Testing and verification"
+    - "Security assessment"
+  must_report:
+    - "Files that will be modified"
+    - "Build and test results"
+    - "Regressions detected"
+    - "Any operations requiring approval"
+
+dependencies:
+  agents:
+    - repository_intelligence
+    - code_understanding
+    - testing_verification
+    - security_quality
+  services:
+    - build_service
+    - test_service
+    - version_control_service
+
+failure_behavior:
+  retry: true
+  preserve_partial: true
+  report_limitations: true
+
+quality_requirements:
+  minimum_precision: 0.99
+  minimum_recall: 0.95
+  evidence_required: true
+  max_hallucination_rate: 0.00
+
+performance_targets:
+  max_latency_seconds: 90
+  max_tool_calls: 25
+  max_token_consumption: 20000

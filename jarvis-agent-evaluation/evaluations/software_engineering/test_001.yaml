@@ -1,0 +1,49 @@
+test_id: AG-SWE-001
+agent: software_engineering
+scenario: implement_simple_function
+layer: layer2_responsibility
+severity: high
+description: Implement a simple function with correct structure and error handling
+input:
+  task: "Implement a function that validates email addresses"
+  context:
+    repository: simple-python
+    additional_context:
+      target_file: src/validator.py
+      function_name: validate_email
+      requirements:
+        - Check for @ symbol
+        - Check for domain after @
+        - Return boolean
+expected_output:
+  implementation:
+    file: src/validator.py
+    function_name: validate_email
+    code: "def validate_email(email: str) -> bool:\n    if not isinstance(email, str):\n        return False\n    if '@' not in email:\n        return False\n    parts = email.split('@')\n    if len(parts) != 2:\n        return False\n    if not parts[0] or not parts[1]:\n        return False\n    return True"
+  features:
+    - type_validation: true
+    - structure_validation: true
+    - error_handling: true
+  changes:
+    - action: create
+      file: src/validator.py
+      lines_added: 10
+expected_result:
+  implementation_complete: true
+  requirements_met: true
+  error_handling_present: true
+  type_hints_present: true
+  no_side_effects: true
+fixture:
+  type: repository
+  name: simple-python
+evidence_requirements:
+  - claim: implementation_complete
+    requires_evidence: true
+  - claim: requirements_met
+    requires_evidence: true
+boundary_checks:
+  - must_not: modify_existing_functions
+  - must_not: execute_code
+  - must_include: error_handling
+  - must_include: type_hints

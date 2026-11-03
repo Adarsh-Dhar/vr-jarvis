@@ -5,7 +5,7 @@ checks:
   type: schema_validity
 description: Malformed Input test for stop_telemetry_collection
 expected:
-  status: skipped
+  status: error
 fixture: corrupted-inputs
 input:
   collection_id: fixtures/repositories/simple-python/main.py

@@ -1,0 +1,119 @@
+name: monorepo-java-microservices
+description: A Java monorepo with multiple microservices using Maven
+languages:
+  - Java
+  - Kotlin
+frameworks:
+  - Spring Boot
+  - Spring Cloud
+project_type: microservices
+entry_points:
+  - file: user-service/src/main/java/com/example/UserApplication.java
+    function: main
+  - file: order-service/src/main/java/com/example/OrderApplication.java
+    function: main
+  - file: payment-service/src/main/java/com/example/PaymentApplication.java
+    function: main
+build_system:
+  type: maven
+  configuration:
+    package_manager: mvn
+    build_command: mvn clean install
+    test_command: mvn test
+    root_pom: pom.xml
+dependencies:
+  runtime:
+    - Java 17+
+    - Spring Boot 3.x
+  development:
+    - Maven 3.8+
+monorepo_structure:
+  type: multi_module_maven
+  modules:
+    - user-service
+    - order-service
+    - payment-service
+    - shared-library
+generated_files:
+  - target/
+  - .m2/
+ground_truth:
+  functions:
+    - name: main
+      file: user-service/src/main/java/com/example/UserApplication.java
+      line: 15
+      parameters:
+        - name: args
+          type: String[]
+      return_type: void
+    - name: main
+      file: order-service/src/main/java/com/example/OrderApplication.java
+      line: 15
+      parameters:
+        - name: args
+          type: String[]
+      return_type: void
+    - name: main
+      file: payment-service/src/main/java/com/example/PaymentApplication.java
+      line: 15
+      parameters:
+        - name: args
+          type: String[]
+      return_type: void
+    - name: createUser
+      file: user-service/src/main/java/com/example/service/UserService.java
+      line: 25
+      parameters:
+        - name: request
+          type: CreateUserRequest
+      return_type: User
+    - name: processOrder
+      file: order-service/src/main/java/com/example/service/OrderService.java
+      line: 30
+      parameters:
+        - name: request
+          type: ProcessOrderRequest
+      return_type: Order
+    - name: processPayment
+      file: payment-service/src/main/java/com/example/service/PaymentService.java
+      line: 28
+      parameters:
+        - name: request
+          type: PaymentRequest
+      return_type: PaymentResult
+  relationships:
+    - type: depends_on
+      from: order-service
+      to: user-service
+      direct: true
+      reason: order-service calls user-service API
+    - type: depends_on
+      from: order-service
+      to: payment-service
+      direct: true
+      reason: order-service calls payment-service API
+    - type: shared_library
+      from: user-service
+      to: shared-library
+      direct: true
+    - type: shared_library
+      from: order-service
+      to: shared-library
+      direct: true
+    - type: shared_library
+      from: payment-service
+      to: shared-library
+      direct: true
+  files:
+    - path: user-service/src/main/java/com/example/UserApplication.java
+      lines: 30
+      complexity: low
+    - path: order-service/src/main/java/com/example/OrderApplication.java
+      lines: 30
+      complexity: low
+    - path: payment-service/src/main/java/com/example/PaymentApplication.java
+      lines: 30
+      complexity: low
+    - path: shared-library/src/main/java/com/example/common/ApiResponse.java
+      lines: 25
+      complexity: low

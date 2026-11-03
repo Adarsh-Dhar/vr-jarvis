@@ -1,0 +1,24 @@
+name: memory_leak_001
+description: Memory leak due to unclosed database connections
+bug_type: memory_leak
+severity: high
+location:
+  file: src/database/connection.py
+  line: 50
+  function: query_data
+root_cause:
+  description: Database connections are opened but never closed in a loop
+  vulnerable_code: "for item in items: conn = get_connection(); result = conn.execute(query)"
+reproduction_steps: "Execute query_data with 1000 items; Monitor memory usage; Memory grows continuously"
+expected_fix:
+  description: Use context manager or explicitly close connections
+  fixed_code: "for item in items: with get_connection() as conn: result = conn.execute(query)"
+test_case:
+  file: tests/test_connection.py
+  function: test_memory_leak
+  expected_to_fail: true
+  should_pass_after_fix: true
+ground_truth:
+  is_bug: true
+  reproducible: true
+  fixable: true
