@@ -353,6 +353,15 @@ def evidence_collector(callback_context, tool_result):
                     state["evidence"].extend(tool_result[field])
                 else:
                     state["evidence"].append(tool_result[field])
+    
+    # Decrement concurrent call count
+    calling_agent = callback_context.agent_name
+    concurrent_calls = state.get('concurrent_calls', {})
+    if calling_agent in concurrent_calls and concurrent_calls[calling_agent] > 0:
+        concurrent_calls[calling_agent] -= 1
+        state['concurrent_calls'] = concurrent_calls
+    
+    return None
 
     # Decrement concurrent call count after tool completes
     calling_agent = callback_context.agent_name
