@@ -1,6 +1,11 @@
 """
 Agent 8 - Debugging Intelligence Tools
 Find out why something is broken.
+
+Phase 5 Status: PARTIALLY IMPLEMENTED
+- All tools marked as 'unsupported' requiring Debug Adapter Protocol (DAP) integration
+- Basic stack trace analysis implemented where possible
+- Full implementation requires DAP integration with supported debuggers
 """
 
 from typing import Optional, List, Dict, Any
@@ -21,20 +26,32 @@ def capture_exception(
 ) -> dict:
     """Capture exceptions."""
     return {
-        'status': 'not_implemented',
-        'reason': 'Runtime and debugging capabilities are not yet implemented',
-        'note': 'Will be implemented in Phase B4 with real subprocess management'
+        'status': 'unsupported',
+        'reason': 'Exception capture requires Debug Adapter Protocol (DAP) integration',
+        'application_id': application_id
     }
 
 
 @safe
 def analyze_stack_trace(stack_trace: str, tool_context: ToolContext) -> dict:
     """Interpret stack traces."""
-    return {
-        'status': 'not_implemented',
-        'reason': 'Runtime and debugging capabilities are not yet implemented',
-        'note': 'Will be implemented in Phase B4 with real subprocess management'
-    }
+    # Basic implementation: parse the stack trace
+    try:
+        frames = []
+        for line in stack_trace.split('\n'):
+            if 'File' in line and 'line' in line:
+                frames.append(line.strip())
+        
+        return {
+            'status': 'partial',
+            'frames': frames,
+            'note': 'Basic parsing implemented, full analysis requires DAP integration'
+        }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
 
 
 @safe
@@ -44,9 +61,9 @@ def find_error_origin(
 ) -> dict:
     """Identify the likely source of an error."""
     return {
-        'status': 'not_implemented',
-        'reason': 'Runtime and debugging capabilities are not yet implemented',
-        'note': 'Will be implemented in Phase B4 with real subprocess management'
+        'status': 'unsupported',
+        'reason': 'Error origin analysis requires Debug Adapter Protocol (DAP) integration',
+        'note': 'Basic stack trace parsing available in analyze_stack_trace'
     }
 
 
@@ -57,9 +74,9 @@ def trace_error_propagation(
 ) -> dict:
     """Follow how errors propagate."""
     return {
-        'status': 'not_implemented',
-        'reason': 'Runtime and debugging capabilities are not yet implemented',
-        'note': 'Will be implemented in Phase B4 with real subprocess management'
+        'status': 'unsupported',
+        'reason': 'Error propagation tracing requires Debug Adapter Protocol (DAP) integration',
+        'error_id': error_id
     }
 
 
@@ -70,9 +87,9 @@ def identify_failure_path(
 ) -> dict:
     """Reconstruct the failure path."""
     return {
-        'status': 'not_implemented',
-        'reason': 'Runtime and debugging capabilities are not yet implemented',
-        'note': 'Will be implemented in Phase B4 with real subprocess management'
+        'status': 'unsupported',
+        'reason': 'Failure path reconstruction requires Debug Adapter Protocol (DAP) integration',
+        'error_id': error_id
     }
 
 
@@ -85,9 +102,10 @@ def set_breakpoint(
 ) -> dict:
     """Set a debugger breakpoint."""
     return {
-        'status': 'not_implemented',
-        'reason': 'Runtime and debugging capabilities are not yet implemented',
-        'note': 'Will be implemented in Phase B4 with real subprocess management'
+        'status': 'unsupported',
+        'reason': 'Breakpoint management requires Debug Adapter Protocol (DAP) integration',
+        'file_path': file_path,
+        'line': line
     }
 
 
@@ -95,9 +113,9 @@ def set_breakpoint(
 def remove_breakpoint(breakpoint_id: str, tool_context: ToolContext) -> dict:
     """Remove a breakpoint."""
     return {
-        'status': 'not_implemented',
-        'reason': 'Runtime and debugging capabilities are not yet implemented',
-        'note': 'Will be implemented in Phase B4 with real subprocess management'
+        'status': 'unsupported',
+        'reason': 'Breakpoint management requires Debug Adapter Protocol (DAP) integration',
+        'breakpoint_id': breakpoint_id
     }
 
 
@@ -105,9 +123,8 @@ def remove_breakpoint(breakpoint_id: str, tool_context: ToolContext) -> dict:
 def step_into(tool_context: ToolContext) -> dict:
     """Step into a function."""
     return {
-        'status': 'not_implemented',
-        'reason': 'Runtime and debugging capabilities are not yet implemented',
-        'note': 'Will be implemented in Phase B4 with real subprocess management'
+        'status': 'unsupported',
+        'reason': 'Stepping requires Debug Adapter Protocol (DAP) integration'
     }
 
 
@@ -115,9 +132,8 @@ def step_into(tool_context: ToolContext) -> dict:
 def step_over(tool_context: ToolContext) -> dict:
     """Step over an operation."""
     return {
-        'status': 'not_implemented',
-        'reason': 'Runtime and debugging capabilities are not yet implemented',
-        'note': 'Will be implemented in Phase B4 with real subprocess management'
+        'status': 'unsupported',
+        'reason': 'Stepping requires Debug Adapter Protocol (DAP) integration'
     }
 
 
@@ -125,9 +141,8 @@ def step_over(tool_context: ToolContext) -> dict:
 def step_out(tool_context: ToolContext) -> dict:
     """Exit the current function."""
     return {
-        'status': 'not_implemented',
-        'reason': 'Runtime and debugging capabilities are not yet implemented',
-        'note': 'Will be implemented in Phase B4 with real subprocess management'
+        'status': 'unsupported',
+        'reason': 'Stepping requires Debug Adapter Protocol (DAP) integration'
     }
 
 
@@ -138,9 +153,9 @@ def inspect_variables(
 ) -> dict:
     """Inspect runtime variables."""
     return {
-        'status': 'not_implemented',
-        'reason': 'Runtime and debugging capabilities are not yet implemented',
-        'note': 'Will be implemented in Phase B4 with real subprocess management'
+        'status': 'unsupported',
+        'reason': 'Variable inspection requires Debug Adapter Protocol (DAP) integration',
+        'scope': scope
     }
 
 
@@ -151,9 +166,9 @@ def evaluate_debug_expression(
 ) -> dict:
     """Evaluate a safe debugging expression."""
     return {
-        'status': 'not_implemented',
-        'reason': 'Runtime and debugging capabilities are not yet implemented',
-        'note': 'Will be implemented in Phase B4 with real subprocess management'
+        'status': 'unsupported',
+        'reason': 'Expression evaluation requires Debug Adapter Protocol (DAP) integration',
+        'expression': expression
     }
 
 
@@ -161,9 +176,8 @@ def evaluate_debug_expression(
 def inspect_call_stack(tool_context: ToolContext) -> dict:
     """Inspect the current call stack."""
     return {
-        'status': 'not_implemented',
-        'reason': 'Runtime and debugging capabilities are not yet implemented',
-        'note': 'Will be implemented in Phase B4 with real subprocess management'
+        'status': 'unsupported',
+        'reason': 'Call stack inspection requires Debug Adapter Protocol (DAP) integration'
     }
 
 
@@ -174,9 +188,9 @@ def watch_expression(
 ) -> dict:
     """Monitor an expression."""
     return {
-        'status': 'not_implemented',
-        'reason': 'Runtime and debugging capabilities are not yet implemented',
-        'note': 'Will be implemented in Phase B4 with real subprocess management'
+        'status': 'unsupported',
+        'reason': 'Watch expressions require Debug Adapter Protocol (DAP) integration',
+        'expression': expression
     }
 
 
@@ -187,9 +201,9 @@ def reproduce_bug(
 ) -> dict:
     """Attempt to reproduce a failure."""
     return {
-        'status': 'not_implemented',
-        'reason': 'Runtime and debugging capabilities are not yet implemented',
-        'note': 'Will be implemented in Phase B4 with real subprocess management'
+        'status': 'unsupported',
+        'reason': 'Bug reproduction requires controlled test environment and execution capture',
+        'bug_report': bug_report
     }
 
 
@@ -201,9 +215,10 @@ def compare_success_failure(
 ) -> dict:
     """Compare successful and failed executions."""
     return {
-        'status': 'not_implemented',
-        'reason': 'Runtime and debugging capabilities are not yet implemented',
-        'note': 'Will be implemented in Phase B4 with real subprocess management'
+        'status': 'unsupported',
+        'reason': 'Execution comparison requires OpenTelemetry integration',
+        'success_trace_id': success_trace_id,
+        'failure_trace_id': failure_trace_id
     }
 
 
@@ -214,9 +229,9 @@ def identify_root_cause(
 ) -> dict:
     """Rank and explain possible root causes."""
     return {
-        'status': 'not_implemented',
-        'reason': 'Runtime and debugging capabilities are not yet implemented',
-        'note': 'Will be implemented in Phase B4 with real subprocess management'
+        'status': 'unsupported',
+        'reason': 'Root cause identification requires evidence-based diagnostic process',
+        'error_id': error_id
     }
 
 
@@ -227,7 +242,7 @@ def suggest_debugging_actions(
 ) -> dict:
     """Suggest next investigative steps."""
     return {
-        'status': 'not_implemented',
-        'reason': 'Runtime and debugging capabilities are not yet implemented',
-        'note': 'Will be implemented in Phase B4 with real subprocess management'
+        'status': 'unsupported',
+        'reason': 'Debugging action suggestions require evidence-based analysis',
+        'error_id': error_id
     }

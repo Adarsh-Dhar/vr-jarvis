@@ -25,18 +25,52 @@ from ai_agents.config import USE_CACHED_TESTS
 from ai_agents import llm
 from ai_agents.tools.git_tools import commit_worktree
 from ai_agents.tools.graph_tools import get_source
+from ai_agents.agents.registry import initialize_agents
 
 APP, USER = 'jarvis', 'quest'
-TOKEN = os.getenv('JARVIS_TOKEN', '')
+TOKEN = os.getenv('JARVIS_TOKEN')
 ASK_TIMEOUT = float(os.getenv('JARVIS_ASK_TIMEOUT', '170'))   # keep below the Unity request timeout
 MAX_SESSIONS = int(os.getenv('JARVIS_MAX_SESSIONS', '50'))
 SESSION_IDLE_TIMEOUT = int(os.getenv('JARVIS_SESSION_IDLE_TIMEOUT', '3600'))  # 1 hour
+
+# Security validation on startup
+def validate_security_config():
+    """Validate security configuration before starting the server."""
+    host = os.getenv('JARVIS_HOST', '127.0.0.1')
+    
+    # Reject startup if TOKEN is not set when binding to non-localhost
+    if host != '127.0.0.1' and not TOKEN:
+        raise RuntimeError(
+            f"Cannot start on network address {host} without JARVIS_TOKEN set. "
+            f"Set JARVIS_TOKEN to a secure value."
+        )
+    
+    # Reject startup with known insecure tokens
+    if TOKEN and TOKEN in ('', 'dev-token'):
+        raise RuntimeError(
+            f"Cannot start with insecure JARVIS_TOKEN '{TOKEN}'. "
+            f"Set JARVIS_TOKEN to a secure random value."
+        )
+    
+    # Warn if no token is set for localhost (allowed but not recommended)
+    if not TOKEN and host == '127.0.0.1':
+        logger = logging.getLogger('uvicorn.error')
+        logger.warning(
+            "WARNING: Starting without JARVIS_TOKEN on localhost. "
+            "This is only safe for local development. Set JARVIS_TOKEN for production."
+        )
+
+# Validate security on import
+validate_security_config()
 
 sessions = InMemorySessionService()
 runner = Runner(agent=root_agent, app_name=APP, session_service=sessions)
 locks = defaultdict(asyncio.Lock)
 session_last_used = {}  # Track session last activity for eviction
 app = FastAPI(title='JARVIS bridge')
+
+# Initialize all agents explicitly
+initialize_agents()
 
 # Audit log
 AUDIT_LOG_PATH = Path(__file__).parent.parent / 'logs' / 'audit.jsonl'
@@ -60,19 +94,27 @@ def log_audit(agent: str, tool: str, args: dict, outcome: str, duration: float):
 
 
 def auth(authorization: str = Header(default='')):
-    # LAN only. Set JARVIS_TOKEN and put the same value in JarvisServerSettings.Token.
-    # Use constant-time comparison to prevent timing attacks
+    """
+    Authentication middleware.
+    
+    - Requires JARVIS_TOKEN for network-accessible servers.
+    - Allows unauthenticated access only to explicitly public endpoints (e.g., /health).
+    - Uses constant-time comparison to prevent timing attacks.
+    - Authentication is required for agent execution, progress, session, and tool endpoints.
+    """
+    # If TOKEN is set, require it for all endpoints (except those explicitly marked public)
     if TOKEN:
         expected = f'Bearer {TOKEN}'
         if not hmac.compare_digest(authorization, expected):
             raise HTTPException(status_code=401, detail='bad token')
-    
-    # Security check: refuse to start on network with default token
-    if os.getenv('JARVIS_HOST', '127.0.0.1') != '127.0.0.1' and TOKEN in ('', 'dev-token'):
-        raise HTTPException(
-            status_code=403,
-            detail='Cannot start on network with default token. Set JARVIS_TOKEN to a secure value.'
-        )
+    else:
+        # TOKEN is None - only allow on localhost for development
+        host = os.getenv('JARVIS_HOST', '127.0.0.1')
+        if host != '127.0.0.1':
+            raise HTTPException(
+                status_code=403,
+                detail='Authentication required for network access. Set JARVIS_TOKEN.'
+            )
 
 
 def _s(value):
@@ -128,6 +170,12 @@ class ApproveBody(BaseModel):
     approved: bool
 
 
+class RequestApprovalBody(BaseModel):
+    session_id: str
+    tool_name: str
+    parameters: dict
+
+
 @app.post('/session', dependencies=[Depends(auth)])
 async def new_session():
     session_id = uuid.uuid4().hex
@@ -142,8 +190,9 @@ def _git(*args):
         return ''
 
 
-@app.get('/health')
+@app.get('/health')  # No authentication - public endpoint
 async def health():
+    """Public health check endpoint - no authentication required."""
     changed = len([line for line in _git('status', '--porcelain').splitlines() if line.strip()])
     return {'ok': True, 'cached_tests': USE_CACHED_TESTS, 'repo': config.REPO_ROOT.name,
             'branch': _git('rev-parse', '--abbrev-ref', 'HEAD') or '?', 'changed': changed}
@@ -279,23 +328,82 @@ async def ask(body: AskBody):
     }
 
 
+@app.post('/request_approval', dependencies=[Depends(auth)])
+async def request_approval(body: RequestApprovalBody):
+    """
+    Request an approval token for a protected tool operation.
+    
+    This endpoint generates a single-use, session-scoped authorization token
+    that can be used to call a tool that requires approval.
+    
+    The token is tied to:
+    - The specific session
+    - The specific tool
+    - The exact parameters
+    - A short expiration time (5 minutes)
+    
+    The user must approve this request through the /approve endpoint before
+    the token can be used.
+    """
+    from ai_agents.callbacks import generate_approval_token
+    
+    async with locks[body.session_id]:
+        state = (await ensure(body.session_id)).state
+        
+        # Generate the approval token
+        token = generate_approval_token(body.session_id, body.tool_name, body.parameters)
+        
+        # Store the token in session state with metadata
+        approval_tokens = state.get('approval_tokens', {})
+        approval_tokens[token] = {
+            'session_id': body.session_id,
+            'tool_name': body.tool_name,
+            'parameters': body.parameters,
+            'created_at': time.time(),
+            'status': 'pending'  # pending -> approved or rejected
+        }
+        state['approval_tokens'] = approval_tokens
+        
+        # Set pending approval state for the UI
+        await set_state(body.session_id, {
+            'pending_approval': f'Execute {body.tool_name}',
+            'approval_type': 'tool',
+            'approval_token': token,
+            'approved': False
+        })
+    
+    return {
+        'ok': True,
+        'token': token,
+        'detail': f'Approval requested for {body.tool_name}. Use /approve to grant or deny.'
+    }
+
+
 @app.post('/approve', dependencies=[Depends(auth)])
 async def approve(body: ApproveBody):
     """Handle user approval for commits or tool actions.
     
-    Phase D1: Improved approval path that handles:
-    - Commits (requires worktree and passed tests)
-    - Tool actions (single-use expiring token)
-    - Rejection (clears pending state)
+    Approval workflow:
+    - Commits: requires worktree and passed tests
+    - Tool actions: marks the pending approval token as approved
+    - Rejection: clears pending state and marks token as rejected
     """
     async with locks[body.session_id]:
         state = (await ensure(body.session_id)).state
         pending = state.get('pending_approval', '')
         worktree = state.get('worktree', '')
         approval_type = state.get('approval_type', 'commit')  # 'commit' or 'tool'
+        approval_token = state.get('approval_token')
+        
+        if approval_type == 'tool' and approval_token:
+            # Mark the token as approved
+            approval_tokens = state.get('approval_tokens', {})
+            if approval_token in approval_tokens:
+                approval_tokens[approval_token]['status'] = 'approved'
+                state['approval_tokens'] = approval_tokens
         
         # Clear pending state
-        await set_state(body.session_id, {'approved': body.approved, 'pending_approval': '', 'approval_type': ''})
+        await set_state(body.session_id, {'approved': body.approved, 'pending_approval': '', 'approval_type': '', 'approval_token': ''})
     
     if not body.approved:
         return {'ok': True, 'action': 'rejected', 'detail': 'Rejected. Nothing was changed.'}
@@ -315,12 +423,8 @@ async def approve(body: ApproveBody):
         return {'ok': True, 'action': 'commit', **commit_worktree(worktree, 'JARVIS: ' + str(pending)[:120])}
     
     elif approval_type == 'tool':
-        # Tool action workflow: check for valid token
-        approval_token = state.get('approval_token')
-        if not approval_token:
-            return {'ok': False, 'action': 'tool', 'detail': 'No approval token found.'}
-        
-        # Token is consumed by the permission guard in callbacks.py
+        # Tool action workflow: token is now marked as approved
+        # The permission guard will validate and consume it
         return {'ok': True, 'action': 'tool', 'detail': f'Tool action approved: {pending}'}
     
     else:

@@ -3,9 +3,17 @@ Findings Schema and Recording
 Shared findings format for all specialist agents.
 """
 
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Literal
 from pydantic import BaseModel, Field
 from google.adk.tools import ToolContext
+
+
+class EvidenceType(str):
+    """Types of evidence supporting a finding."""
+    STATIC = "static"  # From static analysis (code, AST, graph)
+    RUNTIME = "runtime"  # From runtime instrumentation
+    AI_INFERENCE = "ai_inference"  # From AI model reasoning
+    UNRESOLVED = "unresolved"  # Evidence type could not be determined
 
 
 class Evidence(BaseModel):
@@ -15,6 +23,8 @@ class Evidence(BaseModel):
     end: int = Field(..., description="End line number")
     node_id: str = Field(..., description="Graph node ID")
     tool: str = Field(..., description="Tool that provided this evidence")
+    evidence_type: str = Field(default="static", description="Type of evidence: static, runtime, ai_inference, unresolved")
+    snippet: Optional[str] = Field(None, description="Relevant code snippet")
 
 
 class Finding(BaseModel):
@@ -25,6 +35,10 @@ class Finding(BaseModel):
     confidence: float = Field(..., description="Confidence score 0.0-1.0", ge=0.0, le=1.0)
     evidence: List[Evidence] = Field(default_factory=list, description="Supporting evidence")
     unknowns: List[str] = Field(default_factory=list, description="What remains unknown")
+    repository_id: Optional[str] = Field(None, description="Repository identifier")
+    repository_revision: Optional[str] = Field(None, description="Git commit hash or revision")
+    verification_status: str = Field(default="unverified", description="Verification status: verified, unverified, needs_review")
+    provenance: Dict[str, Any] = Field(default_factory=dict, description="Provenance information: who, when, how")
 
 
 def record_finding(
@@ -35,6 +49,8 @@ def record_finding(
     evidence: List[Dict[str, Any]],
     unknowns: List[str],
     tool_context: ToolContext,
+    repository_id: Optional[str] = None,
+    repository_revision: Optional[str] = None,
 ) -> str:
     """
     Record a finding to state['findings'] list.
@@ -47,6 +63,8 @@ def record_finding(
         evidence: List of evidence dicts
         unknowns: List of unknowns
         tool_context: Tool context with state
+        repository_id: Repository identifier
+        repository_revision: Git commit hash or revision
 
     Returns:
         Success message
@@ -68,7 +86,14 @@ def record_finding(
         else:
             evidence_objects.append(ev)
 
-    # Create finding
+    # Create finding with verification status
+    # AI claims start as unverified unless they have strong static evidence
+    verification_status = "unverified"
+    if status == "confirmed" and evidence_objects:
+        # If agent claims "confirmed" but we're in Phase 3, still mark as needs_review
+        # Independent verification will determine final status
+        verification_status = "needs_review"
+
     finding = Finding(
         agent=agent,
         claim=claim,
@@ -76,6 +101,13 @@ def record_finding(
         confidence=confidence,
         evidence=evidence_objects,
         unknowns=unknowns,
+        repository_id=repository_id,
+        repository_revision=repository_revision,
+        verification_status=verification_status,
+        provenance={
+            "agent": agent,
+            "timestamp": tool_context.state.get("timestamp", "unknown"),
+        }
     )
 
     # Add to state

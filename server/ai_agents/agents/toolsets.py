@@ -237,6 +237,7 @@ TOOL_LEVELS = {
     "understand_user_intent": "read",
     "verify_citations": "read",
     "verify_compilation": "read",
+    "verify_finding": "read",
     "verify_lint": "read",
     "verify_security": "read",
     "verify_types": "read",
@@ -245,6 +246,9 @@ TOOL_LEVELS = {
     "visualize_data_flow": "read",
     "visualize_test_coverage": "read",
     "watch_expression": "read",
+    # Findings tools
+    "record_finding": "read",
+    "get_findings": "read",
     # Aliases for missing spatial tools
     "focus_on_graph_node": "read",
     "set_graph_depth": "read",
@@ -337,6 +341,8 @@ TOOLSETS: Dict[str, List[str]] = {
         "analyze_control_flow",
         "extract_docstrings",
         "read_file_range",
+        "record_finding",
+        "get_findings",
     ],
 
     # Agent 5: Relationship Intelligence

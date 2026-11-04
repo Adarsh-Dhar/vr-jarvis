@@ -77,6 +77,18 @@ from .orchestrator_tools import (
     check_task_completion,
     request_user_approval,
     manage_task_priority,
+    # Delegation tools for invoking specialist agents
+    invoke_repository_intelligence,
+    invoke_code_understanding,
+    invoke_relationship_intelligence,
+    invoke_data_flow_intelligence,
+    invoke_runtime_intelligence,
+    invoke_debugging_intelligence,
+    invoke_security_quality,
+    invoke_software_engineering,
+    invoke_testing_verification,
+    invoke_visualization_spatial,
+    invoke_conversational,
 )
 
 # Agent 2 - Conversational JARVIS
@@ -704,6 +716,13 @@ from .control_tools import (
 # Common utilities
 from ._common import record_evidence
 from ._safe import safe
+
+# Findings tools
+from .findings_tools import (
+    record_finding,
+    get_findings,
+    verify_finding,
+)
 
 # Dynamically generate __all__ from actual imports
 __all__ = sorted(n for n, v in globals().items()

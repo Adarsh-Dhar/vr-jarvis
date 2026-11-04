@@ -13,12 +13,18 @@ from datetime import datetime
 
 
 class AgentTestRunner:
-    """Basic test runner for agent evaluation."""
+    """Basic test runner for agent evaluation.
+    
+    Execution Modes:
+    - 'mock': Uses simulated execution (for infrastructure validation)
+    - 'live': Executes actual Google ADK agents (for real performance measurement)
+    """
 
-    def __init__(self, test_dir: Path, output_dir: Path):
+    def __init__(self, test_dir: Path, output_dir: Path, execution_mode: str = 'mock'):
         self.test_dir = test_dir
         self.output_dir = output_dir
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.execution_mode = execution_mode
         self.results = []
 
     def load_test_case(self, test_path: Path) -> Optional[Dict[str, Any]]:

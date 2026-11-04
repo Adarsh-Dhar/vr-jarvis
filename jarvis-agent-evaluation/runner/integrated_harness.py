@@ -22,20 +22,31 @@ from policy_evaluator import PolicyEvaluator
 
 
 class IntegratedEvaluationHarness:
-    """Integrated harness for agent evaluation."""
+    """Integrated harness for agent evaluation.
+    
+    Execution Modes:
+    - 'mock': Uses simulated execution (for infrastructure validation)
+    - 'live': Executes actual Google ADK agents (for real performance measurement)
+    
+    The 'mock' mode validates the evaluation framework works correctly.
+    The 'live' mode measures actual JARVIS agent quality.
+    """
 
-    def __init__(self, base_dir: Path):
+    def __init__(self, base_dir: Path, execution_mode: str = 'mock'):
         self.base_dir = base_dir
         self.agent_specs_dir = base_dir / 'agent-specifications'
         self.evaluations_dir = base_dir / 'evaluations'
         self.fixtures_dir = base_dir / 'fixtures'
         self.reports_dir = base_dir / 'reports'
+        self.execution_mode = execution_mode  # 'mock' or 'live'
 
         # Initialize components
         self.schema_validator = SchemaValidator()
         self.fixture_manager = FixtureManager(self.fixtures_dir)
         self.fixture_registry = FixtureRegistry(self.fixture_manager)
         self.reports_dir.mkdir(parents=True, exist_ok=True)
+        
+        print(f"Initialized harness in {self.execution_mode} mode")
 
     def load_agent_spec(self, agent_id: str) -> Optional[Dict[str, Any]]:
         """Load an agent specification."""
@@ -91,15 +102,20 @@ class IntegratedEvaluationHarness:
             initial_context=test_case.get('fixture', {})
         )
 
-        # Placeholder: Execute the agent
-        # In the full implementation, this would:
-        # 1. Initialize the agent with the test context
-        # 2. Execute the agent with the user request
-        # 3. Capture all tool calls through the recorder
-        # 4. Record all decisions and state changes
-
-        # For now, simulate execution
-        actual_output = self._simulate_agent_execution(test_case, agent_spec)
+        # Execute the agent based on execution mode
+        if self.execution_mode == 'mock':
+            # Mock execution: returns expected outputs for infrastructure validation
+            actual_output = self._simulate_agent_execution(test_case, agent_spec)
+            execution_note = 'Mock execution - infrastructure validation only'
+        elif self.execution_mode == 'live':
+            # Live execution: executes actual Google ADK agents
+            actual_output = self._execute_real_agent(test_case, agent_spec)
+            execution_note = 'Live execution - actual agent performance'
+        else:
+            raise ValueError(f"Unknown execution mode: {self.execution_mode}")
+        
+        # Record execution mode in trace
+        trace_recorder.add_note(execution_note)
 
         # Stop recording
         trace_recorder.stop_recording(actual_output)
@@ -180,6 +196,12 @@ class IntegratedEvaluationHarness:
             status = 'passed'
         else:
             status = 'failed'
+        
+        # If in mock mode, mark status as 'mock_passed' to distinguish from real execution
+        if self.execution_mode == 'mock' and status == 'passed':
+            status = 'mock_passed'
+        elif self.execution_mode == 'mock' and status == 'failed':
+            status = 'mock_failed'
 
         # Compile complete result
         result = {
@@ -187,6 +209,7 @@ class IntegratedEvaluationHarness:
             'agent': agent_id,
             'scenario': test_case.get('scenario'),
             'status': status,
+            'execution_mode': self.execution_mode,
             'timestamp': datetime.now().isoformat(),
             'execution': {
                 'actual_output': actual_output,
@@ -266,6 +289,35 @@ class IntegratedEvaluationHarness:
                     output[key] = True
         
         return output
+
+    def _execute_real_agent(self, test_case: Dict[str, Any], agent_spec: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Execute the actual Google ADK agent.
+        
+        This would:
+        1. Load the actual agent from the registry
+        2. Create an isolated execution session
+        3. Mount the required repository fixture
+        4. Send the test request through the agent runtime
+        5. Capture all tool calls and delegation
+        6. Capture structured findings
+        7. Return the actual result or execution error
+        
+        For now, this is a placeholder indicating what needs to be implemented.
+        """
+        # TODO: Implement actual Google ADK agent execution
+        # This requires:
+        # - Importing the agent registry from server/ai_agents/agents/registry.py
+        # - Loading the actual agent instance
+        # - Creating a Google ADK session
+        # - Executing the request through the ADK runner
+        # - Capturing tool calls, delegation, and findings
+        
+        return {
+            'status': 'not_implemented',
+            'error': 'Live agent execution not yet implemented',
+            'note': 'Phase 6 requires Google ADK integration with server agent registry'
+        }
 
     def run_agent_tests(self, agent_id: str) -> List[Dict[str, Any]]:
         """
@@ -377,9 +429,17 @@ class IntegratedEvaluationHarness:
 def main():
     """Main entry point."""
     base_dir = Path(__file__).parent.parent
-    harness = IntegratedEvaluationHarness(base_dir)
+    
+    # Parse execution mode from command line
+    execution_mode = 'mock'  # default
+    if '--live' in sys.argv:
+        execution_mode = 'live'
+    elif '--mock' in sys.argv:
+        execution_mode = 'mock'
+    
+    harness = IntegratedEvaluationHarness(base_dir, execution_mode=execution_mode)
 
-    if len(sys.argv) > 1:
+    if len(sys.argv) > 1 and not sys.argv[1].startswith('--'):
         # Run tests for specific agent
         agent_id = sys.argv[1]
         results = {agent_id: harness.run_agent_tests(agent_id)}
@@ -395,11 +455,17 @@ def main():
     print(f"\n{'='*60}")
     print("EVALUATION SUMMARY")
     print(f"{'='*60}")
+    print(f"Execution Mode: {execution_mode.upper()}")
     print(f"Total Tests: {summary['summary']['total_tests']}")
     print(f"Passed: {summary['summary']['passed']}")
     print(f"Failed: {summary['summary']['failed']}")
     print(f"Skipped: {summary['summary']['skipped']}")
     print(f"Success Rate: {summary['summary']['success_rate']:.2f}%")
+    
+    if execution_mode == 'mock':
+        print(f"\n⚠️  MOCK MODE: Results are from simulated execution.")
+        print(f"   These validate the evaluation framework, not actual agent quality.")
+        print(f"   Use --live flag to execute actual agents.")
 
     print(f"\nBy Agent:")
     for agent_id, agent_summary in summary['by_agent'].items():
