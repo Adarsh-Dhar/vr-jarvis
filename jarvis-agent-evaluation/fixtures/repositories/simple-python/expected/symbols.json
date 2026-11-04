@@ -1,0 +1,24 @@
+{
+  "symbols": [
+    {
+      "name": "UserService",
+      "type": "class",
+      "file": "src/main.py",
+      "line": 14,
+      "methods": ["create_user", "get_user", "authenticate"]
+    },
+    {
+      "name": "User",
+      "type": "class",
+      "file": "src/main.py",
+      "line": 8,
+      "fields": ["id", "username", "email"]
+    },
+    {
+      "name": "main",
+      "type": "function",
+      "file": "src/main.py",
+      "line": 40
+    }
+  ]
+}
