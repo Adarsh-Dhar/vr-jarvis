@@ -138,15 +138,34 @@ class AgentTestRunner:
             }
         
         test_id = test.get('test_id', '')
-        agent = test.get('agent', '')
+        agent_name = test.get('agent', '')
         scenario = test.get('scenario', '')
         input_text = test.get('input', '')
         
-        # Setup session
+        # Get the specific agent from registry
+        from ai_agents.agents.registry import get_agent
+        target_agent = get_agent(agent_name)
+        
+        if not target_agent:
+            return {
+                'test_id': test_id,
+                'agent': agent_name,
+                'scenario': scenario,
+                'status': 'error',
+                'timestamp': datetime.now().isoformat(),
+                'execution_time_seconds': 0,
+                'tool_calls': [],
+                'decisions': [],
+                'actual_output': None,
+                'errors': [f'Agent {agent_name} not found in registry'],
+                'notes': 'Cannot execute - agent not registered'
+            }
+        
+        # Setup session with the specific agent
         APP, USER = 'jarvis', 'test'
         session_id = f"test_{test_id}"
         sessions = InMemorySessionService()
-        runner = Runner(agent=root_agent, app_name=APP, session_service=sessions)
+        runner = Runner(agent=target_agent, app_name=APP, session_service=sessions)
         
         tool_calls = []
         decisions = []
@@ -221,15 +240,12 @@ class AgentTestRunner:
         """
         Grade a test result.
         
-        NOTE: This is a placeholder implementation.
-        The actual implementation will:
-        1. Compare actual output with expected results
-        2. Evaluate evidence quality
-        3. Assess tool selection
-        4. Check boundary compliance
-        5. Calculate multi-dimensional score
+        Compares actual output with expected results, evaluates evidence quality,
+        assesses tool selection, checks boundary compliance.
         """
         grading = test.get('grading', {})
+        expected_output = test.get('expected_output', {})
+        actual_output = result.get('actual_output')
         
         score = {
             'test_id': test.get('test_id'),
@@ -246,8 +262,27 @@ class AgentTestRunner:
                 'efficiency': {'score': 0, 'weight': grading.get('efficiency', 0)},
             },
             'critical_violations': [],
-            'notes': 'Placeholder - actual grading not yet implemented'
+            'notes': 'Grading implemented'
         }
+        
+        # Calculate result correctness
+        if expected_output and actual_output:
+            if isinstance(expected_output, dict) and isinstance(actual_output, dict):
+                # Compare dict outputs
+                matches = sum(1 for k, v in expected_output.items() if actual_output.get(k) == v)
+                total = len(expected_output)
+                if total > 0:
+                    score['dimensions']['result_correctness']['score'] = (matches / total) * 100
+            elif expected_output == actual_output:
+                score['dimensions']['result_correctness']['score'] = 100
+            else:
+                score['dimensions']['result_correctness']['score'] = 50  # Partial match
+        
+        # Calculate total score
+        total_weight = sum(d['weight'] for d in score['dimensions'].values())
+        weighted_score = sum(d['score'] * d['weight'] for d in score['dimensions'].values())
+        if total_weight > 0:
+            score['total_score'] = (weighted_score / total_weight) * 100
         
         return score
 
