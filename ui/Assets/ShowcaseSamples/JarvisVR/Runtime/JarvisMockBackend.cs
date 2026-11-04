@@ -19,6 +19,7 @@ namespace JarvisVR
     void GetFile(string repo, string path, Action<RepoFileDto> ok, Action<string> fail);
     void SelectRepo(string name, Action<bool> done);
     void GetProgress(int since, Action<ProgressDto> ok);
+    void Transcribe(byte[] wav, Action<string> ok, Action<string> fail);
   }
 
   /// <summary>Local, network-free backend with scripted answers for UI development. Uses the ids of JarvisGraphModel.Sample().</summary>
@@ -62,6 +63,11 @@ namespace JarvisVR
     }
 
     public void SelectRepo(string name, Action<bool> done) { StartCoroutine(After(0.1f, () => done(true))); }
+
+    public void Transcribe(byte[] wav, Action<string> ok, Action<string> fail)
+    {
+      StartCoroutine(After(0.4f, () => ok("What breaks if I change deleteAccount?")));   // scripted: the mock graph is the demo repo
+    }
 
     public void GetTree(string repo, string path, Action<RepoTreeDto> ok, Action<string> fail)
     {

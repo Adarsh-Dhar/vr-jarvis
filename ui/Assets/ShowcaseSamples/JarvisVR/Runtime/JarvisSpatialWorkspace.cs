@@ -51,6 +51,9 @@ namespace JarvisVR
     // ---- state ----
     private GraphDto _graph;
     private HealthDto _health;
+    private string[] _agentEvidence;          // node ids the agents examined for the last answer (from /ask)
+    private string _agentTestResults;        // test run text from the last answer (from /ask)
+    private JarvisSpatialButton _quickChange;
     private ReposDto _repos;
     private RepoTreeDto _repoTree;
     private RepoFileDto _openFile;
@@ -97,6 +100,7 @@ namespace JarvisVR
       _voice = gameObject.AddComponent<JarvisVoice>();
       _voice.Transcript += Ask;
       _voice.Notice += m => Say(m);
+      _voice.Transcriber = _bridge.Transcribe;   // speech to text on the server, no Meta Voice SDK needed
 
       BuildPanels();
       BuildOrb();
@@ -213,11 +217,11 @@ namespace JarvisVR
       _codeNext = _codePanel.AddButton("NEXT >", 366, 454, 176, 48, () => ChangeEditorPage(+1));
       _codePrev.gameObject.SetActive(false); _codeClose.gameObject.SetActive(false); _codeNext.gameObject.SetActive(false);
 
-      JarvisSpatialPanel evidence = AddPanel("evidence", "Evidence", 560, 250, 1.18f, -0.46f, pal.Violet);
-      evidence.SetBodyBox(60, 180); evidence.Body.fontSize = 22;
+      JarvisSpatialPanel evidence = AddPanel("evidence", "Evidence", 560, 330, 1.18f, -0.46f, pal.Violet);
+      evidence.SetBodyBox(60, 260); evidence.Body.fontSize = 22;
 
-      JarvisSpatialPanel tests = AddPanel("tests", "Tests", 560, 250, 1.18f, -0.46f, pal.Green);
-      tests.SetBodyBox(60, 180); tests.Body.fontSize = 22;
+      JarvisSpatialPanel tests = AddPanel("tests", "Tests", 560, 330, 1.18f, -0.46f, pal.Green);
+      tests.SetBodyBox(60, 260); tests.Body.fontSize = 22;
 
       JarvisSpatialPanel activity = AddPanel("activity", "Agent activity", 440, 250, -1.12f, -0.46f, pal.Violet);
       activity.SetBodyBox(60, 180); activity.UseMono(18);
@@ -243,7 +247,7 @@ namespace JarvisVR
 
       JarvisSpatialPanel caption = AddPanel("caption", "JARVIS", 820, 190, 0.15f, -0.52f, pal.Cyan);
       caption.SetBodyBox(54, 70); caption.Body.fontSize = 26;
-      caption.AddButton("What breaks if I change deleteAccount?", 20, 128, 400, 50, () => Ask("What breaks if I change deleteAccount?"));
+      _quickChange = caption.AddButton("What breaks if I change this?", 20, 128, 400, 50, () => Ask(QuickChangeQuestion()));   // label follows the selection
       caption.AddButton("Show risky paths", 430, 128, 190, 50, () => Ask("Show me the risky paths in this change."));
       caption.AddButton("Run tests", 630, 128, 170, 50, () => Ask("Run the tests for this change."));
 
@@ -285,6 +289,7 @@ namespace JarvisVR
     private void LoadGraph(GraphDto g)
     {
       _graph = g;
+      _agentEvidence = null; _agentTestResults = null;   // ids from another repository would not resolve
       for (int i = _graphRoot.childCount - 1; i >= 0; i--) Destroy(_graphRoot.GetChild(i).gameObject);
       _nodes.Clear(); _edges.Clear(); _clusters.Clear(); _pulses.Clear();
       BuildGraph();
@@ -485,6 +490,7 @@ namespace JarvisVR
       Log("selected " + _nodes[id].Dto.name);
       if (_bridge != null && !_source.ContainsKey(id))
         _bridge.GetSource(id, s => { if (s != null && s.status == "ok") { _source[id] = s; if (_selected == id) RefreshCode(); } });
+      RefreshQuickButtons();
     }
 
     private void DragCluster(string nodeId, Vector3 worldDelta)
@@ -524,6 +530,8 @@ namespace JarvisVR
         return;
       }
       ResetOverlay();
+      _agentEvidence = r.evidence;
+      _agentTestResults = r.test_results;
       bool graphChanged = false;
       if (r.scene_commands != null) foreach (SceneCommand c in r.scene_commands) graphChanged |= ApplyCommand(c);
       if (!string.IsNullOrEmpty(r.pending_approval)) _pending = r.pending_approval;
@@ -532,9 +540,32 @@ namespace JarvisVR
       Say(reply);
       Log("JARVIS answered");
       if (_voice != null) _voice.Speak(reply);
-      RefreshAll();
-      if (!string.IsNullOrEmpty(_pending)) SetMode("GIT");
-      else if (graphChanged) SetMode("MAP");
+      RefreshActivity();
+    }
+
+    private void RefreshAll() { RefreshStyles(); RefreshEvidence(); RefreshCode(); RefreshGhost(); RefreshApproval(); RefreshTests(); RefreshQuickButtons(); SetMode(_mode); }
+
+    /// <summary>The function the quick question is about: the selected node, else the most connected one in this repository.</summary>
+    private string QuickTarget()
+    {
+      if (!string.IsNullOrEmpty(_selected) && _nodes.TryGetValue(_selected, out NodeView sel)) return sel.Dto.name;
+      NodeView best = null;
+      foreach (NodeView n in _nodes.Values) if (best == null || n.In + n.Out > best.In + best.Out) best = n;
+      return best != null ? best.Dto.name : null;
+    }
+
+    private string QuickChangeQuestion()
+    {
+      string t = QuickTarget();
+      return t != null ? "What breaks if I change " + t + "?" : "What does this repository do?";
+    }
+
+    private void RefreshQuickButtons()
+    {
+      if (_quickChange == null) return;
+      string t = QuickTarget();
+      if (t != null && t.Length > 13) t = t.Substring(0, 12) + "…";   // keeps the label inside the button
+      _quickChange.Label.text = t != null ? "What breaks if I change " + t + "?" : "What does this repository do?";
     }
 
     /// <returns>true when the command changes what the graph shows.</returns>
@@ -641,7 +672,7 @@ namespace JarvisVR
       RefreshActivity();
     }
 
-    private void RefreshAll() { RefreshStyles(); RefreshEvidence(); RefreshCode(); RefreshGhost(); RefreshApproval(); RefreshTests(); SetMode(_mode); }
+
 
     private void RefreshStatus()
     {
@@ -939,19 +970,43 @@ namespace JarvisVR
 
     private void RefreshEvidence()
     {
-      if (!_panels.ContainsKey("evidence") || string.IsNullOrEmpty(_selected) || !_nodes.TryGetValue(_selected, out NodeView n)) return;
+      if (!_panels.ContainsKey("evidence")) return;
+      NodeView n = null;
+      if (!string.IsNullOrEmpty(_selected)) _nodes.TryGetValue(_selected, out n);
+      bool haveAgent = _agentEvidence != null && _agentEvidence.Length > 0;
+      if (n == null && !haveAgent) return;
       JarvisPalette pal = JarvisPalette.Current;
       var sb = new StringBuilder();
-      sb.Append("<b>").Append(n.Dto.name).Append("</b>  ").Append(n.Dto.kind).Append(" · ").Append(n.Dto.cluster).Append('\n');
-      sb.Append(n.Dto.file).Append("  L").Append(n.Dto.start).Append("-").Append(n.Dto.end).Append('\n');
-      sb.Append("<color=#").Append(Hex(pal.Cyan)).Append(">[static]</color> ").Append(n.In).Append(" callers, ").Append(n.Out).Append(" callees\n");
-      int inferred = _edges.Count(e => (e.From == n || e.To == n) && e.Style == "dashed");
-      int runtime = _edges.Count(e => (e.From == n || e.To == n) && e.Style == "dotted");
-      if (inferred > 0) sb.Append("<color=#").Append(Hex(pal.Violet)).Append(">[inferred]</color> ").Append(inferred).Append(" links\n");
-      if (runtime > 0) sb.Append("<color=#").Append(Hex(pal.Green)).Append(">[runtime]</color> ").Append(runtime).Append(" links\n");
-      if (n.NoCallers) sb.Append("<color=#").Append(Hex(pal.Red)).Append(">[risk]</color> no callers found: may be dead code or called dynamically\n");
-      if (_hot.Contains(n.Dto.id)) sb.Append("<color=#").Append(Hex(pal.Amber)).Append(">[change path]</color> on the highlighted path\n");
+      if (n != null)
+      {
+        sb.Append("<b>").Append(n.Dto.name).Append("</b>  ").Append(n.Dto.kind).Append(" · ").Append(n.Dto.cluster).Append('\n');
+        sb.Append(n.Dto.file).Append("  L").Append(n.Dto.start).Append("-").Append(n.Dto.end).Append('\n');
+        sb.Append("<color=#").Append(Hex(pal.Cyan)).Append(">[static]</color> ").Append(n.In).Append(" callers, ").Append(n.Out).Append(" callees\n");
+        int inferred = _edges.Count(e => (e.From == n || e.To == n) && e.Style == "dashed");
+        int runtime = _edges.Count(e => (e.From == n || e.To == n) && e.Style == "dotted");
+        if (inferred > 0) sb.Append("<color=#").Append(Hex(pal.Violet)).Append(">[inferred]</color> ").Append(inferred).Append(" links\n");
+        if (runtime > 0) sb.Append("<color=#").Append(Hex(pal.Green)).Append(">[runtime]</color> ").Append(runtime).Append(" links\n");
+        if (n.NoCallers) sb.Append("<color=#").Append(Hex(pal.Red)).Append(">[risk]</color> no callers found: may be dead code or called dynamically\n");
+        if (_hot.Contains(n.Dto.id)) sb.Append("<color=#").Append(Hex(pal.Amber)).Append(">[change path]</color> on the highlighted path\n");
+      }
+      if (haveAgent) AppendAgentEvidence(sb, pal);
       _panels["evidence"].SetBody(sb.ToString());
+    }
+
+    /// <summary>What the agents actually looked at while answering (the evidence list returned by /ask), newest first.</summary>
+    private void AppendAgentEvidence(StringBuilder sb, JarvisPalette pal)
+    {
+      if (sb.Length > 0) sb.Append('\n');
+      sb.Append("<color=#").Append(Hex(pal.Violet)).Append("><b>Agents examined</b></color>  ").Append(_agentEvidence.Length).Append(" items\n");
+      int shown = 0;
+      for (int i = _agentEvidence.Length - 1; i >= 0 && shown < 5; i--, shown++)
+      {
+        string id = _agentEvidence[i];
+        string line = _nodes.TryGetValue(id, out NodeView ev) ? ev.Dto.name + "  " + ev.Dto.file + ":" + ev.Dto.start : id;
+        if (line.Length > 46) line = line.Substring(0, 45) + "…";
+        sb.Append("• ").Append(line).Append('\n');
+      }
+      if (_agentEvidence.Length > shown) sb.Append("… ").Append(_agentEvidence.Length - shown).Append(" more\n");
     }
 
     private void RefreshCode()
@@ -997,7 +1052,18 @@ namespace JarvisVR
       _panels["approval"].SetBody(string.IsNullOrEmpty(_pending) ? "Nothing is waiting for approval." : _pending);
     }
 
-    private void RefreshTests() { if (_panels.ContainsKey("tests")) _panels["tests"].SetBody(_testSummary); }
+    private void RefreshTests()
+    {
+      if (!_panels.ContainsKey("tests")) return;
+      string extra = "";
+      if (!string.IsNullOrWhiteSpace(_agentTestResults))       // the test run text the agents returned with the answer
+      {
+        string t = _agentTestResults.Trim().Replace("\r", "");
+        if (t.Length > 420) t = t.Substring(0, 419) + "…";
+        extra = "\n\n<b>Test run</b>\n" + t;
+      }
+      _panels["tests"].SetBody(_testSummary + extra);
+    }
 
     private void RefreshStyles()
     {

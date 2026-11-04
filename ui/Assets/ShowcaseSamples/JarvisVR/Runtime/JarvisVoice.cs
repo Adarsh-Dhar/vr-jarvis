@@ -19,6 +19,15 @@ namespace JarvisVR
     public event Action<string> Transcript;
     public event Action<string> Notice;
 
+    /// <summary>Set by the workspace. Sends a 16 kHz mono WAV to the server and returns the transcript, so speech to text
+    /// works on a Quest build without the Meta Voice SDK.</summary>
+    public Action<byte[], Action<string>, Action<string>> Transcriber;
+    private bool _recording, _heardVoice;
+    private int _recStart;
+    private float _recStartedAt, _lastVoiceAt;
+    private const int LoopSeconds = 30, MaxRecordSeconds = 12;
+    private const float SilenceStopSeconds = 1.1f, NoSpeechGiveUpSeconds = 6f, VoiceLevel = 0.15f;
+
     private const int Rate = 16000;
     private readonly float[] _buf = new float[256];
     private AudioClip _mic;
@@ -50,12 +59,22 @@ namespace JarvisVR
       Current = State.Listening;
 #if JARVIS_META_VOICE
       if (_wit != null) { _wit.Activate(); return; }
+#else
+      // Record the microphone; the server transcribes it. Stops by itself after a pause, or tap the orb again to send.
+      if (Transcriber != null && _mic != null && Microphone.IsRecording(null))
+      {
+        _recStart = Microphone.GetPosition(null);
+        _recStartedAt = _lastVoiceAt = Time.unscaledTime;
+        _heardVoice = false;
+        _recording = true;
+        return;
+      }
 #endif
 #if UNITY_EDITOR
       // Simulator fallback so the flow is testable without a microphone.
       Invoke(nameof(DemoTranscript), 1.2f);
 #else
-      if (Notice != null) Notice("Speech-to-text needs the Meta Voice SDK. Define JARVIS_META_VOICE after installing it.");
+      if (Notice != null) Notice(_mic == null ? "No microphone available. Allow microphone access for this app." : "Speech-to-text needs the server: turn off mock mode, or install the Meta Voice SDK (define JARVIS_META_VOICE).");
       Current = State.Idle;
 #endif
     }
@@ -63,11 +82,66 @@ namespace JarvisVR
     public void StopListening()
     {
       CancelInvoke(nameof(DemoTranscript));
+#if !JARVIS_META_VOICE
+      if (_recording) { FinishRecording(false); return; }   // tapping the orb again sends what was said so far
+#endif
 #if JARVIS_META_VOICE
       if (_wit != null) _wit.Deactivate();
 #endif
       if (Current == State.Listening) Current = State.Idle;
     }
+
+#if !JARVIS_META_VOICE
+    private void FinishRecording(bool discard)
+    {
+      _recording = false;
+      if (Current == State.Listening) Current = State.Idle;
+      int end = Microphone.GetPosition(null);
+      int total = _mic != null ? _mic.samples : 0;
+      int count = end >= _recStart ? end - _recStart : total - _recStart + end;   // the microphone buffer loops
+      if (_mic == null || discard || count < Rate / 4)
+      {
+        if (Notice != null) Notice(discard ? "I did not hear anything. Pinch the orb and try again." : "That was too short. Try again.");
+        return;
+      }
+      var data = new float[count];
+      if (end >= _recStart) _mic.GetData(data, _recStart);
+      else
+      {
+        var head = new float[total - _recStart];
+        _mic.GetData(head, _recStart);
+        Array.Copy(head, 0, data, 0, head.Length);
+        if (end > 0)
+        {
+          var tail = new float[end];
+          _mic.GetData(tail, 0);
+          Array.Copy(tail, 0, data, head.Length, tail.Length);
+        }
+      }
+      if (Notice != null) Notice("Transcribing…");
+      Transcriber(EncodeWav(data, Rate),
+        text =>
+        {
+          if (string.IsNullOrWhiteSpace(text)) { if (Notice != null) Notice("I could not make out any words."); }
+          else SubmitTranscript(text.Trim());
+        },
+        err => { if (Notice != null) Notice("Speech-to-text failed: " + err); });
+    }
+
+    /// <summary>16-bit PCM mono WAV (44-byte header).</summary>
+    private static byte[] EncodeWav(float[] samples, int rate)
+    {
+      int n = samples.Length;
+      var b = new byte[44 + n * 2];
+      void Tag(int o, string s) { for (int i = 0; i < 4; i++) b[o + i] = (byte)s[i]; }
+      void I32(int o, int v) { b[o] = (byte)v; b[o + 1] = (byte)(v >> 8); b[o + 2] = (byte)(v >> 16); b[o + 3] = (byte)(v >> 24); }
+      void I16(int o, int v) { b[o] = (byte)v; b[o + 1] = (byte)(v >> 8); }
+      Tag(0, "RIFF"); I32(4, 36 + n * 2); Tag(8, "WAVE"); Tag(12, "fmt "); I32(16, 16); I16(20, 1); I16(22, 1);
+      I32(24, rate); I32(28, rate * 2); I16(32, 2); I16(34, 16); Tag(36, "data"); I32(40, n * 2);
+      for (int i = 0; i < n; i++) I16(44 + i * 2, Mathf.Clamp(Mathf.RoundToInt(samples[i] * 32767f), -32768, 32767));
+      return b;
+    }
+#endif
 
     private void DemoTranscript() { SubmitTranscript("What breaks if I change deleteAccount?"); }
 
@@ -94,7 +168,7 @@ namespace JarvisVR
       if (_mic == null && Time.unscaledTime >= _retryAt)
       {
         _retryAt = Time.unscaledTime + 2f;
-        if (Microphone.devices.Length > 0) _mic = Microphone.Start(null, true, 1, Rate);
+        if (Microphone.devices.Length > 0) _mic = Microphone.Start(null, true, LoopSeconds, Rate);
       }
       if (_mic != null)
       {
@@ -107,6 +181,15 @@ namespace JarvisVR
           float rms = Mathf.Clamp01(Mathf.Sqrt(sum / _buf.Length) * 8f);
           Level = Mathf.Lerp(Level, rms, 0.5f);
         }
+      }
+      if (_recording)
+      {
+        float now = Time.unscaledTime;
+        if (Level > VoiceLevel) { _lastVoiceAt = now; _heardVoice = true; }
+        float t = now - _recStartedAt;
+        if (_heardVoice && now - _lastVoiceAt > SilenceStopSeconds) FinishRecording(false);
+        else if (t >= MaxRecordSeconds) FinishRecording(false);
+        else if (!_heardVoice && t >= NoSpeechGiveUpSeconds) FinishRecording(true);
       }
 #endif
       if (Current == State.Speaking)

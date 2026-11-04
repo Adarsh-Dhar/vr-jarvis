@@ -1,4 +1,6 @@
 import asyncio
+import base64
+import binascii
 import logging
 import json
 import os
@@ -185,6 +187,52 @@ async def ensure(session_id):
 async def set_state(session_id, delta):
     session = await ensure(session_id)
     await sessions.append_event(session, Event(author='user', actions=EventActions(state_delta=delta)))
+
+
+# ---------------------------------------------------------------------------
+# Speech to text. The headset records the microphone and posts a short WAV here; the server transcribes it with the
+# same Gemini API key the agents use, so the Quest build needs no Meta Voice SDK.
+STT_MODEL = os.getenv('JARVIS_STT_MODEL', config.MODEL_NAME)
+MAX_AUDIO_BYTES = int(os.getenv('JARVIS_MAX_AUDIO_BYTES', str(2_000_000)))   # about 60 s of 16 kHz mono 16-bit audio
+STT_PROMPT = ('Transcribe this audio exactly as spoken. Reply with only the transcript text, nothing else. '
+              'If there is no speech, reply with an empty string.')
+
+
+class TranscribeBody(BaseModel):
+    audio_base64: str
+    mime: str = 'audio/wav'
+
+
+def _transcribe_audio(audio: bytes, mime: str) -> str:
+    """Blocking call to the model. Kept separate so tests can replace it."""
+    from google import genai
+    client = genai.Client()          # reads GOOGLE_API_KEY (or the Vertex settings) from the environment
+    response = client.models.generate_content(
+        model=STT_MODEL,
+        contents=[types.Part.from_bytes(data=audio, mime_type=mime), STT_PROMPT],
+    )
+    return (response.text or '').strip().strip('"').strip()
+
+
+@app.post('/transcribe', dependencies=[Depends(auth)])
+async def transcribe(body: TranscribeBody):
+    """Speech to text for the VR client. Returns {'text': ..., 'error': ''}."""
+    if not body.mime.startswith('audio/'):
+        raise HTTPException(status_code=400, detail='mime must be an audio/* type')
+    try:
+        audio = base64.b64decode(body.audio_base64, validate=True)
+    except (binascii.Error, ValueError):
+        raise HTTPException(status_code=400, detail='audio_base64 is not valid base64')
+    if len(audio) > MAX_AUDIO_BYTES:
+        raise HTTPException(status_code=413, detail=f'audio is larger than {MAX_AUDIO_BYTES} bytes')
+    if len(audio) < 2000:                                  # under ~60 ms of 16 kHz audio: nothing to transcribe
+        return {'text': '', 'error': 'audio too short'}
+    try:
+        text = await asyncio.to_thread(_transcribe_audio, audio, body.mime)
+    except Exception as exc:
+        logging.getLogger('uvicorn.error').warning('transcribe failed: %s', exc)
+        return {'text': '', 'error': f'{type(exc).__name__}: {str(exc)[:160]}'}
+    return {'text': text, 'error': ''}
 
 
 class AskBody(BaseModel):

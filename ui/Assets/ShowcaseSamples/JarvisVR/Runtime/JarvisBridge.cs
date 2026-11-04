@@ -30,6 +30,8 @@ namespace JarvisVR
   }
   [Serializable] public class ProgressStep { public int i; public string agent, kind; }
   [Serializable] public class ProgressDto { public bool busy; public List<ProgressStep> steps; }
+  [Serializable] internal class TranscribeRequest { public string audio_base64, mime; }
+  [Serializable] internal class TranscribeResponse { public string text, error; }
   [Serializable] public class SourceResponse { public string status, id, file, source, error; public int first_line; }
   [Serializable] public class ApproveResponse { public bool ok; public string branch, commit, detail; }
   [Serializable] internal class SessionResponse { public string session_id; }
@@ -137,6 +139,17 @@ namespace JarvisVR
     public void SelectRepo(string name, Action<bool> done) =>
       StartCoroutine(Send("POST", "/repos/select", JsonUtility.ToJson(new RepoSelectRequest { name = name }), b => done(true),
         e => { Debug.LogWarning("JARVIS select repo: " + e); done(false); }));
+
+    /// <summary>Speech to text on the server. wav = 16 kHz mono 16-bit PCM WAV bytes.</summary>
+    public void Transcribe(byte[] wav, Action<string> ok, Action<string> fail)
+    {
+      string body = JsonUtility.ToJson(new TranscribeRequest { audio_base64 = Convert.ToBase64String(wav), mime = "audio/wav" });
+      StartCoroutine(Send("POST", "/transcribe", body, b =>
+      {
+        var r = JsonUtility.FromJson<TranscribeResponse>(b);
+        if (r != null && !string.IsNullOrEmpty(r.error)) fail(r.error); else ok(r != null ? r.text : "");
+      }, e => fail(e)));
+    }
 
     public void GetGraph(Action<GraphDto> ok) =>
       StartCoroutine(Send("GET", "/graph", null, b => ok(JsonUtility.FromJson<GraphDto>(b)), e => Debug.LogWarning("JARVIS graph: " + e)));
