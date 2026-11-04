@@ -109,8 +109,8 @@ def validate_approval_token(token: str, session_id: str, tool_name: str, args: d
     """
     Validate and consume an approval token.
     
-    Returns True if the token is valid and was consumed.
-    Returns False if the token is invalid, expired, or already used.
+    Returns True if the token is valid, approved, and was consumed.
+    Returns False if the token is invalid, expired, not approved, or already used.
     """
     state = tool_context.state
     
@@ -123,6 +123,11 @@ def validate_approval_token(token: str, session_id: str, tool_name: str, args: d
     
     # Get token metadata
     token_data = approval_tokens[token]
+    
+    # CRITICAL: Check if token was actually approved by the user
+    if token_data.get('status') != 'approved':
+        # Token exists but was not approved (rejected or still pending)
+        return False
     
     # Verify token matches the current request
     if token_data.get('session_id') != session_id:
@@ -143,7 +148,7 @@ def validate_approval_token(token: str, session_id: str, tool_name: str, args: d
         state['approval_tokens'] = approval_tokens
         return False
     
-    # Token is valid - consume it (single-use)
+    # Token is valid and approved - consume it (single-use)
     del approval_tokens[token]
     state['approval_tokens'] = approval_tokens
     

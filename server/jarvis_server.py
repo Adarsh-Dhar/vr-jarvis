@@ -36,20 +36,27 @@ SESSION_IDLE_TIMEOUT = int(os.getenv('JARVIS_SESSION_IDLE_TIMEOUT', '3600'))  # 
 # Security validation on startup
 def validate_security_config():
     """Validate security configuration before starting the server."""
-    host = os.getenv('JARVIS_HOST', '127.0.0.1')
+    # The actual bind address comes from uvicorn config, not JARVIS_HOST
+    # We check if the server will be network-exposed (not localhost)
+    # This is validated by checking if JARVIS_HOST is set to a non-localhost value
+    # or if the uvicorn --host parameter is not 127.0.0.1
     
-    # Reject startup if TOKEN is not set when binding to non-localhost
-    if host != '127.0.0.1' and not TOKEN:
-        raise RuntimeError(
-            f"Cannot start on network address {host} without JARVIS_TOKEN set. "
-            f"Set JARVIS_TOKEN to a secure value."
-        )
+    # For now, we rely on JARVIS_HOST to indicate intended exposure
+    # The actual uvicorn bind address should match JARVIS_HOST
+    host = os.getenv('JARVIS_HOST', '127.0.0.1')
     
     # Reject startup with known insecure tokens
     if TOKEN and TOKEN in ('', 'dev-token'):
         raise RuntimeError(
             f"Cannot start with insecure JARVIS_TOKEN '{TOKEN}'. "
             f"Set JARVIS_TOKEN to a secure random value."
+        )
+    
+    # If binding to non-localhost, require token
+    if host != '127.0.0.1' and not TOKEN:
+        raise RuntimeError(
+            f"Cannot start on network address {host} without JARVIS_TOKEN set. "
+            f"Set JARVIS_TOKEN to a secure value."
         )
     
     # Warn if no token is set for localhost (allowed but not recommended)
