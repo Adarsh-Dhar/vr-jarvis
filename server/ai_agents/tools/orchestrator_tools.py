@@ -9,6 +9,51 @@ from ._safe import safe
 
 
 @safe
+def understand_user_intent(
+    question: str,
+    tool_context: ToolContext
+) -> dict:
+    """
+    Understand the user's intent from a natural language question.
+    
+    Args:
+        question: The user's natural language question
+        tool_context: Tool context with state
+        
+    Returns:
+        Intent classification with entities
+    """
+    # Simple intent classification based on keywords
+    question_lower = question.lower()
+    
+    intent = "general"
+    entities = {}
+    
+    if "function" in question_lower or "method" in question_lower:
+        intent = "function_explanation"
+    elif "bug" in question_lower or "error" in question_lower or "fix" in question_lower:
+        intent = "debugging"
+    elif "test" in question_lower:
+        intent = "testing"
+    elif "security" in question_lower or "vulnerability" in question_lower:
+        intent = "security"
+    elif "change" in question_lower or "modify" in question_lower or "refactor" in question_lower:
+        intent = "modification"
+    
+    # Extract function name if present
+    words = question_lower.split()
+    for i, word in enumerate(words):
+        if word in ["function", "method"] and i + 1 < len(words):
+            entities["function"] = words[i + 1]
+    
+    return {
+        'status': 'ok',
+        'intent': intent,
+        'entities': entities
+    }
+
+
+@safe
 def invoke_repository_intelligence(
     task: str,
     tool_context: ToolContext
