@@ -277,6 +277,18 @@ TOOLSETS: Dict[str, List[str]] = {
         "check_task_completion",
         "merge_agent_results",
         "resolve_conflicting_findings",
+        # Delegation tools
+        "invoke_repository_intelligence",
+        "invoke_code_understanding",
+        "invoke_relationship_intelligence",
+        "invoke_data_flow_intelligence",
+        "invoke_runtime_intelligence",
+        "invoke_debugging_intelligence",
+        "invoke_security_quality",
+        "invoke_software_engineering",
+        "invoke_testing_verification",
+        "invoke_visualization_spatial",
+        "invoke_conversational",
         "request_more_evidence",
         "request_approval",
         # Other specialists will be added as AgentTool instances

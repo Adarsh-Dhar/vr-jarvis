@@ -54,6 +54,268 @@ def understand_user_intent(
 
 
 @safe
+def classify_request(
+    request: str,
+    tool_context: ToolContext
+) -> dict:
+    """
+    Classify a user request into task type and required agents.
+    
+    Args:
+        request: The user's request text
+        tool_context: Tool context with state
+        
+    Returns:
+        Classification with task type and required agents
+    """
+    request_lower = request.lower()
+    
+    task_type = "general"
+    required_agents = []
+    
+    # Determine task type
+    if "explain" in request_lower or "what is" in request_lower or "how does" in request_lower:
+        task_type = "investigation"
+        required_agents = ["repository_intelligence", "code_understanding", "relationship_intelligence"]
+    elif "bug" in request_lower or "error" in request_lower or "fix" in request_lower:
+        task_type = "debugging"
+        required_agents = ["debugging_intelligence", "runtime_intelligence"]
+    elif "test" in request_lower:
+        task_type = "testing"
+        required_agents = ["testing_verification"]
+    elif "security" in request_lower or "vulnerability" in request_lower:
+        task_type = "security"
+        required_agents = ["security_quality"]
+    elif "change" in request_lower or "modify" in request_lower or "add" in request_lower:
+        task_type = "modification"
+        required_agents = ["software_engineering", "testing_verification"]
+    elif "data flow" in request_lower or "trace" in request_lower:
+        task_type = "data_flow"
+        required_agents = ["data_flow_intelligence"]
+    elif "visualize" in request_lower or "graph" in request_lower:
+        task_type = "visualization"
+        required_agents = ["visualization_spatial", "relationship_intelligence"]
+    
+    return {
+        'status': 'ok',
+        'task_type': task_type,
+        'required_agents': required_agents,
+        'confidence': 0.8
+    }
+
+
+@safe
+def create_investigation_plan(
+    request: str,
+    tool_context: ToolContext
+) -> dict:
+    """Create an investigation plan for a request."""
+    return {
+        'status': 'ok',
+        'plan': [],
+        'note': 'Investigation planning to be implemented'
+    }
+
+
+@safe
+def decompose_task(
+    task: str,
+    tool_context: ToolContext
+) -> dict:
+    """Decompose a task into subtasks."""
+    return {
+        'status': 'ok',
+        'subtasks': [],
+        'note': 'Task decomposition to be implemented'
+    }
+
+
+@safe
+def select_agents(
+    task: str,
+    tool_context: ToolContext
+) -> dict:
+    """Select agents for a task."""
+    return {
+        'status': 'ok',
+        'agents': [],
+        'note': 'Agent selection to be implemented'
+    }
+
+
+@safe
+def delegate_task(
+    agent: str,
+    task: str,
+    tool_context: ToolContext
+) -> dict:
+    """Delegate a task to an agent."""
+    return {
+        'status': 'ok',
+        'delegated': False,
+        'note': 'Task delegation to be implemented'
+    }
+
+
+@safe
+def run_agents_parallel(
+    agents: list,
+    task: str,
+    tool_context: ToolContext
+) -> dict:
+    """Run multiple agents in parallel."""
+    return {
+        'status': 'ok',
+        'results': [],
+        'note': 'Parallel execution to be implemented'
+    }
+
+
+@safe
+def run_agents_sequentially(
+    agents: list,
+    task: str,
+    tool_context: ToolContext
+) -> dict:
+    """Run multiple agents sequentially."""
+    return {
+        'status': 'ok',
+        'results': [],
+        'note': 'Sequential execution to be implemented'
+    }
+
+
+@safe
+def wait_for_agent(
+    agent: str,
+    tool_context: ToolContext
+) -> dict:
+    """Wait for an agent to complete."""
+    return {
+        'status': 'ok',
+        'completed': False,
+        'note': 'Agent waiting to be implemented'
+    }
+
+
+@safe
+def get_agent_status(
+    agent: str,
+    tool_context: ToolContext
+) -> dict:
+    """Get the status of an agent."""
+    return {
+        'status': 'ok',
+        'agent_status': 'idle',
+        'note': 'Agent status tracking to be implemented'
+    }
+
+
+@safe
+def cancel_agent_task(
+    agent: str,
+    tool_context: ToolContext
+) -> dict:
+    """Cancel an agent's task."""
+    return {
+        'status': 'ok',
+        'cancelled': False,
+        'note': 'Task cancellation to be implemented'
+    }
+
+
+@safe
+def retry_agent_task(
+    agent: str,
+    tool_context: ToolContext
+) -> dict:
+    """Retry an agent's task."""
+    return {
+        'status': 'ok',
+        'retried': False,
+        'note': 'Task retry to be implemented'
+    }
+
+
+@safe
+def merge_agent_results(
+    results: list,
+    tool_context: ToolContext
+) -> dict:
+    """Merge results from multiple agents."""
+    return {
+        'status': 'ok',
+        'merged': [],
+        'note': 'Result merging to be implemented'
+    }
+
+
+@safe
+def resolve_conflicting_findings(
+    findings: list,
+    tool_context: ToolContext
+) -> dict:
+    """Resolve conflicting findings from agents."""
+    return {
+        'status': 'ok',
+        'resolved': [],
+        'note': 'Conflict resolution to be implemented'
+    }
+
+
+@safe
+def request_more_evidence(
+    agent: str,
+    tool_context: ToolContext
+) -> dict:
+    """Request more evidence from an agent."""
+    return {
+        'status': 'ok',
+        'evidence': [],
+        'note': 'Evidence request to be implemented'
+    }
+
+
+@safe
+def check_task_completion(
+    task: str,
+    tool_context: ToolContext
+) -> dict:
+    """Check if a task is complete."""
+    return {
+        'status': 'ok',
+        'complete': False,
+        'note': 'Completion checking to be implemented'
+    }
+
+
+@safe
+def request_user_approval(
+    action: str,
+    tool_context: ToolContext
+) -> dict:
+    """Request user approval for an action."""
+    return {
+        'status': 'ok',
+        'approved': False,
+        'note': 'User approval to be implemented'
+    }
+
+
+@safe
+def manage_task_priority(
+    task: str,
+    priority: str,
+    tool_context: ToolContext
+) -> dict:
+    """Manage task priority."""
+    return {
+        'status': 'ok',
+        'note': 'Priority management to be implemented'
+    }
+
+
+@safe
 def invoke_repository_intelligence(
     task: str,
     tool_context: ToolContext
