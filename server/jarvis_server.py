@@ -32,6 +32,39 @@ TOKEN = os.getenv('JARVIS_TOKEN')
 ASK_TIMEOUT = float(os.getenv('JARVIS_ASK_TIMEOUT', '170'))   # keep below the Unity request timeout
 MAX_SESSIONS = int(os.getenv('JARVIS_MAX_SESSIONS', '50'))
 SESSION_IDLE_TIMEOUT = int(os.getenv('JARVIS_SESSION_IDLE_TIMEOUT', '3600'))  # 1 hour
+ENABLE_DIRECT_TOOLS = os.getenv('JARVIS_ENABLE_DIRECT_TOOLS', '0') == '1'
+
+# Allowlist for direct tool calls (read-only tools only)
+DIRECT_TOOL_ALLOWLIST = {
+    'list_files',
+    'read_file',
+    'read_file_range',
+    'search_code',
+    'get_symbol_definition',
+    'get_symbol_references',
+    'get_type_hierarchy',
+    'get_imports',
+    'get_exports',
+    'get_repository_metadata',
+    'get_changed_files',
+    'git_diff',
+    'git_log',
+    'git_show',
+    'git_status',
+    'git_branch',
+    'get_worktree_diff',
+}
+
+# Quick actions allowlist (model-free tools for Unity)
+QUICK_ACTIONS_ALLOWLIST = {
+    'find_callers',
+    'find_callees',
+    'get_symbol_definition',
+    'calculate_change_impact',
+    'detect_dead_code',
+    'calculate_complexity',
+    'scan_secrets',
+}
 
 # Security validation on startup
 def validate_security_config():
@@ -177,12 +210,6 @@ class ApproveBody(BaseModel):
     approved: bool
 
 
-class RequestApprovalBody(BaseModel):
-    session_id: str
-    tool_name: str
-    parameters: dict
-
-
 @app.post('/session', dependencies=[Depends(auth)])
 async def new_session():
     session_id = uuid.uuid4().hex
@@ -281,8 +308,39 @@ async def ask_stream(body: AskBody):
         async with locks[body.session_id]:      # hold the lock for the whole stream
             await ensure(body.session_id)
             await set_state(body.session_id, _turn_state(body))
-            async for ev in _run_turn_streaming(body):
-                yield 'data: ' + json.dumps(ev) + '\n\n'
+
+            reply = ''
+            error = ''
+            try:
+                async for ev in _run_turn_streaming(body):
+                    yield 'data: ' + json.dumps(ev) + '\n\n'
+                    if ev.get('type') == 'final_response':
+                        reply = ev.get('content', '')
+            except asyncio.TimeoutError:
+                error = 'JARVIS took too long to answer. Try a narrower question.'
+                yield 'data: ' + json.dumps({'type': 'error', 'error': error}) + '\n\n'
+            except Exception as exc:
+                error = f'{type(exc).__name__}: {str(exc)[:200]}'
+                yield 'data: ' + json.dumps({'type': 'error', 'error': error}) + '\n\n'
+
+            # Build and send final response using the same logic as /ask
+            state = (await ensure(body.session_id)).state
+
+            # Auto-generate commit approval prompt if conditions are met
+            last = state.get('last_test_run') or {}
+            pending = _s(state.get('pending_approval'))
+            has_patch = state.get('proposed_patch') or state.get('result_software_eng')
+            if (not pending and not error and has_patch and state.get('worktree')
+                    and isinstance(last, dict) and last.get('status') == 'passed'):
+                pending = 'Commit the verified patch to a sandbox branch'
+                commands = list(state.get('scene_commands', []))
+                commands.append({'type': 'show_approval_prompt', 'summary': pending})
+                await set_state(body.session_id, {'pending_approval': pending, 'approved': False, 'approval_type': 'commit'})
+
+            # Send final state response
+            final_response = _build_ask_response(reply, error, state)
+            yield 'data: ' + json.dumps({'type': 'final_state', 'response': final_response}) + '\n\n'
+
     return StreamingResponse(gen(), media_type='text/event-stream', headers={'Cache-Control': 'no-cache'})
 
 
@@ -293,6 +351,30 @@ async def _run_turn(body):
         if event.is_final_response() and event.content and event.content.parts:
             reply = ' '.join(p.text for p in event.content.parts if getattr(p, 'text', None))
     return reply
+
+
+def _build_ask_response(reply: str, error: str, state: dict) -> dict:
+    """Build the standardized response for /ask and /ask/stream endpoints.
+
+    This unified function ensures both endpoints return the same structure.
+    """
+    last = state.get('last_test_run') or {}
+    commands = list(state.get('scene_commands', []))
+    pending = _s(state.get('pending_approval'))
+    approval_type = state.get('approval_type', '')
+    has_patch = state.get('proposed_patch') or state.get('result_software_eng')
+
+    return {
+        'reply': reply,
+        'error': error,
+        'scene_commands': commands,
+        'pending_approval': pending,
+        'approval_type': approval_type,
+        'approved': bool(state.get('approved', False)),
+        'test_results': _s(state.get('test_results')),
+        'test_source': last.get('source', '') if isinstance(last, dict) else '',
+        'evidence': list(state.get('evidence', [])),
+    }
 
 
 @app.post('/ask', dependencies=[Depends(auth)])
@@ -311,141 +393,93 @@ async def ask(body: AskBody):
         except Exception as exc:
             error = f'{type(exc).__name__}: {str(exc)[:200]}'
         state = (await ensure(body.session_id)).state
+
+        # Auto-generate commit approval prompt if conditions are met
+        last = state.get('last_test_run') or {}
+        pending = _s(state.get('pending_approval'))
+        has_patch = state.get('proposed_patch') or state.get('result_software_eng')
+        if (not pending and not error and has_patch and state.get('worktree')
+                and isinstance(last, dict) and last.get('status') == 'passed'):
+            pending = 'Commit the verified patch to a sandbox branch'
+            commands = list(state.get('scene_commands', []))
+            commands.append({'type': 'show_approval_prompt', 'summary': pending})
+            await set_state(body.session_id, {'pending_approval': pending, 'approved': False, 'approval_type': 'commit'})
+
     logger = logging.getLogger('uvicorn.error')
     logger.info('ask: %d model calls, %s', llm.stats['requests'] - calls_before, 'error' if error else 'ok')
     logger.info('reply: %s', reply[:200] if reply else error)
-    last = state.get('last_test_run') or {}
-    commands = list(state.get('scene_commands', []))
-    pending = _s(state.get('pending_approval'))
-    has_patch = state.get('proposed_patch') or state.get('result_software_eng')
-    if (not pending and not error and has_patch and state.get('worktree')
-            and isinstance(last, dict) and last.get('status') == 'passed'):
-        pending = 'Commit the verified patch to a sandbox branch'
-        commands.append({'type': 'show_approval_prompt', 'summary': pending})
-        await set_state(body.session_id, {'pending_approval': pending, 'approved': False})
-    return {
-        'reply': reply,
-        'error': error,
-        'scene_commands': commands,
-        'pending_approval': pending,
-        'approved': bool(state.get('approved', False)),
-        'test_results': _s(state.get('test_results')),
-        'test_source': last.get('source', '') if isinstance(last, dict) else '',
-        'evidence': list(state.get('evidence', [])),
-    }
 
-
-@app.post('/request_approval', dependencies=[Depends(auth)])
-async def request_approval(body: RequestApprovalBody):
-    """
-    Request an approval token for a protected tool operation.
-    
-    This endpoint generates a single-use, session-scoped authorization token
-    that can be used to call a tool that requires approval.
-    
-    The token is tied to:
-    - The specific session
-    - The specific tool
-    - The exact parameters
-    - A short expiration time (5 minutes)
-    
-    The user must approve this request through the /approve endpoint before
-    the token can be used.
-    """
-    from ai_agents.callbacks import generate_approval_token
-    
-    async with locks[body.session_id]:
-        state = (await ensure(body.session_id)).state
-        
-        # Generate the approval token
-        token = generate_approval_token(body.session_id, body.tool_name, body.parameters)
-        
-        # Store the token in session state with metadata
-        approval_tokens = state.get('approval_tokens', {})
-        approval_tokens[token] = {
-            'session_id': body.session_id,
-            'tool_name': body.tool_name,
-            'parameters': body.parameters,
-            'created_at': time.time(),
-            'status': 'pending'  # pending -> approved or rejected
-        }
-        state['approval_tokens'] = approval_tokens
-        
-        # Set pending approval state for the UI
-        await set_state(body.session_id, {
-            'pending_approval': f'Execute {body.tool_name}',
-            'approval_type': 'tool',
-            'approval_token': token,
-            'approved': False
-        })
-    
-    return {
-        'ok': True,
-        'token': token,
-        'detail': f'Approval requested for {body.tool_name}. Use /approve to grant or deny.'
-    }
+    return _build_ask_response(reply, error, state)
 
 
 @app.post('/approve', dependencies=[Depends(auth)])
 async def approve(body: ApproveBody):
     """Handle user approval for commits or tool actions.
-    
+
     Approval workflow:
     - Commits: requires worktree and passed tests
-    - Tool actions: marks the pending approval token as approved
-    - Rejection: clears pending state and marks token as rejected
+    - Tool actions: marks the pending approval as approved
+    - Rejection: clears pending state
     """
     async with locks[body.session_id]:
         state = (await ensure(body.session_id)).state
         pending = state.get('pending_approval', '')
         worktree = state.get('worktree', '')
         approval_type = state.get('approval_type', 'commit')  # 'commit' or 'tool'
-        approval_token = state.get('approval_token')
-        
-        if approval_type == 'tool' and approval_token:
-            # Mark the token as approved
-            approval_tokens = state.get('approval_tokens', {})
-            if approval_token in approval_tokens:
-                approval_tokens[approval_token]['status'] = 'approved'
-                state['approval_tokens'] = approval_tokens
-        
-        # Clear pending state
-        await set_state(body.session_id, {'approved': body.approved, 'pending_approval': '', 'approval_type': '', 'approval_token': ''})
-    
+        approval_key = state.get('approval_key')
+
+        # Prepare state delta
+        delta = {
+            'approved': body.approved,
+            'pending_approval': '',
+            'approval_type': '',
+            'approval_key': ''
+        }
+
+        if approval_type == 'tool' and approval_key and body.approved:
+            # Mark the approval as approved
+            pending_approvals = state.get('pending_approvals', {})
+            if approval_key in pending_approvals:
+                pending_approvals[approval_key]['status'] = 'approved'
+                delta['pending_approvals'] = pending_approvals
+
+        # Persist all state changes in a single call
+        await set_state(body.session_id, delta)
+
     if not body.approved:
         return {'ok': True, 'action': 'rejected', 'detail': 'Rejected. Nothing was changed.'}
-    
+
     if not pending:
         return {'ok': False, 'action': 'none', 'detail': 'Nothing was waiting for approval.'}
-    
+
     if approval_type == 'commit':
         # Commit workflow: requires worktree and passed tests
         if not worktree:
             return {'ok': False, 'action': 'commit', 'detail': 'No sandbox worktree to commit.'}
-        
+
+        # Re-fetch state to get latest after set_state
+        state = (await ensure(body.session_id)).state
         last = state.get('last_test_run', {})
         if not isinstance(last, dict) or last.get('status') != 'passed':
             return {'ok': False, 'action': 'commit', 'detail': 'Tests must pass before committing.'}
-        
+
         return {'ok': True, 'action': 'commit', **commit_worktree(worktree, 'JARVIS: ' + str(pending)[:120])}
-    
+
     elif approval_type == 'tool':
-        # Tool action workflow: token is now marked as approved
-        # The permission guard will validate and consume it
+        # Tool action workflow: approval is now marked as approved
+        # The permission guard will validate and consume it on retry
         return {'ok': True, 'action': 'tool', 'detail': f'Tool action approved: {pending}'}
-    
+
     else:
         return {'ok': False, 'action': 'unknown', 'detail': f'Unknown approval type: {approval_type}'}
 
 
 @app.get('/task/{session_id}', dependencies=[Depends(auth)])
 async def get_task_state(session_id: str):
-    """Get current task state for a session.
-    Flattened for JsonUtility compatibility in Unity.
-    """
+    """Get current task state for a session in Unity-compatible format."""
     session = await ensure(session_id)
     state = session.state
-    
+
     # Flatten results into a list for Unity
     agent_results = []
     for key in ['result_repository', 'result_code_understanding', 'result_relationship',
@@ -461,28 +495,53 @@ async def get_task_state(session_id: str):
                 'confidence': value.get('confidence', 0),
                 'status': value.get('status', 'unknown')
             })
-    
+
+    # Extract plan summary
+    plan = state.get('plan', {})
+    plan_summary = plan.get('summary', '') if isinstance(plan, dict) else str(plan)
+
+    # Extract findings as strings
+    findings_raw = state.get('findings', [])
+    findings = []
+    if isinstance(findings_raw, list):
+        for f in findings_raw:
+            if isinstance(f, str):
+                findings.append(f)
+            elif isinstance(f, dict):
+                findings.append(f.get('text', str(f)))
+            else:
+                findings.append(str(f))
+
     return {
-        'session_id': session_id,
-        'plan': state.get('plan', {}),
-        'findings': list(state.get('findings', [])),
+        'busy': locks[session_id].locked(),
+        'plan_summary': plan_summary,
         'agent_results': agent_results,
-        'result_code_understanding': state.get('result_code_understanding', {}),
-        'result_relationship': state.get('result_relationship', {}),
-        'result_data_flow': state.get('result_data_flow', {}),
-        'result_runtime': state.get('result_runtime', {}),
-        'result_debugging': state.get('result_debugging', {}),
-        'result_software_eng': state.get('result_software_eng', {}),
-        'result_testing': state.get('result_testing', {}),
-        'result_security': state.get('result_security', {}),
+        'findings': findings
     }
 
 
 @app.get('/agents', dependencies=[Depends(auth)])
 async def get_agent_status():
-    """Get status of all agents."""
+    """Get status of all agents in Unity-compatible format."""
     from ai_agents.agents.registry import get_all_agent_statuses
-    return get_all_agent_statuses()
+    from ai_agents.agents.toolsets import PERMISSION_CEILINGS
+
+    all_statuses = get_all_agent_statuses()
+    agents_list = []
+
+    for agent_name, status in all_statuses.items():
+        if status.get('status') == 'not_found':
+            continue
+
+        agents_list.append({
+            'name': agent_name,
+            'model': status.get('model', 'unknown'),
+            'description': status.get('description', ''),
+            'tool_count': status.get('tool_count', 0),
+            'level': PERMISSION_CEILINGS.get(agent_name, 'read')
+        })
+
+    return {'agents': agents_list}
 
 
 @app.get('/agents/{agent_name}', dependencies=[Depends(auth)])
@@ -497,7 +556,9 @@ async def get_agent_info(agent_name: str):
 
 @app.get('/progress/{session_id}', dependencies=[Depends(auth)])
 async def progress(session_id: str, since: int = 0):
-    """Get progress events for a session."""
+    """Get progress events for a session.
+    Use this endpoint to light agent status dots in Unity.
+    """
     state = (await ensure(session_id)).state
     log = list(state.get('task_log', []))
     return {'busy': locks[session_id].locked(),
@@ -552,37 +613,126 @@ async def list_tools():
 
 
 class ToolCallBody(BaseModel):
-    tool_name: str
     parameters: dict = {}
+
+
+class ActionBody(BaseModel):
+    parameters: dict = {}
+
+
+@app.post('/actions/{action_name}', dependencies=[Depends(auth)])
+async def run_action(action_name: str, body: ActionBody):
+    """Run a quick action without a model call.
+    Returns Unity-compatible response with status, title, lines, and scene_commands.
+    """
+    from ai_agents.agents.toolsets import TOOL_LEVELS
+    from ai_agents import tools as tools_module
+
+    start_time = time.time()
+    redacted_args = {k: '***' if 'token' in k.lower() or 'key' in k.lower() or 'password' in k.lower() else v
+                     for k, v in body.parameters.items()}
+
+    # Check action is in allowlist
+    if action_name not in QUICK_ACTIONS_ALLOWLIST:
+        log_audit('quick_action', action_name, redacted_args, 'blocked_not_in_allowlist', time.time() - start_time)
+        raise HTTPException(status_code=403, detail=f'Action {action_name} is not in the quick actions allowlist')
+
+    # Check tool exists
+    if not hasattr(tools_module, action_name):
+        log_audit('quick_action', action_name, redacted_args, 'error_not_found', time.time() - start_time)
+        raise HTTPException(status_code=404, detail=f'Action {action_name} not found')
+
+    # Build a session-scoped tool context
+    # Note: We need a session_id for the tool context
+    session_id = uuid.uuid4().hex
+    session = await ensure(session_id)
+
+    class ActionToolContext:
+        def __init__(self, session_state):
+            self.state = session_state
+            self.agent_name = 'quick_action'
+
+    tool_context = ActionToolContext(session.state)
+
+    # Call the tool
+    try:
+        tool_func = getattr(tools_module, action_name)
+
+        # Add tool_context to parameters
+        params = body.parameters.copy()
+        params['tool_context'] = tool_context
+
+        result = tool_func(**params)
+
+        # Extract Unity-compatible fields
+        status = result.get('status', 'success') if isinstance(result, dict) else 'success'
+        title = result.get('title', action_name.replace('_', ' ').title()) if isinstance(result, dict) else action_name.replace('_', ' ').title()
+        lines = result.get('lines', []) if isinstance(result, dict) else []
+        scene_commands = result.get('scene_commands', []) if isinstance(result, dict) else []
+
+        # Extract evidence if present
+        if not lines and 'evidence' in result:
+            evidence = result.get('evidence', [])
+            if isinstance(evidence, list):
+                lines = [str(e) for e in evidence]
+
+        log_audit('quick_action', action_name, redacted_args, 'success', time.time() - start_time)
+
+        return {
+            'status': status,
+            'title': title,
+            'lines': lines,
+            'scene_commands': scene_commands
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        log_audit('quick_action', action_name, redacted_args, f'error_{type(e).__name__}', time.time() - start_time)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post('/tools/{tool_name}', dependencies=[Depends(auth)])
 async def call_tool(tool_name: str, body: ToolCallBody):
     """Run a read-level tool directly without a model.
-    Write and execute tools are refused.
+    Requires JARVIS_ENABLE_DIRECT_TOOLS=1 and tool must be in allowlist.
     """
     from ai_agents.agents.toolsets import TOOL_LEVELS
     from ai_agents import tools as tools_module
-    
+
+    start_time = time.time()
+    outcome = 'blocked'
+
+    # Check if direct tools are enabled
+    if not ENABLE_DIRECT_TOOLS:
+        log_audit('direct_call', tool_name, body.parameters, 'blocked_feature_disabled', time.time() - start_time)
+        raise HTTPException(status_code=403, detail='Direct tool calls are disabled. Set JARVIS_ENABLE_DIRECT_TOOLS=1 to enable.')
+
+    # Check tool is in permission table - fail closed
+    if tool_name not in TOOL_LEVELS:
+        log_audit('direct_call', tool_name, body.parameters, 'blocked_unlisted', time.time() - start_time)
+        raise HTTPException(status_code=403, detail=f'Tool {tool_name} is not in the permission table and cannot be called directly')
+
     # Check permission level
-    perm_level = TOOL_LEVELS.get(tool_name, 'read')
-    if perm_level in ['write', 'execute']:
-        return {
-            'status': 'blocked',
-            'reason': f'Tool {tool_name} requires {perm_level} permission and cannot be called directly'
-        }
-    
+    perm_level = TOOL_LEVELS[tool_name]
+    if perm_level != 'read':
+        log_audit('direct_call', tool_name, body.parameters, 'blocked_permission', time.time() - start_time)
+        raise HTTPException(status_code=403, detail=f'Tool {tool_name} requires {perm_level} permission and cannot be called directly')
+
+    # Check tool is in allowlist
+    if tool_name not in DIRECT_TOOL_ALLOWLIST:
+        log_audit('direct_call', tool_name, body.parameters, 'blocked_not_in_allowlist', time.time() - start_time)
+        raise HTTPException(status_code=403, detail=f'Tool {tool_name} is not in the direct tool allowlist')
+
     # Check tool exists
     if not hasattr(tools_module, tool_name):
-        return {
-            'status': 'error',
-            'error': f'Tool {tool_name} not found'
-        }
-    
+        log_audit('direct_call', tool_name, body.parameters, 'error_not_found', time.time() - start_time)
+        raise HTTPException(status_code=404, detail=f'Tool {tool_name} not found')
+
     # Call the tool
     try:
         tool_func = getattr(tools_module, tool_name)
-        
+
         # Build mock tool context
         class MockToolContext:
             def __init__(self):
@@ -593,26 +743,25 @@ async def call_tool(tool_name: str, body: ToolCallBody):
                     'scene_commands': [],
                 }
                 self.agent_name = 'direct_call'
-        
+
         tool_context = MockToolContext()
-        
+
         # Add tool_context to parameters
         params = body.parameters.copy()
         params['tool_context'] = tool_context
-        
+
         result = tool_func(**params)
-        
+
         if not isinstance(result, dict):
-            return {
-                'status': 'error',
-                'error': f'Tool returned non-dict: {type(result)}'
-            }
-        
+            log_audit('direct_call', tool_name, body.parameters, 'error_invalid_result', time.time() - start_time)
+            raise HTTPException(status_code=500, detail=f'Tool returned non-dict: {type(result)}')
+
+        log_audit('direct_call', tool_name, body.parameters, 'success', time.time() - start_time)
         return result
-        
+
+    except HTTPException:
+        raise
     except Exception as e:
-        return {
-            'status': 'error',
-            'error': str(e)
-        }
+        log_audit('direct_call', tool_name, body.parameters, f'error_{type(e).__name__}', time.time() - start_time)
+        raise HTTPException(status_code=500, detail=str(e))
 

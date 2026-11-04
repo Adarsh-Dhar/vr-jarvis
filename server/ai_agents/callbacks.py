@@ -81,104 +81,86 @@ PERMISSION_LEVELS = {
 from .agents.toolsets import TOOL_LEVELS as TOOL_PERMISSIONS
 
 
-def generate_approval_token(session_id: str, tool_name: str, args: dict) -> str:
+def generate_approval_key(tool_name: str, args: dict) -> str:
     """
-    Generate a single-use, session-scoped approval token.
-    
-    The token is tied to:
-    - session_id: The specific session
-    - tool_name: The specific tool being called
-    - args: The exact arguments (hashed for consistency)
-    - A random nonce to prevent guessing
-    
-    Tokens are stored in session state with an expiration time.
+    Generate a deterministic key for an approval request.
+    Used to identify if a retried tool call matches a previously approved request.
     """
-    # Create a deterministic hash of the arguments
     args_hash = hashlib.sha256(json.dumps(args, sort_keys=True).encode()).hexdigest()[:16]
-    
-    # Generate a random nonce
-    nonce = secrets.token_hex(16)
-    
-    # Create the token
-    token = f"{session_id}:{tool_name}:{args_hash}:{nonce}"
-    
-    return token
+    return f"{tool_name}:{args_hash}"
 
 
-def validate_approval_token(token: str, session_id: str, tool_name: str, args: dict, tool_context) -> bool:
+def validate_approval(tool_name: str, args: dict, tool_context) -> bool:
     """
-    Validate and consume an approval token.
-    
-    Returns True if the token is valid, approved, and was consumed.
-    Returns False if the token is invalid, expired, not approved, or already used.
+    Check if a tool call has been approved via the hold gesture.
+
+    The approval flow:
+    1. permission_guard blocks a write tool and stores {tool_name, args_hash, status: 'pending'} in state
+    2. User holds, Unity calls /approve, which marks status: 'approved'
+    3. Agent retries the tool call with same tool_name and args
+    4. This function checks if {tool_name, args_hash} exists and is approved
+    5. If approved, consume it (single-use) and return True
+
+    Returns True if the call was approved and consumed.
+    Returns False if not approved, expired, or already used.
     """
     state = tool_context.state
-    
-    # Get pending approval tokens from session state
-    approval_tokens = state.get('approval_tokens', {})
-    
-    # Check if token exists
-    if token not in approval_tokens:
+
+    # Get pending approvals from session state
+    pending_approvals = state.get('pending_approvals', {})
+
+    # Generate the approval key
+    approval_key = generate_approval_key(tool_name, args)
+
+    # Check if approval exists
+    if approval_key not in pending_approvals:
         return False
-    
-    # Get token metadata
-    token_data = approval_tokens[token]
-    
-    # CRITICAL: Check if token was actually approved by the user
-    if token_data.get('status') != 'approved':
-        # Token exists but was not approved (rejected or still pending)
+
+    # Get approval metadata
+    approval_data = pending_approvals[approval_key]
+
+    # Check if approval was granted
+    if approval_data.get('status') != 'approved':
         return False
-    
-    # Verify token matches the current request
-    if token_data.get('session_id') != session_id:
-        return False
-    if token_data.get('tool_name') != tool_name:
-        return False
-    
-    # Verify arguments match (optional - can be strict or loose)
-    args_hash = hashlib.sha256(json.dumps(args, sort_keys=True).encode()).hexdigest()[:16]
-    if token_data.get('args_hash') != args_hash:
-        return False
-    
+
     # Check expiration (5 minutes default)
-    import time
-    if time.time() - token_data.get('created_at', 0) > 300:
-        # Token expired
-        del approval_tokens[token]
-        state['approval_tokens'] = approval_tokens
+    if time.time() - approval_data.get('created_at', 0) > 300:
+        # Approval expired
+        del pending_approvals[approval_key]
+        state['pending_approvals'] = pending_approvals
         return False
-    
-    # Token is valid and approved - consume it (single-use)
-    del approval_tokens[token]
-    state['approval_tokens'] = approval_tokens
-    
+
+    # Approval is valid - consume it (single-use)
+    del pending_approvals[approval_key]
+    state['pending_approvals'] = pending_approvals
+
     return True
 
 
 def permission_guard(tool, args, tool_context):
     '''
     before_tool_callback. Returning a dict skips the tool call.
-    
+
     Enforces:
     - Permission ceilings per agent
     - Tool budgets per session
-    - Single-use approval tokens for protected operations
+    - Approval workflow for write tools (server-side via hold gesture)
     - Audit logging for all authorization attempts
     '''
     name = tool.name
     start_time = time.time()
     outcome = 'blocked'
-    redacted_args = {k: '***' if 'token' in k.lower() or 'key' in k.lower() or 'password' in k.lower() else v 
+    redacted_args = {k: '***' if 'token' in k.lower() or 'key' in k.lower() or 'password' in k.lower() else v
                      for k, v in args.items()}
 
     # Use tool_context.agent_name (from ADK) instead of state['calling_agent']
     calling_agent = tool_context.agent_name
-    
+
     if calling_agent:
         from .agents.toolsets import PERMISSION_CEILINGS
         from .agents.registry import AGENT_CONFIG
         agent_ceiling = PERMISSION_CEILINGS.get(calling_agent, "read")
-        
+
         # Fail closed: tool missing from permission table is blocked for read-only agents
         tool_perm = TOOL_PERMISSIONS.get(name)
         if tool_perm is None:
@@ -210,7 +192,7 @@ def permission_guard(tool, args, tool_context):
         if calling_agent not in per_turn_budgets:
             per_turn_budgets[calling_agent] = 0
             tool_context.state['per_turn_budgets'] = per_turn_budgets
-        
+
         # Get agent's tool budget from AGENT_CONFIG
         agent_config = AGENT_CONFIG.get(calling_agent, {})
         budget = agent_config.get("tool_budget", 20)  # Default budget per turn
@@ -221,13 +203,13 @@ def permission_guard(tool, args, tool_context):
                 'status': 'blocked',
                 'reason': f'Agent {calling_agent} exceeded per-turn tool budget of {budget}'
             }
-        
+
         # Check concurrent call limits
         concurrent_calls = tool_context.state.get('concurrent_calls', {})
         if not isinstance(concurrent_calls, dict):
             concurrent_calls = {}
             tool_context.state['concurrent_calls'] = concurrent_calls
-        
+
         # Get concurrent limit from AGENT_CONFIG (default 5)
         concurrent_limit = agent_config.get("concurrent_limit", 5)
         current_concurrent = concurrent_calls.get(calling_agent, 0)
@@ -238,15 +220,15 @@ def permission_guard(tool, args, tool_context):
                 'status': 'blocked',
                 'reason': f'Agent {calling_agent} exceeded concurrent call limit of {concurrent_limit}'
             }
-        
+
         # Increment per-turn budget (atomic - this happens before tool execution)
         per_turn_budgets[calling_agent] += 1
         tool_context.state['per_turn_budgets'] = per_turn_budgets
-        
+
         # Increment concurrent call count (atomic)
         concurrent_calls[calling_agent] = current_concurrent + 1
         tool_context.state['concurrent_calls'] = concurrent_calls
-        
+
         # Store tool start time for timeout tracking
         tool_timeouts = tool_context.state.get('tool_timeouts', {})
         if not isinstance(tool_timeouts, dict):
@@ -265,30 +247,42 @@ def permission_guard(tool, args, tool_context):
             outcome = 'blocked_worktree'
             _log_authorization(calling_agent, name, redacted_args, outcome, time.time() - start_time)
             return {'status': 'blocked', 'reason': 'Create a sandbox worktree first.'}
-    
-    # Check for approval token if tool requires it
-    # Tools that require approval tokens can be listed in TIER2_TOOLS or checked via permissions
-    # For now, we check if the tool is in a list that requires approval
-    if name in TIER2_TOOLS:
-        # Check for valid approval token
-        approval_token = args.get('approval_token')
-        if approval_token:
-            session_id = tool_context.state.get('session_id', '')
-            if not validate_approval_token(approval_token, session_id, name, args, tool_context):
-                outcome = 'blocked_invalid_token'
-                _log_authorization(calling_agent, name, redacted_args, outcome, time.time() - start_time)
-                return {
-                    'status': 'blocked',
-                    'reason': 'Invalid or expired approval token'
-                }
-        else:
-            outcome = 'blocked_no_token'
+
+    # NEW: Approval workflow for write tools
+    # If tool requires write permission, check if it's been approved via hold gesture
+    if tool_perm == 'write':
+        # Check if this call was previously approved
+        if validate_approval(name, args, tool_context):
+            # Approved - proceed with execution
+            outcome = 'granted'
             _log_authorization(calling_agent, name, redacted_args, outcome, time.time() - start_time)
-            return {
-                'status': 'blocked',
-                'reason': 'This action requires a valid approval token'
-            }
-    
+            return None
+
+        # Not approved - store approval request and block
+        approval_key = generate_approval_key(name, args)
+        pending_approvals = tool_context.state.get('pending_approvals', {})
+        pending_approvals[approval_key] = {
+            'tool_name': name,
+            'args': args,
+            'created_at': time.time(),
+            'status': 'pending'
+        }
+        tool_context.state['pending_approvals'] = pending_approvals
+
+        # Set UI state for approval prompt
+        tool_context.state['pending_approval'] = f'Execute {name}'
+        tool_context.state['approval_type'] = 'tool'
+        tool_context.state['approval_key'] = approval_key
+        tool_context.state['approved'] = False
+
+        outcome = 'blocked_needs_approval'
+        _log_authorization(calling_agent, name, redacted_args, outcome, time.time() - start_time)
+        return {
+            'status': 'blocked',
+            'reason': f'Tool {name} requires user approval (hold gesture)',
+            'approval_key': approval_key
+        }
+
     # Permission granted
     outcome = 'granted'
     _log_authorization(calling_agent, name, redacted_args, outcome, time.time() - start_time)
