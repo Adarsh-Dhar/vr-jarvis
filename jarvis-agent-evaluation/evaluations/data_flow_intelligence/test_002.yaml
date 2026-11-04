@@ -1,34 +1,34 @@
-test_id: AG-DBG-002
-agent: debugging
+test_id: AG-DATA-002
+agent: data_flow_intelligence
 scenario: contract_validation
 layer: layer1_contract
 severity: critical
-description: Validate debugging contract and configuration
+description: Validate data flow contract and configuration
 input:
   task: "Validate contract"
   context:
     validation_type: contract_check
 expected_output:
   contract:
-    agent_id: debugging
+    agent_id: data_flow
     version: 1.0.0
     responsibilities:
-      - error_interpretation
-      - root_cause_identification
-      - hypothesis_testing
+      - source_to_sink_tracing
+      - transformation_identification
+      - sensitive_data_tracking
     allowed_tools:
-      - error_analyzer
-      - root_cause_detector
-      - hypothesis_tester
+      - data_flow_analyzer
+      - transformation_detector
+      - sensitive_data_tracker
     boundaries:
       must_not:
         - modify_production_code
-        - execute_bug_reproduction
+        - execute_data_operations
       must_delegate:
-        - complex_multi_system_debugging
+        - complex_multi_system_analysis
       must_report:
-        - root_cause_uncertain
-        - reproduction_unavailable
+        - incomplete_trace
+        - external_system
     quality_requirements:
       min_precision: 0.85
       min_recall: 0.80
@@ -44,4 +44,4 @@ fixture:
 evidence_requirements: []
 boundary_checks:
   - must_not: modify_production_code
-  - must_not: execute_bug_reproduction
+  - must_not: execute_data_operations

@@ -35,7 +35,7 @@ expected_output:
       action: find_relationships
       depends_on: [2]
     - step: 4
-      agent: data_flow
+      agent: data_flow_intelligence
       action: trace_data_flow
       depends_on: [2, 3]
   dependencies:

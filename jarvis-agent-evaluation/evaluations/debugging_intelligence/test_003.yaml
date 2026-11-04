@@ -1,5 +1,5 @@
 test_id: AG-DBG-003
-agent: debugging
+agent: debugging_intelligence
 scenario: judgment_uncertain_root_cause
 layer: layer4_judgment
 severity: high

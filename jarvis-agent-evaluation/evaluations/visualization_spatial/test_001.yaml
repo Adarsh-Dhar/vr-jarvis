@@ -1,5 +1,5 @@
 test_id: AG-VIS-001
-agent: visualization
+agent: visualization_spatial
 scenario: generate_call_graph
 layer: layer2_responsibility
 severity: high

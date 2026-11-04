@@ -1,39 +1,38 @@
-test_id: AG-VIS-002
-agent: visualization
+test_id: AG-DBG-002
+agent: debugging_intelligence
 scenario: contract_validation
 layer: layer1_contract
 severity: critical
-description: Validate visualization contract and configuration
+description: Validate debugging contract and configuration
 input:
   task: "Validate contract"
   context:
     validation_type: contract_check
 expected_output:
   contract:
-    agent_id: visualization
+    agent_id: debugging
     version: 1.0.0
     responsibilities:
-      - graph_construction
-      - filtering
-      - path_highlighting
+      - error_interpretation
+      - root_cause_identification
+      - hypothesis_testing
     allowed_tools:
-      - graph_builder
-      - filter_engine
-      - path_highlighter
+      - error_analyzer
+      - root_cause_detector
+      - hypothesis_tester
     boundaries:
       must_not:
         - modify_production_code
-        - execute_code
-      must_include:
-        - source_locations
-        - legend
+        - execute_bug_reproduction
+      must_delegate:
+        - complex_multi_system_debugging
       must_report:
-        - graph_too_large
-        - filtering_incomplete
+        - root_cause_uncertain
+        - reproduction_unavailable
     quality_requirements:
-      min_precision: 0.90
-      min_recall: 0.85
-      max_hallucination_rate: 0.03
+      min_precision: 0.85
+      min_recall: 0.80
+      max_hallucination_rate: 0.05
 expected_result:
   contract_valid: true
   all_responsibilities_defined: true
@@ -45,6 +44,4 @@ fixture:
 evidence_requirements: []
 boundary_checks:
   - must_not: modify_production_code
-  - must_not: execute_code
-  - must_include: source_locations
-  - must_include: legend
+  - must_not: execute_bug_reproduction

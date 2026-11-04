@@ -1,5 +1,5 @@
 test_id: AG-DBG-001
-agent: debugging
+agent: debugging_intelligence
 scenario: diagnose_race_condition
 layer: layer2_responsibility
 severity: high

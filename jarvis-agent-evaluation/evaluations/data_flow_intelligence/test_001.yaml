@@ -1,5 +1,5 @@
 test_id: AG-DATA-001
-agent: data_flow
+agent: data_flow_intelligence
 scenario: trace_user_input_to_database
 layer: layer2_responsibility
 severity: high

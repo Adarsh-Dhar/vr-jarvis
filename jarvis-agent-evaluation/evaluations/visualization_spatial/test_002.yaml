@@ -1,38 +1,39 @@
-test_id: AG-DATA-002
-agent: data_flow
+test_id: AG-VIS-002
+agent: visualization_spatial
 scenario: contract_validation
 layer: layer1_contract
 severity: critical
-description: Validate data flow contract and configuration
+description: Validate visualization contract and configuration
 input:
   task: "Validate contract"
   context:
     validation_type: contract_check
 expected_output:
   contract:
-    agent_id: data_flow
+    agent_id: visualization
     version: 1.0.0
     responsibilities:
-      - source_to_sink_tracing
-      - transformation_identification
-      - sensitive_data_tracking
+      - graph_construction
+      - filtering
+      - path_highlighting
     allowed_tools:
-      - data_flow_analyzer
-      - transformation_detector
-      - sensitive_data_tracker
+      - graph_builder
+      - filter_engine
+      - path_highlighter
     boundaries:
       must_not:
         - modify_production_code
-        - execute_data_operations
-      must_delegate:
-        - complex_multi_system_analysis
+        - execute_code
+      must_include:
+        - source_locations
+        - legend
       must_report:
-        - incomplete_trace
-        - external_system
+        - graph_too_large
+        - filtering_incomplete
     quality_requirements:
-      min_precision: 0.85
-      min_recall: 0.80
-      max_hallucination_rate: 0.05
+      min_precision: 0.90
+      min_recall: 0.85
+      max_hallucination_rate: 0.03
 expected_result:
   contract_valid: true
   all_responsibilities_defined: true
@@ -44,4 +45,6 @@ fixture:
 evidence_requirements: []
 boundary_checks:
   - must_not: modify_production_code
-  - must_not: execute_data_operations
+  - must_not: execute_code
+  - must_include: source_locations
+  - must_include: legend

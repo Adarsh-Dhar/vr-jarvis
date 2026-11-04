@@ -1,5 +1,5 @@
 test_id: AG-E2E-002
-agent: debugging
+agent: debugging_intelligence
 scenario: end_to_end_bug_fix_workflow
 layer: layer6_end_to_end
 severity: critical
@@ -26,9 +26,9 @@ expected_output:
       test_file: tests/test_connection.py
       test_function: test_concurrent_connections
   execution_trace:
-    - agent: debugging
+    - agent: debugging_intelligence
       action: analyze_bug_scenario
-    - agent: debugging
+    - agent: debugging_intelligence
       action: diagnose_root_cause
     - agent: software_engineering
       action: implement_fix
