@@ -193,7 +193,16 @@ def trace_taint_flow(
     source: str,
     tool_context: ToolContext
 ) -> dict:
-    """Track tainted data (security analysis)."""
+    """
+    Track tainted data (security analysis).
+    
+    This is a basic heuristic implementation using pattern matching.
+    Full taint analysis requires:
+    - Static data flow analysis
+    - AST-based tracking
+    - Context-sensitive analysis
+    - Runtime instrumentation for dynamic taint
+    """
     try:
         from .repository_tools import search_code
         
@@ -223,10 +232,11 @@ def trace_taint_flow(
                     })
         
         return {
-            'status': 'ok',
+            'status': 'partial',
             'source': source,
             'tainted_sources': tainted_variables,
-            'note': 'Basic taint analysis - full analysis requires runtime instrumentation'
+            'note': 'Heuristic pattern matching only - does not perform actual data flow analysis. Full taint analysis requires static data flow analysis framework.',
+            'limitation': 'Cannot track actual data flow between variables, cannot resolve sanitization, cannot handle control flow'
         }
     except Exception as e:
         return {

@@ -750,7 +750,15 @@ def visualize_call_graph(
     tool_context: ToolContext,
     scope: str = 'local'
 ) -> dict:
-    """Visualize call graph."""
+    """
+    Visualize call graph.
+    
+    This is a placeholder that creates a visualization ID.
+    Real implementation requires:
+    - Build actual call graph from verified relationship data
+    - Use code intelligence integration (graph_tools.get_callers, get_callees)
+    - Generate graph structure for visualization
+    """
     try:
         viz_id = str(uuid.uuid4())
 
@@ -764,11 +772,11 @@ def visualize_call_graph(
         _set_session_state(tool_context, 'visualization_state', viz_state)
 
         return {
-            'status': 'ok',
+            'status': 'partial',
             'function_id': function_id,
             'scope': scope,
             'visualization_id': viz_id,
-            'note': 'Real visualization requires code intelligence integration'
+            'note': 'Visualization ID created but graph data not generated. Requires code intelligence integration with graph_tools to build actual call graph structure.'
         }
     except Exception as e:
         return {

@@ -1657,11 +1657,15 @@ def refactor_function(
     refactoring_type: str,
     tool_context: ToolContext
 ) -> dict:
-    """Refactor function.
-
-    WARNING: This tool uses template-based refactoring only. It does not perform
-    deep semantic analysis. Results should be reviewed carefully.
-    Marked for deep implementation in Phase 0.7.
+    """
+    Refactor function.
+    
+    This tool provides static analysis and refactoring suggestions only.
+    Actual refactoring requires:
+    - AST manipulation to rewrite code
+    - Semantic analysis to preserve behavior
+    - Test execution to verify correctness
+    - Worktree isolation for safe editing
     """
     try:
         from .navigation_tools import get_symbol_definition
@@ -1704,7 +1708,7 @@ def refactor_function(
         }
         
         return {
-            'status': 'ok',
+            'status': 'partial',
             'function_id': function_id,
             'refactoring_type': refactoring_type,
             'file_path': file_path,
@@ -1714,7 +1718,7 @@ def refactor_function(
             },
             'suggested_actions': refactoring_actions,
             'refactoring_plan': refactoring_plans.get(refactoring_type, 'Generic refactoring'),
-            'note': 'Static analysis provided - actual refactoring requires AST manipulation'
+            'note': 'Static analysis and suggestions provided - actual code rewriting requires AST manipulation and behavior verification'
         }
     except Exception as e:
         return {

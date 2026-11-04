@@ -806,11 +806,15 @@ def detect_code_smells(
     repository_path: str,
     tool_context: ToolContext
 ) -> dict:
-    """Detect code smells.
-
-    WARNING: This tool uses shallow keyword matching only. It does not perform
-    deep code analysis. Results should be treated as approximate.
-    Marked for deep implementation in Phase 0.7.
+    """
+    Detect code smells.
+    
+    This tool uses shallow keyword matching for common patterns.
+    Full code smell detection requires:
+    - AST-based analysis for complex patterns
+    - Metric calculation (cyclomatic complexity, coupling, cohesion)
+    - Pattern matching for architectural violations
+    - Custom rule engine for project-specific smells
     """
     try:
         from .repository_tools import search_code
@@ -846,14 +850,15 @@ def detect_code_smells(
         low_severity = [s for s in code_smells if s.get('severity') == 'low']
         
         return {
-            'status': 'ok',
+            'status': 'partial',
             'repository_path': repository_path,
             'code_smells': code_smells,
             'total_smells': len(code_smells),
             'high_severity': len(high_severity),
             'medium_severity': len(medium_severity),
             'low_severity': len(low_severity),
-            'health_score': 'good' if len(code_smells) < 10 else 'needs_attention'
+            'health_score': 'good' if len(code_smells) < 10 else 'needs_attention',
+            'note': 'Keyword matching only - does not perform AST-based analysis or metric calculation. Full implementation requires complex pattern detection framework.'
         }
     except Exception as e:
         return {
