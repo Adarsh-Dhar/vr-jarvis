@@ -1,19 +1,17 @@
 import os
 from pathlib import Path
 
+from .llm import make_model
+
 ROOT = Path(__file__).parent
 
-# Model configuration with fallback and retry logic
-# Use multiple models to distribute load across different rate limits
-# Models are hardcoded to avoid .env overrides breaking the distribution
-MODELS = [
-    'gemini-3.1-flash-lite',     # 15 RPM, 250K TPM, 500 RPD - highest limits
-    'gemini-3.5-flash-lite',     # 15 RPM, 250K TPM, 500 RPD - highest limits
-    'gemini-3.7-flash',          # New efficient Flash model
-    'gemini-3.6-flash',          # 5 RPM, 250K TPM, 20 RPD
-    'gemini-3.8-flash',          # 5 RPM, 250K TPM, 20 RPD
-]
-MODEL = 'gemini-3.7-flash'  # New high-speed, efficient Flash model
+# Models. Every agent gets MODEL (or LITE_MODEL) from here, wrapped so a call retries on overload (503/429) and can be paced.
+# JARVIS_MODEL_LITE lets routine agents (critics, scene directors) use a cheaper model; it defaults to the same model.
+# See ai_agents/llm.py for the JARVIS_LLM_* settings (retries, requests per minute, concurrency).
+MODEL_NAME = os.getenv('JARVIS_MODEL', 'gemini-3.5-flash-lite')
+LITE_MODEL_NAME = os.getenv('JARVIS_MODEL_LITE', MODEL_NAME)
+MODEL = make_model(MODEL_NAME)
+LITE_MODEL = make_model(LITE_MODEL_NAME)
 MONTHLY_BUDGET_LIMIT = float(os.getenv('JARVIS_MONTHLY_BUDGET', '100.0'))  # USD
 
 # Every folder inside REPOSITORY_DIR is one code repository the VR UI can show.

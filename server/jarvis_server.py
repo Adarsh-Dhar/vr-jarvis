@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import json
 import os
 import subprocess
@@ -21,6 +22,7 @@ from pydantic import BaseModel
 from ai_agents.agent import root_agent
 from ai_agents import config, repository
 from ai_agents.config import USE_CACHED_TESTS
+from ai_agents import llm
 from ai_agents.tools.git_tools import commit_worktree
 from ai_agents.tools.graph_tools import get_source
 
@@ -241,6 +243,7 @@ async def _run_turn(body):
 async def ask(body: AskBody):
     """Non-streaming endpoint for compatibility."""
     error = ''
+    calls_before = llm.stats['requests']
     reply = ''
     async with locks[body.session_id]:
         await ensure(body.session_id)
@@ -252,6 +255,9 @@ async def ask(body: AskBody):
         except Exception as exc:
             error = f'{type(exc).__name__}: {str(exc)[:200]}'
         state = (await ensure(body.session_id)).state
+    logger = logging.getLogger('uvicorn.error')
+    logger.info('ask: %d model calls, %s', llm.stats['requests'] - calls_before, 'error' if error else 'ok')
+    logger.info('reply: %s', reply[:200] if reply else error)
     last = state.get('last_test_run') or {}
     commands = list(state.get('scene_commands', []))
     pending = _s(state.get('pending_approval'))

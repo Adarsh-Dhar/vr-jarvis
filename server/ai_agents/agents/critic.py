@@ -1,6 +1,6 @@
 from google.adk.agents import LlmAgent
 
-from ..config import MODEL
+from ..config import LITE_MODEL
 from ..tools.graph_tools import get_node, verify_citations
 from ..callbacks import permission_guard
 
@@ -25,7 +25,7 @@ claims (list with confidence), and changes_made (list of notes).
 def make_critic(name: str, review_key: str) -> LlmAgent:
     agent = LlmAgent(
         name=name,
-        model=MODEL,
+        model=LITE_MODEL,
         include_contents='none',
         description='Checks that every claim in findings is backed by real graph evidence',
         instruction=TEMPLATE.replace('{findings}', '{' + review_key + '}'),

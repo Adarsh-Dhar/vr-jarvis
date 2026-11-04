@@ -1,6 +1,6 @@
 from google.adk.agents import LlmAgent
 
-from ..config import MODEL
+from ..config import LITE_MODEL
 from ..tools.scene_tools import (dim_unrelated, focus_camera, highlight_vr_path, open_code_panel,
                                  set_edge_style, show_ghost_diff, show_test_badges)
 from ..callbacks import permission_guard
@@ -49,7 +49,7 @@ Then reply in at most two spoken sentences. No markdown, no node ids.
 def make_scene_director(name: str) -> LlmAgent:
     agent = LlmAgent(
         name=name,
-        model=MODEL,
+        model=LITE_MODEL,
         include_contents='none',
         description='Updates the VR scene to show verified results and speaks a two-sentence summary.',
         instruction=INSTRUCTION,
@@ -67,7 +67,7 @@ def make_scene_director(name: str) -> LlmAgent:
 
 def make_result_scene_director(name: str, result_key: str) -> LlmAgent:
     agent = LlmAgent(
-        name=name, model=MODEL, include_contents='none',
+        name=name, model=LITE_MODEL, include_contents='none',
         description='Shows a specialist result in the VR scene and speaks a two-sentence summary.',
         instruction=RESULT_INSTRUCTION.replace('{RESULT}', '{' + result_key + '}'),
         tools=[highlight_vr_path, dim_unrelated, focus_camera, open_code_panel,
