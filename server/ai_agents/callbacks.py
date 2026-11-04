@@ -90,7 +90,10 @@ def permission_guard(tool, args, tool_context):
             }
 
         # Check tool budget from session state
-        tool_budgets = tool_context.state.get('tool_budgets', {})
+        tool_budgets = tool_context.state.get('tool_budgets')
+        if not isinstance(tool_budgets, dict):
+            tool_budgets = {}
+            tool_context.state['tool_budgets'] = tool_budgets
         if calling_agent not in tool_budgets:
             tool_budgets[calling_agent] = 0
             tool_context.state['tool_budgets'] = tool_budgets

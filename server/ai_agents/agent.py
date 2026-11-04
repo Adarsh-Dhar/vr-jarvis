@@ -127,7 +127,7 @@ Rules:
 root_agent = LlmAgent(
     name='jarvis_orchestrator',
     model=MODEL,
-    description='Voice-and-hands assistant for understanding and changing code in VR.',
+    description='Voice-and hands assistant for understanding and changing code in VR.',
     instruction=ROOT_INSTRUCTION,
     tools=[request_approval],
     sub_agents=[phase2_pipeline, investigate_pipeline, impact_pipeline, fix_pipeline, briefing_pipeline,

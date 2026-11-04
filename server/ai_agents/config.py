@@ -4,9 +4,16 @@ from pathlib import Path
 ROOT = Path(__file__).parent
 
 # Model configuration with fallback and retry logic
-MODEL = os.getenv('JARVIS_MODEL', 'gemini-2.0-flash-exp')
-FALLBACK_MODEL = os.getenv('JARVIS_FALLBACK_MODEL', 'gemini-1.5-flash')
-MODEL_RETRIES = int(os.getenv('JARVIS_MODEL_RETRIES', '3'))
+# Use multiple models to distribute load across different rate limits
+# Models are hardcoded to avoid .env overrides breaking the distribution
+MODELS = [
+    'gemini-3.1-flash-lite',     # 15 RPM, 250K TPM, 500 RPD - highest limits
+    'gemini-3.5-flash-lite',     # 15 RPM, 250K TPM, 500 RPD - highest limits
+    'gemini-3.7-flash',          # New efficient Flash model
+    'gemini-3.6-flash',          # 5 RPM, 250K TPM, 20 RPD
+    'gemini-3.8-flash',          # 5 RPM, 250K TPM, 20 RPD
+]
+MODEL = 'gemini-3.7-flash'  # New high-speed, efficient Flash model
 MONTHLY_BUDGET_LIMIT = float(os.getenv('JARVIS_MONTHLY_BUDGET', '100.0'))  # USD
 
 # Every folder inside REPOSITORY_DIR is one code repository the VR UI can show.

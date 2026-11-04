@@ -6,7 +6,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 REPO = ROOT / 'repository' / 'demo-account-service'
-DATA = ROOT / 'ai_agents' / 'data'
+DATA = ROOT / 'server' / 'ai_agents' / 'data'
 
 FILES = {
 'package.json': '''{
@@ -158,6 +158,7 @@ def main():
     sh('git', 'add', '-A'); sh('git', 'commit', '-qm', 'Add audit log to deleteAccount')
     diff = sh('git', 'diff', 'main', 'feature/account-audit')
     sh('git', 'checkout', '-q', 'main')
+    DATA.mkdir(parents=True, exist_ok=True)
     (DATA / 'graph.json').write_text(json.dumps(graph, indent=2))
     (REPO.parent / (REPO.name + '.graph.json')).write_text(json.dumps(graph, indent=2))   # curated graph wins over auto-index
     (DATA / 'demo_change.json').write_text(json.dumps({

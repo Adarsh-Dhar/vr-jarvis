@@ -7,6 +7,9 @@ namespace JarvisVR
 {
   public sealed class JarvisSpatialInput : MonoBehaviour
   {
+    /// <summary>Per-frame input logging. Off by default: it floods the Console and slows the editor.</summary>
+    public static bool VerboseLogging = false;
+
     private sealed class Slot
     {
       public Ray Ray; public bool Valid, Down, WasDown;
@@ -16,11 +19,14 @@ namespace JarvisVR
       public JarvisNodeFx HoverFx;
       public JarvisSpatialResize Resize; public float ResizeDist, ResizeStartScale, ResizeStartDistance;
       public JarvisSpatialGrab Grab; public float GrabDist; public Vector3 GrabOffset;
+      public Vector2 Thumbstick; // Trackpad/thumbstick input
+      public Vector2 PointerPos; // Virtual pointer position (normalized 0-1) for trackpad-based cursor
+      public bool UsingPointer; // True when using thumbstick-based pointer instead of controller forward
       public bool Busy { get { return Btn != null || Node != null || Grab != null || Resize != null; } }
     }
 
-    // 0 left hand, 1 right hand, 2 editor mouse, 3 left controller, 4 right controller
-    private readonly Slot[] _slots = { new Slot(), new Slot(), new Slot(), new Slot(), new Slot() };
+    // 0 left hand, 1 right hand, 2 editor mouse, 3 left controller, 4 right controller, 5 head-gaze fallback (editor)
+    private readonly Slot[] _slots = { new Slot(), new Slot(), new Slot(), new Slot(), new Slot(), new Slot() };
     private OVRHand[] _hands;
     private readonly System.Collections.Generic.List<OVRHand>[] _bySide =
       { new System.Collections.Generic.List<OVRHand>(), new System.Collections.Generic.List<OVRHand>() };   // [0] left, [1] right
@@ -30,6 +36,7 @@ namespace JarvisVR
     private Action _toggleVoice;
     private bool _zooming;
     private float _zoomStartDistance, _zoomStartScale = 1f;
+    private const float PointerSensitivity = 0.5f; // Sensitivity for trackpad-based pointer movement
 
     public void Initialize(Camera cam, Transform graphRoot, Action toggleVoice)
     {
@@ -77,10 +84,6 @@ namespace JarvisVR
 
     private void Update()
     {
-      // Test keyboard input detection
-      if (Input.GetKeyDown(KeyCode.Return))
-        Debug.Log("JARVIS: GLOBAL - Enter key pressed (detected at Update start)");
-
       for (int i = 0; i < 2; i++)
       {
         Slot s = _slots[i];
@@ -94,16 +97,13 @@ namespace JarvisVR
         }
       }
       // Touch controllers: used only while that side's hand is not tracked, so a hand and a controller never fight.
-      // Skip controller input in editor simulator mode - only editor mouse should be used
-      bool simulatorMode = false;
-#if UNITY_EDITOR
-      simulatorMode = true;
-#endif
+      // These are NOT skipped in the editor: Meta XR Simulator turns the mouse into simulated controller or hand input
+      // and delivers it through OpenXR, so this is the path a simulator click arrives on.
       for (int i = 0; i < 2; i++)
       {
         Slot c = _slots[3 + i];
-        c.Valid = false; c.Down = false;
-        if (simulatorMode) continue;  // Skip controllers in simulator mode
+        bool wasValid = c.Valid;
+        c.Valid = false; c.Down = false; c.Thumbstick = Vector2.zero;
         OVRInput.Controller ctrl = i == 0 ? OVRInput.Controller.LTouch : OVRInput.Controller.RTouch;
         if (_slots[i].Valid || !OVRInput.IsControllerConnected(ctrl)) continue;
         Vector3 lp = OVRInput.GetLocalControllerPosition(ctrl);
@@ -112,29 +112,63 @@ namespace JarvisVR
         Quaternion world = (_tracking != null ? _tracking.rotation : Quaternion.identity) * lr;
         c.Ray = new Ray(origin, world * Vector3.forward);
         c.Valid = true;
-        c.Down = OVRInput.Get(OVRInput.Button.PrimaryIndexTrigger, ctrl);
+        c.Down = OVRInput.Get(OVRInput.Button.PrimaryIndexTrigger, ctrl) || OVRInput.Get(OVRInput.Button.PrimaryThumbstick, ctrl);
+        c.Thumbstick = OVRInput.Get(OVRInput.Axis2D.PrimaryThumbstick, ctrl);
+
+        // Initialize pointer position when controller becomes valid
+        if (!wasValid && c.Valid && _cam != null)
+        {
+          c.PointerPos = new Vector2(0.5f, 0.5f); // Start at center of screen
+          c.UsingPointer = false;
+        }
+
+        // Update pointer position based on thumbstick movement
+        if (c.Thumbstick.magnitude > 0.1f)
+        {
+          c.UsingPointer = true;
+          c.PointerPos += c.Thumbstick * PointerSensitivity * Time.unscaledDeltaTime;
+          c.PointerPos = new Vector2(Mathf.Clamp01(c.PointerPos.x), Mathf.Clamp01(c.PointerPos.y));
+        }
+
+        // Always use pointer ray if pointer mode was activated
+        if (c.UsingPointer && _cam != null)
+        {
+          Vector3 p = new Vector3(c.PointerPos.x * _cam.pixelWidth, c.PointerPos.y * _cam.pixelHeight, 0f);
+          Camera.MonoOrStereoscopicEye eye = _cam.stereoEnabled ? Camera.MonoOrStereoscopicEye.Left : Camera.MonoOrStereoscopicEye.Mono;
+          c.Ray = _cam.ScreenPointToRay(p, eye);
+        }
       }
 #if UNITY_EDITOR
+      // Plain Unity mouse. It only receives clicks while the Unity Game view has focus; when Meta XR Simulator has focus the
+      // simulator consumes the mouse and sends it as controller/hand input instead (handled above), so this slot is hidden.
       Slot m = _slots[2];
-      m.Valid = _cam != null;
-      if (m.Valid) { m.Ray = _cam.ScreenPointToRay(Input.mousePosition); m.Down = Input.GetMouseButton(0); }
-      if (Input.GetKeyDown(KeyCode.Space) && _toggleVoice != null) _toggleVoice();
-
-      // In simulator mode, invalidate hand slots so only editor mouse works
-      _slots[0].Valid = false;
-      _slots[1].Valid = false;
-
+      Vector3 mp = Input.mousePosition;
+      bool overGameView = mp.x >= 0f && mp.y >= 0f && mp.x <= Screen.width && mp.y <= Screen.height;
+      m.Valid = _cam != null && Input.mousePresent && Application.isFocused && overGameView;
       if (m.Valid)
       {
-        // Keyboard fallback: use Enter key to simulate mouse click when hovering over a button
-        if (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter))
-        {
-          m.Down = true;
-          Debug.Log("JARVIS: Keyboard Enter pressed to simulate click");
-        }
-        Debug.Log("JARVIS: Editor mouse slot: Valid=" + m.Valid + ", Down=" + m.Down + ", WasDown=" + m.WasDown + ", mousePos=" + Input.mousePosition);
-        if (Input.GetMouseButtonDown(0))
-          Debug.Log("JARVIS: Editor mouse click at " + Input.mousePosition + ", cam pos=" + _cam.transform.position + ", ray=" + m.Ray);
+        // The Game view and the XR eye texture can differ in size, so normalise before building the ray.
+        Vector3 p = new Vector3(mp.x / Mathf.Max(1, Screen.width) * _cam.pixelWidth, mp.y / Mathf.Max(1, Screen.height) * _cam.pixelHeight, 0f);
+        Camera.MonoOrStereoscopicEye eye = _cam.stereoEnabled ? Camera.MonoOrStereoscopicEye.Left : Camera.MonoOrStereoscopicEye.Mono;
+        m.Ray = _cam.ScreenPointToRay(p, eye);
+        // Enter is a held-key click fallback that works when mouse clicks do not reach Unity.
+        m.Down = Input.GetMouseButton(0) || Input.GetKey(KeyCode.Return) || Input.GetKey(KeyCode.KeypadEnter);
+        if (VerboseLogging && (Input.GetMouseButtonDown(0) || Input.GetKeyDown(KeyCode.Return)))
+          Debug.Log("JARVIS: editor click, mousePos=" + mp + ", Down=" + m.Down + ", ray=" + m.Ray);
+      }
+      if (Input.GetKeyDown(KeyCode.Space) && _toggleVoice != null) _toggleVoice();
+
+      // Head-gaze fallback: when no hand, controller or mouse pointer is available (for example the simulator window has focus and
+      // Unity is not receiving the mouse), show a white pointer straight ahead so there is always something to aim with.
+      // Enter clicks it while Unity has focus.
+      Slot g = _slots[5];
+      bool otherPointer = _slots[0].Valid || _slots[1].Valid || _slots[2].Valid || _slots[3].Valid || _slots[4].Valid;
+      g.Valid = _cam != null && !otherPointer;
+      g.Down = false;
+      if (g.Valid)
+      {
+        g.Ray = new Ray(_cam.transform.position, _cam.transform.forward);
+        g.Down = Input.GetKey(KeyCode.Return) || Input.GetKey(KeyCode.KeypadEnter);
       }
 #endif
       foreach (Slot s in _slots) Process(s);
@@ -175,7 +209,8 @@ namespace JarvisVR
         }
       }
       s.Reticle.position = s.Ray.GetPoint(hasHit ? dist - 0.01f : 1.5f);
-      s.Reticle.GetComponent<Renderer>().sharedMaterial.color = s.Down ? new Color(0.96f, 0.65f, 0.14f) : new Color(0.24f, 0.84f, 0.91f);
+      Color restColor = s == _slots[5] ? Color.white : new Color(0.24f, 0.84f, 0.91f);
+      s.Reticle.GetComponent<Renderer>().sharedMaterial.color = s.Down ? new Color(0.96f, 0.65f, 0.14f) : restColor;
 
       if (s.Hover != hoverBtn)
       {
@@ -296,7 +331,7 @@ namespace JarvisVR
       if (hits == null || hits.Length == 0) { selected = default; return false; }
       Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
       selected = hits[0];
-      Debug.Log("JARVIS: Raycast found " + hits.Length + " hits, nearest on " + selected.collider.gameObject.name);
+      if (VerboseLogging) Debug.Log("JARVIS: Raycast found " + hits.Length + " hits, nearest on " + selected.collider.gameObject.name);
 
       // 1) Buttons take priority over their own panel's backing collider. This also avoids
       // unrelated non-interactive scene colliders swallowing a UI click.
