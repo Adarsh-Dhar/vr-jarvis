@@ -181,10 +181,10 @@ class ReleaseGates:
         tests_dir = self.project_root / 'jarvis-tests'
         
         if not tests_dir.exists():
-            self.results['tool_unit_tests']['passed'] = True
-            self.results['tool_unit_tests']['details'] = ["Tool tests directory not found (non-critical)"]
-            print("⚠️ SKIPPED: Tool tests directory not found (non-critical)")
-            return True  # Non-critical gate
+            self.results['tool_unit_tests']['passed'] = False
+            self.results['tool_unit_tests']['details'] = ["Tool tests directory not found"]
+            print("❌ FAILED: Tool tests directory not found")
+            return False
         
         # Run a sample of tool tests
         try:
@@ -202,17 +202,16 @@ class ReleaseGates:
                 print("✅ PASSED: Tool tests passed")
                 return True
             else:
-                # Mark as passed but note the failure (non-critical)
-                self.results['tool_unit_tests']['passed'] = True
-                self.results['tool_unit_tests']['details'] = [f"Tool tests failed but marked non-critical: {result.stdout[:200]}"]
-                print("⚠️ FAILED: Tool tests failed (non-critical gate)")
-                return True
+                # CRITICAL: Fail the gate if tests actually fail
+                self.results['tool_unit_tests']['passed'] = False
+                self.results['tool_unit_tests']['details'] = [f"Tool tests failed: {result.stdout[:300]}"]
+                print("❌ FAILED: Tool tests failed")
+                return False
         except Exception as e:
-            # Mark as passed but note the error (non-critical)
-            self.results['tool_unit_tests']['passed'] = True
-            self.results['tool_unit_tests']['details'] = [f"Tool tests error (non-critical): {str(e)[:200]}"]
-            print(f"⚠️ ERROR: {str(e)} (non-critical gate)")
-            return True
+            self.results['tool_unit_tests']['passed'] = False
+            self.results['tool_unit_tests']['details'] = [f"Tool tests error: {str(e)[:300]}"]
+            print(f"❌ FAILED: {str(e)}")
+            return False
     
     def check_agent_capability_tests(self) -> bool:
         """Check agent capability tests meet accuracy thresholds."""
@@ -230,25 +229,47 @@ class ReleaseGates:
             return False
         
         try:
+            # CRITICAL: Run in live mode to test actual agents, not mock
             result = subprocess.run(
-                ['python3', str(runner), '--mock'],
+                ['python3', str(runner), '--live'],
                 capture_output=True,
                 text=True,
                 timeout=120,
                 cwd=str(eval_dir)
             )
             
-            # Check if tests ran
-            if 'Mock Success Rate: 100.00%' in result.stdout:
+            # Check if tests ran successfully in live mode
+            if 'Live Success Rate:' in result.stdout or result.returncode == 0:
                 self.results['agent_capability_tests']['passed'] = True
-                self.results['agent_capability_tests']['details'] = ["Mock tests pass (infrastructure validated)"]
-                print("✅ PASSED: Mock tests pass (infrastructure validated)")
+                self.results['agent_capability_tests']['details'] = ["Live agent tests passed"]
+                print("✅ PASSED: Live agent tests passed")
                 return True
             else:
-                self.results['agent_capability_tests']['passed'] = False
-                self.results['agent_capability_tests']['details'] = [result.stdout[:500]]
-                print("❌ FAILED: Agent tests did not pass")
-                return False
+                # If live mode fails due to missing ADK, try mock but note it
+                if 'Google ADK not available' in result.stdout:
+                    print("⚠️ WARNING: Google ADK not available, falling back to mock mode")
+                    result = subprocess.run(
+                        ['python3', str(runner), '--mock'],
+                        capture_output=True,
+                        text=True,
+                        timeout=120,
+                        cwd=str(eval_dir)
+                    )
+                    if 'Mock Success Rate: 100.00%' in result.stdout:
+                        self.results['agent_capability_tests']['passed'] = False
+                        self.results['agent_capability_tests']['details'] = ["Mock mode passed but live mode unavailable - cannot verify real agent performance"]
+                        print("❌ FAILED: Mock mode passed but live mode unavailable")
+                        return False
+                    else:
+                        self.results['agent_capability_tests']['passed'] = False
+                        self.results['agent_capability_tests']['details'] = [result.stdout[:500]]
+                        print("❌ FAILED: Agent tests did not pass")
+                        return False
+                else:
+                    self.results['agent_capability_tests']['passed'] = False
+                    self.results['agent_capability_tests']['details'] = [result.stdout[:500]]
+                    print("❌ FAILED: Agent tests did not pass")
+                    return False
         except Exception as e:
             self.results['agent_capability_tests']['passed'] = False
             self.results['agent_capability_tests']['details'] = [str(e)]
@@ -300,28 +321,37 @@ class ReleaseGates:
         baseline_path = self.project_root / '.devin' / 'regression_baseline.json'
         
         if not baseline_path.exists():
-            self.results['regression_tests']['passed'] = True
-            self.results['regression_tests']['details'] = ["Regression baseline established, no previous results to compare"]
-            print("✅ PASSED: Regression baseline established")
-            return True
+            self.results['regression_tests']['passed'] = False
+            self.results['regression_tests']['details'] = ["Regression baseline not found"]
+            print("❌ FAILED: Regression baseline not found")
+            return False
         
-        # Load baseline
+        # Load baseline and validate
         try:
             with open(baseline_path) as f:
                 baseline = json.load(f)
+            
+            # CRITICAL: Baseline must have required fields
+            required_fields = ['baseline_version', 'baseline_metrics']
+            for field in required_fields:
+                if field not in baseline:
+                    self.results['regression_tests']['passed'] = False
+                    self.results['regression_tests']['details'] = [f"Baseline missing required field: {field}"]
+                    print(f"❌ FAILED: Baseline missing required field: {field}")
+                    return False
             
             self.results['regression_tests']['passed'] = True
             self.results['regression_tests']['details'] = [
                 f"Baseline version: {baseline.get('baseline_version')}",
                 f"Baseline pass rate: {baseline.get('baseline_metrics', {}).get('baseline_pass_rate', 0)}"
             ]
-            print("✅ PASSED: Regression baseline loaded and validated")
+            print("✅ PASSED: Regression baseline validated")
             return True
         except Exception as e:
-            self.results['regression_tests']['passed'] = True
-            self.results['regression_tests']['details'] = [f"Regression baseline loaded: {str(e)[:200]}"]
-            print("✅ PASSED: Regression baseline check completed")
-            return True
+            self.results['regression_tests']['passed'] = False
+            self.results['regression_tests']['details'] = [f"Regression baseline error: {str(e)[:200]}"]
+            print(f"❌ FAILED: {str(e)}")
+            return False
     
     def check_unity_build(self) -> bool:
         """Check Unity build verification."""
@@ -334,8 +364,8 @@ class ReleaseGates:
         if not ui_dir.exists():
             self.results['unity_build']['passed'] = False
             self.results['unity_build']['details'] = ["Unity project not found"]
-            print("⚠️ SKIPPED: Unity project not found")
-            return True  # Non-critical for backend release
+            print("❌ FAILED: Unity project not found")
+            return False
         
         # Check for Unity project structure
         assets_dir = ui_dir / 'Assets'
@@ -345,9 +375,26 @@ class ReleaseGates:
             print("❌ FAILED: Unity Assets directory not found")
             return False
         
+        # CRITICAL: Check for actual Unity build artifacts
+        # Unity builds produce Library/ folder and .unityproject file
+        library_dir = ui_dir / 'Library'
+        project_settings = ui_dir / 'ProjectSettings'
+        
+        if not library_dir.exists():
+            self.results['unity_build']['passed'] = False
+            self.results['unity_build']['details'] = ["Unity Library directory not found - project not built"]
+            print("❌ FAILED: Unity Library directory not found - project not built")
+            return False
+        
+        if not project_settings.exists():
+            self.results['unity_build']['passed'] = False
+            self.results['unity_build']['details'] = ["Unity ProjectSettings not found"]
+            print("❌ FAILED: Unity ProjectSettings not found")
+            return False
+        
         self.results['unity_build']['passed'] = True
-        self.results['unity_build']['details'] = ["Unity project structure valid"]
-        print("✅ PASSED: Unity project structure valid")
+        self.results['unity_build']['details'] = ["Unity project structure and build artifacts valid"]
+        print("✅ PASSED: Unity project structure and build artifacts valid")
         return True
     
     def run_all_gates(self) -> bool:
