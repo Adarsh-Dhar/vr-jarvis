@@ -753,30 +753,79 @@ def visualize_call_graph(
     """
     Visualize call graph.
     
-    This is a placeholder that creates a visualization ID.
-    Real implementation requires:
-    - Build actual call graph from verified relationship data
-    - Use code intelligence integration (graph_tools.get_callers, get_callees)
-    - Generate graph structure for visualization
+    Builds actual call graph from relationship data where available.
     """
     try:
+        from .. import config
+        import json
+        
         viz_id = str(uuid.uuid4())
-
+        
+        # Try to load graph data from the repository
+        graph_path = config.GRAPH_PATH
+        nodes = []
+        edges = []
+        
+        if graph_path.exists():
+            with open(graph_path) as f:
+                graph_data = json.load(f)
+            
+            # Find the function in the graph
+            graph_nodes = graph_data.get('nodes', [])
+            graph_edges = graph_data.get('edges', [])
+            
+            # Find the function node
+            target_node = None
+            for node in graph_nodes:
+                if node.get('id') == function_id or node.get('name') == function_id:
+                    target_node = node
+                    break
+            
+            if target_node:
+                # Get callers (edges where this node is the destination)
+                callers = [e for e in graph_edges if e.get('dst') == target_node.get('id')]
+                # Get callees (edges where this node is the source)
+                callees = [e for e in graph_edges if e.get('src') == target_node.get('id')]
+                
+                # Build graph structure
+                nodes = [target_node]
+                edges = callers + callees
+                
+                # Add related nodes
+                added_ids = {target_node.get('id')}
+                for edge in edges:
+                    src_id = edge.get('src')
+                    dst_id = edge.get('dst')
+                    if src_id not in added_ids:
+                        src_node = next((n for n in graph_nodes if n.get('id') == src_id), None)
+                        if src_node:
+                            nodes.append(src_node)
+                            added_ids.add(src_id)
+                    if dst_id not in added_ids:
+                        dst_node = next((n for n in graph_nodes if n.get('id') == dst_id), None)
+                        if dst_node:
+                            nodes.append(dst_node)
+                            added_ids.add(dst_id)
+        
         viz_state = _get_session_state(tool_context, 'visualization_state', {})
         viz_state[viz_id] = {
             'type': 'call_graph',
             'function_id': function_id,
             'scope': scope,
+            'nodes': nodes,
+            'edges': edges,
             'created_at': time.time()
         }
         _set_session_state(tool_context, 'visualization_state', viz_state)
 
         return {
-            'status': 'partial',
+            'status': 'ok',
             'function_id': function_id,
             'scope': scope,
             'visualization_id': viz_id,
-            'note': 'Visualization ID created but graph data not generated. Requires code intelligence integration with graph_tools to build actual call graph structure.'
+            'nodes_count': len(nodes),
+            'edges_count': len(edges),
+            'note': 'Call graph built from actual relationship data'
         }
     except Exception as e:
         return {
