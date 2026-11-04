@@ -1,0 +1,25 @@
+test_id: MA-001
+agent: orchestrator
+scenario: Orchestrator invokes correct specialists
+layer: 7  # Multi-agent coordination
+input: "Investigate why authentication is failing, identify the root cause, check for security vulnerabilities and suggest a fix."
+expected_output:
+  agents_invoked:
+    - debugging_intelligence
+    - security_quality
+    - software_engineering
+  coordination_type: sequential
+  delegation_complete: true
+expected_evidence:
+  - type: tool_call
+    tool: invoke_debugging_intelligence
+  - type: tool_call
+    tool: invoke_security_quality
+  - type: tool_call
+    tool: invoke_software_engineering
+boundary_checks:
+  check: "Orchestrator should delegate to specialists, not attempt the task itself"
+grading:
+  coordination: 1.0
+  correct_delegation: 1.0
+  tool_selection: 0.8

@@ -1,0 +1,24 @@
+test_id: STR-001
+agent: orchestrator
+scenario: Concurrency stress test - 10 concurrent requests
+layer: 7  # Stress testing
+input: "Analyze this code"
+fixture: large-repo
+expected_output:
+  all_requests_handled: true
+  no_deadlocks: true
+  reasonable_latency: true
+  max_latency_ms: 5000
+expected_evidence:
+  - type: metric
+    name: concurrent_requests
+    value: 10
+  - type: metric
+    name: average_latency_ms
+    value: < 3000
+boundary_checks:
+  check: "System should handle 10 concurrent requests without deadlock or excessive latency"
+grading:
+  concurrency: 1.0
+  performance: 0.8
+  stability: 0.9

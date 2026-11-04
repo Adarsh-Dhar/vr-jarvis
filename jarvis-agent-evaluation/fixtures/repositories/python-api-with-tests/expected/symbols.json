@@ -1,0 +1,53 @@
+{
+  "symbols": [
+    {
+      "name": "User",
+      "type": "class",
+      "file": "src/api.py",
+      "line": 17,
+      "methods": ["_hash_password", "check_password", "to_dict"]
+    },
+    {
+      "name": "require_auth",
+      "type": "function",
+      "file": "src/api.py",
+      "line": 35
+    },
+    {
+      "name": "create_user",
+      "type": "function",
+      "file": "src/api.py",
+      "line": 52
+    },
+    {
+      "name": "get_user",
+      "type": "function",
+      "file": "src/api.py",
+      "line": 76
+    },
+    {
+      "name": "delete_user",
+      "type": "function",
+      "file": "src/api.py",
+      "line": 83
+    },
+    {
+      "name": "login",
+      "type": "function",
+      "file": "src/api.py",
+      "line": 102
+    },
+    {
+      "name": "logout",
+      "type": "function",
+      "file": "src/api.py",
+      "line": 126
+    },
+    {
+      "name": "health",
+      "type": "function",
+      "file": "src/api.py",
+      "line": 134
+    }
+  ]
+}

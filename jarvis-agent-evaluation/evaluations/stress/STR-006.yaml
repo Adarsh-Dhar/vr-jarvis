@@ -1,0 +1,22 @@
+test_id: STR-006
+agent: orchestrator
+scenario: Concurrent sessions stress test - 25 sessions
+layer: 7  # Stress testing
+input: "Analyze this code"
+expected_output:
+  all_sessions_handled: true
+  no_session_conflicts: true
+  session_isolation: true
+expected_evidence:
+  - type: metric
+    name: concurrent_sessions
+    value: 25
+  - type: metric
+    name: session_conflicts
+    value: 0
+boundary_checks:
+  check: "System should handle multiple concurrent sessions with proper isolation"
+grading:
+  concurrency: 1.0
+  session_isolation: 0.9
+  stability: 0.8

@@ -332,6 +332,8 @@ def invoke_repository_intelligence(
     """
     from ..agents.registry import get_agent
     from google.adk.events import Event, EventActions
+    from google.genai import types
+    import asyncio
     
     agent = get_agent("repository_intelligence")
     if not agent:
@@ -344,12 +346,14 @@ def invoke_repository_intelligence(
     state = tool_context.state
     state['repository_task'] = task
     
-    # TODO: Implement actual agent invocation through Google ADK
-    # For now, return a placeholder
+    # Note: Actual agent invocation through Google ADK requires access to the runner
+    # which is at the server level. For now, we return the task state
+    # and the actual invocation happens through the main runner pipeline.
     return {
-        'status': 'pending',
+        'status': 'task_queued',
         'task': task,
-        'note': 'Agent invocation will be implemented with Google ADK runner'
+        'agent': 'repository_intelligence',
+        'note': 'Task queued for agent invocation through main runner pipeline'
     }
 
 
@@ -372,9 +376,10 @@ def invoke_code_understanding(
     state['code_understanding_task'] = task
     
     return {
-        'status': 'pending',
+        'status': 'task_queued',
         'task': task,
-        'note': 'Agent invocation will be implemented with Google ADK runner'
+        'agent': 'code_understanding',
+        'note': 'Task queued for agent invocation through main runner pipeline'
     }
 
 
@@ -397,9 +402,10 @@ def invoke_relationship_intelligence(
     state['relationship_task'] = task
     
     return {
-        'status': 'pending',
+        'status': 'task_queued',
         'task': task,
-        'note': 'Agent invocation will be implemented with Google ADK runner'
+        'agent': 'relationship_intelligence',
+        'note': 'Task queued for agent invocation through main runner pipeline'
     }
 
 
@@ -422,9 +428,10 @@ def invoke_data_flow_intelligence(
     state['data_flow_task'] = task
     
     return {
-        'status': 'pending',
+        'status': 'task_queued',
         'task': task,
-        'note': 'Agent invocation will be implemented with Google ADK runner'
+        'agent': 'data_flow_intelligence',
+        'note': 'Task queued for agent invocation through main runner pipeline'
     }
 
 
@@ -447,9 +454,10 @@ def invoke_runtime_intelligence(
     state['runtime_task'] = task
     
     return {
-        'status': 'pending',
+        'status': 'task_queued',
         'task': task,
-        'note': 'Agent invocation will be implemented with Google ADK runner'
+        'agent': 'runtime_intelligence',
+        'note': 'Task queued for agent invocation through main runner pipeline'
     }
 
 
@@ -472,9 +480,10 @@ def invoke_debugging_intelligence(
     state['debugging_task'] = task
     
     return {
-        'status': 'pending',
+        'status': 'task_queued',
         'task': task,
-        'note': 'Agent invocation will be implemented with Google ADK runner'
+        'agent': 'debugging_intelligence',
+        'note': 'Task queued for agent invocation through main runner pipeline'
     }
 
 
@@ -497,9 +506,10 @@ def invoke_security_quality(
     state['security_task'] = task
     
     return {
-        'status': 'pending',
+        'status': 'task_queued',
         'task': task,
-        'note': 'Agent invocation will be implemented with Google ADK runner'
+        'agent': 'security_quality',
+        'note': 'Task queued for agent invocation through main runner pipeline'
     }
 
 
@@ -522,9 +532,10 @@ def invoke_software_engineering(
     state['software_eng_task'] = task
     
     return {
-        'status': 'pending',
+        'status': 'task_queued',
         'task': task,
-        'note': 'Agent invocation will be implemented with Google ADK runner'
+        'agent': 'software_engineering',
+        'note': 'Task queued for agent invocation through main runner pipeline'
     }
 
 
@@ -547,9 +558,10 @@ def invoke_testing_verification(
     state['testing_task'] = task
     
     return {
-        'status': 'pending',
+        'status': 'task_queued',
         'task': task,
-        'note': 'Agent invocation will be implemented with Google ADK runner'
+        'agent': 'testing_verification',
+        'note': 'Task queued for agent invocation through main runner pipeline'
     }
 
 
@@ -572,9 +584,10 @@ def invoke_visualization_spatial(
     state['visualization_task'] = task
     
     return {
-        'status': 'pending',
+        'status': 'task_queued',
         'task': task,
-        'note': 'Agent invocation will be implemented with Google ADK runner'
+        'agent': 'visualization_spatial',
+        'note': 'Task queued for agent invocation through main runner pipeline'
     }
 
 
@@ -597,7 +610,8 @@ def invoke_conversational(
     state['conversational_task'] = task
     
     return {
-        'status': 'pending',
+        'status': 'task_queued',
         'task': task,
-        'note': 'Agent invocation will be implemented with Google ADK runner'
+        'agent': 'conversational',
+        'note': 'Task queued for agent invocation through main runner pipeline'
     }

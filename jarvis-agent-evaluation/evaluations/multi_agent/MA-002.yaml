@@ -1,0 +1,24 @@
+test_id: MA-002
+agent: orchestrator
+scenario: Independent agents execute concurrently
+layer: 7  # Multi-agent coordination
+input: "Analyze the codebase for code smells, security vulnerabilities, and test coverage in parallel."
+expected_output:
+  agents_invoked:
+    - security_quality
+    - testing_verification
+  coordination_type: parallel
+  concurrent_execution: true
+expected_evidence:
+  - type: tool_call
+    tool: run_agents_parallel
+  - type: tool_call
+    tool: invoke_security_quality
+  - type: tool_call
+    tool: invoke_testing_verification
+boundary_checks:
+  check: "Orchestrator should use parallel execution for independent tasks"
+grading:
+  coordination: 1.0
+  parallel_execution: 1.0
+  efficiency: 0.9

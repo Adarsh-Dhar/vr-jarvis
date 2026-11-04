@@ -1,0 +1,23 @@
+test_id: STR-003
+agent: relationship_intelligence
+scenario: Complex dependency graph stress test - 500 dependencies
+layer: 7  # Stress testing
+input: "Show all dependencies for this function"
+fixture: complex-dependencies
+expected_output:
+  graph_built: true
+  traversal_complete: true
+  performance_acceptable: true
+expected_evidence:
+  - type: metric
+    name: dependencies_traversed
+    value: 500
+  - type: metric
+    name: graph_build_time_ms
+    value: < 5000
+boundary_checks:
+  check: "System should handle complex dependency graphs efficiently"
+grading:
+  scalability: 1.0
+  graph_performance: 0.8
+  complexity_handling: 0.9

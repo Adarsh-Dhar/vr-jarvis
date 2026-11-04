@@ -1,0 +1,21 @@
+test_id: MA-007
+agent: orchestrator
+scenario: Timed-out agent is cancelled safely
+layer: 7  # Multi-agent coordination
+input: "Analyze this very large codebase for all dependencies."
+expected_output:
+  agents_invoked:
+    - relationship_intelligence
+  timeout_handled: true
+  cancellation_safe: true
+expected_evidence:
+  - type: tool_call
+    tool: cancel_agent_task
+  - type: tool_call
+    tool: get_agent_status
+boundary_checks:
+  check: "Orchestrator should safely cancel timed-out agents"
+grading:
+  coordination: 1.0
+  timeout_handling: 1.0
+  safety: 0.9

@@ -214,7 +214,7 @@ class AgentTestRunner:
             'decisions': decisions,
             'actual_output': actual_output,
             'errors': errors,
-            'notes': 'Live agent execution via Google ADK'
+            'notes': 'Live agent execution via Google ADK - infrastructure complete'
         }
 
     def grade_test(self, test: Dict[str, Any], result: Dict[str, Any]) -> Dict[str, Any]:

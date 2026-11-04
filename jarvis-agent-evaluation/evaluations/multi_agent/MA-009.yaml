@@ -1,0 +1,24 @@
+test_id: MA-009
+agent: orchestrator
+scenario: Verification agent independently validates code changes
+layer: 7  # Multi-agent coordination
+input: "Propose a fix for this bug, then verify it with the testing agent."
+expected_output:
+  agents_invoked:
+    - software_engineering
+    - testing_verification
+  verification_independent: true
+  verification_successful: true
+expected_evidence:
+  - type: tool_call
+    tool: invoke_software_engineering
+  - type: tool_call
+    tool: invoke_testing_verification
+  - type: tool_call
+    tool: check_task_completion
+boundary_checks:
+  check: "Verification should be independent from the change proposal"
+grading:
+  coordination: 1.0
+  verification: 1.0
+  independence: 0.9

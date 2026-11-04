@@ -1,0 +1,24 @@
+test_id: MA-004
+agent: orchestrator
+scenario: Findings pass correctly between agents
+layer: 7  # Multi-agent coordination
+input: "Investigate this function, then verify the findings with security analysis."
+expected_output:
+  agents_invoked:
+    - code_understanding
+    - security_quality
+  findings_shared: true
+  findings_verified: true
+expected_evidence:
+  - type: tool_call
+    tool: record_finding
+  - type: tool_call
+    tool: get_findings
+  - type: tool_call
+    tool: verify_finding
+boundary_checks:
+  check: "Findings from one agent should be accessible to subsequent agents"
+grading:
+  coordination: 1.0
+  findings_sharing: 1.0
+  verification: 0.9

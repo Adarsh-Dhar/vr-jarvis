@@ -1,0 +1,23 @@
+test_id: STR-005
+agent: debugging_intelligence
+scenario: Context pressure stress test - long investigation
+layer: 7  # Stress testing
+input: "Investigate why this complex system is failing, check all components, trace all paths, identify all possible causes"
+fixture: complex-system
+expected_output:
+  investigation_complete: true
+  context_not_lost: true
+  reasonable_time: true
+expected_evidence:
+  - type: metric
+    name: investigation_duration_s
+    value: < 60
+  - type: metric
+    name: context_preserved
+    value: true
+boundary_checks:
+  check: "System should handle long investigations without losing context"
+grading:
+  context_management: 1.0
+  investigation_depth: 0.8
+  time_reasonableness: 0.9

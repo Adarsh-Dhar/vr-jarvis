@@ -1,0 +1,22 @@
+test_id: MA-008
+agent: orchestrator
+scenario: Two agents cannot overwrite each other's work
+layer: 7  # Multi-agent coordination
+input: "Have code understanding and security analysis both work on this file independently."
+expected_output:
+  agents_invoked:
+    - code_understanding
+    - security_quality
+  no_conflicts: true
+  work_isolated: true
+expected_evidence:
+  - type: tool_call
+    tool: run_agents_parallel
+  - type: tool_call
+    tool: merge_agent_results
+boundary_checks:
+  check: "Agents should work in isolation without overwriting each other"
+grading:
+  coordination: 1.0
+  isolation: 1.0
+  conflict_prevention: 0.9

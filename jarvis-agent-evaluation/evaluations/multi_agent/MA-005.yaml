@@ -1,0 +1,22 @@
+test_id: MA-005
+agent: orchestrator
+scenario: Contradictory findings are preserved and investigated
+layer: 7  # Multi-agent coordination
+input: "Check if this function is safe, then get a second opinion from security analysis."
+expected_output:
+  agents_invoked:
+    - code_understanding
+    - security_quality
+  contradictory_findings_preserved: true
+  investigation_triggered: true
+expected_evidence:
+  - type: tool_call
+    tool: resolve_conflicting_findings
+  - type: tool_call
+    tool: request_more_evidence
+boundary_checks:
+  check: "Orchestrator should preserve conflicting findings and investigate"
+grading:
+  coordination: 1.0
+  conflict_handling: 1.0
+  investigation: 0.9

@@ -1,0 +1,27 @@
+test_id: MA-003
+agent: orchestrator
+scenario: Dependent agents execute in correct order
+layer: 7  # Multi-agent coordination
+input: "First understand the code structure, then analyze relationships, then visualize the dependencies."
+expected_output:
+  agents_invoked:
+    - code_understanding
+    - relationship_intelligence
+    - visualization_spatial
+  coordination_type: sequential
+  dependency_order: ["code_understanding", "relationship_intelligence", "visualization_spatial"]
+expected_evidence:
+  - type: tool_call
+    tool: run_agents_sequentially
+  - type: tool_call
+    tool: invoke_code_understanding
+  - type: tool_call
+    tool: invoke_relationship_intelligence
+  - type: tool_call
+    tool: invoke_visualization_spatial
+boundary_checks:
+  check: "Orchestrator should enforce sequential order for dependent tasks"
+grading:
+  coordination: 1.0
+  correct_order: 1.0
+  dependency_handling: 0.9

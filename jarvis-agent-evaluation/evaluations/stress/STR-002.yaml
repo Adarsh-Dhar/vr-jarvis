@@ -1,0 +1,23 @@
+test_id: STR-002
+agent: repository_intelligence
+scenario: Large repository stress test - 10,000 files
+layer: 7  # Stress testing
+input: "What is the structure of this repository?"
+fixture: large-repo-10k-files
+expected_output:
+  analysis_complete: true
+  memory_usage_reasonable: true
+  timeout_not_exceeded: true
+expected_evidence:
+  - type: metric
+    name: files_analyzed
+    value: 10000
+  - type: metric
+    name: memory_mb
+    value: < 500
+boundary_checks:
+  check: "System should handle large repositories without memory exhaustion"
+grading:
+  scalability: 1.0
+  memory_efficiency: 0.8
+  timeout_handling: 0.9

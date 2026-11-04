@@ -1,0 +1,52 @@
+{
+  "symbols": [
+    {
+      "name": "User",
+      "type": "interface",
+      "file": "src/UserService.ts",
+      "line": 6,
+      "fields": ["id", "username", "email", "roles"]
+    },
+    {
+      "name": "Role",
+      "type": "enum",
+      "file": "src/UserService.ts",
+      "line": 13,
+      "values": ["ADMIN", "USER", "MODERATOR"]
+    },
+    {
+      "name": "Repository",
+      "type": "interface",
+      "file": "src/UserService.ts",
+      "line": 19,
+      "methods": ["findById", "findAll", "save", "delete"]
+    },
+    {
+      "name": "UserRepository",
+      "type": "class",
+      "file": "src/UserService.ts",
+      "line": 25,
+      "methods": ["findById", "findAll", "save", "delete"]
+    },
+    {
+      "name": "CacheService",
+      "type": "class",
+      "file": "src/UserService.ts",
+      "line": 47,
+      "methods": ["get", "set", "invalidate", "clear"]
+    },
+    {
+      "name": "UserService",
+      "type": "class",
+      "file": "src/UserService.ts",
+      "line": 79,
+      "methods": ["getUser", "createUser", "deleteUser", "hasRole"]
+    },
+    {
+      "name": "createUserService",
+      "type": "function",
+      "file": "src/UserService.ts",
+      "line": 120
+    }
+  ]
+}

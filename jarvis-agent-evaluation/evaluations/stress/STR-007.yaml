@@ -1,0 +1,23 @@
+test_id: STR-007
+agent: orchestrator
+scenario: Memory and CPU consumption stress test
+layer: 7  # Stress testing
+input: "Analyze this entire codebase and generate a comprehensive report"
+fixture: large-repo
+expected_output:
+  analysis_complete: true
+  memory_within_limits: true
+  cpu_reasonable: true
+expected_evidence:
+  - type: metric
+    name: peak_memory_mb
+    value: < 1000
+  - type: metric
+    name: cpu_percent
+    value: < 80
+boundary_checks:
+  check: "System should complete analysis without excessive resource consumption"
+grading:
+  resource_efficiency: 1.0
+  memory_management: 0.9
+  cpu_usage: 0.8

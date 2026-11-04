@@ -1,0 +1,23 @@
+test_id: STR-004
+agent: runtime_intelligence
+scenario: Complex async trace stress test - 1000 events
+layer: 7  # Stress testing
+input: "Reconstruct the call hierarchy from this runtime trace"
+fixture: complex-async-trace
+expected_output:
+  trace_reconstructed: true
+  all_events_processed: true
+  performance_acceptable: true
+expected_evidence:
+  - type: metric
+    name: events_processed
+    value: 1000
+  - type: metric
+    name: processing_time_ms
+    value: < 10000
+boundary_checks:
+  check: "System should handle complex async traces efficiently"
+grading:
+  scalability: 1.0
+  trace_performance: 0.8
+  event_handling: 0.9
