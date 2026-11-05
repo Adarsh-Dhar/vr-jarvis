@@ -409,7 +409,37 @@ namespace JarvisVR
       line.alignment = LineAlignment.View;
       JarvisSpatialGfx.Flat(line);
       ev.Line = line;
+      
+      // Add a collider for edge selection
+      var collider = go.AddComponent<SphereCollider>();
+      collider.radius = 0.05f;
+      collider.isTrigger = true;
+      
+      // Add edge interaction component
+      var edgeComponent = go.AddComponent<JarvisGraphEdge>();
+      string edgeId = ev.Dto.src + "->" + ev.Dto.dst;
+      edgeComponent.Initialize(edgeId, OnEdgePinch, OnEdgeHold);
+      
       StyleEdge(ev, ev.Dto.kind);
+    }
+
+    private void OnEdgePinch(string edgeId)
+    {
+      // Find the edge and select it
+      foreach (var edge in _edges)
+      {
+        if (edge.Dto.src + "->" + edge.Dto.dst == edgeId)
+        {
+          SelectEdge(edge);
+          break;
+        }
+      }
+    }
+
+    private void OnEdgeHold(string edgeId)
+    {
+      // Could show a context menu for the edge
+      Debug.Log("Edge held: " + edgeId);
     }
 
     private void StyleEdge(EdgeView ev, string kind)
@@ -491,6 +521,37 @@ namespace JarvisVR
       if (_bridge != null && !_source.ContainsKey(id))
         _bridge.GetSource(id, s => { if (s != null && s.status == "ok") { _source[id] = s; if (_selected == id) RefreshCode(); } });
       RefreshQuickButtons();
+    }
+
+    private void SelectEdge(EdgeView edge)
+    {
+      if (edge == null) return;
+      
+      // Show edge information in a panel
+      string edgeInfo = $"Edge: {edge.Dto.src} → {edge.Dto.dst}\n";
+      edgeInfo += $"Type: {edge.Dto.type}\n";
+      edgeInfo += $"Kind: {edge.Dto.kind}\n";
+      
+      if (!string.IsNullOrEmpty(edge.Dto.file))
+      {
+        edgeInfo += $"File: {edge.Dto.file}\n";
+      }
+      
+      if (edge.Dto.line > 0)
+      {
+        edgeInfo += $"Line: {edge.Dto.line}\n";
+      }
+      
+      // Highlight the edge
+      edge.Line.startColor = edge.Line.endColor = JarvisPalette.Current.Amber;
+      
+      Log("selected edge: " + edge.Dto.src + " → " + edge.Dto.dst);
+      
+      // Show in code panel if available
+      if (_codePanel != null)
+      {
+        _codePanel.SetBody(edgeInfo);
+      }
     }
 
     private void DragCluster(string nodeId, Vector3 worldDelta)
@@ -1133,6 +1194,31 @@ namespace JarvisVR
     {
       if (!_nodes.TryGetValue(_menuNode ?? "", out NodeView n)) return;
       ClusterView cv = n.Cluster;
+      
+      if (cv.Collapsed)
+      {
+        // Expanding: fetch children from server
+        string clusterId = cv.Name;
+        if (_bridge != null && !_mock)
+        {
+          _bridge.GetGraphWithFocus(clusterId, 2, g =>
+          {
+            if (g != null && g.nodes != null)
+            {
+              // Add new nodes to the graph
+              foreach (var node in g.nodes)
+              {
+                if (!_nodes.ContainsKey(node.id))
+                {
+                  // This would require rebuilding the graph, for now just log
+                  Debug.Log("Would add node: " + node.id);
+                }
+              }
+            }
+          }, e => Debug.LogWarning("Failed to fetch cluster children: " + e));
+        }
+      }
+      
       cv.Collapsed = !cv.Collapsed;
       for (int i = 1; i < cv.Members.Count; i++)   // member 0 stays as the cluster anchor
       {

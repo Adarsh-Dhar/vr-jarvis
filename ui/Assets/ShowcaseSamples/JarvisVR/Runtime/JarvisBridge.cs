@@ -39,8 +39,8 @@ namespace JarvisVR
   [Serializable] internal class ApproveRequest { public string session_id; public bool approved; }
 
   // Field names match ai_agents/data/graph.json and the server's /health JSON.
-  [Serializable] public class GraphNodeDto { public string id, name, file, cluster, kind; public int start, end; }
-  [Serializable] public class GraphEdgeDto { public string src, dst, type, kind; }
+  [Serializable] public class GraphNodeDto { public string id, name, file, cluster, kind, level, parent; public int start, end; }
+  [Serializable] public class GraphEdgeDto { public string src, dst, type, kind, file; public int line; }
   [Serializable] public class GraphDto
   {
     public System.Collections.Generic.List<GraphNodeDto> nodes = new System.Collections.Generic.List<GraphNodeDto>();
@@ -153,6 +153,12 @@ namespace JarvisVR
 
     public void GetGraph(Action<GraphDto> ok) =>
       StartCoroutine(Send("GET", "/graph", null, b => ok(JsonUtility.FromJson<GraphDto>(b)), e => Debug.LogWarning("JARVIS graph: " + e)));
+
+    public void GetGraphWithFocus(string focusId, int depth, Action<GraphDto> ok, Action<string> fail)
+    {
+      string url = "/graph?focus=" + UnityWebRequest.EscapeURL(focusId) + "&depth=" + depth;
+      StartCoroutine(Send("GET", url, null, b => ok(JsonUtility.FromJson<GraphDto>(b)), fail));
+    }
 
     public void GetProgress(int since, Action<ProgressDto> ok) =>
       StartCoroutine(Send("GET", "/progress/" + _session + "?since=" + since, null,

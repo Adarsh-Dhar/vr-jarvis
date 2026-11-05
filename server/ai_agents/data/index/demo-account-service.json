@@ -8,7 +8,9 @@
    "start": 2,
    "end": 4,
    "cluster": "auth",
-   "loc": 3
+   "loc": 3,
+   "level": "function",
+   "parent": "auth"
   },
   {
    "id": "auth.requireAuth.requireAuth",
@@ -18,7 +20,9 @@
    "start": 6,
    "end": 11,
    "cluster": "auth",
-   "loc": 6
+   "loc": 6,
+   "level": "function",
+   "parent": "auth"
   },
   {
    "id": "db.client.query",
@@ -28,7 +32,9 @@
    "start": 1,
    "end": 3,
    "cluster": "db",
-   "loc": 3
+   "loc": 3,
+   "level": "function",
+   "parent": "db"
   },
   {
    "id": "db.users.repo.deleteUser",
@@ -38,7 +44,9 @@
    "start": 3,
    "end": 5,
    "cluster": "db",
-   "loc": 3
+   "loc": 3,
+   "level": "repository",
+   "parent": "db"
   },
   {
    "id": "lib.token.verifyToken",
@@ -48,7 +56,9 @@
    "start": 1,
    "end": 4,
    "cluster": "lib",
-   "loc": 4
+   "loc": 4,
+   "level": "function",
+   "parent": "lib"
   },
   {
    "id": "services.account.getAccount",
@@ -58,7 +68,9 @@
    "start": 3,
    "end": 5,
    "cluster": "services",
-   "loc": 3
+   "loc": 3,
+   "level": "service",
+   "parent": "services"
   },
   {
    "id": "services.account.deleteAccount",
@@ -68,21 +80,103 @@
    "start": 7,
    "end": 10,
    "cluster": "services",
-   "loc": 4
+   "loc": 4,
+   "level": "service",
+   "parent": "services"
   }
  ],
  "edges": [
   {
+   "src": "auth.owner",
+   "dst": "auth.owner.checkOwner",
+   "type": "contains",
+   "kind": "confirmed"
+  },
+  {
+   "src": "auth.requireAuth",
+   "dst": "auth.requireAuth.requireAuth",
+   "type": "contains",
+   "kind": "confirmed"
+  },
+  {
+   "src": "db.client",
+   "dst": "db.client.query",
+   "type": "contains",
+   "kind": "confirmed"
+  },
+  {
+   "src": "db.users.repo",
+   "dst": "db.users.repo.deleteUser",
+   "type": "contains",
+   "kind": "confirmed"
+  },
+  {
+   "src": "lib.token",
+   "dst": "lib.token.verifyToken",
+   "type": "contains",
+   "kind": "confirmed"
+  },
+  {
+   "src": "services.account",
+   "dst": "services.account.getAccount",
+   "type": "contains",
+   "kind": "confirmed"
+  },
+  {
+   "src": "services.account",
+   "dst": "services.account.deleteAccount",
+   "type": "contains",
+   "kind": "confirmed"
+  },
+  {
+   "src": "auth.requireAuth.requireAuth",
+   "dst": "lib.token.verifyToken",
+   "type": "imports",
+   "kind": "confirmed",
+   "file": "auth/requireAuth.ts",
+   "line": 1
+  },
+  {
+   "src": "db.users.repo.deleteUser",
+   "dst": "db.client.query",
+   "type": "imports",
+   "kind": "confirmed",
+   "file": "db/users.repo.ts",
+   "line": 1
+  },
+  {
+   "src": "services.account.getAccount",
+   "dst": "db.users.repo.deleteUser",
+   "type": "imports",
+   "kind": "confirmed",
+   "file": "services/account.ts",
+   "line": 1
+  },
+  {
+   "src": "services.account.deleteAccount",
+   "dst": "db.users.repo.deleteUser",
+   "type": "imports",
+   "kind": "confirmed",
+   "file": "services/account.ts",
+   "line": 1
+  },
+  {
    "src": "auth.requireAuth.requireAuth",
    "dst": "lib.token.verifyToken",
    "type": "calls",
-   "kind": "confirmed"
+   "kind": "confirmed",
+   "file": "auth/requireAuth.ts",
+   "line": 7,
+   "call_type": "direct"
   },
   {
    "src": "db.users.repo.deleteUser",
    "dst": "db.client.query",
    "type": "calls",
-   "kind": "confirmed"
+   "kind": "confirmed",
+   "file": "db/users.repo.ts",
+   "line": 4,
+   "call_type": "direct"
   }
  ],
  "tests": [
@@ -94,5 +188,6 @@
    ]
   }
  ],
- "coverage": {}
+ "coverage": {},
+ "external_services": []
 }

@@ -751,61 +751,57 @@ def visualize_call_graph(
     scope: str = 'local'
 ) -> dict:
     """
-    Visualize call graph.
+    Visualize call graph using the graph index.
     
-    Builds actual call graph from relationship data where available.
+    Builds actual call graph from the repository index where available.
     """
     try:
-        from .. import config
-        import json
+        from .navigation_tools import _load_graph_index, resolve_symbol
         
         viz_id = str(uuid.uuid4())
         
-        # Try to load graph data from the repository
-        graph_path = config.GRAPH_PATH
-        nodes = []
-        edges = []
+        # Load graph from index
+        graph = _load_graph_index()
+        graph_nodes = graph.get('nodes', [])
+        graph_edges = graph.get('edges', [])
         
-        if graph_path.exists():
-            with open(graph_path) as f:
-                graph_data = json.load(f)
-            
-            # Find the function in the graph
-            graph_nodes = graph_data.get('nodes', [])
-            graph_edges = graph_data.get('edges', [])
-            
-            # Find the function node
-            target_node = None
-            for node in graph_nodes:
-                if node.get('id') == function_id or node.get('name') == function_id:
-                    target_node = node
-                    break
-            
-            if target_node:
-                # Get callers (edges where this node is the destination)
-                callers = [e for e in graph_edges if e.get('dst') == target_node.get('id')]
-                # Get callees (edges where this node is the source)
-                callees = [e for e in graph_edges if e.get('src') == target_node.get('id')]
-                
-                # Build graph structure
-                nodes = [target_node]
-                edges = callers + callees
-                
-                # Add related nodes
-                added_ids = {target_node.get('id')}
-                for edge in edges:
-                    src_id = edge.get('src')
-                    dst_id = edge.get('dst')
-                    if src_id not in added_ids:
-                        src_node = next((n for n in graph_nodes if n.get('id') == src_id), None)
-                        if src_node:
-                            nodes.append(src_node)
-                            added_ids.add(src_id)
-                    if dst_id not in added_ids:
-                        dst_node = next((n for n in graph_nodes if n.get('id') == dst_id), None)
-                        if dst_node:
-                            nodes.append(dst_node)
-                            added_ids.add(dst_id)
+        # Find the function in the graph
+        target_node = resolve_symbol(function_id)
+        if not target_node:
+            # Try by name
+            nodes_by_name = [n for n in graph_nodes if n.get('name') == function_id]
+            if nodes_by_name:
+                target_node = nodes_by_name[0]
+            else:
+                return {
+                    'status': 'error',
+                    'error': f'Function not found in graph index: {function_id}'
+                }
+        
+        # Get callers (edges where this node is the destination)
+        callers = [e for e in graph_edges if e.get('dst') == target_node.get('id')]
+        # Get callees (edges where this node is the source)
+        callees = [e for e in graph_edges if e.get('src') == target_node.get('id')]
+        
+        # Build graph structure
+        nodes = [target_node]
+        edges = callers + callees
+        
+        # Add related nodes
+        added_ids = {target_node.get('id')}
+        for edge in edges:
+            src_id = edge.get('src')
+            dst_id = edge.get('dst')
+            if src_id not in added_ids:
+                src_node = resolve_symbol(src_id)
+                if src_node:
+                    nodes.append(src_node)
+                    added_ids.add(src_id)
+            if dst_id not in added_ids:
+                dst_node = resolve_symbol(dst_id)
+                if dst_node:
+                    nodes.append(dst_node)
+                    added_ids.add(dst_id)
         
         viz_state = _get_session_state(tool_context, 'visualization_state', {})
         viz_state[viz_id] = {
@@ -825,7 +821,7 @@ def visualize_call_graph(
             'visualization_id': viz_id,
             'nodes_count': len(nodes),
             'edges_count': len(edges),
-            'note': 'Call graph built from actual relationship data'
+            'note': 'Call graph built from graph index'
         }
     except Exception as e:
         return {
@@ -992,14 +988,102 @@ def visualize_architecture(
     tool_context: ToolContext,
     scope: str = 'full'
 ) -> dict:
-    """Visualize architecture."""
+    """Visualize architecture by computing the architecture map from the graph index."""
     try:
+        from .navigation_tools import _load_graph_index, resolve_symbol
+        from collections import defaultdict
+        
         viz_id = str(uuid.uuid4())
+        graph = _load_graph_index()
+        nodes = graph.get('nodes', [])
+        edges = graph.get('edges', [])
+        
+        # Build architecture layers based on folder names and file patterns
+        layers = defaultdict(list)
+        external_services = set()
+        
+        for node in nodes:
+            file_path = node.get('file', '')
+            name = node.get('name', '')
+            
+            # Determine layer based on file path and name
+            layer = 'other'
+            if any(x in file_path.lower() for x in ['route', 'controller', 'api', 'endpoint']):
+                layer = 'api'
+            elif any(x in file_path.lower() for x in ['service', 'business', 'logic']):
+                layer = 'services'
+            elif any(x in file_path.lower() for x in ['repository', 'repo', 'dao', 'database']):
+                layer = 'database'
+            elif any(x in file_path.lower() for x in ['auth', 'security', 'login', 'permission']):
+                layer = 'auth'
+            elif 'test' in file_path.lower() or 'test' in name.lower():
+                layer = 'tests'
+            elif any(x in file_path.lower() for x in ['util', 'helper', 'common', 'lib']):
+                layer = 'lib'
+            
+            layers[layer].append(node)
+            
+            # Detect external services from imports
+            if 'import' in file_path or 'require' in file_path:
+                # Simple heuristic: if the module name is not a local file, it's external
+                pass
+        
+        # Build hierarchy with parent-child relationships
+        architecture_nodes = []
+        architecture_edges = []
+        
+        # Add layer nodes
+        for layer_name, layer_nodes in layers.items():
+            if layer_nodes:
+                layer_id = f"layer.{layer_name}"
+                architecture_nodes.append({
+                    'id': layer_id,
+                    'name': layer_name.title(),
+                    'type': 'layer',
+                    'count': len(layer_nodes)
+                })
+                
+                # Add nodes in this layer as children
+                for node in layer_nodes:
+                    node_id = node.get('id')
+                    architecture_edges.append({
+                        'src': layer_id,
+                        'dst': node_id,
+                        'type': 'contains'
+                    })
+        
+        # Compute coupling metrics
+        fan_in = defaultdict(int)
+        fan_out = defaultdict(int)
+        
+        for edge in edges:
+            src = edge.get('src')
+            dst = edge.get('dst')
+            if src and dst:
+                fan_out[src] += 1
+                fan_in[dst] += 1
+        
+        # Build coupling summary
+        coupling_metrics = {
+            'fan_in': dict(fan_in),
+            'fan_out': dict(fan_out),
+            'total_nodes': len(nodes),
+            'total_edges': len(edges),
+            'layers': {k: len(v) for k, v in layers.items()}
+        }
+        
+        # Emit scene command for Unity
+        _emit_command(tool_context, 'show_graph', 
+                     nodes=architecture_nodes,
+                     edges=architecture_edges,
+                     metrics=coupling_metrics)
         
         viz_state = _get_session_state(tool_context, 'visualization_state', {})
         viz_state[viz_id] = {
             'type': 'architecture',
             'scope': scope,
+            'layers': dict(layers),
+            'coupling_metrics': coupling_metrics,
             'created_at': time.time()
         }
         _set_session_state(tool_context, 'visualization_state', viz_state)
@@ -1008,7 +1092,11 @@ def visualize_architecture(
             'status': 'ok',
             'scope': scope,
             'visualization_id': viz_id,
-            'note': 'Real visualization requires architecture analysis'
+            'layers': {k: len(v) for k, v in layers.items()},
+            'node_count': len(architecture_nodes),
+            'edge_count': len(architecture_edges),
+            'coupling_metrics': coupling_metrics,
+            'command_queued': True
         }
     except Exception as e:
         return {

@@ -10,64 +10,99 @@ from ._safe import safe
 
 @safe
 def build_call_graph(scope: str, tool_context: ToolContext) -> dict:
-    """Construct function call graphs.
+    """Construct function call graphs from the graph index.
     
     Args:
         scope: The analysis scope. Use '.' for the whole repository, a folder path, a file path, or a node id.
     """
     try:
-        from .analysis_tools import extract_symbols
-        from .navigation_tools import get_call_hierarchy
-        from .repository_tools import list_files
+        from .navigation_tools import _load_graph_index, resolve_symbol
         from ._common import repo_root
+        from pathlib import Path
+        
+        # Load the graph index
+        graph = _load_graph_index()
+        
+        # Filter nodes and edges by scope
+        filtered_nodes = []
+        filtered_edges = []
         
         # Handle scope: '.' means whole repository
         if scope == '.' or scope == 'repo':
-            scope = str(repo_root())
-        
-        # Get all Python files in scope
-        files_result = list_files(tool_context, directory=scope, pattern='.py', recursive=True)
-        if files_result.get('status') != 'ok':
-            return files_result
-        
-        call_graph = {
-            'nodes': [],
-            'edges': []
-        }
-        
-        for file_info in files_result['files']:
-            if file_info['type'] == 'file':
-                file_path = file_info['path']
+            # Return all nodes and edges
+            filtered_nodes = graph.get('nodes', [])
+            filtered_edges = graph.get('edges', [])
+        else:
+            # Check if scope is a node ID
+            if '/' not in scope and '.' in scope:
+                # It's likely a node ID (e.g., "routes.account.deleteAccount")
+                node = resolve_symbol(scope)
+                if node:
+                    # Return this node and its direct connections
+                    filtered_nodes = [node]
+                    node_id = node.get('id')
+                    for edge in graph.get('edges', []):
+                        if edge.get('src') == node_id or edge.get('dst') == node_id:
+                            filtered_edges.append(edge)
+                            # Add connected nodes
+                            connected_id = edge.get('dst') if edge.get('src') == node_id else edge.get('src')
+                            connected_node = resolve_symbol(connected_id)
+                            if connected_node and connected_node not in filtered_nodes:
+                                filtered_nodes.append(connected_node)
+            else:
+                # Scope is a folder or file path
+                scope_path = Path(scope)
+                for node in graph.get('nodes', []):
+                    node_file = node.get('file', '')
+                    # Check if node is in scope
+                    if scope_path.is_dir():
+                        # Check if node file is under this directory
+                        if node_file.startswith(scope):
+                            filtered_nodes.append(node)
+                    elif scope_path.is_file():
+                        # Check if node file matches exactly
+                        if node_file == scope:
+                            filtered_nodes.append(node)
+                    else:
+                        # Scope might be a folder name (not a path)
+                        # Check if node file starts with the scope name
+                        if node_file.startswith(scope + '/') or node_file.startswith(scope + '\\'):
+                            filtered_nodes.append(node)
+                        # Also check if the file path contains the scope as a directory
+                        elif '/' + scope + '/' in node_file or '\\' + scope + '\\' in node_file:
+                            filtered_nodes.append(node)
                 
-                # Extract symbols from file
-                symbols_result = extract_symbols(file_path, tool_context)
-                if symbols_result.get('status') == 'ok':
-                    for symbol in symbols_result['symbols']:
-                        if symbol['type'] == 'function':
-                            call_graph['nodes'].append({
-                                'id': f"{file_path}:{symbol['name']}",
-                                'name': symbol['name'],
-                                'file': file_path,
-                                'line': symbol['line'],
-                                'type': 'function'
-                            })
-                            
-                            # Get call hierarchy for this function
-                            call_result = get_call_hierarchy(symbol['name'], tool_context)
-                            if call_result.get('status') == 'ok':
-                                for outgoing in call_result.get('outgoing_calls', []):
-                                    call_graph['edges'].append({
-                                        'from': f"{file_path}:{symbol['name']}",
-                                        'to': outgoing.get('to'),
-                                        'type': 'call'
-                                    })
+                # Get edges between filtered nodes and their connections
+                node_ids = {n.get('id') for n in filtered_nodes}
+                connected_node_ids = set()
+                
+                for edge in graph.get('edges', []):
+                    src_id = edge.get('src')
+                    dst_id = edge.get('dst')
+                    
+                    # Include edge if either endpoint is in the filtered nodes
+                    if src_id in node_ids or dst_id in node_ids:
+                        filtered_edges.append(edge)
+                        # Track connected nodes that aren't already in the set
+                        if src_id not in node_ids:
+                            connected_node_ids.add(src_id)
+                        if dst_id not in node_ids:
+                            connected_node_ids.add(dst_id)
+                
+                # Add connected nodes to the result
+                for node in graph.get('nodes', []):
+                    if node.get('id') in connected_node_ids:
+                        filtered_nodes.append(node)
         
         return {
             'status': 'ok',
             'scope': scope,
-            'call_graph': call_graph,
-            'node_count': len(call_graph['nodes']),
-            'edge_count': len(call_graph['edges'])
+            'call_graph': {
+                'nodes': filtered_nodes,
+                'edges': filtered_edges
+            },
+            'node_count': len(filtered_nodes),
+            'edge_count': len(filtered_edges)
         }
     except Exception as e:
         return {
@@ -78,7 +113,7 @@ def build_call_graph(scope: str, tool_context: ToolContext) -> dict:
 
 @safe
 def find_callers(function_id: str, tool_context: ToolContext, depth: int = 1) -> dict:
-    """Find functions calling a selected function."""
+    """Find functions calling a selected function using the graph index."""
     try:
         from .navigation_tools import get_call_hierarchy
 
@@ -93,13 +128,13 @@ def find_callers(function_id: str, tool_context: ToolContext, depth: int = 1) ->
         # If depth > 1, get indirect callers
         if depth > 1:
             indirect_callers = []
-            direct_caller_names = [c.get('from', '') for c in callers]
+            direct_caller_ids = [c.get('from', '') for c in callers]
 
             for caller in callers:
-                caller_name = caller.get('from', '')
-                if caller_name and caller_name not in direct_caller_names:
+                caller_id = caller.get('from', '')
+                if caller_id and caller_id not in direct_caller_ids:
                     # Recursively get callers of this caller
-                    sub_result = find_callers(caller_name, tool_context, depth=depth-1)
+                    sub_result = find_callers(caller_id, tool_context, depth=depth-1)
                     if sub_result.get('status') == 'ok':
                         indirect_callers.extend(sub_result.get('callers', []))
 
@@ -126,10 +161,10 @@ def find_callers(function_id: str, tool_context: ToolContext, depth: int = 1) ->
 
 @safe
 def find_callees(function_id: str, tool_context: ToolContext) -> dict:
-    """Find functions called by a selected function."""
+    """Find functions called by a selected function using the graph index."""
     try:
         from .navigation_tools import get_call_hierarchy
-        return get_call_hierarchy(function_id, tool_context)
+        return get_call_hierarchy(function_id, tool_context, direction='outgoing')
     except Exception as e:
         return {
             'status': 'error',
@@ -143,10 +178,55 @@ def trace_call_chain(
     tool_context: ToolContext,
     depth: int = 3
 ) -> dict:
-    """Trace the complete call chain."""
+    """Trace the complete call chain using the graph index."""
     try:
-        from .navigation_tools import get_call_hierarchy
-        return get_call_hierarchy(function_id, tool_context)
+        from .navigation_tools import get_call_hierarchy, _load_graph_index, resolve_symbol
+        
+        # Get the call hierarchy for the function
+        call_result = get_call_hierarchy(function_id, tool_context, direction='outgoing')
+        
+        if call_result.get('status') != 'ok':
+            return call_result
+        
+        # Build call chains by recursively following outgoing calls
+        chains = []
+        visited = set()
+        
+        def build_chain(current_id, current_chain, current_depth):
+            if current_depth > depth or current_id in visited:
+                return
+            visited.add(current_id)
+            
+            node = resolve_symbol(current_id)
+            if node:
+                current_chain.append({
+                    'id': current_id,
+                    'name': node.get('name'),
+                    'file': node.get('file')
+                })
+            
+            graph = _load_graph_index()
+            for edge in graph.get('edges', []):
+                if edge.get('src') == current_id:
+                    next_id = edge.get('dst')
+                    build_chain(next_id, current_chain.copy(), current_depth + 1)
+        
+        # Start building chains from the initial function
+        node = resolve_symbol(function_id)
+        if node:
+            initial_chain = [{
+                'id': function_id,
+                'name': node.get('name'),
+                'file': node.get('file')
+            }]
+            build_chain(function_id, initial_chain, 0)
+        
+        return {
+            'status': 'ok',
+            'function_id': function_id,
+            'chains': chains,
+            'depth': depth
+        }
     except Exception as e:
         return {
             'status': 'error',
@@ -159,9 +239,9 @@ def find_indirect_callers(
     function_id: str,
     tool_context: ToolContext
 ) -> dict:
-    """Find functions indirectly calling a selected function."""
+    """Find functions indirectly calling a selected function using the graph index."""
     try:
-        from .navigation_tools import get_call_hierarchy
+        from .navigation_tools import get_call_hierarchy, _load_graph_index, resolve_symbol
         
         # Get direct callers (incoming calls)
         call_result = get_call_hierarchy(function_id, tool_context, direction='incoming')
@@ -174,18 +254,17 @@ def find_indirect_callers(
         
         # For each direct caller, find their callers
         for caller in direct_callers:
-            caller_name = caller.get('from', '').replace('caller_at_', '')
-            if caller_name.isdigit():
-                # Try to extract function name from context
+            caller_id = caller.get('from', '')
+            if not caller_id:
                 continue
             
-            caller_result = get_call_hierarchy(caller_name, tool_context, direction='incoming')
+            caller_result = get_call_hierarchy(caller_id, tool_context, direction='incoming')
             if caller_result.get('status') == 'ok':
                 for indirect_caller in caller_result.get('incoming_calls', []):
                     indirect_callers.append({
                         'function_id': function_id,
                         'indirect_caller': indirect_caller.get('from'),
-                        'via': caller.get('from'),
+                        'via': caller_id,
                         'file': indirect_caller.get('file'),
                         'line': indirect_caller.get('line')
                     })
@@ -730,48 +809,42 @@ def calculate_change_impact(
     element_id: str,
     tool_context: ToolContext
 ) -> dict:
-    """Estimate which components are affected by a change."""
+    """Estimate which components are affected by a change using the graph index."""
     try:
-        from .navigation_tools import get_symbol_references, get_call_hierarchy
-        from .repository_tools import search_code
+        from .navigation_tools import get_call_hierarchy, _load_graph_index, resolve_symbol
         
-        # Get references to the element
-        ref_result = get_symbol_references(element_id, tool_context)
-        
-        # Get call hierarchy
-        call_result = get_call_hierarchy(element_id, tool_context)
+        # Get references to the element from the graph index
+        graph = _load_graph_index()
         
         affected_components = []
+        node = resolve_symbol(element_id)
         
-        if ref_result.get('status') == 'ok':
-            for ref in ref_result['references']:
-                affected_components.append({
-                    'component': ref['file'],
-                    'line': ref['line'],
-                    'impact_type': 'reference'
-                })
-        
-        if call_result.get('status') == 'ok':
-            for caller in call_result.get('incoming_calls', []):
-                affected_components.append({
-                    'component': caller.get('file'),
-                    'line': caller.get('line'),
-                    'impact_type': 'caller'
-                })
-        
-        # Search for imports of this element as a module
-        import_patterns = [
-            f'import {element_id}',
-            f'from {element_id} import'
-        ]
-        for pattern in import_patterns:
-            search_result = search_code(tool_context, query=pattern)
-            if search_result.get('status') == 'ok':
-                for match in search_result['matches']:
+        if node:
+            symbol_id = node.get('id')
+            symbol_name = node.get('name')
+            
+            # Find all incoming edges (callers)
+            for edge in graph.get('edges', []):
+                if edge.get('dst') == symbol_id:
+                    src_node = resolve_symbol(edge.get('src'))
                     affected_components.append({
-                        'component': match['file'],
-                        'line': match['line'],
-                        'impact_type': 'import'
+                        'component': edge.get('src'),
+                        'name': src_node.get('name') if src_node else None,
+                        'file': src_node.get('file') if src_node else None,
+                        'line': edge.get('line'),
+                        'impact_type': 'caller'
+                    })
+            
+            # Find all outgoing edges (callees)
+            for edge in graph.get('edges', []):
+                if edge.get('src') == symbol_id:
+                    dst_node = resolve_symbol(edge.get('dst'))
+                    affected_components.append({
+                        'component': edge.get('dst'),
+                        'name': dst_node.get('name') if dst_node else None,
+                        'file': dst_node.get('file') if dst_node else None,
+                        'line': edge.get('line'),
+                        'impact_type': 'callee'
                     })
         
         # Calculate impact score
@@ -798,37 +871,33 @@ def find_all_paths_between_symbols(
     to_id: str,
     tool_context: ToolContext
 ) -> dict:
-    """Find paths connecting two code elements."""
+    """Find paths connecting two code elements using the graph index."""
     try:
-        from .navigation_tools import get_call_hierarchy
+        from .navigation_tools import get_call_hierarchy, _load_graph_index, resolve_symbol
         
-        # Build a simple path using call hierarchy
-        from_result = get_call_hierarchy(from_id, tool_context, direction='outgoing')
-        to_result = get_call_hierarchy(to_id, tool_context, direction='incoming')
-        
+        graph = _load_graph_index()
         paths = []
         
         # Check if there's a direct call
-        if from_result.get('status') == 'ok':
-            for outgoing in from_result.get('outgoing_calls', []):
-                if to_id in outgoing.get('to', ''):
-                    paths.append({
-                        'path': [from_id, to_id],
-                        'type': 'direct_call'
-                    })
+        for edge in graph.get('edges', []):
+            if edge.get('src') == from_id and edge.get('dst') == to_id:
+                paths.append({
+                    'path': [from_id, to_id],
+                    'type': 'direct_call',
+                    'kind': edge.get('kind')
+                })
         
-        # If no direct path, try indirect
-        if not paths and from_result.get('status') == 'ok':
-            for outgoing in from_result.get('outgoing_calls', []):
-                intermediate = outgoing.get('to')
-                # Check if intermediate calls to_id
-                intermediate_result = get_call_hierarchy(intermediate, tool_context, direction='outgoing')
-                if intermediate_result.get('status') == 'ok':
-                    for next_out in intermediate_result.get('outgoing_calls', []):
-                        if to_id in next_out.get('to', ''):
+        # If no direct path, try indirect (depth 2)
+        if not paths:
+            for edge1 in graph.get('edges', []):
+                if edge1.get('src') == from_id:
+                    intermediate = edge1.get('dst')
+                    for edge2 in graph.get('edges', []):
+                        if edge2.get('src') == intermediate and edge2.get('dst') == to_id:
                             paths.append({
                                 'path': [from_id, intermediate, to_id],
-                                'type': 'indirect_call'
+                                'type': 'indirect_call',
+                                'kind': edge2.get('kind')
                             })
         
         return {
@@ -847,38 +916,29 @@ def find_all_paths_between_symbols(
 
 @safe
 def find_dependents(component_id: str, tool_context: ToolContext) -> dict:
-    """Find components depending on a selected component."""
+    """Find components depending on a selected component using the graph index."""
     try:
-        from .navigation_tools import get_symbol_references
-        from .repository_tools import search_code
+        from .navigation_tools import _load_graph_index, resolve_symbol
         
+        graph = _load_graph_index()
         dependents = []
         
-        # Find references
-        ref_result = get_symbol_references(component_id, tool_context)
-        if ref_result.get('status') == 'ok':
-            for ref in ref_result['references']:
-                dependents.append({
-                    'component': ref['file'],
-                    'line': ref['line'],
-                    'type': ref.get('type', 'reference')
-                })
-        
-        # Find imports
-        import_patterns = [
-            f'import {component_id}',
-            f'from {component_id} import'
-        ]
-        for pattern in import_patterns:
-            search_result = search_code(tool_context, query=pattern)
-            if search_result.get('status') == 'ok':
-                for match in search_result['matches']:
-                    if match['file'] not in [d['component'] for d in dependents]:
-                        dependents.append({
-                            'component': match['file'],
-                            'line': match['line'],
-                            'type': 'import'
-                        })
+        # Find all nodes that reference this component
+        node = resolve_symbol(component_id)
+        if node:
+            symbol_id = node.get('id')
+            
+            # Find incoming edges (things that depend on this)
+            for edge in graph.get('edges', []):
+                if edge.get('dst') == symbol_id:
+                    src_node = resolve_symbol(edge.get('src'))
+                    dependents.append({
+                        'component': edge.get('src'),
+                        'name': src_node.get('name') if src_node else None,
+                        'file': src_node.get('file') if src_node else None,
+                        'line': edge.get('line'),
+                        'type': 'dependency'
+                    })
         
         return {
             'status': 'ok',

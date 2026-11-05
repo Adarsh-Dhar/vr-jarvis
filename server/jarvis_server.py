@@ -10,6 +10,7 @@ import hmac
 import time
 from collections import defaultdict
 from pathlib import Path
+from typing import Optional
 
 from types import SimpleNamespace
 
@@ -281,10 +282,62 @@ async def health():
 
 
 @app.get('/graph', dependencies=[Depends(auth)])
-async def graph():
+async def graph(focus: Optional[str] = None, depth: int = 2):
+    """Return the graph, optionally filtered by focus node and depth."""
     if not config.GRAPH_PATH.is_file() and config.REPO_ROOT.name in repository.list_repos():
         repository.activate(config.REPO_ROOT.name)
-    return json.loads(config.GRAPH_PATH.read_text())
+    
+    graph_data = json.loads(config.GRAPH_PATH.read_text())
+    
+    # If focus is specified, return a subgraph around that node
+    if focus:
+        nodes = graph_data.get('nodes', [])
+        edges = graph_data.get('edges', [])
+        
+        # Find the focus node
+        focus_node = None
+        for node in nodes:
+            if node.get('id') == focus or node.get('name') == focus:
+                focus_node = node
+                break
+        
+        if focus_node:
+            focus_id = focus_node.get('id')
+            
+            # Collect nodes and edges within the specified depth
+            included_nodes = {focus_id}
+            included_edges = []
+            
+            # BFS to find connected nodes up to depth
+            current_depth = {focus_id: 0}
+            frontier = {focus_id}
+            
+            for _ in range(depth):
+                next_frontier = set()
+                for node_id in frontier:
+                    # Find edges connected to this node
+                    for edge in edges:
+                        if edge.get('src') == node_id or edge.get('dst') == node_id:
+                            other_id = edge.get('dst') if edge.get('src') == node_id else edge.get('src')
+                            if other_id not in included_nodes:
+                                included_nodes.add(other_id)
+                                current_depth[other_id] = current_depth.get(node_id, 0) + 1
+                                next_frontier.add(other_id)
+                            included_edges.append(edge)
+                frontier = next_frontier
+            
+            # Filter nodes and edges
+            filtered_nodes = [n for n in nodes if n.get('id') in included_nodes]
+            filtered_edges = [e for e in edges if e in included_edges]
+            
+            return {
+                'nodes': filtered_nodes,
+                'edges': filtered_edges,
+                'focus': focus,
+                'depth': depth
+            }
+    
+    return graph_data
 
 
 class RepoBody(BaseModel):

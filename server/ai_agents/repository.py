@@ -6,6 +6,7 @@ import subprocess
 from pathlib import Path, PurePosixPath
 
 from . import config
+from .tree_sitter_parser import extract_symbols_with_tree_sitter, extract_calls_with_tree_sitter
 
 SKIP_DIRS = {'.git', 'node_modules', 'dist', 'build', 'out', 'coverage', '__pycache__', '.venv', 'venv',
              'env', '.next', '.idea', '.vscode', 'target', 'vendor'}
@@ -21,6 +22,8 @@ _ARROW = re.compile(r'^\s*(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s
                     r'(?:function\b|\([^)]*\)\s*(?::[^=]+)?=>|[A-Za-z_$][\w$]*\s*=>)')
 _CLASS = re.compile(r'^\s*(?:export\s+)?(?:default\s+)?(?:abstract\s+)?class\s+([A-Za-z_$][\w$]*)')
 _CALL = re.compile(r'\b([A-Za-z_$][\w$]*)\s*\(')
+_METHOD_CALL = re.compile(r'\b(?:self|this|[A-Za-z_$][\w$]*)\.([A-Za-z_$][\w$]*)\s*\(')
+_CONSTRUCTOR = re.compile(r'\bnew\s+([A-Za-z_$][\w$]*)\s*\(')
 _IMPORT = re.compile(r'''(?:from\s+['"]([^'"]+)['"]|require\(\s*['"]([^'"]+)['"]\s*\)|^\s*(?:from\s+([\w.]+)\s+import|import\s+([\w.]+)))''', re.M)
 
 
@@ -75,27 +78,42 @@ def _symbols(rel, text):
     """Yield (name, kind, start_line, end_line) 1-based."""
     lines = text.splitlines()
     if rel.endswith('.py'):
+        # Use tree-sitter for Python
         try:
-            tree = ast.parse(text)
-        except SyntaxError:
-            return
-        for node in tree.body:
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                yield node.name, 'function', node.lineno, node.end_lineno
-            elif isinstance(node, ast.ClassDef):
-                yield node.name, 'object', node.lineno, node.end_lineno
-                for m in node.body:
-                    if isinstance(m, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                        yield node.name + '.' + m.name, 'function', m.lineno, m.end_lineno
+            symbols = extract_symbols_with_tree_sitter(rel, text)
+            for sym in symbols:
+                yield sym['name'], sym['kind'], sym['start'], sym['end']
+        except Exception:
+            # Fallback to AST
+            try:
+                tree = ast.parse(text)
+            except SyntaxError:
+                return
+            for node in tree.body:
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    yield node.name, 'function', node.lineno, node.end_lineno
+                elif isinstance(node, ast.ClassDef):
+                    yield node.name, 'object', node.lineno, node.end_lineno
+                    for m in node.body:
+                        if isinstance(m, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                            yield node.name + '.' + m.name, 'function', m.lineno, m.end_lineno
         return
-    for i, line in enumerate(lines):
-        if line.startswith((' ', '\t')) and not line.lstrip().startswith(('export', 'function', 'async', 'const', 'class')):
-            continue
-        for rx, kind in ((_FN, 'function'), (_ARROW, 'function'), (_CLASS, 'object')):
-            m = rx.match(line)
-            if m:
-                yield m.group(1), kind, i + 1, _js_end(lines, i)
-                break
+    
+    # Use tree-sitter for JavaScript/TypeScript
+    try:
+        symbols = extract_symbols_with_tree_sitter(rel, text)
+        for sym in symbols:
+            yield sym['name'], sym['kind'], sym['start'], sym['end']
+    except Exception:
+        # Fallback to regex
+        for i, line in enumerate(lines):
+            if line.startswith((' ', '\t')) and not line.lstrip().startswith(('export', 'function', 'async', 'const', 'class')):
+                continue
+            for rx, kind in ((_FN, 'function'), (_ARROW, 'function'), (_CLASS, 'object')):
+                m = rx.match(line)
+                if m:
+                    yield m.group(1), kind, i + 1, _js_end(lines, i)
+                    break
 
 
 def _imports(text):
@@ -122,43 +140,182 @@ def index_repo(name):
             continue
         lines = text.splitlines()
         for sym, kind, start, end in _symbols(rel, text):
-            nodes.append({'id': _dotted(rel) + '.' + sym, 'name': sym.split('.')[-1], 'kind': kind, 'file': rel,
-                          'start': start, 'end': end, 'cluster': _cluster(rel), 'loc': max(end - start + 1, 1)})
+            # Determine node level based on kind and file structure
+            level = 'function'
+            if kind == 'object':
+                level = 'class'
+            elif 'route' in rel.lower() or 'controller' in rel.lower() or 'api' in rel.lower():
+                level = 'route'
+            elif 'service' in rel.lower() or 'business' in rel.lower():
+                level = 'service'
+            elif 'repository' in rel.lower() or 'repo' in rel.lower() or 'dao' in rel.lower() or 'database' in rel.lower():
+                level = 'repository'
+            elif 'test' in rel.lower() or _is_test(rel):
+                level = 'test'
+            
+            # Determine parent based on file path
+            parts = rel.split('/')
+            parent = None
+            if len(parts) > 1:
+                parent = '.'.join(parts[:-1])
+            elif len(parts) == 1:
+                parent = 'root'
+            
+            nodes.append({
+                'id': _dotted(rel) + '.' + sym, 
+                'name': sym.split('.')[-1], 
+                'kind': kind, 
+                'file': rel,
+                'start': start, 
+                'end': end, 
+                'cluster': _cluster(rel), 
+                'loc': max(end - start + 1, 1),
+                'level': level,
+                'parent': parent
+            })
 
     by_name = {}
     for n in nodes:
         by_name.setdefault(n['name'], []).append(n)
     edges, seen = [], set()
+    
+    # Add contains edges for hierarchy
+    for n in nodes:
+        if n.get('parent'):
+            parent_id = n['parent'] + '.' + n.get('file', '').rsplit('/', 1)[-1].rsplit('.', 1)[0]
+            edges.append({
+                'src': parent_id,
+                'dst': n['id'],
+                'type': 'contains',
+                'kind': 'confirmed'
+            })
+    
+    # Add imports edges based on file imports
+    for n in nodes:
+        file_path = n.get('file', '')
+        if file_path:
+            imports = _imports(texts.get(file_path, ''))
+            for imp in imports:
+                # Find matching nodes in the imported module
+                for target_node in nodes:
+                    target_file = target_node.get('file', '')
+                    if imp in target_file or imp in target_file.rsplit('/', 1)[-1]:
+                        edges.append({
+                            'src': n['id'],
+                            'dst': target_node['id'],
+                            'type': 'imports',
+                            'kind': 'confirmed',
+                            'file': n['file'],
+                            'line': 1
+                        })
+                        break
+    
+    # Add call edges with improved resolution using tree-sitter
     for n in nodes:
         if n['kind'] == 'object':
             continue
-        body = '\n'.join(texts[n['file']].splitlines()[n['start']:n['end']])   # skips the definition line itself
-        imported = _imports(texts[n['file']])
-        for callee in set(_CALL.findall(body)):
+        file_path = n.get('file', '')
+        if not file_path:
+            continue
+        
+        # Use tree-sitter to extract calls from the entire file
+        try:
+            calls = extract_calls_with_tree_sitter(file_path, texts.get(file_path, ''))
+        except Exception:
+            # Fallback to regex
+            calls = []
+            lines = texts.get(file_path, '').splitlines()
+            for offset, line in enumerate(lines):
+                for callee in _CALL.findall(line):
+                    calls.append({
+                        'name': callee,
+                        'line': offset + 1,
+                        'type': 'direct'
+                    })
+        
+        # Filter calls to only those within this function's line range
+        function_calls = [c for c in calls if n['start'] <= c['line'] <= n['end']]
+        
+        # Resolve each call
+        for call in function_calls:
+            callee = call['name']
+            call_type = call.get('type', 'direct')
+            line_idx = call['line'] - 1  # Convert to 0-based
+            
             targets = by_name.get(callee, [])
-            if not targets or len(targets) > 3:
+            if not targets:
                 continue
+            
             for t in targets:
                 if t['id'] == n['id'] or (n['id'], t['id']) in seen:
                     continue
+                
+                # Determine confidence based on call type and scope
+                kind = 'unresolved'
+                if call_type == 'direct':
+                    # Direct calls are most reliable
+                    stem = t['file'].rsplit('/', 1)[-1].rsplit('.', 1)[0]
+                    imported = _imports(texts.get(n['file'], ''))
+                    if t['file'] == n['file'] or stem in imported:
+                        kind = 'confirmed'
+                    else:
+                        kind = 'likely'
+                elif call_type == 'method':
+                    # Method calls need more context
+                    kind = 'likely'
+                elif call_type == 'constructor':
+                    # Constructors are usually reliable
+                    kind = 'confirmed'
+                
+                # If we have too many targets, mark as unresolved
+                if len(targets) > 3:
+                    kind = 'unresolved'
+                
                 seen.add((n['id'], t['id']))
-                stem = t['file'].rsplit('/', 1)[-1].rsplit('.', 1)[0]
-                sure = t['file'] == n['file'] or stem in imported
-                edges.append({'src': n['id'], 'dst': t['id'], 'type': 'calls', 'kind': 'confirmed' if sure else 'inferred'})
+                edges.append({
+                    'src': n['id'], 
+                    'dst': t['id'], 
+                    'type': 'calls', 
+                    'kind': kind,
+                    'file': n['file'],
+                    'line': line_idx + 1,  # Convert to 1-based line number
+                    'call_type': call_type
+                })
 
-    if len(nodes) > MAX_NODES:       # keep the best connected symbols
-        deg = {}
-        for e in edges:
-            deg[e['src']] = deg.get(e['src'], 0) + 1; deg[e['dst']] = deg.get(e['dst'], 0) + 1
-        keep = {n['id'] for n in sorted(nodes, key=lambda n: -deg.get(n['id'], 0))[:MAX_NODES]}
-        nodes = [n for n in nodes if n['id'] in keep]
-        edges = [e for e in edges if e['src'] in keep and e['dst'] in keep]
+    # Remove MAX_NODES cap - return all nodes for level-based graph serving
+    # The server will handle pagination via /graph?focus=<id>&depth=2
 
+    # Detect external services and libraries from imports
+    external_services = set()
+    for n in nodes:
+        file_path = n.get('file', '')
+        if file_path:
+            imports = _imports(texts.get(file_path, ''))
+            for imp in imports:
+                # Check if it's a known external library
+                if not any(imp in n2.get('file', '') for n2 in nodes):
+                    external_services.add(imp)
+    
+    # Add external services as nodes
+    for service in external_services:
+        nodes.append({
+            'id': f'external.{service}',
+            'name': service,
+            'kind': 'external',
+            'file': 'external',
+            'start': 0,
+            'end': 0,
+            'cluster': 'external',
+            'loc': 0,
+            'level': 'external',
+            'parent': None
+        })
+    
     ids = {n['id'] for n in nodes}
     for t in tests:
         called = set(_CALL.findall(texts[t['file']]))
         t['covers'] = sorted({x['id'] for c in called for x in by_name.get(c, []) if x['id'] in ids and len(by_name[c]) <= 3})
-    return {'nodes': nodes, 'edges': edges, 'tests': tests, 'coverage': {}}
+    return {'nodes': nodes, 'edges': edges, 'tests': tests, 'coverage': {}, 'external_services': list(external_services)}
 
 
 def build_graph(name):

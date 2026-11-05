@@ -12,21 +12,21 @@ namespace JarvisVR
     public static GraphDto Sample()
     {
       var g = new GraphDto();
-      void N(string id, string name, string file, string cluster, string kind) =>
-        g.nodes.Add(new GraphNodeDto { id = id, name = name, file = file, cluster = cluster, kind = kind });
-      void E(string s, string d, string k) => g.edges.Add(new GraphEdgeDto { src = s, dst = d, type = "calls", kind = k });
-      N("route.delete", "DELETE /account/:id", "routes/account.ts", "api", "route");
-      N("auth.require", "requireAuth", "auth/requireAuth.ts", "auth", "function");
-      N("service.delete", "deleteAccount", "services/account.ts", "services", "function");
-      N("auth.owner", "checkOwner", "auth/owner.ts", "auth", "function");
-      N("db.delete", "users.repo.delete", "db/users.repo.ts", "db", "function");
-      N("db.repo", "users.repo", "db/users.repo.ts", "db", "object");
-      N("test.own-account", "deletes own account", "tests/account.test.ts", "tests", "test");
-      E("route.delete", "auth.require", "confirmed");
-      E("route.delete", "service.delete", "confirmed");
-      E("service.delete", "db.repo", "confirmed");
-      E("db.repo", "db.delete", "inferred");
-      E("test.own-account", "route.delete", "runtime");
+      void N(string id, string name, string file, string cluster, string kind, string level = "function", string parent = "") =>
+        g.nodes.Add(new GraphNodeDto { id = id, name = name, file = file, cluster = cluster, kind = kind, level = level, parent = parent });
+      void E(string s, string d, string k, string file = "", int line = 0) => g.edges.Add(new GraphEdgeDto { src = s, dst = d, type = "calls", kind = k, file = file, line = line });
+      N("route.delete", "DELETE /account/:id", "routes/account.ts", "api", "route", "route");
+      N("auth.require", "requireAuth", "auth/requireAuth.ts", "auth", "function", "function");
+      N("service.delete", "deleteAccount", "services/account.ts", "services", "function", "service");
+      N("auth.owner", "checkOwner", "auth/owner.ts", "auth", "function", "function");
+      N("db.delete", "users.repo.delete", "db/users.repo.ts", "db", "function", "repository");
+      N("db.repo", "users.repo", "db/users.repo.ts", "db", "object", "repository");
+      N("test.own-account", "deletes own account", "tests/account.test.ts", "tests", "test", "test");
+      E("route.delete", "auth.require", "confirmed", "routes/account.ts", 15);
+      E("route.delete", "service.delete", "confirmed", "routes/account.ts", 16);
+      E("service.delete", "db.repo", "confirmed", "services/account.ts", 42);
+      E("db.repo", "db.delete", "inferred", "db/users.repo.ts", 8);
+      E("test.own-account", "route.delete", "runtime", "tests/account.test.ts", 23);
       return g;
     }
 

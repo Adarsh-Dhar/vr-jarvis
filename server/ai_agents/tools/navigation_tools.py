@@ -8,9 +8,54 @@ from typing import Optional, List, Dict, Any
 import re
 import ast
 import subprocess
+import json
 from google.adk.tools import ToolContext
 from ._safe import safe
 from ._common import repo_root, resolve_in_repo
+
+
+# Graph index resolver - single source of truth for symbol resolution
+def _load_graph_index():
+    """Load the graph index from GRAPH_PATH."""
+    try:
+        from .. import config
+        if config.GRAPH_PATH.exists():
+            with open(config.GRAPH_PATH) as f:
+                return json.load(f)
+    except Exception:
+        pass
+    return {'nodes': [], 'edges': []}
+
+
+def resolve_symbol(symbol_id: str) -> Optional[Dict]:
+    """
+    Resolve a symbol ID from the graph index.
+    
+    Args:
+        symbol_id: The symbol ID to resolve (e.g., "file.module.function")
+    
+    Returns:
+        Dict with node data if found, None otherwise
+    """
+    graph = _load_graph_index()
+    for node in graph.get('nodes', []):
+        if node.get('id') == symbol_id:
+            return node
+    return None
+
+
+def resolve_symbol_by_name(symbol_name: str) -> List[Dict]:
+    """
+    Resolve all symbols with a given name from the graph index.
+    
+    Args:
+        symbol_name: The symbol name to resolve (e.g., "create_order")
+    
+    Returns:
+        List of node dicts matching the name
+    """
+    graph = _load_graph_index()
+    return [node for node in graph.get('nodes', []) if node.get('name') == symbol_name]
 
 
 def _is_python_file(file_path: str) -> bool:
@@ -260,70 +305,57 @@ def get_call_hierarchy(
     tool_context: ToolContext,
     direction: str = 'both'
 ) -> dict:
-    """Retrieve incoming and outgoing calls."""
+    """Retrieve incoming and outgoing calls using the graph index."""
     try:
-        cwd = repo_root()
+        # Try to resolve by ID first
+        node = resolve_symbol(symbol_name)
+        
+        # If not found by ID, try by name
+        if not node:
+            nodes = resolve_symbol_by_name(symbol_name)
+            if nodes:
+                node = nodes[0]  # Use first match
+            else:
+                return {
+                    'status': 'not_found',
+                    'symbol_name': symbol_name,
+                    'message': 'Symbol not found in graph index'
+                }
+        
+        symbol_id = node.get('id')
+        graph = _load_graph_index()
+        
         incoming_calls = []
         outgoing_calls = []
         
-        # Find the definition first
-        def_result = get_symbol_definition(symbol_name, tool_context)
-        if def_result.get('status') != 'ok':
-            return {
-                'status': 'not_found',
-                'symbol_name': symbol_name,
-                'message': 'Symbol definition not found'
-            }
-        
-        definition_file = def_result['definition']['file']
-        definition_line = def_result['definition']['line']
-        
         if direction in ['both', 'incoming']:
-            if _is_python_file(definition_file):
-                # AST: resolves the enclosing function of every call site
-                for site in _python_call_sites(symbol_name, cwd):
-                    incoming_calls.append({'from': site['caller'], 'file': site['file'], 'line': site['line']})
-            else:
-                result = subprocess.run(
-                    ['grep', '-rnw', '--include=*.js', '--include=*.ts', symbol_name, str(cwd)],
-                    capture_output=True,
-                    text=True
-                )
-                if result.returncode == 0:
-                    for line in result.stdout.splitlines():
-                        parts = line.split(':', 2)
-                        if len(parts) >= 2:
-                            file_path = parts[0]
-                            line_num = int(parts[1])
-                            # Skip the definition itself
-                            if file_path != definition_file or line_num != definition_line:
-                                incoming_calls.append({
-                                    'from': f'caller_at_{line_num}',
-                                    'file': file_path,
-                                    'line': line_num
-                                })
+            # Find edges where this node is the destination
+            for edge in graph.get('edges', []):
+                if edge.get('dst') == symbol_id:
+                    src_node = resolve_symbol(edge.get('src'))
+                    incoming_calls.append({
+                        'from': edge.get('src'),
+                        'file': src_node.get('file') if src_node else None,
+                        'line': edge.get('line'),
+                        'kind': edge.get('kind')
+                    })
         
         if direction in ['both', 'outgoing']:
-            # For Python, parse the function body to find calls
-            if _is_python_file(definition_file):
-                tree = _parse_python_ast(definition_file)
-                if tree:
-                    for node in ast.walk(tree):
-                        if isinstance(node, ast.FunctionDef) and node.name == symbol_name:
-                            # Find function calls in the body
-                            for child in ast.walk(node):
-                                if isinstance(child, ast.Call):
-                                    if isinstance(child.func, ast.Name):
-                                        outgoing_calls.append({
-                                            'to': child.func.id,
-                                            'file': definition_file,
-                                            'line': child.lineno
-                                        })
-                            break
+            # Find edges where this node is the source
+            for edge in graph.get('edges', []):
+                if edge.get('src') == symbol_id:
+                    dst_node = resolve_symbol(edge.get('dst'))
+                    outgoing_calls.append({
+                        'to': edge.get('dst'),
+                        'file': dst_node.get('file') if dst_node else None,
+                        'line': edge.get('line'),
+                        'kind': edge.get('kind')
+                    })
         
         return {
             'status': 'ok',
             'symbol_name': symbol_name,
+            'symbol_id': symbol_id,
             'incoming_calls': incoming_calls,
             'outgoing_calls': outgoing_calls
         }

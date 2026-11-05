@@ -187,18 +187,19 @@ namespace JarvisVR
       }
 
       JarvisSpatialButton hoverBtn = null; JarvisGraphNode hoverNode = null; JarvisSpatialGrab hoverGrab = null;
-      JarvisNodeFx hoverFx = null; JarvisSpatialResize hoverResize = null;
+      JarvisNodeFx hoverFx = null; JarvisSpatialResize hoverResize = null; JarvisGraphEdge hoverEdge = null;
       float dist = 1.5f; bool hasHit = false;
       if (TryRaycastTarget(s.Ray, out RaycastHit hit))
       {
         hasHit = true; dist = hit.distance;
         hoverBtn = hit.collider.GetComponentInParent<JarvisSpatialButton>();
         hoverNode = hit.collider.GetComponentInParent<JarvisGraphNode>();
+        hoverEdge = hit.collider.GetComponentInParent<JarvisGraphEdge>();
         hoverGrab = hit.collider.GetComponentInParent<JarvisSpatialGrab>();
         hoverFx = hit.collider.GetComponentInParent<JarvisNodeFx>();
         hoverResize = hit.collider.GetComponentInParent<JarvisSpatialResize>();
         // Pinching anywhere on a panel body (not only the thin title strip) grabs the panel, unless it is pinned.
-        if (hoverBtn == null && hoverNode == null && hoverGrab == null && hoverResize == null)
+        if (hoverBtn == null && hoverNode == null && hoverEdge == null && hoverGrab == null && hoverResize == null)
         {
           JarvisSpatialPanel panel = hit.collider.GetComponentInParent<JarvisSpatialPanel>();
           if (panel != null && !panel.Pinned)
@@ -246,6 +247,11 @@ namespace JarvisVR
           Debug.Log("JARVIS: Clicked on node");
           s.Node = hoverNode; s.NodeDist = dist; s.NodeStart = s.NodeLast = s.Ray.GetPoint(dist); s.NodeDragging = false;
           s.NodeTime = Time.unscaledTime; s.NodeHeld = false;
+        }
+        else if (hoverEdge != null)
+        {
+          Debug.Log("JARVIS: Clicked on edge");
+          hoverEdge.Select();
         }
         else if (hoverGrab != null)
         {

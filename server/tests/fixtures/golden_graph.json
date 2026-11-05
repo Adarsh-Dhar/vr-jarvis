@@ -1,0 +1,80 @@
+{
+  "nodes": [
+    {
+      "id": "routes.account.createOrder",
+      "name": "createOrder",
+      "kind": "function",
+      "file": "routes/account.ts",
+      "start": 10,
+      "end": 25,
+      "cluster": "routes",
+      "loc": 15,
+      "level": "route",
+      "parent": "routes"
+    },
+    {
+      "id": "services.order.createOrder",
+      "name": "createOrder",
+      "kind": "function",
+      "file": "services/order.ts",
+      "start": 5,
+      "end": 30,
+      "cluster": "services",
+      "loc": 25,
+      "level": "service",
+      "parent": "services"
+    },
+    {
+      "id": "db.orders.insert",
+      "name": "insert",
+      "kind": "function",
+      "file": "db/orders.repo.ts",
+      "start": 8,
+      "end": 20,
+      "cluster": "db",
+      "loc": 12,
+      "level": "repository",
+      "parent": "db"
+    },
+    {
+      "id": "auth.requireAuth",
+      "name": "requireAuth",
+      "kind": "function",
+      "file": "auth/requireAuth.ts",
+      "start": 3,
+      "end": 15,
+      "cluster": "auth",
+      "loc": 12,
+      "level": "function",
+      "parent": "auth"
+    }
+  ],
+  "edges": [
+    {
+      "src": "routes.account.createOrder",
+      "dst": "services.order.createOrder",
+      "type": "calls",
+      "kind": "confirmed",
+      "file": "routes/account.ts",
+      "line": 15
+    },
+    {
+      "src": "services.order.createOrder",
+      "dst": "db.orders.insert",
+      "type": "calls",
+      "kind": "confirmed",
+      "file": "services/order.ts",
+      "line": 22
+    },
+    {
+      "src": "routes.account.createOrder",
+      "dst": "auth.requireAuth",
+      "type": "calls",
+      "kind": "confirmed",
+      "file": "routes/account.ts",
+      "line": 12
+    }
+  ],
+  "tests": [],
+  "coverage": {}
+}

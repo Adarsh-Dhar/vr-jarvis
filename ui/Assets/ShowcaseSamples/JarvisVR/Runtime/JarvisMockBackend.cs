@@ -14,6 +14,7 @@ namespace JarvisVR
     void GetSource(string nodeId, Action<SourceResponse> ok);
     void GetHealth(Action<HealthDto> ok, Action<string> fail);
     void GetGraph(Action<GraphDto> ok);
+    void GetGraphWithFocus(string focusId, int depth, Action<GraphDto> ok, Action<string> fail);
     void GetRepos(Action<ReposDto> ok, Action<string> fail);
     void GetTree(string repo, string path, Action<RepoTreeDto> ok, Action<string> fail);
     void GetFile(string repo, string path, Action<RepoFileDto> ok, Action<string> fail);
@@ -110,6 +111,76 @@ namespace JarvisVR
     }
 
     public void GetGraph(Action<GraphDto> ok) { StartCoroutine(After(0.2f, () => ok(JarvisGraphModel.Sample()))); }
+
+    public void GetGraphWithFocus(string focusId, int depth, Action<GraphDto> ok, Action<string> fail)
+    {
+      // For mock, just return the sample graph filtered by focus
+      var sample = JarvisGraphModel.Sample();
+      var filtered = new GraphDto();
+      
+      // Find the focus node
+      GraphNodeDto focusNode = null;
+      foreach (var node in sample.nodes)
+      {
+        if (node.id == focusId || node.name == focusId)
+        {
+          focusNode = node;
+          break;
+        }
+      }
+      
+      if (focusNode == null)
+      {
+        fail("Node not found: " + focusId);
+        return;
+      }
+      
+      // Add focus node
+      filtered.nodes.Add(focusNode);
+      
+      // Add connected nodes up to depth
+      var includedIds = new HashSet<string> { focusNode.id };
+      var currentDepth = new Dictionary<string, int> { { focusNode.id, 0 } };
+      var frontier = new HashSet<string> { focusNode.id };
+      
+      for (int d = 0; d < depth; d++)
+      {
+        var nextFrontier = new HashSet<string>();
+        foreach (var edge in sample.edges)
+        {
+          string otherId = null;
+          if (edge.src == focusNode.id || includedIds.Contains(edge.src))
+          {
+            otherId = edge.dst;
+          }
+          else if (edge.dst == focusNode.id || includedIds.Contains(edge.dst))
+          {
+            otherId = edge.src;
+          }
+          
+          if (otherId != null && !includedIds.Contains(otherId))
+          {
+            includedIds.Add(otherId);
+            currentDepth[otherId] = currentDepth.GetValueOrDefault(edge.src, 0) + 1;
+            nextFrontier.Add(otherId);
+            filtered.edges.Add(edge);
+            
+            // Add the node
+            foreach (var node in sample.nodes)
+            {
+              if (node.id == otherId)
+              {
+                filtered.nodes.Add(node);
+                break;
+              }
+            }
+          }
+        }
+        frontier = nextFrontier;
+      }
+      
+      StartCoroutine(After(0.2f, () => ok(filtered)));
+    }
 
     public void GetProgress(int since, Action<ProgressDto> ok)
     {
