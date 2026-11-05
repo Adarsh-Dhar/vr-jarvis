@@ -1039,7 +1039,17 @@ def visualize_architecture(
             
             # Determine layer based on file path and name
             layer = 'other'
-            if any(x in file_path.lower() for x in ['route', 'controller', 'api', 'endpoint']):
+            # First check the node's level field for explicit layer information
+            if level == 'route':
+                layer = 'api'
+            elif level == 'service':
+                layer = 'services'
+            elif level == 'repository':
+                layer = 'database'
+            elif level == 'test':
+                layer = 'tests'
+            # Then fallback to file path heuristics
+            elif any(x in file_path.lower() for x in ['route', 'controller', 'api', 'endpoint']):
                 layer = 'api'
             elif any(x in file_path.lower() for x in ['service', 'business', 'logic']):
                 layer = 'services'
@@ -1137,19 +1147,10 @@ def visualize_architecture(
                     'count': len(file_nodes)
                 })
         
-        # Add class nodes
-        for class_name, class_nodes in classes.items():
-            if class_name:
-                class_id = f"class.{class_name}"
-                add_node({
-                    'id': class_id,
-                    'name': class_name.split('.')[-1],
-                    'kind': 'object',
-                    'cluster': class_name.split('.')[0] if '.' in class_name else 'root',
-                    'level': 'class',
-                    'file': class_nodes[0].get('file', '') if class_nodes else '',
-                    'count': len(class_nodes)
-                })
+        # Add class nodes (only from original nodes with level='class')
+        for node in nodes:
+            if node.get('level') == 'class':
+                add_node(node)
         
         # Add all original function/leaf nodes
         for node in nodes:
@@ -1162,12 +1163,20 @@ def visualize_architecture(
             level = node.get('level', 'function')
             node_id = node.get('id')
             
-            if not node_id:
+            if not node_id or node_id not in node_set:
                 continue
             
-            # Determine layer
+            # Determine layer based on level first, then fallback to file path
             layer = 'other'
-            if any(x in file_path.lower() for x in ['route', 'controller', 'api', 'endpoint']):
+            if level == 'route':
+                layer = 'api'
+            elif level == 'service':
+                layer = 'services'
+            elif level == 'repository':
+                layer = 'database'
+            elif level == 'test':
+                layer = 'tests'
+            elif any(x in file_path.lower() for x in ['route', 'controller', 'api', 'endpoint']):
                 layer = 'api'
             elif any(x in file_path.lower() for x in ['service', 'business', 'logic']):
                 layer = 'services'
@@ -1189,59 +1198,60 @@ def visualize_architecture(
             # File
             file_id = f"file.{file_path.replace('/', '.')}" if file_path else None
             
-            # Class (if applicable)
+            # Class (if applicable) - only if class node exists
             class_id = None
             if level == 'function' and '.' in node_id:
                 class_parts = node_id.split('.')
                 if len(class_parts) >= 2:
-                    class_id = f"class.{'.'.join(class_parts[:-1])}"
+                    potential_class_id = f"class.{'.'.join(class_parts[:-1])}"
+                    if potential_class_id in node_set:
+                        class_id = potential_class_id
             
             # Create hierarchy edges
-            if node_id in node_set:
-                # layer -> module
-                if module_id in node_set:
+            # layer -> module
+            if module_id in node_set:
+                architecture_edges.append({
+                    'src': layer_id,
+                    'dst': module_id,
+                    'type': 'contains',
+                    'kind': 'confirmed'
+                })
+                # module -> file
+                if file_id and file_id in node_set:
                     architecture_edges.append({
-                        'src': layer_id,
-                        'dst': module_id,
+                        'src': module_id,
+                        'dst': file_id,
                         'type': 'contains',
                         'kind': 'confirmed'
                     })
-                    # module -> file
-                    if file_id and file_id in node_set:
+                    # file -> class or file -> function
+                    if class_id:
                         architecture_edges.append({
-                            'src': module_id,
-                            'dst': file_id,
+                            'src': file_id,
+                            'dst': class_id,
                             'type': 'contains',
                             'kind': 'confirmed'
                         })
-                        # file -> class or file -> function
-                        if class_id and class_id in node_set:
-                            architecture_edges.append({
-                                'src': file_id,
-                                'dst': class_id,
-                                'type': 'contains',
-                                'kind': 'confirmed'
-                            })
-                            # class -> function
-                            architecture_edges.append({
-                                'src': class_id,
-                                'dst': node_id,
-                                'type': 'contains',
-                                'kind': 'confirmed'
-                            })
-                        else:
-                            # file -> function directly
-                            architecture_edges.append({
-                                'src': file_id,
-                                'dst': node_id,
-                                'type': 'contains',
-                                'kind': 'confirmed'
-                            })
+                        # class -> function
+                        architecture_edges.append({
+                            'src': class_id,
+                            'dst': node_id,
+                            'type': 'contains',
+                            'kind': 'confirmed'
+                        })
+                    else:
+                        # file -> function directly
+                        architecture_edges.append({
+                            'src': file_id,
+                            'dst': node_id,
+                            'type': 'contains',
+                            'kind': 'confirmed'
+                        })
         
-        # Aggregate module->module edges from imports edges
+        # Aggregate module->module edges from imports and calls edges
         module_connections = defaultdict(set)
         for edge in edges:
-            if edge.get('type') == 'imports':
+            if edge.get('type') in ('imports', 'calls'):
                 src = edge.get('src')
                 dst = edge.get('dst')
                 if src and dst:
@@ -1271,7 +1281,7 @@ def visualize_architecture(
                 })
         
         # Compute coupling metrics - only calls and imports edges count,
-        # not contains/hierarchy edges
+        # not contains/hierarchy edges. Count only edges between leaf nodes (functions).
         fan_in = defaultdict(int)
         fan_out = defaultdict(int)
         
@@ -1281,6 +1291,12 @@ def visualize_architecture(
             src = edge.get('src')
             dst = edge.get('dst')
             if src and dst:
+                # Only count edges between function-level nodes, not hierarchy edges
+                # Skip edges where src or dst is a module, file, or class node
+                if any(src.startswith(prefix) for prefix in ['module.', 'file.', 'class.', 'layer.']):
+                    continue
+                if any(dst.startswith(prefix) for prefix in ['module.', 'file.', 'class.', 'layer.']):
+                    continue
                 fan_out[src] += 1
                 fan_in[dst] += 1
         

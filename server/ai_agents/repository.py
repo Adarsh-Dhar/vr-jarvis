@@ -254,13 +254,38 @@ def index_repo(name):
             if same_file:
                 chosen, kind = same_file[0], 'confirmed'
             else:
-                imported = [t for t in targets
-                            if t['file'].rsplit('/', 1)[-1].rsplit('.', 1)[0] in file_imports
-                            or _dotted(t['file']) in file_imports
-                            or any(_dotted(t['file']).endswith('.' + imp) or imp.endswith('.' + _dotted(t['file']))
-                                   for imp in file_imports)]
+                # Improved import-aware resolution
+                imported = []
+                for t in targets:
+                    target_file = t['file']
+                    target_module = target_file.rsplit('/', 1)[0] if '/' in target_file else target_file
+                    target_module_name = target_module.replace('/', '.')
+                    
+                    # Check if the target module is imported
+                    for imp in file_imports:
+                        # Exact module match
+                        if imp == target_module_name:
+                            imported.append(t)
+                            break
+                        # Target is a submodule of an import
+                        if target_module_name.startswith(imp + '.'):
+                            imported.append(t)
+                            break
+                        # Import is a submodule of target
+                        if imp.startswith(target_module_name + '.'):
+                            imported.append(t)
+                            break
+                        # Filename match (imported file name matches target file)
+                        if imp == target_file.rsplit('/', 1)[-1].rsplit('.', 1)[0]:
+                            imported.append(t)
+                            break
+                
                 if len(imported) == 1:
                     chosen, kind = imported[0], 'confirmed'
+                elif len(imported) > 1:
+                    # Multiple imported matches - try to disambiguate by call context
+                    # For now, mark as likely since we can't be sure
+                    chosen, kind = imported[0], 'likely'
                 elif len(targets) == 1:
                     chosen, kind = targets[0], 'likely' if call_type != 'constructor' else 'confirmed'
                 else:

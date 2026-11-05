@@ -554,6 +554,58 @@ namespace JarvisVR
       }
     }
 
+    private void ExpandNode(string nodeId)
+    {
+      if (!_nodes.TryGetValue(nodeId, out NodeView n)) return;
+      
+      // Find all child nodes (modules contain files, files contain classes/functions)
+      var children = new List<NodeView>();
+      foreach (var kvp in _nodes)
+      {
+        // Check if this node is a child of the expanded node
+        // This is a simple heuristic - in a full implementation, we'd use the hierarchy edges
+        if (kvp.Value.Dto.id.StartsWith(nodeId + ".") || 
+            (kvp.Value.Dto.parent == nodeId) ||
+            (kvp.Value.Dto.file != null && kvp.Value.Dto.file.StartsWith(n.Dto.file)))
+        {
+          children.Add(kvp.Value);
+        }
+      }
+      
+      // Show all children
+      foreach (var child in children)
+      {
+        child.Root.gameObject.SetActive(true);
+      }
+      
+      Log("expanded node: " + nodeId + " (" + children.Count + " children)");
+    }
+
+    private void CollapseNode(string nodeId)
+    {
+      if (!_nodes.TryGetValue(nodeId, out NodeView n)) return;
+      
+      // Find all child nodes
+      var children = new List<NodeView>();
+      foreach (var kvp in _nodes)
+      {
+        if (kvp.Value.Dto.id.StartsWith(nodeId + ".") || 
+            (kvp.Value.Dto.parent == nodeId) ||
+            (kvp.Value.Dto.file != null && kvp.Value.Dto.file.StartsWith(n.Dto.file)))
+        {
+          children.Add(kvp.Value);
+        }
+      }
+      
+      // Hide all children
+      foreach (var child in children)
+      {
+        child.Root.gameObject.SetActive(false);
+      }
+      
+      Log("collapsed node: " + nodeId + " (" + children.Count + " children)");
+    }
+
     private void DragCluster(string nodeId, Vector3 worldDelta)
     {
       if (!_nodes.TryGetValue(nodeId, out NodeView n)) return;
@@ -691,6 +743,20 @@ namespace JarvisVR
           return false;
         case "show_approval_prompt":
           _pending = c.summary;
+          return false;
+        case "expand_node":
+          if (!string.IsNullOrEmpty(c.node_id) && _nodes.ContainsKey(c.node_id))
+          {
+            ExpandNode(c.node_id);
+            return true;
+          }
+          return false;
+        case "collapse_node":
+          if (!string.IsNullOrEmpty(c.node_id) && _nodes.ContainsKey(c.node_id))
+          {
+            CollapseNode(c.node_id);
+            return true;
+          }
           return false;
         default:
           Debug.LogWarning("JARVIS: unknown scene command " + c.type);

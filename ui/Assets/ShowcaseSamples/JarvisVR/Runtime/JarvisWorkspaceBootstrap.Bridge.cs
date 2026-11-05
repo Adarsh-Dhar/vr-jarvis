@@ -168,23 +168,23 @@ namespace JarvisVR
                     }
                     return true;
                 case "show_graph":
-                    if (c.nodes != null || c.edges != null)
+                    if (c.nodes != null && c.edges != null)
                     {
-                        // Store new graph data for potential full replacement
-                        // For now, just log and update highlights for any provided nodes
+                        // Rebuild the graph with the provided nodes and edges
+                        var newGraph = new GraphDto();
                         if (c.nodes != null)
                         {
-                            foreach (var node in c.nodes)
-                            {
-                                if (!string.IsNullOrEmpty(node.id) && _graphObjects.ContainsKey(node.id))
-                                {
-                                    _hot.Add(node.id);
-                                }
-                            }
+                            foreach (var node in c.nodes) newGraph.nodes.Add(node);
                         }
-                        Debug.Log($"JARVIS: show_graph received {c.nodes?.Length ?? 0} nodes, {c.edges?.Length ?? 0} edges");
+                        if (c.edges != null)
+                        {
+                            foreach (var edge in c.edges) newGraph.edges.Add(edge);
+                        }
+                        LoadGraph(newGraph);
+                        Debug.Log($"JARVIS: show_graph loaded {newGraph.nodes.Count} nodes, {newGraph.edges.Count} edges");
+                        return true;
                     }
-                    return true;
+                    return false;
                 default:
                     Debug.LogWarning("JARVIS: unknown scene command " + c.type);
                     return false;
