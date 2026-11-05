@@ -369,6 +369,8 @@ TOOL_LEVELS = {
     "git_status": "read",
     "list_changed_nodes": "read",
     "find_introducing_commit": "read",
+    "trace_function_history": "read",
+    "find_regression_commit": "read",
     "trace_file_history": "read",
     "find_shared_dependencies": "read",
     "find_tests_for_node": "read",
@@ -381,6 +383,8 @@ TOOL_LEVELS = {
     "trace_path": "read",
     # Git history tools
     "find_introducing_commit": "read",
+    "trace_function_history": "read",
+    "find_regression_commit": "read",
     "analyze_commit_impact": "read",
     "trace_file_history": "read",
     # Documentation tools
@@ -707,6 +711,11 @@ TOOLSETS: Dict[str, List[str]] = {
         "search_code",
         "get_repository_metadata",
         "get_changed_files",
+        # Git history tools
+        "find_introducing_commit",
+        "trace_function_history",
+        "find_regression_commit",
+        "trace_file_history",
     ],
 
     # Agent 4: Code Understanding

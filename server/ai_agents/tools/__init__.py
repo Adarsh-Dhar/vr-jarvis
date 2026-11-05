@@ -488,8 +488,11 @@ from .documentation_toolkit import (
 # Specialist Toolkit C - Git and Development History
 from .git_history_toolkit import (
     find_introducing_commit,
+    trace_function_history,
+    find_regression_commit,
     analyze_commit_impact,
     trace_file_history,
+    visualize_git_history,
 )
 
 # Specialist Toolkit D - External Integrations

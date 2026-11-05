@@ -90,7 +90,6 @@ class DefUseAnalyzer(ast.NodeVisitor):
 def trace_variable_origin(variable_id: str, tool_context: ToolContext) -> dict:
     """Find where a variable's value originates using def-use analysis."""
     try:
-        from .navigation_tools import get_symbol_definition
         from .. import codegraph
         
         # Parse variable_id as function:variable
@@ -102,14 +101,18 @@ def trace_variable_origin(variable_id: str, tool_context: ToolContext) -> dict:
         
         function_name, variable_name = variable_id.split(':', 1)
         
-        # Get function definition
-        def_result = get_symbol_definition(function_name, tool_context)
-        if def_result.get('status') != 'ok':
-            return def_result
+        # Use CodeGraph to resolve the function
+        graph = codegraph.load_current_graph()
+        node = graph.get(function_name)
         
-        file_path = def_result['definition']['file']
-        start_line = def_result['definition'].get('start', 0)
-        end_line = def_result['definition'].get('end', 0)
+        if not node:
+            return {
+                'status': 'not_found',
+                'function_name': function_name,
+                'message': 'Function not found in graph'
+            }
+        
+        file_path = node.get('file', '')
         
         if not _is_python_file(file_path):
             return {
@@ -126,12 +129,13 @@ def trace_variable_origin(variable_id: str, tool_context: ToolContext) -> dict:
         
         # Find the function node
         func_node = None
-        # Extract simple name from dotted ID
-        simple_name = function_name.split('.')[-1] if '.' in function_name else function_name
+        simple_name = node.get('name', '')
+        if not simple_name and '.' in node.get('id', ''):
+            simple_name = node['id'].split('.')[-1]
         
-        for node in ast.walk(tree):
-            if isinstance(node, ast.FunctionDef) and node.name == simple_name:
-                func_node = node
+        for node_ast in ast.walk(tree):
+            if isinstance(node_ast, ast.FunctionDef) and node_ast.name == simple_name:
+                func_node = node_ast
                 break
         
         if not func_node:
@@ -186,7 +190,7 @@ def trace_variable_origin(variable_id: str, tool_context: ToolContext) -> dict:
 def trace_variable_usage(variable_id: str, tool_context: ToolContext) -> dict:
     """Find where a variable is used using def-use analysis."""
     try:
-        from .navigation_tools import get_symbol_definition
+        from .. import codegraph
         
         if ':' not in variable_id:
             return {
@@ -196,11 +200,18 @@ def trace_variable_usage(variable_id: str, tool_context: ToolContext) -> dict:
         
         function_name, variable_name = variable_id.split(':', 1)
         
-        def_result = get_symbol_definition(function_name, tool_context)
-        if def_result.get('status') != 'ok':
-            return def_result
+        # Use CodeGraph to resolve the function
+        graph = codegraph.load_current_graph()
+        node = graph.get(function_name)
         
-        file_path = def_result['definition']['file']
+        if not node:
+            return {
+                'status': 'not_found',
+                'function_name': function_name,
+                'message': 'Function not found in graph'
+            }
+        
+        file_path = node.get('file', '')
         
         if not _is_python_file(file_path):
             return {
@@ -216,12 +227,13 @@ def trace_variable_usage(variable_id: str, tool_context: ToolContext) -> dict:
             }
         
         func_node = None
-        # Extract simple name from dotted ID
-        simple_name = function_name.split('.')[-1] if '.' in function_name else function_name
+        simple_name = node.get('name', '')
+        if not simple_name and '.' in node.get('id', ''):
+            simple_name = node['id'].split('.')[-1]
         
-        for node in ast.walk(tree):
-            if isinstance(node, ast.FunctionDef) and node.name == simple_name:
-                func_node = node
+        for node_ast in ast.walk(tree):
+            if isinstance(node_ast, ast.FunctionDef) and node_ast.name == simple_name:
+                func_node = node_ast
                 break
         
         if not func_node:
@@ -359,7 +371,6 @@ def trace_taint_flow(source_id: str, tool_context: ToolContext) -> dict:
 def visualize_data_flow(variable_id: str, tool_context: ToolContext) -> dict:
     """Visualize data flow using graph emission."""
     try:
-        from .data_flow_intelligence_tools import trace_variable_origin, trace_variable_usage
         from .visualization_spatial_tools import _emit_command
         
         # Get origin and usage
@@ -380,6 +391,13 @@ def visualize_data_flow(variable_id: str, tool_context: ToolContext) -> dict:
                 'end': origin['line'],
                 'level': 'variable',
                 'kind': 'origin'
+            })
+            edges.append({
+                'src': f'{variable_id}_origin',
+                'dst': variable_id,
+                'type': 'dataflow',
+                'kind': 'confirmed',
+                'line': origin['line']
             })
         
         nodes.append({
@@ -415,6 +433,8 @@ def visualize_data_flow(variable_id: str, tool_context: ToolContext) -> dict:
         return {
             'status': 'ok',
             'variable_id': variable_id,
+            'origin_found': origin_result.get('status') == 'ok',
+            'usage_count': len(usage_result.get('uses', [])) if usage_result.get('status') == 'ok' else 0,
             'node_count': len(nodes),
             'edge_count': len(edges)
         }
