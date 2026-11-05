@@ -91,28 +91,53 @@ def extract_calls_with_tree_sitter(file_path: str, text: str):
     calls = []
     
     def walk_node(node):
-        # Look for call expressions
-        if node.type in ['call_expression', 'new_expression']:
-            function_node = node.child_by_field_name('function')
-            if function_node:
-                # Get the function name
-                if function_node.type == 'identifier':
-                    name = function_node.text.decode('utf-8')
-                    calls.append({
-                        'name': name,
-                        'line': node.start_point[0] + 1,
-                        'type': 'direct'
-                    })
-                elif function_node.type == 'member_expression':
-                    # Method call: obj.method()
-                    property_node = function_node.child_by_field_name('property')
-                    if property_node:
-                        name = property_node.text.decode('utf-8')
+        # Look for call expressions - different node types for Python vs JS/TS
+        if file_path.endswith('.py'):
+            # Python call node type is 'call'
+            if node.type == 'call':
+                function_node = node.child_by_field_name('function')
+                if function_node:
+                    # Get the function name
+                    if function_node.type == 'identifier':
+                        name = function_node.text.decode('utf-8')
                         calls.append({
                             'name': name,
                             'line': node.start_point[0] + 1,
-                            'type': 'method'
+                            'type': 'direct'
                         })
+                    elif function_node.type == 'attribute':
+                        # Method call: obj.method()
+                        attribute_node = function_node.child_by_field_name('attribute')
+                        if attribute_node:
+                            name = attribute_node.text.decode('utf-8')
+                            calls.append({
+                                'name': name,
+                                'line': node.start_point[0] + 1,
+                                'type': 'method'
+                            })
+        else:
+            # JavaScript/TypeScript call node types
+            if node.type in ['call_expression', 'new_expression']:
+                function_node = node.child_by_field_name('function')
+                if function_node:
+                    # Get the function name
+                    if function_node.type == 'identifier':
+                        name = function_node.text.decode('utf-8')
+                        calls.append({
+                            'name': name,
+                            'line': node.start_point[0] + 1,
+                            'type': 'direct'
+                        })
+                    elif function_node.type == 'member_expression':
+                        # Method call: obj.method()
+                        property_node = function_node.child_by_field_name('property')
+                        if property_node:
+                            name = property_node.text.decode('utf-8')
+                            calls.append({
+                                'name': name,
+                                'line': node.start_point[0] + 1,
+                                'type': 'method'
+                            })
         
         for child in node.children:
             walk_node(child)

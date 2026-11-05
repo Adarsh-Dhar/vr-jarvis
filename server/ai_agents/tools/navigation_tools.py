@@ -329,25 +329,25 @@ def get_call_hierarchy(
         outgoing_calls = []
         
         if direction in ['both', 'incoming']:
-            # Find edges where this node is the destination
+            # Find edges where this node is the destination (only call edges)
             for edge in graph.get('edges', []):
-                if edge.get('dst') == symbol_id:
+                if edge.get('dst') == symbol_id and edge.get('type') == 'calls':
                     src_node = resolve_symbol(edge.get('src'))
                     incoming_calls.append({
                         'from': edge.get('src'),
-                        'file': src_node.get('file') if src_node else None,
+                        'file': src_node.get('file') if src_node else edge.get('file'),
                         'line': edge.get('line'),
                         'kind': edge.get('kind')
                     })
         
         if direction in ['both', 'outgoing']:
-            # Find edges where this node is the source
+            # Find edges where this node is the source (only call edges)
             for edge in graph.get('edges', []):
-                if edge.get('src') == symbol_id:
+                if edge.get('src') == symbol_id and edge.get('type') == 'calls':
                     dst_node = resolve_symbol(edge.get('dst'))
                     outgoing_calls.append({
                         'to': edge.get('dst'),
-                        'file': dst_node.get('file') if dst_node else None,
+                        'file': dst_node.get('file') if dst_node else edge.get('file'),
                         'line': edge.get('line'),
                         'kind': edge.get('kind')
                     })

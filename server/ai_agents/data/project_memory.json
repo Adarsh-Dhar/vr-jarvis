@@ -1499,6 +1499,11 @@
       "at": "2026-11-03T06:50:45+00:00",
       "summary": "fixtures/repositories/simple-python/main.py",
       "node_ids": "fixtures/repositories/simple-python/main.py"
+    },
+    {
+      "at": "2026-11-05T04:45:03+00:00",
+      "summary": "test",
+      "node_ids": "test"
     }
   ],
   "decisions": [
@@ -2665,6 +2670,10 @@
     {
       "at": "2026-11-03T06:50:51+00:00",
       "decision": "fixtures/repositories/simple-python/main.py"
+    },
+    {
+      "at": "2026-11-05T04:45:03+00:00",
+      "decision": "test"
     }
   ],
   "last_session": null

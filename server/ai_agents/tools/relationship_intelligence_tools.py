@@ -117,7 +117,7 @@ def find_callers(function_id: str, tool_context: ToolContext, depth: int = 1) ->
     try:
         from .navigation_tools import get_call_hierarchy
 
-        # Get incoming calls (callers)
+        # Get incoming calls (callers) - only call edges
         call_result = get_call_hierarchy(function_id, tool_context, direction='incoming')
 
         if call_result.get('status') != 'ok':
@@ -287,65 +287,63 @@ def build_dependency_graph(
     repository_path: str,
     tool_context: ToolContext
 ) -> dict:
-    """Build module dependency graphs from repository analysis."""
+    """Build module dependency graphs from repository analysis using the graph index."""
     try:
-        from .analysis_tools import analyze_dependencies
-        from .. import config
-        from pathlib import Path
+        from .navigation_tools import _load_graph_index
         
-        repo_path = Path(repository_path)
-        if not repo_path.exists():
-            return {'status': 'error', 'error': f'Repository path not found: {repository_path}'}
+        # Load the graph index
+        graph = _load_graph_index()
+        nodes = graph.get('nodes', [])
+        edges = graph.get('edges', [])
         
-        # Find Python/TypeScript/JavaScript files to analyze
-        source_files = []
-        for ext in ['*.py', '*.ts', '*.js', '*.tsx', '*.jsx']:
-            source_files.extend(repo_path.rglob(ext))
+        # Build dependency graph from edges
+        dependency_nodes = []
+        dependency_edges = []
         
-        if not source_files:
-            return {
-                'status': 'ok',
-                'repository_path': repository_path,
-                'nodes': [],
-                'edges': [],
-                'note': 'No source files found to analyze'
-            }
+        # Group nodes by file to create module-level dependencies
+        file_to_nodes = {}
+        for node in nodes:
+            file_path = node.get('file', '')
+            if file_path:
+                if file_path not in file_to_nodes:
+                    file_to_nodes[file_path] = []
+                file_to_nodes[file_path].append(node)
         
-        # Analyze first few files for dependencies
-        nodes = []
-        edges = []
-        node_id_counter = 0
+        # Create module nodes
+        for file_path, file_nodes in file_to_nodes.items():
+            dependency_nodes.append({
+                'id': f'module.{file_path}',
+                'name': file_path,
+                'type': 'module',
+                'file': file_path
+            })
         
-        for file_path in source_files[:10]:  # Limit to first 10 files for performance
-            try:
-                result = analyze_dependencies(str(file_path), SimpleNamespace(state={}))
-                if result and isinstance(result, dict):
-                    nodes.append({
-                        'id': f"file_{node_id_counter}",
-                        'name': str(file_path.relative_to(repo_path)),
-                        'type': 'file'
-                    })
-                    node_id_counter += 1
+        # Create dependency edges based on imports
+        for edge in edges:
+            if edge.get('type') == 'imports':
+                src_node = next((n for n in nodes if n.get('id') == edge.get('src')), None)
+                dst_node = next((n for n in nodes if n.get('id') == edge.get('dst')), None)
+                
+                if src_node and dst_node:
+                    src_file = src_node.get('file', '')
+                    dst_file = dst_node.get('file', '')
                     
-                    # Add dependencies as edges
-                    deps = result.get('dependencies', [])
-                    for dep in deps:
-                        edges.append({
-                            'src': str(file_path.relative_to(repo_path)),
-                            'dst': dep,
-                            'type': 'dependency'
+                    if src_file and dst_file and src_file != dst_file:
+                        dependency_edges.append({
+                            'src': f'module.{src_file}',
+                            'dst': f'module.{dst_file}',
+                            'type': 'dependency',
+                            'kind': 'confirmed'
                         })
-            except Exception:
-                continue
         
         return {
             'status': 'ok',
             'repository_path': repository_path,
-            'nodes': nodes,
-            'edges': edges,
-            'nodes_count': len(nodes),
-            'edges_count': len(edges),
-            'note': 'Dependency graph built from source file analysis (sampled 10 files)'
+            'nodes': dependency_nodes,
+            'edges': dependency_edges,
+            'nodes_count': len(dependency_nodes),
+            'edges_count': len(dependency_edges),
+            'note': 'Dependency graph built from graph index imports'
         }
     except Exception as e:
         return {

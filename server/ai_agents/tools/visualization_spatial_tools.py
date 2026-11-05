@@ -760,6 +760,33 @@ def visualize_call_graph(
         
         viz_id = str(uuid.uuid4())
         
+        # Handle special case for whole repository
+        if function_id == '.' or function_id == 'repo':
+            graph = _load_graph_index()
+            nodes = graph.get('nodes', [])
+            edges = graph.get('edges', [])
+            
+            viz_state = _get_session_state(tool_context, 'visualization_state', {})
+            viz_state[viz_id] = {
+                'type': 'call_graph',
+                'function_id': function_id,
+                'scope': scope,
+                'nodes': nodes,
+                'edges': edges,
+                'created_at': time.time()
+            }
+            _set_session_state(tool_context, 'visualization_state', viz_state)
+            
+            return {
+                'status': 'ok',
+                'function_id': function_id,
+                'scope': scope,
+                'visualization_id': viz_id,
+                'nodes_count': len(nodes),
+                'edges_count': len(edges),
+                'note': 'Full repository call graph'
+            }
+        
         # Load graph from index
         graph = _load_graph_index()
         graph_nodes = graph.get('nodes', [])
@@ -778,10 +805,10 @@ def visualize_call_graph(
                     'error': f'Function not found in graph index: {function_id}'
                 }
         
-        # Get callers (edges where this node is the destination)
-        callers = [e for e in graph_edges if e.get('dst') == target_node.get('id')]
-        # Get callees (edges where this node is the source)
-        callees = [e for e in graph_edges if e.get('src') == target_node.get('id')]
+        # Get callers (edges where this node is the destination) - only call edges
+        callers = [e for e in graph_edges if e.get('dst') == target_node.get('id') and e.get('type') == 'calls']
+        # Get callees (edges where this node is the source) - only call edges
+        callees = [e for e in graph_edges if e.get('src') == target_node.get('id') and e.get('type') == 'calls']
         
         # Build graph structure
         nodes = [target_node]

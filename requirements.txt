@@ -5,3 +5,6 @@ pydantic
 pytest
 pyyaml
 httpx
+tree-sitter
+tree-sitter-typescript
+tree-sitter-python

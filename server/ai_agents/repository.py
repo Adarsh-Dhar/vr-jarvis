@@ -13,7 +13,6 @@ SKIP_DIRS = {'.git', 'node_modules', 'dist', 'build', 'out', 'coverage', '__pyca
 JS_EXT = {'.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs'}
 EXTS = JS_EXT | {'.py'}
 MAX_FILE_BYTES = 400_000
-MAX_NODES = 400          # keep the VR scene readable
 MAX_FN_LINES = 400
 MAX_BROWSER_FILE_BYTES = 512_000
 
