@@ -90,8 +90,8 @@ class CodeGraph:
                 if edge['type'] != 'calls':
                     continue
                 caller = edge['src']
-                if d == 0:
-                    # Direct caller
+                if d + 1 == 1:
+                    # Direct caller (depth 1 from target)
                     result.append({
                         'from': caller,
                         'file': edge.get('file'),
@@ -99,13 +99,13 @@ class CodeGraph:
                         'kind': edge.get('kind', 'unresolved')
                     })
                 else:
-                    # Indirect caller
+                    # Indirect caller (depth > 1 from target)
                     result.append({
                         'from': caller,
                         'file': edge.get('file'),
                         'line': edge.get('line'),
                         'kind': edge.get('kind', 'unresolved'),
-                        'depth': d
+                        'depth': d + 1
                     })
                 queue.append((caller, d + 1))
 

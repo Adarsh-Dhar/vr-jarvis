@@ -8,7 +8,7 @@ from ai_agents.tools.visualization_spatial_tools import visualize_architecture
 @pytest.fixture
 def demo_graph():
     """Load the demo-account-service graph."""
-    config.REPOSITORY_DIR = Path('/Users/adarsh/Documents/vr-agent/repository')
+    config.REPOSITORY_DIR = Path(__file__).parent.parent.parent / 'repository'
     repository.activate('demo-account-service')
     
     with open(config.GRAPH_PATH) as f:

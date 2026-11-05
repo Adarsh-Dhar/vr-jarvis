@@ -126,8 +126,11 @@ def trace_variable_origin(variable_id: str, tool_context: ToolContext) -> dict:
         
         # Find the function node
         func_node = None
+        # Extract simple name from dotted ID
+        simple_name = function_name.split('.')[-1] if '.' in function_name else function_name
+        
         for node in ast.walk(tree):
-            if isinstance(node, ast.FunctionDef) and node.name == function_name:
+            if isinstance(node, ast.FunctionDef) and node.name == simple_name:
                 func_node = node
                 break
         
@@ -213,8 +216,11 @@ def trace_variable_usage(variable_id: str, tool_context: ToolContext) -> dict:
             }
         
         func_node = None
+        # Extract simple name from dotted ID
+        simple_name = function_name.split('.')[-1] if '.' in function_name else function_name
+        
         for node in ast.walk(tree):
-            if isinstance(node, ast.FunctionDef) and node.name == function_name:
+            if isinstance(node, ast.FunctionDef) and node.name == simple_name:
                 func_node = node
                 break
         
@@ -490,19 +496,6 @@ def identify_data_validation_gaps(tool_context: ToolContext) -> dict:
             'gaps': gaps,
             'gap_count': len(gaps)
         }
-    except Exception as e:
-        return {
-            'status': 'error',
-            'error': str(e)
-        }
-
-
-@safe
-def trace_variable_usage(variable_id: str, tool_context: ToolContext) -> dict:
-    """Find where it is used."""
-    try:
-        from .navigation_tools import get_symbol_references
-        return get_symbol_references(variable_id, tool_context)
     except Exception as e:
         return {
             'status': 'error',

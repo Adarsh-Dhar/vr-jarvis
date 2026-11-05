@@ -809,11 +809,6 @@ def calculate_change_impact(
             'status': 'error',
             'error': str(e)
         }
-    except Exception as e:
-        return {
-            'status': 'error',
-            'error': str(e)
-        }
 
 
 @safe

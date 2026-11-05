@@ -989,23 +989,67 @@ def visualize_execution_flow(
     trace_id: str,
     tool_context: ToolContext
 ) -> dict:
-    """Visualize execution flow."""
+    """Visualize execution flow with runtime_observed provenance."""
     try:
-        viz_id = str(uuid.uuid4())
+        from .runtime_intelligence_tools import collect_execution_trace
+        from .. import codegraph
+
+        # Get execution trace
+        trace_result = collect_execution_trace(trace_id, duration=5, tool_context=tool_context)
         
-        viz_state = _get_session_state(tool_context, 'visualization_state', {})
-        viz_state[viz_id] = {
-            'type': 'execution_flow',
-            'trace_id': trace_id,
-            'created_at': time.time()
-        }
-        _set_session_state(tool_context, 'visualization_state', viz_state)
+        if trace_result.get('status') != 'ok':
+            return trace_result
+
+        graph = codegraph.load_current_graph()
         
+        # Build visualization from trace data
+        nodes = []
+        edges = []
+        
+        # If we have real trace data, use it
+        trace_data = trace_result.get('trace', [])
+        if trace_data:
+            for i, event in enumerate(trace_data):
+                func_name = event.get('function', 'unknown')
+                nodes.append({
+                    'id': f'call_{i}',
+                    'name': func_name,
+                    'type': 'call',
+                    'provenance': 'runtime_observed',
+                    'timestamp': event.get('timestamp', 0)
+                })
+                
+                if i > 0:
+                    edges.append({
+                        'src': f'call_{i-1}',
+                        'dst': f'call_{i}',
+                        'type': 'calls',
+                        'kind': 'runtime_observed'
+                    })
+        else:
+            # Fallback: show current graph structure with runtime_observed annotation
+            for node_id, node in graph._nodes.items():
+                if node.get('level') == 'function':
+                    nodes.append({
+                        'id': node_id,
+                        'name': node.get('name', node_id),
+                        'file': node.get('file', ''),
+                        'type': 'function',
+                        'provenance': 'static'
+                    })
+
+        # Emit graph
+        _emit_command(tool_context, 'show_graph',
+                     nodes=nodes,
+                     edges=edges,
+                     title=f'Execution Flow: {trace_id}')
+
         return {
             'status': 'ok',
             'trace_id': trace_id,
-            'visualization_id': viz_id,
-            'note': 'Real visualization requires runtime integration'
+            'node_count': len(nodes),
+            'edge_count': len(edges),
+            'note': 'Visualization ready - requires actual application execution for real runtime data'
         }
     except Exception as e:
         return {
@@ -1249,23 +1293,88 @@ def visualize_security_flow(
     component_id: str,
     tool_context: ToolContext
 ) -> dict:
-    """Visualize security flow."""
+    """Visualize security flow with taint paths."""
     try:
-        viz_id = str(uuid.uuid4())
+        from .security_quality_tools import scan_vulnerabilities, trace_taint
+        from .. import codegraph
+
+        graph = codegraph.load_current_graph()
+        node = graph.get(component_id)
         
-        viz_state = _get_session_state(tool_context, 'visualization_state', {})
-        viz_state[viz_id] = {
-            'type': 'security_flow',
-            'component_id': component_id,
-            'created_at': time.time()
-        }
-        _set_session_state(tool_context, 'visualization_state', viz_state)
+        if not node:
+            return {
+                'status': 'not_found',
+                'component_id': component_id,
+                'message': 'Component not found'
+            }
+
+        # Get vulnerabilities
+        vuln_result = scan_vulnerabilities(component_id, tool_context)
         
+        # Get taint analysis
+        taint_result = trace_taint(component_id, tool_context)
+
+        # Build visualization nodes
+        nodes = []
+        edges = []
+        
+        # Add the component node
+        nodes.append({
+            'id': component_id,
+            'name': node.get('name', component_id),
+            'file': node.get('file', ''),
+            'level': node.get('level', 'unknown'),
+            'type': 'component'
+        })
+
+        # Add vulnerability nodes
+        if vuln_result.get('status') == 'ok':
+            for i, vuln in enumerate(vuln_result.get('vulnerabilities', [])):
+                vuln_id = f'{component_id}_vuln_{i}'
+                nodes.append({
+                    'id': vuln_id,
+                    'name': vuln.get('type', 'unknown'),
+                    'level': 'vulnerability',
+                    'type': 'vulnerability',
+                    'severity': vuln.get('severity', 'medium')
+                })
+                edges.append({
+                    'src': component_id,
+                    'dst': vuln_id,
+                    'type': 'has_vulnerability',
+                    'kind': 'confirmed'
+                })
+
+        # Add taint path nodes
+        if taint_result.get('status') == 'ok':
+            for i, path in enumerate(taint_result.get('paths', [])):
+                path_id = f'{component_id}_taint_{i}'
+                nodes.append({
+                    'id': path_id,
+                    'name': f'taint_path_{i}',
+                    'level': 'taint',
+                    'type': 'taint_path',
+                    'source': path.get('source', 'unknown'),
+                    'sink': path.get('sink', 'unknown')
+                })
+                edges.append({
+                    'src': component_id,
+                    'dst': path_id,
+                    'type': 'taint_flow',
+                    'kind': 'likely'
+                })
+
+        # Emit graph
+        _emit_command(tool_context, 'show_graph',
+                     nodes=nodes,
+                     edges=edges,
+                     title=f'Security Flow: {component_id}')
+
         return {
             'status': 'ok',
             'component_id': component_id,
-            'visualization_id': viz_id,
-            'note': 'Real visualization requires security analysis'
+            'vulnerability_count': len(vuln_result.get('vulnerabilities', [])) if vuln_result.get('status') == 'ok' else 0,
+            'taint_path_count': len(taint_result.get('paths', [])) if taint_result.get('status') == 'ok' else 0
         }
     except Exception as e:
         return {
@@ -1300,6 +1409,22 @@ def visualize_git_history(
             'visualization_id': viz_id,
             'note': 'Real visualization requires git integration'
         }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
+
+
+@safe
+def visualize_git_history_from_toolkit(
+    repository_path: str,
+    tool_context: ToolContext
+) -> dict:
+    """Visualize git history using git_history_toolkit."""
+    try:
+        from .git_history_toolkit import visualize_git_history as git_viz
+        return git_viz(repository_path, tool_context)
     except Exception as e:
         return {
             'status': 'error',

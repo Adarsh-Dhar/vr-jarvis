@@ -323,8 +323,11 @@ def analyze_control_flow(function_name: str, tool_context: ToolContext) -> dict:
 
         # Find the function node
         func_node = None
+        # Extract just the function name from dotted ID
+        simple_name = function_name.split('.')[-1] if '.' in function_name else function_name
+        
         for node in ast.walk(tree):
-            if isinstance(node, ast.FunctionDef) and node.name == function_name:
+            if isinstance(node, ast.FunctionDef) and node.name == simple_name:
                 func_node = node
                 break
 
@@ -342,7 +345,7 @@ def analyze_control_flow(function_name: str, tool_context: ToolContext) -> dict:
 
         def create_block(start_line, end_line, label, block_type='sequence'):
             nonlocal block_id_counter
-            block_id = f"{function_name}#B{block_id_counter}"
+            block_id = f"{simple_name}#B{block_id_counter}"
             block_id_counter += 1
             return {
                 'id': block_id,
@@ -425,6 +428,7 @@ def analyze_control_flow(function_name: str, tool_context: ToolContext) -> dict:
         return {
             'status': 'ok',
             'function_name': function_name,
+            'simple_name': simple_name,
             'blocks': blocks,
             'edges': edges,
             'block_count': len(blocks)
