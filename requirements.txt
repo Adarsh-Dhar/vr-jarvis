@@ -3,6 +3,8 @@ fastapi
 uvicorn[standard]
 pydantic
 pytest
+pytest-cov
+coverage
 pyyaml
 httpx
 tree-sitter

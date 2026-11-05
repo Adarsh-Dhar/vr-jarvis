@@ -312,20 +312,51 @@ namespace JarvisVR
         rootGo.transform.localPosition = layout[dto.id];
         nv.Root = rootGo.transform;
 
-        // Replace this switch with Instantiate(prefab) to use your own 3D models. Keep a collider and JarvisGraphNode on the prefab root.
-        PrimitiveType shape = dto.kind == "route" ? PrimitiveType.Cube
-          : dto.kind == "object" ? PrimitiveType.Cylinder
-          : dto.kind == "test" ? PrimitiveType.Capsule
+        // Choose primitive based on level (module, file, class, function, layer, external)
+        PrimitiveType shape = dto.level == "module" ? PrimitiveType.Cube
+          : dto.level == "file" ? PrimitiveType.Cube
+          : dto.level == "class" ? PrimitiveType.Cylinder
+          : dto.level == "layer" ? PrimitiveType.Capsule
+          : dto.kind == "external" ? PrimitiveType.Cube
           : PrimitiveType.Sphere;
+
         GameObject body = GameObject.CreatePrimitive(shape);
         body.name = "Body";
         body.transform.SetParent(rootGo.transform, false);
-        body.transform.localScale = Vector3.one * 0.075f;
+
+        // Scale based on level
+        float scale = dto.level == "module" ? 0.12f
+          : dto.level == "file" ? 0.10f
+          : dto.level == "class" ? 0.08f
+          : dto.level == "layer" ? 0.14f
+          : dto.kind == "external" ? 0.06f
+          : 0.075f;
+        body.transform.localScale = Vector3.one * scale;
+
+        // Rotate layer nodes (ring-like)
+        if (dto.level == "layer")
+        {
+          body.transform.localRotation = Quaternion.Euler(0f, 0f, 45f);
+        }
+        // Rotate external nodes (diamond-like)
+        else if (dto.kind == "external")
+        {
+          body.transform.localRotation = Quaternion.Euler(45f, 45f, 0f);
+        }
+
         nv.BodyT = body.transform;
         nv.Body = body.GetComponent<Renderer>();
         nv.Body.sharedMaterial = JarvisSpatialGfx.Neon(Color.white, 1.5f, true);
         JarvisSpatialGfx.Flat(nv.Body);
-        nv.Base = dto.kind == "route" ? pal.Amber : dto.kind == "test" ? pal.Violet : pal.Cyan;
+
+        // Color based on level
+        nv.Base = dto.level == "module" ? pal.Amber
+          : dto.level == "file" ? pal.Violet
+          : dto.level == "class" ? pal.Green
+          : dto.level == "layer" ? pal.Red
+          : dto.kind == "external" ? pal.Gray
+          : dto.kind == "test" ? pal.Violet
+          : pal.Cyan;
         body.AddComponent<JarvisGraphNode>().Initialize(dto.id, Select, DragCluster, ShowNodeMenu);
         nv.Fx = rootGo.AddComponent<JarvisNodeFx>();
         nv.Fx.Begin(nv.BodyT, 0.06f * _nodes.Count, nv.Base);
@@ -547,8 +578,21 @@ namespace JarvisVR
       
       Log("selected edge: " + edge.Dto.src + " → " + edge.Dto.dst);
       
-      // Show in code panel if available
-      if (_codePanel != null)
+      // Show in code panel if available, scroll to the line
+      if (_codePanel != null && !string.IsNullOrEmpty(edge.Dto.file) && edge.Dto.line > 0)
+      {
+        _bridge.GetSource(edge.Dto.src, s =>
+        {
+          if (s != null && s.status == "ok")
+          {
+            _source[edge.Dto.src] = s;
+            _selected = edge.Dto.src;
+            RefreshCode();
+            Log("scrolled to line " + edge.Dto.line);
+          }
+        });
+      }
+      else if (_codePanel != null)
       {
         _codePanel.SetBody(edgeInfo);
       }
@@ -557,52 +601,47 @@ namespace JarvisVR
     private void ExpandNode(string nodeId)
     {
       if (!_nodes.TryGetValue(nodeId, out NodeView n)) return;
-      
-      // Find all child nodes (modules contain files, files contain classes/functions)
+
+      // Find all child nodes using the parent field from the graph
       var children = new List<NodeView>();
       foreach (var kvp in _nodes)
       {
-        // Check if this node is a child of the expanded node
-        // This is a simple heuristic - in a full implementation, we'd use the hierarchy edges
-        if (kvp.Value.Dto.id.StartsWith(nodeId + ".") || 
-            (kvp.Value.Dto.parent == nodeId) ||
-            (kvp.Value.Dto.file != null && kvp.Value.Dto.file.StartsWith(n.Dto.file)))
+        // Check if this node's parent is the expanded node
+        if (kvp.Value.Dto.parent == nodeId)
         {
           children.Add(kvp.Value);
         }
       }
-      
+
       // Show all children
       foreach (var child in children)
       {
         child.Root.gameObject.SetActive(true);
       }
-      
+
       Log("expanded node: " + nodeId + " (" + children.Count + " children)");
     }
 
     private void CollapseNode(string nodeId)
     {
       if (!_nodes.TryGetValue(nodeId, out NodeView n)) return;
-      
-      // Find all child nodes
+
+      // Find all child nodes using the parent field
       var children = new List<NodeView>();
       foreach (var kvp in _nodes)
       {
-        if (kvp.Value.Dto.id.StartsWith(nodeId + ".") || 
-            (kvp.Value.Dto.parent == nodeId) ||
-            (kvp.Value.Dto.file != null && kvp.Value.Dto.file.StartsWith(n.Dto.file)))
+        if (kvp.Value.Dto.parent == nodeId)
         {
           children.Add(kvp.Value);
         }
       }
-      
+
       // Hide all children
       foreach (var child in children)
       {
         child.Root.gameObject.SetActive(false);
       }
-      
+
       Log("collapsed node: " + nodeId + " (" + children.Count + " children)");
     }
 
@@ -744,6 +783,49 @@ namespace JarvisVR
         case "show_approval_prompt":
           _pending = c.summary;
           return false;
+        case "select_node":
+          if (!string.IsNullOrEmpty(c.node_id) && _nodes.ContainsKey(c.node_id)) Select(c.node_id);
+          return true;
+        case "set_depth":
+          // Store depth for future filtering (implementation depends on graph traversal)
+          Log("set_depth: " + c.depth);
+          return true;
+        case "set_scope":
+          // Store scope for future filtering
+          Log("set_scope: " + c.scope);
+          return true;
+        case "set_filters":
+          // Store filters for future filtering
+          Log("set_filters applied");
+          return true;
+        case "create_group":
+          if (!string.IsNullOrEmpty(c.group_id) && c.node_ids != null)
+          {
+            // Tint the listed nodes with a group color (implementation needed)
+            Log("create_group: " + c.group_id + " with " + c.node_ids.Length + " nodes");
+          }
+          return true;
+        case "annotate":
+          if (!string.IsNullOrEmpty(c.node_id) && !string.IsNullOrEmpty(c.text))
+          {
+            // Show floating label at node (implementation needed)
+            Log("annotate: " + c.node_id + " = " + c.text);
+          }
+          return false;
+        case "bookmark":
+          if (!string.IsNullOrEmpty(c.node_id) && !string.IsNullOrEmpty(c.label))
+          {
+            // Save selection and camera pose (implementation needed)
+            Log("bookmark: " + c.label + " for " + c.node_id);
+          }
+          return false;
+        case "compare":
+          if (!string.IsNullOrEmpty(c.node_id1) && !string.IsNullOrEmpty(c.node_id2))
+          {
+            if (_nodes.ContainsKey(c.node_id1)) Select(c.node_id1);
+            Log("compare: " + c.node_id1 + " vs " + c.node_id2);
+          }
+          return true;
         case "expand_node":
           if (!string.IsNullOrEmpty(c.node_id) && _nodes.ContainsKey(c.node_id))
           {

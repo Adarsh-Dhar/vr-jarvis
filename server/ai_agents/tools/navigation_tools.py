@@ -15,47 +15,70 @@ from ._common import repo_root, resolve_in_repo
 
 
 # Graph index resolver - single source of truth for symbol resolution
+# Now wraps CodeGraph for centralized graph access
 def _load_graph_index():
-    """Load the graph index from GRAPH_PATH."""
+    """Load the graph index from GRAPH_PATH (legacy wrapper for compatibility)."""
     try:
-        from .. import config
-        if config.GRAPH_PATH.exists():
-            with open(config.GRAPH_PATH) as f:
-                return json.load(f)
+        from .. import codegraph
+        graph = codegraph.load_current_graph()
+        return graph._raw_data
     except Exception:
-        pass
+        # Fallback to direct file read
+        try:
+            from .. import config
+            if config.GRAPH_PATH.exists():
+                with open(config.GRAPH_PATH) as f:
+                    return json.load(f)
+        except Exception:
+            pass
     return {'nodes': [], 'edges': []}
 
 
 def resolve_symbol(symbol_id: str) -> Optional[Dict]:
     """
-    Resolve a symbol ID from the graph index.
-    
+    Resolve a symbol ID from the graph index using CodeGraph.
+
     Args:
         symbol_id: The symbol ID to resolve (e.g., "file.module.function")
-    
+
     Returns:
         Dict with node data if found, None otherwise
     """
-    graph = _load_graph_index()
-    for node in graph.get('nodes', []):
-        if node.get('id') == symbol_id:
-            return node
-    return None
+    try:
+        from .. import codegraph
+        graph = codegraph.load_current_graph()
+        return graph.get(symbol_id)
+    except Exception:
+        # Fallback to legacy implementation
+        graph = _load_graph_index()
+        for node in graph.get('nodes', []):
+            if node.get('id') == symbol_id:
+                return node
+        return None
 
 
 def resolve_symbol_by_name(symbol_name: str) -> List[Dict]:
     """
-    Resolve all symbols with a given name from the graph index.
-    
+    Resolve all symbols with a given name from the graph index using CodeGraph.
+
     Args:
         symbol_name: The symbol name to resolve (e.g., "create_order")
-    
+
     Returns:
         List of node dicts matching the name
     """
-    graph = _load_graph_index()
-    return [node for node in graph.get('nodes', []) if node.get('name') == symbol_name]
+    try:
+        from .. import codegraph
+        graph = codegraph.load_current_graph()
+        node = graph.get(symbol_name)
+        if node:
+            return [node]
+        # If no exact match, search by name in all nodes
+        return [n for n in graph._nodes.values() if n.get('name') == symbol_name]
+    except Exception:
+        # Fallback to legacy implementation
+        graph = _load_graph_index()
+        return [node for node in graph.get('nodes', []) if node.get('name') == symbol_name]
 
 
 def _is_python_file(file_path: str) -> bool:
@@ -305,53 +328,32 @@ def get_call_hierarchy(
     tool_context: ToolContext,
     direction: str = 'both'
 ) -> dict:
-    """Retrieve incoming and outgoing calls using the graph index."""
+    """Retrieve incoming and outgoing calls using CodeGraph."""
     try:
-        # Try to resolve by ID first
-        node = resolve_symbol(symbol_name)
-        
-        # If not found by ID, try by name
+        from .. import codegraph
+
+        graph = codegraph.load_current_graph()
+
+        # Resolve the symbol
+        node = graph.get(symbol_name)
         if not node:
-            nodes = resolve_symbol_by_name(symbol_name)
-            if nodes:
-                node = nodes[0]  # Use first match
-            else:
-                return {
-                    'status': 'not_found',
-                    'symbol_name': symbol_name,
-                    'message': 'Symbol not found in graph index'
-                }
-        
-        symbol_id = node.get('id')
-        graph = _load_graph_index()
-        
+            return {
+                'status': 'not_found',
+                'symbol_name': symbol_name,
+                'message': 'Symbol not found in graph'
+            }
+
+        symbol_id = node['id']
+
         incoming_calls = []
         outgoing_calls = []
-        
+
         if direction in ['both', 'incoming']:
-            # Find edges where this node is the destination (only call edges)
-            for edge in graph.get('edges', []):
-                if edge.get('dst') == symbol_id and edge.get('type') == 'calls':
-                    src_node = resolve_symbol(edge.get('src'))
-                    incoming_calls.append({
-                        'from': edge.get('src'),
-                        'file': src_node.get('file') if src_node else edge.get('file'),
-                        'line': edge.get('line'),
-                        'kind': edge.get('kind')
-                    })
-        
+            incoming_calls = graph.callers(symbol_id, depth=1)
+
         if direction in ['both', 'outgoing']:
-            # Find edges where this node is the source (only call edges)
-            for edge in graph.get('edges', []):
-                if edge.get('src') == symbol_id and edge.get('type') == 'calls':
-                    dst_node = resolve_symbol(edge.get('dst'))
-                    outgoing_calls.append({
-                        'to': edge.get('dst'),
-                        'file': dst_node.get('file') if dst_node else edge.get('file'),
-                        'line': edge.get('line'),
-                        'kind': edge.get('kind')
-                    })
-        
+            outgoing_calls = graph.callees(symbol_id, depth=1)
+
         return {
             'status': 'ok',
             'symbol_name': symbol_name,

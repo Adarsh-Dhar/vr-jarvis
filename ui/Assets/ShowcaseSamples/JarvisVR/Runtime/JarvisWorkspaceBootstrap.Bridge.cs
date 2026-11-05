@@ -168,22 +168,8 @@ namespace JarvisVR
                     }
                     return true;
                 case "show_graph":
-                    if (c.nodes != null && c.edges != null)
-                    {
-                        // Rebuild the graph with the provided nodes and edges
-                        var newGraph = new GraphDto();
-                        if (c.nodes != null)
-                        {
-                            foreach (var node in c.nodes) newGraph.nodes.Add(node);
-                        }
-                        if (c.edges != null)
-                        {
-                            foreach (var edge in c.edges) newGraph.edges.Add(edge);
-                        }
-                        LoadGraph(newGraph);
-                        Debug.Log($"JARVIS: show_graph loaded {newGraph.nodes.Count} nodes, {newGraph.edges.Count} edges");
-                        return true;
-                    }
+                    // Graph loading is handled by JarvisSpatialWorkspace, not this bootstrap UI
+                    Debug.LogWarning("JARVIS: show_graph should be handled by JarvisSpatialWorkspace");
                     return false;
                 default:
                     Debug.LogWarning("JARVIS: unknown scene command " + c.type);

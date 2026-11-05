@@ -191,15 +191,51 @@ def scan_vulnerabilities(
     repository_path: str,
     tool_context: ToolContext
 ) -> dict:
-    """Scan for security vulnerabilities."""
+    """Scan for security vulnerabilities with kind labels."""
     try:
-        # Delegate to scan_security_vulnerabilities
-        return scan_security_vulnerabilities(repository_path, tool_context)
-    except Exception as e:
+        path = Path(repository_path)
+        if not path.is_absolute():
+            path = resolve_in_repo(path)
+        
+        vulnerabilities = []
+        
+        # Pattern-based vulnerability detection
+        patterns = [
+            {'pattern': 'eval(', 'severity': 'high', 'kind': 'likely', 'description': 'Arbitrary code execution'},
+            {'pattern': 'exec(', 'severity': 'high', 'kind': 'likely', 'description': 'Arbitrary code execution'},
+            {'pattern': 'subprocess.call(', 'severity': 'medium', 'kind': 'likely', 'description': 'Command injection risk'},
+            {'pattern': 'os.system(', 'severity': 'high', 'kind': 'likely', 'description': 'Command injection'},
+            {'pattern': 'pickle.loads(', 'severity': 'high', 'kind': 'likely', 'description': 'Deserialization risk'},
+            {'pattern': 'hashlib.md5(', 'severity': 'low', 'kind': 'likely', 'description': 'Weak hash algorithm'},
+            {'pattern': 'password', 'severity': 'medium', 'kind': 'likely', 'description': 'Hardcoded password pattern'},
+        ]
+        
+        for py_file in path.rglob('*.py'):
+            try:
+                content = py_file.read_text(encoding='utf-8')
+                lines = content.splitlines()
+                for i, line in enumerate(lines, 1):
+                    for pattern_info in patterns:
+                        if pattern_info['pattern'] in line:
+                            vulnerabilities.append({
+                                'file': str(py_file.relative_to(path)),
+                                'line': i,
+                                'pattern': pattern_info['pattern'],
+                                'severity': pattern_info['severity'],
+                                'kind': pattern_info['kind'],
+                                'description': pattern_info['description']
+                            })
+            except Exception:
+                continue
+        
         return {
-            'status': 'error',
-            'error': str(e)
+            'status': 'ok',
+            'repository_path': str(path),
+            'vulnerabilities': vulnerabilities,
+            'count': len(vulnerabilities)
         }
+    except Exception as e:
+        return {'status': 'error', 'error': str(e)}
 
 
 @safe

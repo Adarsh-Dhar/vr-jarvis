@@ -24,44 +24,31 @@ def discover_api_endpoints(
     repository_path: str,
     tool_context: ToolContext
 ) -> dict:
-    """Find application endpoints."""
+    """Find application endpoints - only real route definitions, not all pattern matches."""
     try:
         from .repository_tools import search_code
-        
-        # Search for common endpoint patterns
-        endpoint_patterns = [
-            '@app.route',
-            '@api.route',
-            '@bp.route',
-            'router.get',
-            'router.post',
-            'router.put',
-            'router.delete',
-            'app.get',
-            'app.post',
-            'GET',
-            'POST',
-            'PUT',
-            'DELETE'
-        ]
-        
-        endpoints = []
-        for pattern in endpoint_patterns:
-            search_result = search_code(tool_context, directory=repository_path, query=pattern)
-            if search_result.get('status') == 'ok':
-                for match in search_result['matches']:
-                    endpoints.append({
-                        'pattern': pattern,
-                        'file': match['file'],
-                        'line': match['line'],
-                        'snippet': match['snippet']
-                    })
-        
+        from .. import codegraph
+
+        graph = codegraph.load_current_graph()
+
+        # Filter to nodes that are API routes based on their layer or level
+        api_nodes = []
+        for node_id, node in graph._nodes.items():
+            # Check if this is an API route based on layer field or node properties
+            if node.get('layer') == 'api' or node.get('level') == 'route':
+                api_nodes.append({
+                    'id': node_id,
+                    'name': node.get('name'),
+                    'file': node.get('file'),
+                    'line': node.get('start'),
+                    'layer': node.get('layer', 'unknown')
+                })
+
         return {
             'status': 'ok',
             'repository_path': repository_path,
-            'endpoints': endpoints,
-            'count': len(endpoints)
+            'endpoints': api_nodes,
+            'count': len(api_nodes)
         }
     except Exception as e:
         return {

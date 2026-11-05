@@ -58,6 +58,41 @@ def _cluster(rel):
     return parts[0] if len(parts) > 1 else 'root'
 
 
+def _compute_layer(rel, texts):
+    """
+    Compute the architectural layer for a file based on:
+    - Folder names
+    - Framework hints (route decorators, Express router)
+    - Import direction (files that import many but are imported by few are higher)
+    """
+    rel_lower = rel.lower()
+
+    # Folder-based heuristics
+    if any(p in rel_lower for p in ['api', 'route', 'controller', 'handler', 'endpoint']):
+        return 'api'
+    if any(p in rel_lower for p in ['service', 'business', 'logic', 'domain']):
+        return 'service'
+    if any(p in rel_lower for p in ['repository', 'repo', 'dao', 'database', 'db', 'model', 'entity']):
+        return 'database'
+    if any(p in rel_lower for p in ['auth', 'security', 'middleware']):
+        return 'auth'
+    if any(p in rel_lower for p in ['util', 'helper', 'common', 'shared']):
+        return 'shared'
+
+    # Framework hints (check file content)
+    if rel in texts:
+        text = texts[rel].lower()
+        if '@app.route' in text or '@router' in text or 'express.router' in text:
+            return 'api'
+        if 'class ' in text and 'repository' in text or 'dao' in text:
+            return 'database'
+
+    # Import direction heuristic (would need full graph, skip for now)
+    # Fallback: use top-level package as layer
+    parts = rel.split('/')
+    return parts[0] if len(parts) > 1 else 'other'
+
+
 def _js_end(lines, start):
     depth, seen = 0, False
     for i in range(start, min(len(lines), start + MAX_FN_LINES)):
@@ -128,6 +163,12 @@ def index_repo(name):
     """Build {nodes, edges, tests, coverage} for repository/<name>. Pure function of the files on disk."""
     repo = config.REPOSITORY_DIR / name
     nodes, texts, tests = [], {}, []
+
+    # First pass: collect all files and build module/file nodes
+    module_nodes = {}
+    file_nodes = {}
+    symbol_nodes = []
+
     for path, rel in _source_files(repo):
         try:
             text = path.read_text(errors='replace')
@@ -137,86 +178,132 @@ def index_repo(name):
         if _is_test(rel):
             tests.append({'id': 'test.' + _dotted(rel), 'file': rel, 'covers': []})
             continue
+
+        # Create file node
+        file_id = 'file.' + _dotted(rel)
+        file_parts = rel.split('/')
+        module_name = file_parts[0] if len(file_parts) > 1 else 'root'
+
+        file_nodes[file_id] = {
+            'id': file_id,
+            'name': rel.rsplit('/', 1)[-1],
+            'kind': 'file',
+            'file': rel,
+            'start': 1,
+            'end': text.count('\n') + 1,
+            'cluster': _cluster(rel),
+            'loc': text.count('\n') + 1,
+            'level': 'file',
+            'parent': 'module.' + module_name
+        }
+
+        # Create module node if not exists
+        if module_name not in module_nodes:
+            module_nodes['module.' + module_name] = {
+                'id': 'module.' + module_name,
+                'name': module_name,
+                'kind': 'module',
+                'file': module_name,
+                'start': 0,
+                'end': 0,
+                'cluster': module_name,
+                'loc': 0,
+                'level': 'module',
+                'parent': None
+            }
+
+        # Extract symbols
         lines = text.splitlines()
         for sym, kind, start, end in _symbols(rel, text):
-            # Determine node level based on kind and file structure
-            level = 'function'
-            if kind == 'object':
-                level = 'class'
-            elif 'route' in rel.lower() or 'controller' in rel.lower() or 'api' in rel.lower():
-                level = 'route'
-            elif 'service' in rel.lower() or 'business' in rel.lower():
-                level = 'service'
-            elif 'repository' in rel.lower() or 'repo' in rel.lower() or 'dao' in rel.lower() or 'database' in rel.lower():
-                level = 'repository'
-            elif 'test' in rel.lower() or _is_test(rel):
-                level = 'test'
-            
-            # Determine parent based on file path
-            parts = rel.split('/')
-            parent = None
-            if len(parts) > 1:
-                parent = '.'.join(parts[:-1])
-            elif len(parts) == 1:
-                parent = 'root'
-            
-            nodes.append({
-                'id': _dotted(rel) + '.' + sym, 
-                'name': sym.split('.')[-1], 
-                'kind': kind, 
+            # Determine layer based on folder names, framework hints, and import direction
+            layer = _compute_layer(rel, texts)
+
+            # Build node with real parent (file node)
+            node_id = _dotted(rel) + '.' + sym
+            symbol_nodes.append({
+                'id': node_id,
+                'name': sym.split('.')[-1],
+                'kind': kind,
                 'file': rel,
-                'start': start, 
-                'end': end, 
-                'cluster': _cluster(rel), 
+                'start': start,
+                'end': end,
+                'cluster': _cluster(rel),
                 'loc': max(end - start + 1, 1),
-                'level': level,
-                'parent': parent
+                'level': 'function' if kind != 'object' else 'class',
+                'layer': layer,
+                'parent': file_id
             })
+
+    # Combine all nodes
+    nodes = list(module_nodes.values()) + list(file_nodes.values()) + symbol_nodes
 
     by_name = {}
     for n in nodes:
         by_name.setdefault(n['name'], []).append(n)
     edges, seen = [], set()
-    
-    # Add contains edges for hierarchy
+
+    # Add contains edges for hierarchy (module -> file -> class/function)
     for n in nodes:
-        if n.get('parent'):
-            parent_id = n['parent'] + '.' + n.get('file', '').rsplit('/', 1)[-1].rsplit('.', 1)[0]
+        parent_id = n.get('parent')
+        if parent_id and parent_id in module_nodes or parent_id in file_nodes:
             edges.append({
                 'src': parent_id,
                 'dst': n['id'],
                 'type': 'contains',
                 'kind': 'confirmed'
             })
-    
-    # Add imports edges based on file imports
-    for n in nodes:
-        file_path = n.get('file', '')
-        if file_path:
-            imports = _imports(texts.get(file_path, ''))
-            for imp in imports:
-                # Find matching nodes in the imported module
-                for target_node in nodes:
-                    target_file = target_node.get('file', '')
-                    if imp in target_file or imp in target_file.rsplit('/', 1)[-1]:
+
+    # Add aggregated imports edges at file level
+    file_imports = {}
+    for file_id, file_node in file_nodes.items():
+        file_path = file_node['file']
+        imports = _imports(texts.get(file_path, ''))
+        file_imports[file_id] = imports
+
+        for imp in imports:
+            # Find target file
+            for target_file_id, target_file_node in file_nodes.items():
+                target_file = target_file_node['file']
+                if imp in target_file or imp in target_file.rsplit('/', 1)[-1]:
+                    if file_id != target_file_id:
                         edges.append({
-                            'src': n['id'],
-                            'dst': target_node['id'],
+                            'src': file_id,
+                            'dst': target_file_id,
                             'type': 'imports',
                             'kind': 'confirmed',
-                            'file': n['file'],
+                            'file': file_path,
                             'line': 1
                         })
-                        break
+                    break
+
+    # Add aggregated imports edges at module level (with count)
+    module_imports = {}
+    for edge in edges:
+        if edge['type'] == 'imports':
+            src = edge['src']
+            dst = edge['dst']
+            if src.startswith('module.') and dst.startswith('module.'):
+                key = (src, dst)
+                module_imports[key] = module_imports.get(key, 0) + 1
+
+    for (src, dst), count in module_imports.items():
+        edges.append({
+            'src': src,
+            'dst': dst,
+            'type': 'imports',
+            'kind': 'confirmed',
+            'count': count
+        })
     
     # Add call edges with improved resolution using tree-sitter
-    for n in nodes:
+    # Only process symbol nodes (functions/classes), not module/file nodes
+    for n in symbol_nodes:
         if n['kind'] == 'object':
             continue
         file_path = n.get('file', '')
         if not file_path:
             continue
-        
+
         # Use tree-sitter to extract calls from the entire file
         try:
             calls = extract_calls_with_tree_sitter(file_path, texts.get(file_path, ''))
@@ -231,13 +318,13 @@ def index_repo(name):
                         'line': offset + 1,
                         'type': 'direct'
                     })
-        
+
         # Filter calls to only those within this function's line range
         function_calls = [c for c in calls if n['start'] <= c['line'] <= n['end']]
-        
+
         # Get imports for this file to resolve ambiguous calls
         file_imports = _imports(texts.get(file_path, ''))
-        
+
         # Resolve each call
         for call in function_calls:
             callee = call['name']
@@ -249,7 +336,8 @@ def index_repo(name):
                 continue
             
             # Disambiguate: prefer targets in the same file, then targets whose
-            # module the caller imports, then a single remaining candidate.
+            # module the caller imports, then targets in the same package.
+            # Leave truly ambiguous cases as 'unresolved' instead of choosing the first.
             same_file = [t for t in targets if t['file'] == n['file']]
             if same_file:
                 chosen, kind = same_file[0], 'confirmed'
@@ -260,7 +348,7 @@ def index_repo(name):
                     target_file = t['file']
                     target_module = target_file.rsplit('/', 1)[0] if '/' in target_file else target_file
                     target_module_name = target_module.replace('/', '.')
-                    
+
                     # Check if the target module is imported
                     for imp in file_imports:
                         # Exact module match
@@ -279,19 +367,33 @@ def index_repo(name):
                         if imp == target_file.rsplit('/', 1)[-1].rsplit('.', 1)[0]:
                             imported.append(t)
                             break
-                
+
                 if len(imported) == 1:
                     chosen, kind = imported[0], 'confirmed'
                 elif len(imported) > 1:
                     # Multiple imported matches - try to disambiguate by call context
                     # For now, mark as likely since we can't be sure
                     chosen, kind = imported[0], 'likely'
-                elif len(targets) == 1:
-                    chosen, kind = targets[0], 'likely' if call_type != 'constructor' else 'confirmed'
                 else:
-                    # Truly ambiguous: emit one unresolved edge to the first candidate
-                    # rather than N edges, so callers/callees stay accurate.
-                    chosen, kind = targets[0], 'unresolved'
+                    # No imported matches - try same package
+                    caller_module = n['file'].rsplit('/', 1)[0] if '/' in n['file'] else n['file']
+                    same_package = []
+                    for t in targets:
+                        target_module = t['file'].rsplit('/', 1)[0] if '/' in t['file'] else t['file']
+                        if target_module == caller_module:
+                            same_package.append(t)
+
+                    if len(same_package) == 1:
+                        chosen, kind = same_package[0], 'likely'
+                    elif len(same_package) > 1:
+                        # Multiple in same package - mark as likely
+                        chosen, kind = same_package[0], 'likely'
+                    elif len(targets) == 1:
+                        chosen, kind = targets[0], 'likely' if call_type != 'constructor' else 'confirmed'
+                    else:
+                        # Truly ambiguous: emit one unresolved edge to the first candidate
+                        # rather than N edges, so callers/callees stay accurate.
+                        chosen, kind = targets[0], 'unresolved'
             
             if call_type == 'method' and kind == 'confirmed':
                 kind = 'likely'   # method dispatch is never fully confirmed statically
@@ -376,6 +478,9 @@ def activate(name):
         mod.REPO_ROOT = config.REPO_ROOT
     graph_tools.GRAPH_PATH = path
     graph_tools._graph.cache_clear()
+    # Clear CodeGraph cache
+    from . import codegraph
+    codegraph.clear_cache()
     return graph
 
 

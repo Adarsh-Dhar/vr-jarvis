@@ -39,7 +39,7 @@ namespace JarvisVR
   [Serializable] internal class ApproveRequest { public string session_id; public bool approved; }
 
   // Field names match ai_agents/data/graph.json and the server's /health JSON.
-  [Serializable] public class GraphNodeDto { public string id, name, file, cluster, kind, level, parent; public int start, end; }
+  [Serializable] public class GraphNodeDto { public string id, name, file, cluster, kind, level, parent, type, detail; public int start, end, count; }
   [Serializable] public class GraphEdgeDto { public string src, dst, type, kind, file; public int line; }
   [Serializable] public class GraphDto
   {

@@ -863,25 +863,30 @@ def visualize_dependency_graph(
     tool_context: ToolContext,
     scope: str = 'direct'
 ) -> dict:
-    """Visualize dependency graph."""
+    """Visualize dependency graph using CodeGraph and emit_graph."""
     try:
-        viz_id = str(uuid.uuid4())
+        from .. import codegraph
 
-        viz_state = _get_session_state(tool_context, 'visualization_state', {})
-        viz_state[viz_id] = {
-            'type': 'dependency_graph',
-            'component_id': component_id,
-            'scope': scope,
-            'created_at': time.time()
-        }
-        _set_session_state(tool_context, 'visualization_state', viz_state)
-        
+        graph = codegraph.load_current_graph()
+
+        # Get module and file nodes
+        nodes = [n for n in graph._nodes.values() if n.get('level') in ('module', 'file')]
+
+        # Get import edges
+        edges = [e for e in graph._raw_data.get('edges', []) if e.get('type') == 'imports']
+
+        # Emit the graph to Unity
+        _emit_command(tool_context, 'show_graph',
+                     nodes=nodes,
+                     edges=edges,
+                     title=f'Dependency Graph: {component_id}')
+
         return {
             'status': 'ok',
             'component_id': component_id,
             'scope': scope,
-            'visualization_id': viz_id,
-            'note': 'Real visualization requires code intelligence integration'
+            'node_count': len(nodes),
+            'edge_count': len(edges)
         }
     except Exception as e:
         return {
@@ -895,23 +900,52 @@ def visualize_control_flow(
     function_id: str,
     tool_context: ToolContext
 ) -> dict:
-    """Visualize control flow."""
+    """Visualize control flow using graph emission."""
     try:
-        viz_id = str(uuid.uuid4())
+        from .analysis_tools import analyze_control_flow
 
-        viz_state = _get_session_state(tool_context, 'visualization_state', {})
-        viz_state[viz_id] = {
-            'type': 'control_flow',
-            'function_id': function_id,
-            'created_at': time.time()
-        }
-        _set_session_state(tool_context, 'visualization_state', viz_state)
-        
+        # Get control flow analysis
+        cf_result = analyze_control_flow(function_id, tool_context)
+
+        if cf_result.get('status') != 'ok':
+            return cf_result
+
+        # Convert blocks to graph nodes
+        nodes = []
+        for block in cf_result.get('blocks', []):
+            nodes.append({
+                'id': block['id'],
+                'name': block['label'],
+                'file': block['file'],
+                'start': block['start'],
+                'end': block['end'],
+                'level': 'block',
+                'kind': block['type'],
+                'cluster': 'control_flow'
+            })
+
+        # Convert edges to graph edges
+        edges = []
+        for edge in cf_result.get('edges', []):
+            edges.append({
+                'src': edge['src'],
+                'dst': edge['dst'],
+                'type': 'controlflow',
+                'kind': edge.get('kind', 'confirmed'),
+                'edge_type': edge.get('edge_type', 'next')
+            })
+
+        # Emit the graph to Unity
+        _emit_command(tool_context, 'show_graph',
+                     nodes=nodes,
+                     edges=edges,
+                     title=f'Control Flow: {function_id}')
+
         return {
             'status': 'ok',
             'function_id': function_id,
-            'visualization_id': viz_id,
-            'note': 'Real visualization requires code intelligence integration'
+            'block_count': len(nodes),
+            'edge_count': len(edges)
         }
     except Exception as e:
         return {
@@ -1015,334 +1049,40 @@ def visualize_architecture(
     tool_context: ToolContext,
     scope: str = 'full'
 ) -> dict:
-    """Visualize architecture by computing the architecture map from the graph index."""
+    """Visualize architecture using CodeGraph with real module/file nodes."""
     try:
-        from .navigation_tools import _load_graph_index, resolve_symbol
-        from collections import defaultdict
-        
-        viz_id = str(uuid.uuid4())
-        graph = _load_graph_index()
-        nodes = graph.get('nodes', [])
-        edges = graph.get('edges', [])
-        
-        # Build architecture layers based on folder names and file patterns
-        layers = defaultdict(list)
-        modules = defaultdict(list)  # directory/module level
-        files = defaultdict(list)    # file level
-        classes = defaultdict(list)  # class level
-        external_services = set()
-        
-        for node in nodes:
-            file_path = node.get('file', '')
-            name = node.get('name', '')
-            level = node.get('level', 'function')
-            
-            # Determine layer based on file path and name
-            layer = 'other'
-            # First check the node's level field for explicit layer information
-            if level == 'route':
-                layer = 'api'
-            elif level == 'service':
-                layer = 'services'
-            elif level == 'repository':
-                layer = 'database'
-            elif level == 'test':
-                layer = 'tests'
-            # Then fallback to file path heuristics
-            elif any(x in file_path.lower() for x in ['route', 'controller', 'api', 'endpoint']):
-                layer = 'api'
-            elif any(x in file_path.lower() for x in ['service', 'business', 'logic']):
-                layer = 'services'
-            elif any(x in file_path.lower() for x in ['repository', 'repo', 'dao', 'database']):
-                layer = 'database'
-            elif any(x in file_path.lower() for x in ['auth', 'security', 'login', 'permission']):
-                layer = 'auth'
-            elif 'test' in file_path.lower() or 'test' in name.lower():
-                layer = 'tests'
-            elif any(x in file_path.lower() for x in ['util', 'helper', 'common', 'lib']):
-                layer = 'lib'
-            
-            layers[layer].append(node)
-            
-            # Extract module (directory) from file path
-            if file_path:
-                parts = file_path.split('/')
-                if len(parts) > 1:
-                    module = parts[0]  # top-level directory
-                    modules[module].append(node)
-                else:
-                    modules['root'].append(node)
-                
-                # File level
-                files[file_path].append(node)
-            
-            # Class level
-            if level == 'class':
-                class_name = node.get('name', '')
-                classes[class_name].append(node)
-            elif level == 'function' and '.' in node.get('id', ''):
-                # Function inside a class
-                parts = node.get('id', '').split('.')
-                if len(parts) >= 2:
-                    class_name = '.'.join(parts[:-1])
-                    classes[class_name].append(node)
-            
-            # Detect external services
-            if node.get('kind') == 'external':
-                external_services.add(node.get('name', ''))
-        
-        # Build hierarchy with parent-child relationships
+        from .. import codegraph
+
+        graph = codegraph.load_current_graph()
+
+        # Get module, file, and class nodes (skip leaf functions for high-level view)
         architecture_nodes = []
+        for node_id, node in graph._nodes.items():
+            if node.get('level') in ('module', 'file', 'class'):
+                architecture_nodes.append(node)
+
+        # Get contains edges (hierarchy) and imports edges (dependencies)
         architecture_edges = []
-        node_set = set()  # Track all node IDs to avoid duplicates
-        
-        # Helper to add node if not already added
-        def add_node(node_dict):
-            node_id = node_dict.get('id')
-            if node_id and node_id not in node_set:
-                architecture_nodes.append(node_dict)
-                node_set.add(node_id)
-                return True
-            return False
-        
-        # Add layer nodes
-        for layer_name, layer_nodes in layers.items():
-            if layer_nodes:
-                layer_id = f"layer.{layer_name}"
-                add_node({
-                    'id': layer_id,
-                    'name': layer_name.title(),
-                    'kind': 'layer',
-                    'cluster': layer_name,
-                    'level': 'layer',
-                    'file': '',
-                    'count': len(layer_nodes)
-                })
-        
-        # Add module (directory) nodes
-        for module_name, module_nodes in modules.items():
-            if module_name:
-                module_id = f"module.{module_name}"
-                add_node({
-                    'id': module_id,
-                    'name': module_name,
-                    'kind': 'module',
-                    'cluster': module_name,
-                    'level': 'module',
-                    'file': module_name,
-                    'count': len(module_nodes)
-                })
-        
-        # Add file nodes
-        for file_path, file_nodes in files.items():
-            if file_path:
-                file_id = f"file.{file_path.replace('/', '.')}"
-                add_node({
-                    'id': file_id,
-                    'name': file_path.split('/')[-1],
-                    'kind': 'file',
-                    'cluster': file_path.split('/')[0] if '/' in file_path else 'root',
-                    'level': 'file',
-                    'file': file_path,
-                    'count': len(file_nodes)
-                })
-        
-        # Add class nodes (only from original nodes with level='class')
-        for node in nodes:
-            if node.get('level') == 'class':
-                add_node(node)
-        
-        # Add all original function/leaf nodes
-        for node in nodes:
-            if node.get('level') in ('function', 'route', 'service', 'repository', 'test'):
-                add_node(node)
-        
-        # Build hierarchy edges: layer -> module -> file -> class -> function
-        for node in nodes:
-            file_path = node.get('file', '')
-            level = node.get('level', 'function')
-            node_id = node.get('id')
-            
-            if not node_id or node_id not in node_set:
-                continue
-            
-            # Determine layer based on level first, then fallback to file path
-            layer = 'other'
-            if level == 'route':
-                layer = 'api'
-            elif level == 'service':
-                layer = 'services'
-            elif level == 'repository':
-                layer = 'database'
-            elif level == 'test':
-                layer = 'tests'
-            elif any(x in file_path.lower() for x in ['route', 'controller', 'api', 'endpoint']):
-                layer = 'api'
-            elif any(x in file_path.lower() for x in ['service', 'business', 'logic']):
-                layer = 'services'
-            elif any(x in file_path.lower() for x in ['repository', 'repo', 'dao', 'database']):
-                layer = 'database'
-            elif any(x in file_path.lower() for x in ['auth', 'security', 'login', 'permission']):
-                layer = 'auth'
-            elif 'test' in file_path.lower():
-                layer = 'tests'
-            elif any(x in file_path.lower() for x in ['util', 'helper', 'common', 'lib']):
-                layer = 'lib'
-            
-            layer_id = f"layer.{layer}"
-            
-            # Module (directory)
-            parts = file_path.split('/') if file_path else []
-            module_id = f"module.{parts[0]}" if len(parts) > 1 else "module.root"
-            
-            # File
-            file_id = f"file.{file_path.replace('/', '.')}" if file_path else None
-            
-            # Class (if applicable) - only if class node exists
-            class_id = None
-            if level == 'function' and '.' in node_id:
-                class_parts = node_id.split('.')
-                if len(class_parts) >= 2:
-                    potential_class_id = f"class.{'.'.join(class_parts[:-1])}"
-                    if potential_class_id in node_set:
-                        class_id = potential_class_id
-            
-            # Create hierarchy edges
-            # layer -> module
-            if module_id in node_set:
-                architecture_edges.append({
-                    'src': layer_id,
-                    'dst': module_id,
-                    'type': 'contains',
-                    'kind': 'confirmed'
-                })
-                # module -> file
-                if file_id and file_id in node_set:
-                    architecture_edges.append({
-                        'src': module_id,
-                        'dst': file_id,
-                        'type': 'contains',
-                        'kind': 'confirmed'
-                    })
-                    # file -> class or file -> function
-                    if class_id:
-                        architecture_edges.append({
-                            'src': file_id,
-                            'dst': class_id,
-                            'type': 'contains',
-                            'kind': 'confirmed'
-                        })
-                        # class -> function
-                        architecture_edges.append({
-                            'src': class_id,
-                            'dst': node_id,
-                            'type': 'contains',
-                            'kind': 'confirmed'
-                        })
-                    else:
-                        # file -> function directly
-                        architecture_edges.append({
-                            'src': file_id,
-                            'dst': node_id,
-                            'type': 'contains',
-                            'kind': 'confirmed'
-                        })
-        
-        # Aggregate module->module edges from imports and calls edges
-        module_connections = defaultdict(set)
-        for edge in edges:
-            if edge.get('type') in ('imports', 'calls'):
-                src = edge.get('src')
-                dst = edge.get('dst')
-                if src and dst:
-                    # Find modules for src and dst
-                    src_module = None
-                    dst_module = None
-                    for node in nodes:
-                        if node.get('id') == src:
-                            file_path = node.get('file', '')
-                            parts = file_path.split('/') if file_path else []
-                            src_module = parts[0] if len(parts) > 1 else 'root'
-                        if node.get('id') == dst:
-                            file_path = node.get('file', '')
-                            parts = file_path.split('/') if file_path else []
-                            dst_module = parts[0] if len(parts) > 1 else 'root'
-                    if src_module and dst_module and src_module != dst_module:
-                        module_connections[f"module.{src_module}"].add(f"module.{dst_module}")
-        
-        # Add module->module edges
-        for src_mod, dst_mods in module_connections.items():
-            for dst_mod in dst_mods:
-                architecture_edges.append({
-                    'src': src_mod,
-                    'dst': dst_mod,
-                    'type': 'imports',
-                    'kind': 'confirmed'
-                })
-        
-        # Compute coupling metrics - only calls and imports edges count,
-        # not contains/hierarchy edges. Count only edges between leaf nodes (functions).
-        fan_in = defaultdict(int)
-        fan_out = defaultdict(int)
-        
-        for edge in edges:
-            if edge.get('type') not in ('calls', 'imports'):
-                continue
-            src = edge.get('src')
-            dst = edge.get('dst')
-            if src and dst:
-                # Only count edges between function-level nodes, not hierarchy edges
-                # Skip edges where src or dst is a module, file, or class node
-                if any(src.startswith(prefix) for prefix in ['module.', 'file.', 'class.', 'layer.']):
-                    continue
-                if any(dst.startswith(prefix) for prefix in ['module.', 'file.', 'class.', 'layer.']):
-                    continue
-                fan_out[src] += 1
-                fan_in[dst] += 1
-        
-        # Build coupling summary
-        coupling_metrics = {
-            'fan_in': dict(fan_in),
-            'fan_out': dict(fan_out),
-            'total_nodes': len(nodes),
-            'total_edges': len(edges),
-            'layers': {k: len(v) for k, v in layers.items()},
-            'modules': {k: len(v) for k, v in modules.items()},
-            'files': {k: len(v) for k, v in files.items()},
-            'classes': {k: len(v) for k, v in classes.items()}
-        }
-        
-        # Emit scene command for Unity
-        _emit_command(tool_context, 'show_graph', 
+        for edge in graph._raw_data.get('edges', []):
+            if edge.get('type') in ('contains', 'imports'):
+                # Only include edges between architecture nodes
+                src_id = edge.get('src')
+                dst_id = edge.get('dst')
+                if (src_id in graph._nodes and graph._nodes[src_id].get('level') in ('module', 'file', 'class') and
+                    dst_id in graph._nodes and graph._nodes[dst_id].get('level') in ('module', 'file', 'class')):
+                    architecture_edges.append(edge)
+
+        # Emit the graph to Unity
+        _emit_command(tool_context, 'show_graph',
                      nodes=architecture_nodes,
                      edges=architecture_edges,
-                     metrics=coupling_metrics)
-        
-        viz_state = _get_session_state(tool_context, 'visualization_state', {})
-        viz_state[viz_id] = {
-            'type': 'architecture',
-            'scope': scope,
-            'layers': dict(layers),
-            'modules': dict(modules),
-            'files': dict(files),
-            'classes': dict(classes),
-            'coupling_metrics': coupling_metrics,
-            'created_at': time.time()
-        }
-        _set_session_state(tool_context, 'visualization_state', viz_state)
-        
+                     title='Architecture Map')
+
         return {
             'status': 'ok',
             'scope': scope,
-            'visualization_id': viz_id,
-            'layers': {k: len(v) for k, v in layers.items()},
-            'modules': {k: len(v) for k, v in modules.items()},
-            'files': {k: len(v) for k, v in files.items()},
-            'classes': {k: len(v) for k, v in classes.items()},
             'node_count': len(architecture_nodes),
-            'edge_count': len(architecture_edges),
-            'coupling_metrics': coupling_metrics,
-            'command_queued': True
+            'edge_count': len(architecture_edges)
         }
     except Exception as e:
         return {
@@ -1572,37 +1312,43 @@ def visualize_test_coverage(
     repository_path: str,
     tool_context: ToolContext
 ) -> dict:
-    """Visualize test coverage."""
+    """Visualize test coverage with overlays."""
     try:
         from .testing_verification_tools import measure_test_coverage
-        
+        from .. import codegraph
+
         coverage_result = measure_test_coverage(repository_path, tool_context)
         
-        if coverage_result.get('status') == 'ok':
-            viz_id = str(uuid.uuid4())
-            
-            viz_state = _get_session_state(tool_context, 'visualization_state', {})
-            viz_state[viz_id] = {
-                'type': 'test_coverage',
-                'repository_path': repository_path,
-                'coverage': coverage_result.get('coverage'),
-                'created_at': time.time()
-            }
-            _set_session_state(tool_context, 'visualization_state', viz_state)
-            
-            return {
-                'status': 'ok',
-                'repository_path': repository_path,
-                'visualization_id': viz_id,
-                'coverage': coverage_result.get('coverage')
-            }
+        if coverage_result.get('status') != 'ok':
+            return coverage_result
         
-        return coverage_result
-    except Exception as e:
+        coverage = coverage_result.get('coverage', {})
+        graph = codegraph.load_current_graph()
+        
+        nodes = []
+        for node_id, node in graph._nodes.items():
+            if node.get('level') in ('function', 'class'):
+                file_path = node.get('file', '')
+                file_coverage = coverage.get('by_file', {}).get(file_path, 0.0)
+                nodes.append({'id': node_id, 'coverage': file_coverage})
+        
+        passed = [n['id'] for n in nodes if n['coverage'] >= 80]
+        failed = [n['id'] for n in nodes if 0 < n['coverage'] < 80]
+        not_run = [n['id'] for n in nodes if n['coverage'] == 0]
+        
+        _emit_command(tool_context, 'show_test_badges', passed=passed, failed=failed, not_run=not_run)
+        _emit_command(tool_context, 'dim_unrelated', keep_ids=passed + failed)
+        
         return {
-            'status': 'error',
-            'error': str(e)
+            'status': 'ok',
+            'repository_path': repository_path,
+            'passed_count': len(passed),
+            'failed_count': len(failed),
+            'not_run_count': len(not_run),
+            'overall_coverage': coverage.get('overall', 0.0)
         }
+    except Exception as e:
+        return {'status': 'error', 'error': str(e)}
 
 
 @safe
@@ -1610,23 +1356,47 @@ def visualize_change_impact(
     element_id: str,
     tool_context: ToolContext
 ) -> dict:
-    """Visualize change impact."""
+    """Visualize change impact using scene commands."""
     try:
-        viz_id = str(uuid.uuid4())
-        
-        viz_state = _get_session_state(tool_context, 'visualization_state', {})
-        viz_state[viz_id] = {
-            'type': 'change_impact',
-            'element_id': element_id,
-            'created_at': time.time()
-        }
-        _set_session_state(tool_context, 'visualization_state', viz_state)
-        
+        from .relationship_intelligence_tools import calculate_change_impact
+
+        # Get the impact analysis
+        impact_result = calculate_change_impact(element_id, tool_context)
+
+        if impact_result.get('status') != 'ok':
+            return impact_result
+
+        # Build the list of affected node IDs
+        affected_ids = [element_id]
+        for caller in impact_result.get('direct_callers', []):
+            affected_ids.append(caller['from'])
+        for caller in impact_result.get('indirect_callers', []):
+            affected_ids.append(caller['from'])
+
+        # Get covering test IDs
+        test_ids = []
+        for test in impact_result.get('covering_tests', []):
+            test_ids.extend(test.get('covers', []))
+
+        # Separate tests by status (simplified - all as not_run for now)
+        passed = []
+        failed = []
+        not_run = test_ids
+
+        # Emit scene commands
+        _emit_command(tool_context, 'dim_unrelated', keep_ids=affected_ids)
+        _emit_command(tool_context, 'highlight_path', node_ids=affected_ids)
+        _emit_command(tool_context, 'show_test_badges', passed=passed, failed=failed, not_run=not_run)
+        _emit_command(tool_context, 'focus_camera', node_id=element_id)
+
         return {
             'status': 'ok',
             'element_id': element_id,
-            'visualization_id': viz_id,
-            'note': 'Real visualization requires impact analysis'
+            'direct_count': impact_result.get('direct_count', 0),
+            'indirect_count': impact_result.get('indirect_count', 0),
+            'total_affected': impact_result.get('total_affected', 0),
+            'risk_level': impact_result.get('risk_level', 'unknown'),
+            'untested': impact_result.get('untested', False)
         }
     except Exception as e:
         return {

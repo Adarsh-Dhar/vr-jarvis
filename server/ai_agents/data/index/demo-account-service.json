@@ -1,6 +1,174 @@
 {
  "nodes": [
   {
+   "id": "module.auth",
+   "name": "auth",
+   "kind": "module",
+   "file": "auth",
+   "start": 0,
+   "end": 0,
+   "cluster": "auth",
+   "loc": 0,
+   "level": "module",
+   "parent": null
+  },
+  {
+   "id": "module.db",
+   "name": "db",
+   "kind": "module",
+   "file": "db",
+   "start": 0,
+   "end": 0,
+   "cluster": "db",
+   "loc": 0,
+   "level": "module",
+   "parent": null
+  },
+  {
+   "id": "module.root",
+   "name": "root",
+   "kind": "module",
+   "file": "root",
+   "start": 0,
+   "end": 0,
+   "cluster": "root",
+   "loc": 0,
+   "level": "module",
+   "parent": null
+  },
+  {
+   "id": "module.lib",
+   "name": "lib",
+   "kind": "module",
+   "file": "lib",
+   "start": 0,
+   "end": 0,
+   "cluster": "lib",
+   "loc": 0,
+   "level": "module",
+   "parent": null
+  },
+  {
+   "id": "module.routes",
+   "name": "routes",
+   "kind": "module",
+   "file": "routes",
+   "start": 0,
+   "end": 0,
+   "cluster": "routes",
+   "loc": 0,
+   "level": "module",
+   "parent": null
+  },
+  {
+   "id": "module.services",
+   "name": "services",
+   "kind": "module",
+   "file": "services",
+   "start": 0,
+   "end": 0,
+   "cluster": "services",
+   "loc": 0,
+   "level": "module",
+   "parent": null
+  },
+  {
+   "id": "file.auth.owner",
+   "name": "owner.ts",
+   "kind": "file",
+   "file": "auth/owner.ts",
+   "start": 1,
+   "end": 5,
+   "cluster": "auth",
+   "loc": 5,
+   "level": "file",
+   "parent": "module.auth"
+  },
+  {
+   "id": "file.auth.requireAuth",
+   "name": "requireAuth.ts",
+   "kind": "file",
+   "file": "auth/requireAuth.ts",
+   "start": 1,
+   "end": 12,
+   "cluster": "auth",
+   "loc": 12,
+   "level": "file",
+   "parent": "module.auth"
+  },
+  {
+   "id": "file.db.client",
+   "name": "client.ts",
+   "kind": "file",
+   "file": "db/client.ts",
+   "start": 1,
+   "end": 4,
+   "cluster": "db",
+   "loc": 4,
+   "level": "file",
+   "parent": "module.db"
+  },
+  {
+   "id": "file.db.users.repo",
+   "name": "users.repo.ts",
+   "kind": "file",
+   "file": "db/users.repo.ts",
+   "start": 1,
+   "end": 10,
+   "cluster": "db",
+   "loc": 10,
+   "level": "file",
+   "parent": "module.db"
+  },
+  {
+   "id": "file.jest.config",
+   "name": "jest.config.js",
+   "kind": "file",
+   "file": "jest.config.js",
+   "start": 1,
+   "end": 2,
+   "cluster": "root",
+   "loc": 2,
+   "level": "file",
+   "parent": "module.root"
+  },
+  {
+   "id": "file.lib.token",
+   "name": "token.ts",
+   "kind": "file",
+   "file": "lib/token.ts",
+   "start": 1,
+   "end": 5,
+   "cluster": "lib",
+   "loc": 5,
+   "level": "file",
+   "parent": "module.lib"
+  },
+  {
+   "id": "file.routes.account",
+   "name": "account.ts",
+   "kind": "file",
+   "file": "routes/account.ts",
+   "start": 1,
+   "end": 16,
+   "cluster": "routes",
+   "loc": 16,
+   "level": "file",
+   "parent": "module.routes"
+  },
+  {
+   "id": "file.services.account",
+   "name": "account.ts",
+   "kind": "file",
+   "file": "services/account.ts",
+   "start": 1,
+   "end": 11,
+   "cluster": "services",
+   "loc": 11,
+   "level": "file",
+   "parent": "module.services"
+  },
+  {
    "id": "auth.owner.checkOwner",
    "name": "checkOwner",
    "kind": "function",
@@ -10,7 +178,8 @@
    "cluster": "auth",
    "loc": 3,
    "level": "function",
-   "parent": "auth"
+   "layer": "auth",
+   "parent": "file.auth.owner"
   },
   {
    "id": "auth.requireAuth.requireAuth",
@@ -22,7 +191,8 @@
    "cluster": "auth",
    "loc": 6,
    "level": "function",
-   "parent": "auth"
+   "layer": "auth",
+   "parent": "file.auth.requireAuth"
   },
   {
    "id": "db.client.query",
@@ -34,7 +204,8 @@
    "cluster": "db",
    "loc": 3,
    "level": "function",
-   "parent": "db"
+   "layer": "database",
+   "parent": "file.db.client"
   },
   {
    "id": "db.users.repo.deleteUser",
@@ -45,8 +216,9 @@
    "end": 5,
    "cluster": "db",
    "loc": 3,
-   "level": "repository",
-   "parent": "db"
+   "level": "function",
+   "layer": "database",
+   "parent": "file.db.users.repo"
   },
   {
    "id": "lib.token.verifyToken",
@@ -58,7 +230,8 @@
    "cluster": "lib",
    "loc": 4,
    "level": "function",
-   "parent": "lib"
+   "layer": "lib",
+   "parent": "file.lib.token"
   },
   {
    "id": "routes.account.handler",
@@ -69,8 +242,9 @@
    "end": 12,
    "cluster": "routes",
    "loc": 4,
-   "level": "route",
-   "parent": "routes"
+   "level": "function",
+   "layer": "api",
+   "parent": "file.routes.account"
   },
   {
    "id": "services.account.getAccount",
@@ -81,8 +255,9 @@
    "end": 5,
    "cluster": "services",
    "loc": 3,
-   "level": "service",
-   "parent": "services"
+   "level": "function",
+   "layer": "service",
+   "parent": "file.services.account"
   },
   {
    "id": "services.account.deleteAccount",
@@ -93,102 +268,135 @@
    "end": 10,
    "cluster": "services",
    "loc": 4,
-   "level": "service",
-   "parent": "services"
+   "level": "function",
+   "layer": "service",
+   "parent": "file.services.account"
   }
  ],
  "edges": [
   {
-   "src": "auth.owner",
+   "src": "module.auth",
+   "dst": "file.auth.owner",
+   "type": "contains",
+   "kind": "confirmed"
+  },
+  {
+   "src": "module.auth",
+   "dst": "file.auth.requireAuth",
+   "type": "contains",
+   "kind": "confirmed"
+  },
+  {
+   "src": "module.db",
+   "dst": "file.db.client",
+   "type": "contains",
+   "kind": "confirmed"
+  },
+  {
+   "src": "module.db",
+   "dst": "file.db.users.repo",
+   "type": "contains",
+   "kind": "confirmed"
+  },
+  {
+   "src": "module.root",
+   "dst": "file.jest.config",
+   "type": "contains",
+   "kind": "confirmed"
+  },
+  {
+   "src": "module.lib",
+   "dst": "file.lib.token",
+   "type": "contains",
+   "kind": "confirmed"
+  },
+  {
+   "src": "module.routes",
+   "dst": "file.routes.account",
+   "type": "contains",
+   "kind": "confirmed"
+  },
+  {
+   "src": "module.services",
+   "dst": "file.services.account",
+   "type": "contains",
+   "kind": "confirmed"
+  },
+  {
+   "src": "file.auth.owner",
    "dst": "auth.owner.checkOwner",
    "type": "contains",
    "kind": "confirmed"
   },
   {
-   "src": "auth.requireAuth",
+   "src": "file.auth.requireAuth",
    "dst": "auth.requireAuth.requireAuth",
    "type": "contains",
    "kind": "confirmed"
   },
   {
-   "src": "db.client",
+   "src": "file.db.client",
    "dst": "db.client.query",
    "type": "contains",
    "kind": "confirmed"
   },
   {
-   "src": "db.users.repo",
+   "src": "file.db.users.repo",
    "dst": "db.users.repo.deleteUser",
    "type": "contains",
    "kind": "confirmed"
   },
   {
-   "src": "lib.token",
+   "src": "file.lib.token",
    "dst": "lib.token.verifyToken",
    "type": "contains",
    "kind": "confirmed"
   },
   {
-   "src": "routes.account",
+   "src": "file.routes.account",
    "dst": "routes.account.handler",
    "type": "contains",
    "kind": "confirmed"
   },
   {
-   "src": "services.account",
+   "src": "file.services.account",
    "dst": "services.account.getAccount",
    "type": "contains",
    "kind": "confirmed"
   },
   {
-   "src": "services.account",
+   "src": "file.services.account",
    "dst": "services.account.deleteAccount",
    "type": "contains",
    "kind": "confirmed"
   },
   {
-   "src": "auth.requireAuth.requireAuth",
-   "dst": "lib.token.verifyToken",
+   "src": "file.auth.requireAuth",
+   "dst": "file.lib.token",
    "type": "imports",
    "kind": "confirmed",
    "file": "auth/requireAuth.ts",
    "line": 1
   },
   {
-   "src": "db.users.repo.deleteUser",
-   "dst": "db.client.query",
+   "src": "file.db.users.repo",
+   "dst": "file.db.client",
    "type": "imports",
    "kind": "confirmed",
    "file": "db/users.repo.ts",
    "line": 1
   },
   {
-   "src": "routes.account.handler",
-   "dst": "routes.account.handler",
+   "src": "file.routes.account",
+   "dst": "file.auth.requireAuth",
    "type": "imports",
    "kind": "confirmed",
    "file": "routes/account.ts",
    "line": 1
   },
   {
-   "src": "routes.account.handler",
-   "dst": "auth.requireAuth.requireAuth",
-   "type": "imports",
-   "kind": "confirmed",
-   "file": "routes/account.ts",
-   "line": 1
-  },
-  {
-   "src": "services.account.getAccount",
-   "dst": "db.users.repo.deleteUser",
-   "type": "imports",
-   "kind": "confirmed",
-   "file": "services/account.ts",
-   "line": 1
-  },
-  {
-   "src": "services.account.deleteAccount",
-   "dst": "db.users.repo.deleteUser",
+   "src": "file.services.account",
+   "dst": "file.db.users.repo",
    "type": "imports",
    "kind": "confirmed",
    "file": "services/account.ts",

@@ -615,48 +615,68 @@ def measure_test_coverage(
     repository_path: str,
     tool_context: ToolContext
 ) -> dict:
-    """Measure code coverage."""
+    """Measure code coverage with proper error handling."""
     try:
         path = Path(repository_path)
         if not path.is_absolute():
             path = resolve_in_repo(path)
-        
+
         result = subprocess.run(
-            ['python3', '-m', 'pytest', '--cov=.', '--cov-report=term'],
+            ['python3', '-m', 'coverage', 'run', '-m', 'pytest'],
             cwd=str(path),
             capture_output=True,
             text=True,
             timeout=60
         )
-        
-        # Parse coverage output
-        coverage = {'overall': 0.0, 'by_file': {}}
-        
-        for line in result.stdout.splitlines():
-            if 'TOTAL' in line:
-                parts = line.split()
-                if len(parts) >= 4:
-                    try:
-                        coverage['overall'] = float(parts[3].rstrip('%'))
-                    except:
-                        pass
-            elif '%' in line and line.strip() and not line.startswith('TOTAL'):
-                parts = line.split()
-                if len(parts) >= 2:
-                    file_name = parts[0]
-                    try:
-                        cov_value = float(parts[-1].rstrip('%'))
-                        coverage['by_file'][file_name] = cov_value
-                    except:
-                        pass
-        
+
+        if result.returncode != 0:
+            return {
+                'status': 'error',
+                'error': f"Coverage run failed: {result.stderr[-500:]}",
+                'repository_path': str(path)
+            }
+
+        # Get coverage report
+        report_result = subprocess.run(
+            ['python3', '-m', 'coverage', 'json'],
+            cwd=str(path),
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+
+        if report_result.returncode != 0:
+            return {
+                'status': 'error',
+                'error': f"Coverage report failed: {report_result.stderr[-500:]}",
+                'repository_path': str(path)
+            }
+
+        # Parse JSON report
+        import json
+        coverage_data = json.loads(report_result.stdout)
+        overall = coverage_data.get('totals', {}).get('percent_covered', 0.0)
+
         return {
             'status': 'ok',
             'repository_path': str(path),
-            'coverage': coverage,
-            'output': result.stdout[-2000:] if result.stdout else result.stderr[-2000:]
+            'coverage': {
+                'overall': overall,
+                'by_file': {k: v.get('percent_covered', 0.0) for k, v in coverage_data.get('files', {}).items()}
+            }
         }
     except subprocess.TimeoutExpired:
+        return {
+            'status': 'error',
+            'error': 'Coverage measurement timed out',
+            'repository_path': str(path)
+        }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e),
+            'repository_path': str(path)
+        }
         return {
             'status': 'error',
             'error': 'Coverage measurement timed out'

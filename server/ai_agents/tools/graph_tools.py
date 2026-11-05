@@ -167,10 +167,23 @@ def get_cluster(cluster: str, tool_context: ToolContext) -> dict:
 @safe
 def get_source(node_id: str, tool_context: ToolContext, context_lines: int = 0) -> dict:
     '''Return the source text of a node from the repository, with optional extra lines around it.
-    Always call this before making claims about what a function does.'''
+    Always call this before making claims about what a function does.
+    Handles block IDs for control flow visualization (e.g., function_name#B0).'''
     if (err := _missing(node_id)):
         return err
-    n = _graph()['nodes'][node_id]
+
+    # Handle block IDs (control flow blocks)
+    if '#B' in node_id:
+        # Extract function name from block ID
+        function_name = node_id.split('#B')[0]
+        # Try to get the function node
+        if function_name in _graph()['nodes']:
+            n = _graph()['nodes'][function_name]
+        else:
+            return {'status': 'error', 'error': f'Block parent function not found: {function_name}'}
+    else:
+        n = _graph()['nodes'][node_id]
+
     root = REPO_ROOT.resolve()
     path = (REPO_ROOT / n['file']).resolve()
     if not path.is_relative_to(root):

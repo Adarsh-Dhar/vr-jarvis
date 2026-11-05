@@ -113,38 +113,12 @@ def build_call_graph(scope: str, tool_context: ToolContext) -> dict:
 
 @safe
 def find_callers(function_id: str, tool_context: ToolContext, depth: int = 1) -> dict:
-    """Find functions calling a selected function using the graph index."""
+    """Find functions calling a selected function using CodeGraph."""
     try:
-        from .navigation_tools import get_call_hierarchy
+        from .. import codegraph
 
-        # Get incoming calls (callers) - only call edges
-        call_result = get_call_hierarchy(function_id, tool_context, direction='incoming')
-
-        if call_result.get('status') != 'ok':
-            return call_result
-
-        callers = call_result.get('incoming_calls', [])
-
-        # If depth > 1, get indirect callers
-        if depth > 1:
-            indirect_callers = []
-            direct_caller_ids = [c.get('from', '') for c in callers]
-
-            for caller in callers:
-                caller_id = caller.get('from', '')
-                if caller_id and caller_id not in direct_caller_ids:
-                    # Recursively get callers of this caller
-                    sub_result = find_callers(caller_id, tool_context, depth=depth-1)
-                    if sub_result.get('status') == 'ok':
-                        indirect_callers.extend(sub_result.get('callers', []))
-
-            return {
-                'status': 'ok',
-                'function_id': function_id,
-                'callers': callers,
-                'indirect_callers': indirect_callers,
-                'depth': depth
-            }
+        graph = codegraph.load_current_graph()
+        callers = graph.callers(function_id, depth=depth)
 
         return {
             'status': 'ok',
@@ -161,10 +135,18 @@ def find_callers(function_id: str, tool_context: ToolContext, depth: int = 1) ->
 
 @safe
 def find_callees(function_id: str, tool_context: ToolContext) -> dict:
-    """Find functions called by a selected function using the graph index."""
+    """Find functions called by a selected function using CodeGraph."""
     try:
-        from .navigation_tools import get_call_hierarchy
-        return get_call_hierarchy(function_id, tool_context, direction='outgoing')
+        from .. import codegraph
+
+        graph = codegraph.load_current_graph()
+        callees = graph.callees(function_id, depth=1)
+
+        return {
+            'status': 'ok',
+            'function_id': function_id,
+            'outgoing_calls': callees
+        }
     except Exception as e:
         return {
             'status': 'error',
@@ -178,41 +160,44 @@ def trace_call_chain(
     tool_context: ToolContext,
     depth: int = 3
 ) -> dict:
-    """Trace the complete call chain using the graph index."""
+    """Trace the complete call chain using CodeGraph."""
     try:
-        from .navigation_tools import get_call_hierarchy, _load_graph_index, resolve_symbol
-        
-        # Get the call hierarchy for the function
-        call_result = get_call_hierarchy(function_id, tool_context, direction='outgoing')
-        
-        if call_result.get('status') != 'ok':
-            return call_result
-        
-        # Build call chains by recursively following outgoing calls
+        from .. import codegraph
+
+        graph = codegraph.load_current_graph()
+
+        # Build call chains by BFS following outgoing calls
         chains = []
         visited = set()
-        
+
         def build_chain(current_id, current_chain, current_depth):
             if current_depth > depth or current_id in visited:
+                if current_chain:
+                    chains.append(current_chain)
                 return
             visited.add(current_id)
-            
-            node = resolve_symbol(current_id)
+
+            node = graph.get(current_id)
             if node:
                 current_chain.append({
                     'id': current_id,
                     'name': node.get('name'),
                     'file': node.get('file')
                 })
-            
-            graph = _load_graph_index()
-            for edge in graph.get('edges', []):
-                if edge.get('src') == current_id:
-                    next_id = edge.get('dst')
-                    build_chain(next_id, current_chain.copy(), current_depth + 1)
-        
+
+            # Get outgoing calls
+            callees = graph.callees(current_id, depth=1)
+            if not callees:
+                if current_chain:
+                    chains.append(current_chain)
+                return
+
+            for callee in callees:
+                next_id = callee['to']
+                build_chain(next_id, current_chain.copy(), current_depth + 1)
+
         # Start building chains from the initial function
-        node = resolve_symbol(function_id)
+        node = graph.get(function_id)
         if node:
             initial_chain = [{
                 'id': function_id,
@@ -220,7 +205,7 @@ def trace_call_chain(
                 'file': node.get('file')
             }]
             build_chain(function_id, initial_chain, 0)
-        
+
         return {
             'status': 'ok',
             'function_id': function_id,
@@ -239,41 +224,27 @@ def find_indirect_callers(
     function_id: str,
     tool_context: ToolContext
 ) -> dict:
-    """Find functions indirectly calling a selected function using the graph index."""
+    """Find functions indirectly calling a selected function using CodeGraph."""
     try:
-        from .navigation_tools import get_call_hierarchy, _load_graph_index, resolve_symbol
-        
-        # Get direct callers (incoming calls)
-        call_result = get_call_hierarchy(function_id, tool_context, direction='incoming')
-        
-        if call_result.get('status') != 'ok':
-            return call_result
-        
-        direct_callers = call_result.get('incoming_calls', [])
-        indirect_callers = []
-        
-        # For each direct caller, find their callers
-        for caller in direct_callers:
-            caller_id = caller.get('from', '')
-            if not caller_id:
-                continue
-            
-            caller_result = get_call_hierarchy(caller_id, tool_context, direction='incoming')
-            if caller_result.get('status') == 'ok':
-                for indirect_caller in caller_result.get('incoming_calls', []):
-                    indirect_callers.append({
-                        'function_id': function_id,
-                        'indirect_caller': indirect_caller.get('from'),
-                        'via': caller_id,
-                        'file': indirect_caller.get('file'),
-                        'line': indirect_caller.get('line')
-                    })
-        
+        from .. import codegraph
+
+        graph = codegraph.load_current_graph()
+
+        # Get direct callers (depth=1)
+        direct_callers = graph.callers(function_id, depth=1)
+
+        # Get indirect callers (depth=2)
+        indirect_callers = graph.callers(function_id, depth=2)
+
+        # Filter out direct callers from indirect list
+        direct_caller_ids = {c['from'] for c in direct_callers}
+        indirect_only = [c for c in indirect_callers if c['from'] not in direct_caller_ids]
+
         return {
             'status': 'ok',
             'function_id': function_id,
             'direct_callers': direct_callers,
-            'indirect_callers': indirect_callers
+            'indirect_callers': indirect_only
         }
     except Exception as e:
         return {
@@ -287,63 +258,36 @@ def build_dependency_graph(
     repository_path: str,
     tool_context: ToolContext
 ) -> dict:
-    """Build module dependency graphs from repository analysis using the graph index."""
+    """Build module dependency graphs using CodeGraph."""
     try:
-        from .navigation_tools import _load_graph_index
-        
-        # Load the graph index
-        graph = _load_graph_index()
-        nodes = graph.get('nodes', [])
-        edges = graph.get('edges', [])
-        
-        # Build dependency graph from edges
+        from .. import codegraph
+
+        graph = codegraph.load_current_graph()
+
+        # Get only module and file nodes
         dependency_nodes = []
+        for node_id, node in graph._nodes.items():
+            if node.get('level') in ('module', 'file'):
+                dependency_nodes.append(node)
+
+        # Get import edges between modules and files
         dependency_edges = []
-        
-        # Group nodes by file to create module-level dependencies
-        file_to_nodes = {}
-        for node in nodes:
-            file_path = node.get('file', '')
-            if file_path:
-                if file_path not in file_to_nodes:
-                    file_to_nodes[file_path] = []
-                file_to_nodes[file_path].append(node)
-        
-        # Create module nodes
-        for file_path, file_nodes in file_to_nodes.items():
-            dependency_nodes.append({
-                'id': f'module.{file_path}',
-                'name': file_path,
-                'type': 'module',
-                'file': file_path
-            })
-        
-        # Create dependency edges based on imports
-        for edge in edges:
+        for edge in graph._raw_data.get('edges', []):
             if edge.get('type') == 'imports':
-                src_node = next((n for n in nodes if n.get('id') == edge.get('src')), None)
-                dst_node = next((n for n in nodes if n.get('id') == edge.get('dst')), None)
-                
-                if src_node and dst_node:
-                    src_file = src_node.get('file', '')
-                    dst_file = dst_node.get('file', '')
-                    
-                    if src_file and dst_file and src_file != dst_file:
-                        dependency_edges.append({
-                            'src': f'module.{src_file}',
-                            'dst': f'module.{dst_file}',
-                            'type': 'dependency',
-                            'kind': 'confirmed'
-                        })
-        
+                src_id = edge.get('src')
+                dst_id = edge.get('dst')
+                # Only include edges between module/file nodes
+                if (src_id in graph._nodes and graph._nodes[src_id].get('level') in ('module', 'file') and
+                    dst_id in graph._nodes and graph._nodes[dst_id].get('level') in ('module', 'file')):
+                    dependency_edges.append(edge)
+
         return {
             'status': 'ok',
             'repository_path': repository_path,
             'nodes': dependency_nodes,
             'edges': dependency_edges,
             'nodes_count': len(dependency_nodes),
-            'edges_count': len(dependency_edges),
-            'note': 'Dependency graph built from graph index imports'
+            'edges_count': len(dependency_edges)
         }
     except Exception as e:
         return {
@@ -807,54 +751,63 @@ def calculate_change_impact(
     element_id: str,
     tool_context: ToolContext
 ) -> dict:
-    """Estimate which components are affected by a change using the graph index."""
+    """Estimate which components are affected by a change using CodeGraph."""
     try:
-        from .navigation_tools import get_call_hierarchy, _load_graph_index, resolve_symbol
-        
-        # Get references to the element from the graph index
-        graph = _load_graph_index()
-        
-        affected_components = []
-        node = resolve_symbol(element_id)
-        
-        if node:
-            symbol_id = node.get('id')
-            symbol_name = node.get('name')
-            
-            # Find all incoming edges (callers)
-            for edge in graph.get('edges', []):
-                if edge.get('dst') == symbol_id:
-                    src_node = resolve_symbol(edge.get('src'))
-                    affected_components.append({
-                        'component': edge.get('src'),
-                        'name': src_node.get('name') if src_node else None,
-                        'file': src_node.get('file') if src_node else None,
-                        'line': edge.get('line'),
-                        'impact_type': 'caller'
-                    })
-            
-            # Find all outgoing edges (callees)
-            for edge in graph.get('edges', []):
-                if edge.get('src') == symbol_id:
-                    dst_node = resolve_symbol(edge.get('dst'))
-                    affected_components.append({
-                        'component': edge.get('dst'),
-                        'name': dst_node.get('name') if dst_node else None,
-                        'file': dst_node.get('file') if dst_node else None,
-                        'line': edge.get('line'),
-                        'impact_type': 'callee'
-                    })
-        
-        # Calculate impact score
-        impact_score = len(affected_components)
-        impact_level = 'low' if impact_score < 5 else 'medium' if impact_score < 15 else 'high'
-        
+        from .. import codegraph
+
+        graph = codegraph.load_current_graph()
+
+        # Resolve the element
+        node = graph.get(element_id)
+        if not node:
+            return {
+                'status': 'not_found',
+                'element_id': element_id,
+                'message': 'Element not found in graph'
+            }
+
+        symbol_id = node['id']
+
+        # Get direct callers (depth=1)
+        direct_callers = graph.callers(symbol_id, depth=1)
+
+        # Get indirect callers (depth up to 6)
+        indirect_callers = graph.callers(symbol_id, depth=6)
+
+        # Filter out direct callers from indirect list
+        direct_caller_ids = {c['from'] for c in direct_callers}
+        indirect_only = [c for c in indirect_callers if c['from'] not in direct_caller_ids]
+
+        # Get covering tests
+        all_affected_ids = {symbol_id} | {c['from'] for c in direct_callers} | {c['from'] for c in indirect_only}
+        covering_tests = graph.covering_tests(list(all_affected_ids))
+
+        # Check if the element itself is tested
+        element_tested = any(symbol_id in test.get('covers', []) for test in covering_tests)
+
+        # Calculate risk level based on indirect caller count and test coverage
+        risk_level = 'low'
+        if len(indirect_only) > 10 or not element_tested:
+            risk_level = 'high'
+        elif len(indirect_only) > 3:
+            risk_level = 'medium'
+
         return {
             'status': 'ok',
             'element_id': element_id,
-            'affected_components': affected_components,
-            'impact_score': impact_score,
-            'impact_level': impact_level
+            'direct_callers': direct_callers,
+            'indirect_callers': indirect_only,
+            'direct_count': len(direct_callers),
+            'indirect_count': len(indirect_only),
+            'total_affected': len(direct_callers) + len(indirect_only),
+            'covering_tests': covering_tests,
+            'untested': not element_tested,
+            'risk_level': risk_level
+        }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
         }
     except Exception as e:
         return {
@@ -869,35 +822,42 @@ def find_all_paths_between_symbols(
     to_id: str,
     tool_context: ToolContext
 ) -> dict:
-    """Find paths connecting two code elements using the graph index."""
+    """Find paths connecting two code elements using CodeGraph."""
     try:
-        from .navigation_tools import get_call_hierarchy, _load_graph_index, resolve_symbol
-        
-        graph = _load_graph_index()
+        from .. import codegraph
+
+        graph = codegraph.load_current_graph()
         paths = []
-        
-        # Check if there's a direct call
-        for edge in graph.get('edges', []):
-            if edge.get('src') == from_id and edge.get('dst') == to_id:
+
+        # BFS to find all paths up to depth 3
+        from collections import deque
+
+        queue = deque([(from_id, [from_id])])
+        visited = set()
+
+        while queue:
+            current, path = queue.popleft()
+
+            if current == to_id:
                 paths.append({
-                    'path': [from_id, to_id],
-                    'type': 'direct_call',
-                    'kind': edge.get('kind')
+                    'path': path,
+                    'type': 'call_chain'
                 })
-        
-        # If no direct path, try indirect (depth 2)
-        if not paths:
-            for edge1 in graph.get('edges', []):
-                if edge1.get('src') == from_id:
-                    intermediate = edge1.get('dst')
-                    for edge2 in graph.get('edges', []):
-                        if edge2.get('src') == intermediate and edge2.get('dst') == to_id:
-                            paths.append({
-                                'path': [from_id, intermediate, to_id],
-                                'type': 'indirect_call',
-                                'kind': edge2.get('kind')
-                            })
-        
+                continue
+
+            if len(path) > 3:  # Limit depth
+                continue
+
+            if current in visited:
+                continue
+            visited.add(current)
+
+            # Get outgoing calls
+            callees = graph.callees(current, depth=1)
+            for callee in callees:
+                next_id = callee['to']
+                queue.append((next_id, path + [next_id]))
+
         return {
             'status': 'ok',
             'from_id': from_id,
@@ -914,30 +874,52 @@ def find_all_paths_between_symbols(
 
 @safe
 def find_dependents(component_id: str, tool_context: ToolContext) -> dict:
-    """Find components depending on a selected component using the graph index."""
+    """Find components depending on a selected component using CodeGraph."""
     try:
-        from .navigation_tools import _load_graph_index, resolve_symbol
-        
-        graph = _load_graph_index()
+        from .. import codegraph
+
+        graph = codegraph.load_current_graph()
+
+        # Resolve the component ID
+        node = graph.get(component_id)
+        if not node:
+            return {
+                'status': 'not_found',
+                'component_id': component_id,
+                'message': 'Component not found in graph'
+            }
+
+        symbol_id = node['id']
+
+        # Get incoming edges (callers and dependents)
         dependents = []
-        
-        # Find all nodes that reference this component
-        node = resolve_symbol(component_id)
-        if node:
-            symbol_id = node.get('id')
-            
-            # Find incoming edges (things that depend on this)
-            for edge in graph.get('edges', []):
-                if edge.get('dst') == symbol_id:
-                    src_node = resolve_symbol(edge.get('src'))
-                    dependents.append({
-                        'component': edge.get('src'),
-                        'name': src_node.get('name') if src_node else None,
-                        'file': src_node.get('file') if src_node else None,
-                        'line': edge.get('line'),
-                        'type': 'dependency'
-                    })
-        
+
+        # Add callers (via calls edges)
+        callers = graph.callers(symbol_id, depth=1)
+        for caller in callers:
+            caller_node = graph.get(caller['from'])
+            dependents.append({
+                'component': caller['from'],
+                'name': caller_node['name'] if caller_node else None,
+                'file': caller.get('file'),
+                'line': caller.get('line'),
+                'type': 'call',
+                'kind': caller.get('kind')
+            })
+
+        # Add dependencies (via imports edges)
+        for edge in graph._inn.get(symbol_id, []):
+            if edge['type'] == 'imports':
+                dep_node = graph.get(edge['src'])
+                dependents.append({
+                    'component': edge['src'],
+                    'name': dep_node['name'] if dep_node else None,
+                    'file': edge.get('file'),
+                    'line': edge.get('line'),
+                    'type': 'import',
+                    'kind': edge.get('kind')
+                })
+
         return {
             'status': 'ok',
             'component_id': component_id,

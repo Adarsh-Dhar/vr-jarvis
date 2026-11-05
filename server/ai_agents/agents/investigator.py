@@ -29,12 +29,17 @@ Process:
 
 Rules:
 - Only state that a function exists, calls something or does something if a tool result shows it.
-- If a link has edge_kind inferred, label it inferred in your answer. Never present it as confirmed.
+- If a link has edge's "kind" field:
+  - "confirmed": statically verified (e.g., direct function call, explicit import)
+  - "likely": high confidence but not fully verified (e.g., method dispatch, name-based resolution)
+  - "unresolved": ambiguous or dynamic (e.g., reflection, callbacks, runtime dispatch)
+  - "runtime_observed": observed during execution tracing
+  - Always label claims with the appropriate provenance in your answer., label it inferred in your answer. Never present it as confirmed.
 - If you cannot find evidence, say so plainly and set confidence to uncertain.
 
 Return a JSON object with these keys:
 - answer: a short plain-language explanation, at most four sentences
-- claims: a list of objects, each with text, node_ids (a list) and confidence (confirmed, inferred or uncertain)
+- claims: a list of objects, each with text, node_ids (a list) and confidence (confirmed, likely, unresolved, runtime_observed, or uncertain)
 - evidence_nodes: every node id you relied on
 '''
 

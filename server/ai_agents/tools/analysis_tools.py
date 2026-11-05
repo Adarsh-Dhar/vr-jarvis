@@ -288,60 +288,146 @@ def resolve_references(file_path: str, tool_context: ToolContext) -> dict:
 
 @safe
 def analyze_control_flow(function_name: str, tool_context: ToolContext) -> dict:
-    """Generate control-flow information."""
+    """Generate control-flow information with basic blocks for Python functions."""
     try:
-        # Find the function definition
         from .navigation_tools import get_symbol_definition
+        from .. import codegraph
+
+        # Find the function definition
         def_result = get_symbol_definition(function_name, tool_context)
-        
+
         if def_result.get('status') != 'ok':
             return {
                 'status': 'not_found',
                 'function_name': function_name,
                 'message': 'Function definition not found'
             }
-        
+
         file_path = def_result['definition']['file']
-        
+        start_line = def_result['definition'].get('start', 0)
+        end_line = def_result['definition'].get('end', 0)
+
         if not _is_python_file(file_path):
             return {
                 'status': 'not_applicable',
                 'function_name': function_name,
                 'message': 'Control flow analysis only implemented for Python'
             }
-        
+
         tree = _parse_python_ast(file_path)
         if not tree:
             return {
                 'status': 'error',
                 'error': 'Could not parse file'
             }
-        
-        branches = []
-        loops = []
-        
+
+        # Find the function node
+        func_node = None
         for node in ast.walk(tree):
             if isinstance(node, ast.FunctionDef) and node.name == function_name:
-                for child in ast.walk(node):
-                    if isinstance(child, ast.If):
-                        branches.append({
-                            'condition': 'if statement',
-                            'line': child.lineno
-                        })
-                    elif isinstance(child, (ast.For, ast.While)):
-                        loops.append({
-                            'type': 'for' if isinstance(child, ast.For) else 'while',
-                            'line': child.lineno
-                        })
+                func_node = node
                 break
-        
+
+        if not func_node:
+            return {
+                'status': 'not_found',
+                'function_name': function_name,
+                'message': 'Function not found in AST'
+            }
+
+        # Build basic blocks
+        blocks = []
+        edges = []
+        block_id_counter = 0
+
+        def create_block(start_line, end_line, label, block_type='sequence'):
+            nonlocal block_id_counter
+            block_id = f"{function_name}#B{block_id_counter}"
+            block_id_counter += 1
+            return {
+                'id': block_id,
+                'start': start_line,
+                'end': end_line,
+                'label': label,
+                'type': block_type,
+                'file': file_path
+            }
+
+        # Entry block
+        entry_block = create_block(func_node.lineno, func_node.lineno, 'entry', 'entry')
+        blocks.append(entry_block)
+
+        # Process function body
+        for stmt in func_node.body:
+            if isinstance(stmt, ast.If):
+                # Create blocks for if-else
+                condition_line = stmt.lineno
+                if_block = create_block(condition_line, condition_line, f'if condition', 'condition')
+                blocks.append(if_block)
+
+                # Process if body
+                if stmt.body:
+                    then_start = stmt.body[0].lineno
+                    then_end = stmt.body[-1].end_lineno if stmt.body[-1].end_lineno else then_start
+                    then_block = create_block(then_start, then_end, 'then branch', 'sequence')
+                    blocks.append(then_block)
+                    edges.append({'src': if_block['id'], 'dst': then_block['id'], 'type': 'controlflow', 'kind': 'confirmed', 'edge_type': 'true'})
+
+                # Process else body
+                if stmt.orelse:
+                    else_start = stmt.orelse[0].lineno
+                    else_end = stmt.orelse[-1].end_lineno if stmt.orelse[-1].end_lineno else else_start
+                    else_block = create_block(else_start, else_end, 'else branch', 'sequence')
+                    blocks.append(else_block)
+                    edges.append({'src': if_block['id'], 'dst': else_block['id'], 'type': 'controlflow', 'kind': 'confirmed', 'edge_type': 'false'})
+
+            elif isinstance(stmt, (ast.For, ast.While)):
+                # Create blocks for loops
+                loop_type = 'for' if isinstance(stmt, ast.For) else 'while'
+                condition_line = stmt.lineno
+                loop_block = create_block(condition_line, condition_line, f'{loop_type} condition', 'loop')
+                blocks.append(loop_block)
+
+                # Process loop body
+                if stmt.body:
+                    body_start = stmt.body[0].lineno
+                    body_end = stmt.body[-1].end_lineno if stmt.body[-1].end_lineno else body_start
+                    body_block = create_block(body_start, body_end, 'loop body', 'sequence')
+                    blocks.append(body_block)
+                    edges.append({'src': loop_block['id'], 'dst': body_block['id'], 'type': 'controlflow', 'kind': 'confirmed', 'edge_type': 'loop'})
+
+            elif isinstance(stmt, ast.Return):
+                return_block = create_block(stmt.lineno, stmt.lineno, 'return', 'return')
+                blocks.append(return_block)
+
+            elif isinstance(stmt, ast.Raise):
+                raise_block = create_block(stmt.lineno, stmt.lineno, 'raise', 'exception')
+                blocks.append(raise_block)
+
+            elif isinstance(stmt, ast.Try):
+                # Create blocks for try-except
+                try_start = stmt.lineno
+                try_end = stmt.body[-1].end_lineno if stmt.body else try_start
+                try_block = create_block(try_start, try_end, 'try block', 'sequence')
+                blocks.append(try_block)
+
+                for handler in stmt.handlers:
+                    except_start = handler.lineno
+                    except_end = handler.body[-1].end_lineno if handler.body else except_start
+                    except_block = create_block(except_start, except_end, f'except {handler.type}', 'exception')
+                    blocks.append(except_block)
+                    edges.append({'src': try_block['id'], 'dst': except_block['id'], 'type': 'controlflow', 'kind': 'confirmed', 'edge_type': 'exception'})
+
+        # Link entry to first block
+        if len(blocks) > 1:
+            edges.append({'src': entry_block['id'], 'dst': blocks[1]['id'], 'type': 'controlflow', 'kind': 'confirmed', 'edge_type': 'next'})
+
         return {
             'status': 'ok',
             'function_name': function_name,
-            'control_flow': {
-                'branches': branches,
-                'loops': loops
-            }
+            'blocks': blocks,
+            'edges': edges,
+            'block_count': len(blocks)
         }
     except Exception as e:
         return {
@@ -446,6 +532,39 @@ def analyze_code_complexity(file_path: str, tool_context: ToolContext) -> dict:
             'status': 'error',
             'error': str(e)
         }
+
+
+@safe
+def analyze_repo_complexity(tool_context: ToolContext) -> dict:
+    """Calculate complexity ranking across the repository."""
+    try:
+        from .. import codegraph
+        
+        graph = codegraph.load_current_graph()
+        
+        complexities = []
+        for node_id, node in graph._nodes.items():
+            if node.get('level') == 'function':
+                file_path = node.get('file', '')
+                complexity_result = analyze_code_complexity(file_path, tool_context)
+                if complexity_result.get('status') == 'ok':
+                    complexities.append({
+                        'id': node_id,
+                        'name': node.get('name'),
+                        'cyclomatic': complexity_result['complexity']['cyclomatic'],
+                        'lines_of_code': complexity_result['complexity']['lines_of_code']
+                    })
+        
+        # Sort by cyclomatic complexity
+        complexities.sort(key=lambda x: x['cyclomatic'], reverse=True)
+        
+        return {
+            'status': 'ok',
+            'complexities': complexities[:50],  # Top 50 most complex
+            'total_functions': len(complexities)
+        }
+    except Exception as e:
+        return {'status': 'error', 'error': str(e)}
 
 
 @safe

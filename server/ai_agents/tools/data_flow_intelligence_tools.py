@@ -6,48 +6,489 @@ Understand how data moves through the entire application.
 from typing import Optional, List, Dict, Any
 from google.adk.tools import ToolContext
 from ._safe import safe
+import ast
+
+
+def _is_python_file(file_path: str) -> bool:
+    return file_path.endswith('.py')
+
+
+def _parse_python_ast(file_path: str) -> Optional[ast.AST]:
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        return ast.parse(content)
+    except Exception:
+        return None
+
+
+class DefUseAnalyzer(ast.NodeVisitor):
+    """AST visitor to collect definition-use chains within a function."""
+    
+    def __init__(self):
+        self.definitions = {}  # variable -> {line, type}
+        self.uses = []  # list of {variable, line, type}
+        self.def_use_edges = []  # list of {from_var, to_var, line, kind}
+    
+    def visit_Assign(self, node):
+        for target in node.targets:
+            if isinstance(target, ast.Name):
+                self.definitions[target.id] = {'line': node.lineno, 'type': 'assignment'}
+                # Check if RHS is a variable (creating a data flow edge)
+                if isinstance(node.value, ast.Name):
+                    self.def_use_edges.append({
+                        'from': node.value.id,
+                        'to': target.id,
+                        'line': node.lineno,
+                        'kind': 'assignment'
+                    })
+        self.generic_visit(node)
+    
+    def visit_AugAssign(self, node):
+        if isinstance(node.target, ast.Name):
+            self.definitions[node.target.id] = {'line': node.lineno, 'type': 'augmented_assignment'}
+            if isinstance(node.value, ast.Name):
+                self.def_use_edges.append({
+                    'from': node.value.id,
+                    'to': node.target.id,
+                    'line': node.lineno,
+                    'kind': 'augmented'
+                })
+        self.generic_visit(node)
+    
+    def visit_Name(self, node):
+        if isinstance(node.ctx, ast.Load):
+            self.uses.append({'variable': node.id, 'line': node.lineno, 'type': 'load'})
+        self.generic_visit(node)
+    
+    def visit_Call(self, node):
+        # Track arguments passed to function calls
+        if isinstance(node.func, ast.Name):
+            func_name = node.func.id
+            for i, arg in enumerate(node.args):
+                if isinstance(arg, ast.Name):
+                    self.def_use_edges.append({
+                        'from': arg.id,
+                        'to': f'{func_name}_param_{i}',
+                        'line': node.lineno,
+                        'kind': 'call_argument'
+                    })
+        self.generic_visit(node)
+    
+    def visit_Return(self, node):
+        if node.value and isinstance(node.value, ast.Name):
+            self.def_use_edges.append({
+                'from': node.value.id,
+                'to': 'return_value',
+                'line': node.lineno,
+                'kind': 'return'
+            })
+        self.generic_visit(node)
 
 
 @safe
 def trace_variable_origin(variable_id: str, tool_context: ToolContext) -> dict:
-    """Find where a variable's value originates."""
+    """Find where a variable's value originates using def-use analysis."""
     try:
         from .navigation_tools import get_symbol_definition
-        from .repository_tools import search_code
+        from .. import codegraph
         
-        # Find definition
-        def_result = get_symbol_definition(variable_id, tool_context)
+        # Parse variable_id as function:variable
+        if ':' not in variable_id:
+            return {
+                'status': 'error',
+                'error': 'Variable ID must be in format function:variable'
+            }
         
-        if def_result.get('status') == 'ok':
-            definition = def_result['definition']
+        function_name, variable_name = variable_id.split(':', 1)
+        
+        # Get function definition
+        def_result = get_symbol_definition(function_name, tool_context)
+        if def_result.get('status') != 'ok':
+            return def_result
+        
+        file_path = def_result['definition']['file']
+        start_line = def_result['definition'].get('start', 0)
+        end_line = def_result['definition'].get('end', 0)
+        
+        if not _is_python_file(file_path):
+            return {
+                'status': 'not_applicable',
+                'message': 'Data flow analysis only implemented for Python'
+            }
+        
+        tree = _parse_python_ast(file_path)
+        if not tree:
+            return {
+                'status': 'error',
+                'error': 'Could not parse file'
+            }
+        
+        # Find the function node
+        func_node = None
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef) and node.name == function_name:
+                func_node = node
+                break
+        
+        if not func_node:
+            return {
+                'status': 'not_found',
+                'message': f'Function {function_name} not found'
+            }
+        
+        # Run def-use analysis
+        analyzer = DefUseAnalyzer()
+        analyzer.visit(func_node)
+        
+        # Find where variable is defined
+        if variable_name in analyzer.definitions:
+            origin = analyzer.definitions[variable_name]
             return {
                 'status': 'ok',
                 'variable_id': variable_id,
                 'origin': {
-                    'file': definition.get('file'),
-                    'line': definition.get('line'),
-                    'type': definition.get('symbol_type')
+                    'file': file_path,
+                    'line': origin['line'],
+                    'type': origin['type']
                 }
             }
         
-        # Fallback to code search
-        search_result = search_code(tool_context, query=f'{variable_id} =')
-        if search_result.get('status') == 'ok' and search_result.get('matches'):
-            first_match = search_result['matches'][0]
-            return {
-                'status': 'ok',
-                'variable_id': variable_id,
-                'origin': {
-                    'file': first_match.get('file'),
-                    'line': first_match.get('line'),
-                    'snippet': first_match.get('snippet')
+        # Check if it's a parameter
+        for arg in func_node.args.args:
+            if arg.arg == variable_name:
+                return {
+                    'status': 'ok',
+                    'variable_id': variable_id,
+                    'origin': {
+                        'file': file_path,
+                        'line': func_node.lineno,
+                        'type': 'parameter'
+                    }
                 }
-            }
         
         return {
             'status': 'not_found',
             'variable_id': variable_id,
-            'message': 'Variable origin not found'
+            'message': f'Variable {variable_name} not found in function {function_name}'
+        }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
+
+
+@safe
+def trace_variable_usage(variable_id: str, tool_context: ToolContext) -> dict:
+    """Find where a variable is used using def-use analysis."""
+    try:
+        from .navigation_tools import get_symbol_definition
+        
+        if ':' not in variable_id:
+            return {
+                'status': 'error',
+                'error': 'Variable ID must be in format function:variable'
+            }
+        
+        function_name, variable_name = variable_id.split(':', 1)
+        
+        def_result = get_symbol_definition(function_name, tool_context)
+        if def_result.get('status') != 'ok':
+            return def_result
+        
+        file_path = def_result['definition']['file']
+        
+        if not _is_python_file(file_path):
+            return {
+                'status': 'not_applicable',
+                'message': 'Data flow analysis only implemented for Python'
+            }
+        
+        tree = _parse_python_ast(file_path)
+        if not tree:
+            return {
+                'status': 'error',
+                'error': 'Could not parse file'
+            }
+        
+        func_node = None
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef) and node.name == function_name:
+                func_node = node
+                break
+        
+        if not func_node:
+            return {
+                'status': 'not_found',
+                'message': f'Function {function_name} not found'
+            }
+        
+        analyzer = DefUseAnalyzer()
+        analyzer.visit(func_node)
+        
+        # Find all uses of the variable
+        uses = [u for u in analyzer.uses if u['variable'] == variable_name]
+        
+        return {
+            'status': 'ok',
+            'variable_id': variable_id,
+            'uses': uses,
+            'use_count': len(uses)
+        }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
+
+
+# Taint sources and sinks
+TAINT_SOURCES = [
+    'request.json', 'request.args', 'request.form', 'request.data',
+    'input()', 'sys.argv', 'os.environ', 'open(',
+    'getattr(', 'getattr(', '__dict__', '__getattribute__'
+]
+
+TAINT_SINKS = [
+    'execute(', 'exec(', 'eval(', 'compile(',
+    'subprocess.', 'os.system(', 'os.popen(',
+    'open(', 'file.write(', 'logging.', 'print(',
+    'requests.', 'urllib.', 'http.'
+]
+
+
+@safe
+def trace_taint_flow(source_id: str, tool_context: ToolContext) -> dict:
+    """Trace taint from source to sinks with provenance."""
+    try:
+        from .navigation_tools import get_symbol_definition
+        
+        def_result = get_symbol_definition(source_id, tool_context)
+        if def_result.get('status') != 'ok':
+            return def_result
+        
+        file_path = def_result['definition']['file']
+        
+        if not _is_python_file(file_path):
+            return {
+                'status': 'not_applicable',
+                'message': 'Taint analysis only implemented for Python'
+            }
+        
+        tree = _parse_python_ast(file_path)
+        if not tree:
+            return {
+                'status': 'error',
+                'error': 'Could not parse file'
+            }
+        
+        # Find all potential sources and sinks
+        sources = []
+        sinks = []
+        paths = []
+        
+        for node in ast.walk(tree):
+            # Check for sources
+            if isinstance(node, ast.Call):
+                if isinstance(node.func, ast.Attribute):
+                    call_str = f'{node.func.value.id}.{node.func.attr}' if isinstance(node.func.value, ast.Name) else ''
+                    if any(s in call_str for s in TAINT_SOURCES):
+                        sources.append({
+                            'line': node.lineno,
+                            'call': call_str,
+                            'kind': 'source'
+                        })
+                elif isinstance(node.func, ast.Name):
+                    if node.func.id in TAINT_SOURCES:
+                        sources.append({
+                            'line': node.lineno,
+                            'call': node.func.id,
+                            'kind': 'source'
+                        })
+                
+                # Check for sinks
+                if isinstance(node.func, ast.Attribute):
+                    call_str = f'{node.func.value.id}.{node.func.attr}' if isinstance(node.func.value, ast.Name) else ''
+                    if any(s in call_str for s in TAINT_SINKS):
+                        sinks.append({
+                            'line': node.lineno,
+                            'call': call_str,
+                            'kind': 'sink'
+                        })
+                elif isinstance(node.func, ast.Name):
+                    if node.func.id in TAINT_SINKS:
+                        sinks.append({
+                            'line': node.lineno,
+                            'call': node.func.id,
+                            'kind': 'sink'
+                        })
+        
+        # Build simple paths (source -> sink if in same function)
+        for source in sources:
+            for sink in sinks:
+                if source['line'] < sink['line']:
+                    paths.append({
+                        'source': source,
+                        'sink': sink,
+                        'kind': 'likely'
+                    })
+        
+        return {
+            'status': 'ok',
+            'source_id': source_id,
+            'sources': sources,
+            'sinks': sinks,
+            'paths': paths,
+            'path_count': len(paths)
+        }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
+
+
+@safe
+def visualize_data_flow(variable_id: str, tool_context: ToolContext) -> dict:
+    """Visualize data flow using graph emission."""
+    try:
+        from .data_flow_intelligence_tools import trace_variable_origin, trace_variable_usage
+        from .visualization_spatial_tools import _emit_command
+        
+        # Get origin and usage
+        origin_result = trace_variable_origin(variable_id, tool_context)
+        usage_result = trace_variable_usage(variable_id, tool_context)
+        
+        # Build graph nodes
+        nodes = []
+        edges = []
+        
+        if origin_result.get('status') == 'ok':
+            origin = origin_result['origin']
+            nodes.append({
+                'id': f'{variable_id}_origin',
+                'name': 'origin',
+                'file': origin['file'],
+                'start': origin['line'],
+                'end': origin['line'],
+                'level': 'variable',
+                'kind': 'origin'
+            })
+        
+        nodes.append({
+            'id': variable_id,
+            'name': variable_id.split(':')[1] if ':' in variable_id else variable_id,
+            'level': 'variable',
+            'kind': 'variable'
+        })
+        
+        if usage_result.get('status') == 'ok':
+            for i, use in enumerate(usage_result.get('uses', [])):
+                nodes.append({
+                    'id': f'{variable_id}_use_{i}',
+                    'name': f'use_{i}',
+                    'level': 'variable',
+                    'kind': 'use',
+                    'line': use['line']
+                })
+                edges.append({
+                    'src': variable_id,
+                    'dst': f'{variable_id}_use_{i}',
+                    'type': 'dataflow',
+                    'kind': 'confirmed',
+                    'line': use['line']
+                })
+        
+        # Emit graph
+        _emit_command(tool_context, 'show_graph',
+                     nodes=nodes,
+                     edges=edges,
+                     title=f'Data Flow: {variable_id}')
+        
+        return {
+            'status': 'ok',
+            'variable_id': variable_id,
+            'node_count': len(nodes),
+            'edge_count': len(edges)
+        }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
+
+
+@safe
+def identify_data_leaks(tool_context: ToolContext) -> dict:
+    """Identify potential data leaks (sensitive data reaching sinks)."""
+    try:
+        from .data_flow_intelligence_tools import trace_taint_flow
+        from .. import codegraph
+        
+        graph = codegraph.load_current_graph()
+        
+        leaks = []
+        
+        # Check each function for potential leaks
+        for node_id, node in graph._nodes.items():
+            if node.get('level') == 'function':
+                taint_result = trace_taint_flow(node_id, tool_context)
+                if taint_result.get('status') == 'ok':
+                    # Check if sensitive names reach sinks
+                    for path in taint_result.get('paths', []):
+                        sink_call = path['sink']['call']
+                        if any(sensitive in sink_call.lower() for sensitive in ['log', 'print', 'request', 'http']):
+                            leaks.append({
+                                'function': node_id,
+                                'sink': sink_call,
+                                'line': path['sink']['line'],
+                                'kind': 'likely'
+                            })
+        
+        return {
+            'status': 'ok',
+            'leaks': leaks,
+            'leak_count': len(leaks)
+        }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
+
+
+@safe
+def identify_data_validation_gaps(tool_context: ToolContext) -> dict:
+    """Identify validation gaps (data from sources not validated before use)."""
+    try:
+        from .data_flow_intelligence_tools import trace_taint_flow
+        from .. import codegraph
+        
+        graph = codegraph.load_current_graph()
+        
+        gaps = []
+        
+        for node_id, node in graph._nodes.items():
+            if node.get('level') == 'function':
+                taint_result = trace_taint_flow(node_id, tool_context)
+                if taint_result.get('status') == 'ok':
+                    sources = taint_result.get('sources', [])
+                    sinks = taint_result.get('sinks', [])
+                    
+                    # If we have sources but no validation before sinks
+                    if sources and sinks:
+                        gaps.append({
+                            'function': node_id,
+                            'sources': len(sources),
+                            'sinks': len(sinks),
+                            'kind': 'likely'
+                        })
+        
+        return {
+            'status': 'ok',
+            'gaps': gaps,
+            'gap_count': len(gaps)
         }
     except Exception as e:
         return {
