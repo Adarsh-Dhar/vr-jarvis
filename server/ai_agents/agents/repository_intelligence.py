@@ -43,6 +43,7 @@ def build_repository_intelligence_agent() -> LlmAgent:
         output_key="result_repository",
         permission_ceiling="read",
         description="Analyzes repository structure, languages, frameworks, and changes",
+        skills=["repository_architecture", "repository_browser"],
     )
 
     agent = make_specialist(spec)

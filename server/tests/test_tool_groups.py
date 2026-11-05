@@ -48,14 +48,22 @@ def test_id_round_trip(test_graph):
     graph = codegraph.load_current_graph()
     
     # Test that a known node ID can be retrieved if present
+    # Try both old format (eutro.data.make_dataset) and new format (eutro/data.py::make_dataset)
     node = graph.get('eutro.data.make_dataset')
+    if not node:
+        node = graph.get('eutro/data.py::make_dataset')
+    
     if node:
-        assert node['id'] == 'eutro.data.make_dataset'
+        # Accept either old or new ID format
+        assert node['id'] in ['eutro.data.make_dataset', 'eutro/data.py::make_dataset']
     else:
         print("Node not found - expected for non-activated graphs")
     
-    # Test module node
+    # Test module node - try both old and new format
     module_node = graph.get('module.eutro')
+    if not module_node:
+        module_node = graph.get('module::eutro')
+    
     if not module_node:
         # Check if there are any module nodes
         modules = [n for n in graph._nodes.values() if n.get('level') == 'module']

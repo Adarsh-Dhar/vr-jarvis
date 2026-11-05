@@ -581,7 +581,7 @@ def index_repository(repository_path: str, tool_context: ToolContext) -> dict:
     """Index repository: build its code graph and make it the active repository.
     Accepts '.' to mean the currently active repository."""
     try:
-        from ..repository import activate
+        from ..intelligence.graph_engine.store import activate
         from .. import config
         
         # '.' means use the currently active repository
@@ -614,7 +614,7 @@ def incremental_index_repository(repository_path: str, tool_context: ToolContext
     """Re-index the repository (full rebuild until true incremental indexing exists).
     Accepts '.' to mean the currently active repository."""
     try:
-        from ..repository import activate
+        from ..intelligence.graph_engine.store import activate
         from .. import config
         
         # '.' means use the currently active repository

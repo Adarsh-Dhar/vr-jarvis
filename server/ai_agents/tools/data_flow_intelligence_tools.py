@@ -90,7 +90,7 @@ class DefUseAnalyzer(ast.NodeVisitor):
 def trace_variable_origin(variable_id: str, tool_context: ToolContext) -> dict:
     """Find where a variable's value originates using def-use analysis."""
     try:
-        from .. import codegraph
+        from ..intelligence.graph_engine.codegraph import codegraph
         
         # Parse variable_id as function:variable
         if ':' not in variable_id:
@@ -99,7 +99,7 @@ def trace_variable_origin(variable_id: str, tool_context: ToolContext) -> dict:
                 'error': 'Variable ID must be in format function:variable'
             }
         
-        function_name, variable_name = variable_id.split(':', 1)
+        function_name, variable_name = variable_id.split('#', 1)
         
         # Use CodeGraph to resolve the function
         graph = codegraph.load_current_graph()
@@ -190,7 +190,7 @@ def trace_variable_origin(variable_id: str, tool_context: ToolContext) -> dict:
 def trace_variable_usage(variable_id: str, tool_context: ToolContext) -> dict:
     """Find where a variable is used using def-use analysis."""
     try:
-        from .. import codegraph
+        from ..intelligence.graph_engine.codegraph import codegraph
         
         if ':' not in variable_id:
             return {
@@ -198,7 +198,7 @@ def trace_variable_usage(variable_id: str, tool_context: ToolContext) -> dict:
                 'error': 'Variable ID must be in format function:variable'
             }
         
-        function_name, variable_name = variable_id.split(':', 1)
+        function_name, variable_name = variable_id.split('#', 1)
         
         # Use CodeGraph to resolve the function
         graph = codegraph.load_current_graph()
@@ -402,7 +402,7 @@ def visualize_data_flow(variable_id: str, tool_context: ToolContext) -> dict:
         
         nodes.append({
             'id': variable_id,
-            'name': variable_id.split(':')[1] if ':' in variable_id else variable_id,
+            'name': variable_id.split('#')[1] if '#' in variable_id else variable_id,
             'level': 'variable',
             'kind': 'variable'
         })
@@ -450,7 +450,7 @@ def identify_data_leaks(tool_context: ToolContext) -> dict:
     """Identify potential data leaks (sensitive data reaching sinks)."""
     try:
         from .data_flow_intelligence_tools import trace_taint_flow
-        from .. import codegraph
+        from ..intelligence.graph_engine.codegraph import codegraph
         
         graph = codegraph.load_current_graph()
         
@@ -489,7 +489,7 @@ def identify_data_validation_gaps(tool_context: ToolContext) -> dict:
     """Identify validation gaps (data from sources not validated before use)."""
     try:
         from .data_flow_intelligence_tools import trace_taint_flow
-        from .. import codegraph
+        from ..intelligence.graph_engine.codegraph import codegraph
         
         graph = codegraph.load_current_graph()
         

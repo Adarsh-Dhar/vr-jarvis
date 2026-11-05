@@ -170,7 +170,7 @@ def visualize_git_history(
     """Visualize git history with churn and author overlays."""
     try:
         from .visualization_spatial_tools import _emit_command
-        from .. import codegraph
+        from ..intelligence.graph_engine.codegraph import codegraph
         
         path = Path(repository_path)
         if not path.is_absolute():

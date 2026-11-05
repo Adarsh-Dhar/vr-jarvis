@@ -1,0 +1,130 @@
+{
+  "callgraph_shop": {
+    "description": "Expected call edges for the callgraph_shop fixture",
+    "nodes": [
+      {
+        "id": "authentication.py::validate",
+        "name": "validate",
+        "file": "authentication.py",
+        "line": 5
+      },
+      {
+        "id": "payments.py::validate",
+        "name": "validate",
+        "file": "payments.py",
+        "line": 27
+      },
+      {
+        "id": "orders.py::validate",
+        "name": "validate",
+        "file": "orders.py",
+        "line": 5
+      },
+      {
+        "id": "payments.py::Payment.process",
+        "name": "process",
+        "file": "payments.py",
+        "line": 9
+      },
+      {
+        "id": "payments.py::CardPayment.process",
+        "name": "process",
+        "file": "payments.py",
+        "line": 16
+      },
+      {
+        "id": "payments.py::UpiPayment.process",
+        "name": "process",
+        "file": "payments.py",
+        "line": 23
+      },
+      {
+        "id": "main.py::checkout",
+        "name": "checkout",
+        "file": "main.py",
+        "line": 6
+      },
+      {
+        "id": "main.py::twice",
+        "name": "twice",
+        "file": "main.py",
+        "line": 24
+      },
+      {
+        "id": "main.py::recursive",
+        "name": "recursive",
+        "file": "main.py",
+        "line": 29
+      },
+      {
+        "id": "main.py::fetch_data",
+        "name": "fetch_data",
+        "file": "main.py",
+        "line": 37
+      }
+    ],
+    "edges": [
+      {
+        "src": "main.py::checkout",
+        "dst": "payments.py::validate",
+        "line": 12,
+        "expression": "validate(\"pay123\")",
+        "resolution": "static_resolved",
+        "reason": "Direct call, prefer payments.validate in same file group"
+      },
+      {
+        "src": "main.py::checkout",
+        "dst": "authentication.py::validate",
+        "line": 15,
+        "expression": "auth_validate(\"token123\")",
+        "resolution": "static_resolved",
+        "reason": "Explicit alias to authentication.validate"
+      },
+      {
+        "src": "main.py::checkout",
+        "dst": "orders.py::validate",
+        "line": 18,
+        "expression": "validate_order(\"order123\")",
+        "resolution": "static_resolved",
+        "reason": "Explicit alias to orders.validate"
+      },
+      {
+        "src": "main.py::checkout",
+        "dst": "payments.py::CardPayment.process",
+        "line": 22,
+        "expression": "payment.process(amount)",
+        "resolution": "polymorphic",
+        "reason": "Method call on typed receiver (CardPayment), also candidates in Payment and UpiPayment",
+        "candidates": [
+          "payments.py::Payment.process",
+          "payments.py::CardPayment.process",
+          "payments.py::UpiPayment.process"
+        ]
+      },
+      {
+        "src": "main.py::checkout",
+        "dst": "payments.py::validate",
+        "line": 25,
+        "expression": "validate(\"pay456\")",
+        "resolution": "static_resolved",
+        "reason": "Second call to validate, should resolve to same target (payments.validate)"
+      },
+      {
+        "src": "main.py::recursive",
+        "dst": "payments.py::validate",
+        "line": 35,
+        "expression": "validate(f\"rec_{n}\")",
+        "resolution": "static_resolved",
+        "reason": "Recursive call to validate"
+      },
+      {
+        "src": "main.py::fetch_data",
+        "dst": "external",
+        "line": 39,
+        "expression": "requests.get(url)",
+        "resolution": "external",
+        "reason": "Call to external library (requests) outside repository"
+      }
+    ]
+  }
+}

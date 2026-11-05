@@ -42,6 +42,7 @@ def build_relationship_intelligence_agent() -> LlmAgent:
         output_key="result_relationship",
         permission_ceiling="read",
         description="Analyzes code relationships, dependencies, and change impact",
+        skills=["function_call_graph", "dependency_graph", "change_impact"],
     )
 
     agent = make_specialist(spec)

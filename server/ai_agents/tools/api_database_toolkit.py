@@ -27,7 +27,7 @@ def discover_api_endpoints(
     """Find application endpoints - only real route definitions, not all pattern matches."""
     try:
         from .repository_tools import search_code
-        from .. import codegraph
+        from ..intelligence.graph_engine.codegraph import codegraph
 
         graph = codegraph.load_current_graph()
 

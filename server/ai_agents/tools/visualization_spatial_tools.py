@@ -865,7 +865,7 @@ def visualize_dependency_graph(
 ) -> dict:
     """Visualize dependency graph using CodeGraph and emit_graph."""
     try:
-        from .. import codegraph
+        from ..intelligence.graph_engine.codegraph import codegraph
 
         graph = codegraph.load_current_graph()
 
@@ -1036,7 +1036,7 @@ def visualize_architecture(
 ) -> dict:
     """Visualize architecture using CodeGraph with real module/file nodes."""
     try:
-        from .. import codegraph
+        from ..intelligence.graph_engine.codegraph import codegraph
 
         graph = codegraph.load_current_graph()
 
@@ -1238,7 +1238,7 @@ def visualize_security_flow(
     try:
         from .security_quality_tools import scan_vulnerabilities
         from .data_flow_intelligence_tools import trace_taint_flow
-        from .. import codegraph
+        from ..intelligence.graph_engine.codegraph import codegraph
 
         graph = codegraph.load_current_graph()
         node = graph.get(component_id)
@@ -1350,7 +1350,7 @@ def visualize_test_coverage(
     """Visualize test coverage with overlays."""
     try:
         from .testing_verification_tools import measure_test_coverage
-        from .. import codegraph
+        from ..intelligence.graph_engine.codegraph import codegraph
 
         coverage_result = measure_test_coverage(repository_path, tool_context)
         

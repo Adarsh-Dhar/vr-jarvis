@@ -1,0 +1,11 @@
+id: dependency_graph
+name: Dependency Graph
+version: 1.0.0
+owner: relationship_intelligence
+status: implemented
+supported_languages: [python, typescript]
+capabilities: [build_dependency_graph, visualize_dependency_graph, find_circular_dependencies, find_dependents]
+dependencies:
+  tools: [build_dependency_graph, visualize_dependency_graph, find_circular_dependencies, find_dependents]
+permissions: [repository.read, graph.read]
+description: Build and analyze module dependency graphs, including circular dependency detection and impact analysis.

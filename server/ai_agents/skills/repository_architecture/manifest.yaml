@@ -1,0 +1,11 @@
+id: repository_architecture
+name: Repository Architecture
+version: 1.0.0
+owner: repository_intelligence
+status: implemented
+supported_languages: [python, typescript]
+capabilities: [visualize_architecture, analyze_architecture_boundaries, detect_languages, index_repository, analyze_repository_structure]
+dependencies:
+  tools: [visualize_architecture, analyze_architecture_boundaries, detect_languages, index_repository, analyze_repository_structure]
+permissions: [repository.read]
+description: Analyze and visualize repository architecture including module boundaries, language detection, and structure analysis.

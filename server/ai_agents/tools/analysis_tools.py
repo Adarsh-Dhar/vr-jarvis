@@ -290,7 +290,7 @@ def resolve_references(file_path: str, tool_context: ToolContext) -> dict:
 def analyze_control_flow(function_name: str, tool_context: ToolContext) -> dict:
     """Generate control-flow information with basic blocks for Python functions."""
     try:
-        from .. import codegraph
+        from ..intelligence.graph_engine.codegraph import codegraph
 
         # Use CodeGraph to resolve the function (handles dotted IDs, short names, paths)
         graph = codegraph.load_current_graph()
@@ -547,7 +547,7 @@ def analyze_code_complexity(file_path: str, tool_context: ToolContext) -> dict:
 def analyze_repo_complexity(tool_context: ToolContext) -> dict:
     """Calculate complexity ranking across the repository."""
     try:
-        from .. import codegraph
+        from ..intelligence.graph_engine.codegraph import codegraph
         
         graph = codegraph.load_current_graph()
         

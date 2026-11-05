@@ -10,7 +10,7 @@ import hmac
 import time
 from collections import defaultdict
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Dict, Any
 
 from types import SimpleNamespace
 
@@ -282,8 +282,8 @@ async def health():
 
 
 @app.get('/graph', dependencies=[Depends(auth)])
-async def graph(focus: Optional[str] = None, depth: int = 2):
-    """Return the graph, optionally filtered by focus node and depth."""
+async def graph(focus: Optional[str] = None, depth: int = 2, direction: str = 'both', resolution: Optional[str] = None):
+    """Return the graph, optionally filtered by focus node, depth, direction, and resolution status."""
     if not config.GRAPH_PATH.is_file() and config.REPO_ROOT.name in repository.list_repos():
         repository.activate(config.REPO_ROOT.name)
     
@@ -291,53 +291,42 @@ async def graph(focus: Optional[str] = None, depth: int = 2):
     
     # If focus is specified, return a subgraph around that node
     if focus:
-        nodes = graph_data.get('nodes', [])
-        edges = graph_data.get('edges', [])
+        from ai_agents.intelligence.graph_engine.codegraph import load_current_graph
+        codegraph = load_current_graph()
         
-        # Find the focus node
-        focus_node = None
-        for node in nodes:
-            if node.get('id') == focus or node.get('name') == focus:
-                focus_node = node
-                break
+        focus_node = codegraph.get(focus)
+        if not focus_node:
+            raise HTTPException(status_code=404, detail=f"Focus node not found: {focus}")
         
-        if focus_node:
-            focus_id = focus_node.get('id')
-            
-            # Collect nodes and edges within the specified depth
-            included_nodes = {focus_id}
-            included_edges = []
-            
-            # BFS to find connected nodes up to depth
-            current_depth = {focus_id: 0}
-            frontier = {focus_id}
-            
-            for _ in range(depth):
-                next_frontier = set()
-                for node_id in frontier:
-                    # Find edges connected to this node
-                    for edge in edges:
-                        if edge.get('src') == node_id or edge.get('dst') == node_id:
-                            other_id = edge.get('dst') if edge.get('src') == node_id else edge.get('src')
-                            if other_id not in included_nodes:
-                                included_nodes.add(other_id)
-                                current_depth[other_id] = current_depth.get(node_id, 0) + 1
-                                next_frontier.add(other_id)
-                            included_edges.append(edge)
-                frontier = next_frontier
-            
-            # Filter nodes and edges
-            filtered_nodes = [n for n in nodes if n.get('id') in included_nodes]
-            filtered_edges = [e for e in edges if e in included_edges]
-            
-            return {
-                'nodes': filtered_nodes,
-                'edges': filtered_edges,
-                'focus': focus,
-                'depth': depth
-            }
+        # Use neighborhood method with filters
+        include_unresolved = resolution is None or resolution in ['unresolved', 'all']
+        hide_external = resolution == 'internal' if resolution else False
+        
+        neighborhood = codegraph.neighborhood(
+            node_id=focus_node['id'],
+            depth=depth,
+            direction=direction,
+            include_unresolved=include_unresolved,
+            hide_external=hide_external,
+            max_nodes=1000
+        )
+        
+        return {
+            'nodes': neighborhood['nodes'],
+            'edges': neighborhood['edges'],
+            'meta': graph_data.get('meta', {}),
+            'focus': focus,
+            'depth': depth,
+            'direction': direction,
+            'truncated': neighborhood['truncated']
+        }
     
-    return graph_data
+    # Return full graph with meta
+    return {
+        'nodes': graph_data.get('nodes', []),
+        'edges': graph_data.get('edges', []),
+        'meta': graph_data.get('meta', {})
+    }
 
 
 class RepoBody(BaseModel):
@@ -384,9 +373,89 @@ async def repository_file(repo_name: str, path: str):
         raise HTTPException(status_code=400, detail=str(exc))
 
 
-@app.get('/source/{node_id}', dependencies=[Depends(auth)])
+@app.get('/source/{node_id:path}', dependencies=[Depends(auth)])
 async def source(node_id: str, context: int = 0):
     return get_source(node_id, SimpleNamespace(state={}), min(max(context, 0), 20))
+
+
+# Skill endpoints
+@app.get('/skills', dependencies=[Depends(auth)])
+async def list_skills():
+    """List all available skills."""
+    from ai_agents.registry.skill_registry import get_skill_registry
+    registry = get_skill_registry()
+    skills = registry.list()
+    return {
+        'skills': [
+            {
+                'id': s.id,
+                'name': s.name,
+                'version': s.version,
+                'owner': s.owner,
+                'status': s.status.value,
+                'capabilities': s.capabilities,
+                'supported_languages': s.supported_languages
+            }
+            for s in skills
+        ]
+    }
+
+
+@app.get('/skills/{skill_id}', dependencies=[Depends(auth)])
+async def get_skill(skill_id: str):
+    """Get details for a specific skill."""
+    from ai_agents.registry.skill_registry import get_skill_registry
+    registry = get_skill_registry()
+    skill = registry.get(skill_id)
+    if not skill:
+        raise HTTPException(status_code=404, detail=f"Skill not found: {skill_id}")
+    
+    return {
+        'id': skill.id,
+        'name': skill.name,
+        'version': skill.version,
+        'owner': skill.owner,
+        'status': skill.status.value,
+        'capabilities': skill.capabilities,
+        'supported_languages': skill.supported_languages,
+        'tools': skill.tools,
+        'permissions': skill.permissions,
+        'description': skill.description
+    }
+
+
+class SkillRunBody(BaseModel):
+    skill_id: str
+    args: Dict[str, Any] = {}
+
+
+@app.post('/skills/{skill_id}/run', dependencies=[Depends(auth)])
+async def run_skill(skill_id: str, body: SkillRunBody):
+    """Run a skill (read-only skills only)."""
+    from ai_agents.registry.skill_registry import get_skill_registry
+    from ai_agents.callbacks import permission_guard
+    
+    registry = get_skill_registry()
+    skill = registry.get(skill_id)
+    if not skill:
+        raise HTTPException(status_code=404, detail=f"Skill not found: {skill_id}")
+    
+    # Check if skill requires write or execute permissions
+    write_or_execute = any(p in ['write', 'execute', 'modify'] for p in skill.permissions)
+    if write_or_execute:
+        raise HTTPException(status_code=403, detail="Skills with write/execute permissions cannot be run via API")
+    
+    # Run the skill
+    result = registry.run(skill_id, body.args, {})
+    
+    return {
+        'skill_id': skill_id,
+        'status': result.status.value,
+        'data': result.data,
+        'evidence': result.evidence,
+        'errors': result.errors,
+        'unsupported': result.unsupported
+    }
 
 
 async def _run_turn_streaming(body):

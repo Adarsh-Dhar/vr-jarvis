@@ -1,0 +1,56 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["id", "name", "version", "owner", "capabilities"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Unique identifier for the skill"
+    },
+    "name": {
+      "type": "string",
+      "description": "Human-readable name"
+    },
+    "version": {
+      "type": "string",
+      "description": "Semantic version"
+    },
+    "owner": {
+      "type": "string",
+      "description": "Owning agent"
+    },
+    "capabilities": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "List of capabilities"
+    },
+    "supported_languages": {
+      "type": "array",
+      "items": {"type": "string"},
+      "default": ["python"]
+    },
+    "tools": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Tools this skill uses"
+    },
+    "permissions": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Required permissions"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["scaffolded", "implemented", "validated", "stress_tested", "production"],
+      "default": "scaffolded"
+    },
+    "tests_required": {
+      "type": "boolean",
+      "default": true
+    },
+    "description": {
+      "type": "string",
+      "description": "Skill description"
+    }
+  }
+}

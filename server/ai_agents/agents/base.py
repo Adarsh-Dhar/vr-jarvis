@@ -22,6 +22,7 @@ class AgentSpec:
         permission_ceiling: str = "read",
         model: Optional[str] = None,
         description: Optional[str] = None,
+        skills: Optional[List[str]] = None,
     ):
         self.name = name
         self.instruction_template = instruction_template
@@ -31,6 +32,7 @@ class AgentSpec:
         self.permission_ceiling = permission_ceiling
         self.model = model or MODEL
         self.description = description or f"{name} specialist agent"
+        self.skills = skills or []
 
 
 def make_specialist(spec: AgentSpec) -> LlmAgent:
