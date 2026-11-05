@@ -50,7 +50,7 @@ class CodeGraph:
     def get(self, ref: str) -> Optional[Dict[str, Any]]:
         """
         Resolve a reference to a node.
-        Priority: exact id match, then dotted suffix match, then unique name match.
+        Priority: exact id match, dotted suffix match, unique name match, then file path match.
         """
         # Exact id match
         if ref in self._nodes:
@@ -69,20 +69,26 @@ class CodeGraph:
         if len(name_matches) == 1:
             return name_matches[0]
 
+        # File path match
+        file_matches = [n for n in self._nodes.values() if n.get('file', '') == ref]
+        if len(file_matches) == 1:
+            return file_matches[0]
+
         return None
 
     def callers(self, node_id: str, depth: int = 1) -> List[Dict[str, Any]]:
         """
         Get callers of a node following only 'calls' edges.
         Returns list of {from, file, line, kind} for each caller.
+        Depth is hop count: 1 = direct callers, 2 = callers of callers, etc.
         """
         result = []
         visited = set()
         queue = deque([(node_id, 0)])
 
         while queue:
-            current, d = queue.popleft()
-            if d > depth or current in visited:
+            current, current_depth = queue.popleft()
+            if current_depth > depth or current in visited:
                 continue
             visited.add(current)
 
@@ -90,24 +96,27 @@ class CodeGraph:
                 if edge['type'] != 'calls':
                     continue
                 caller = edge['src']
-                if d + 1 == 1:
-                    # Direct caller (depth 1 from target)
-                    result.append({
-                        'from': caller,
-                        'file': edge.get('file'),
-                        'line': edge.get('line'),
-                        'kind': edge.get('kind', 'unresolved')
-                    })
-                else:
-                    # Indirect caller (depth > 1 from target)
-                    result.append({
-                        'from': caller,
-                        'file': edge.get('file'),
-                        'line': edge.get('line'),
-                        'kind': edge.get('kind', 'unresolved'),
-                        'depth': d + 1
-                    })
-                queue.append((caller, d + 1))
+                caller_depth = current_depth + 1
+                
+                if caller_depth <= depth:
+                    if caller_depth == 1:
+                        # Direct caller (1 hop from target)
+                        result.append({
+                            'from': caller,
+                            'file': edge.get('file'),
+                            'line': edge.get('line'),
+                            'kind': edge.get('kind', 'unresolved')
+                        })
+                    else:
+                        # Indirect caller (more than 1 hop)
+                        result.append({
+                            'from': caller,
+                            'file': edge.get('file'),
+                            'line': edge.get('line'),
+                            'kind': edge.get('kind', 'unresolved'),
+                            'depth': caller_depth
+                        })
+                    queue.append((caller, caller_depth))
 
         return result
 

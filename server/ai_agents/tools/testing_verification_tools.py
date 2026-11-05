@@ -622,7 +622,7 @@ def measure_test_coverage(
             path = resolve_in_repo(path)
 
         result = subprocess.run(
-            ['python3', '-m', 'coverage', 'run', '-m', 'pytest'],
+            ['python3', '-m', 'pytest', '--cov=.', '--cov-report=json'],
             cwd=str(path),
             capture_output=True,
             text=True,
@@ -632,29 +632,26 @@ def measure_test_coverage(
         if result.returncode != 0:
             return {
                 'status': 'error',
-                'error': f"Coverage run failed: {result.stderr[-500:]}",
+                'error': f"Coverage run failed: {result.stderr[-500:] if result.stderr else result.stdout[-500:]}",
                 'repository_path': str(path)
             }
 
-        # Get coverage report
-        report_result = subprocess.run(
-            ['python3', '-m', 'coverage', 'json'],
-            cwd=str(path),
-            capture_output=True,
-            text=True,
-            timeout=30
-        )
-
-        if report_result.returncode != 0:
+        # Try to read the coverage.json file
+        coverage_file = path / '.coverage.json'
+        if not coverage_file.exists():
+            coverage_file = path / 'coverage.json'
+        
+        if not coverage_file.exists():
             return {
                 'status': 'error',
-                'error': f"Coverage report failed: {report_result.stderr[-500:]}",
+                'error': 'Coverage JSON report not generated',
                 'repository_path': str(path)
             }
 
-        # Parse JSON report
         import json
-        coverage_data = json.loads(report_result.stdout)
+        with open(coverage_file) as f:
+            coverage_data = json.load(f)
+        
         overall = coverage_data.get('totals', {}).get('percent_covered', 0.0)
 
         return {

@@ -990,72 +990,13 @@ def visualize_execution_flow(
     tool_context: ToolContext
 ) -> dict:
     """Visualize execution flow with runtime_observed provenance."""
-    try:
-        from .runtime_intelligence_tools import collect_execution_trace
-        from .. import codegraph
-
-        # Get execution trace
-        trace_result = collect_execution_trace(trace_id, duration=5, tool_context=tool_context)
-        
-        if trace_result.get('status') != 'ok':
-            return trace_result
-
-        graph = codegraph.load_current_graph()
-        
-        # Build visualization from trace data
-        nodes = []
-        edges = []
-        
-        # If we have real trace data, use it
-        trace_data = trace_result.get('trace', [])
-        if trace_data:
-            for i, event in enumerate(trace_data):
-                func_name = event.get('function', 'unknown')
-                nodes.append({
-                    'id': f'call_{i}',
-                    'name': func_name,
-                    'type': 'call',
-                    'provenance': 'runtime_observed',
-                    'timestamp': event.get('timestamp', 0)
-                })
-                
-                if i > 0:
-                    edges.append({
-                        'src': f'call_{i-1}',
-                        'dst': f'call_{i}',
-                        'type': 'calls',
-                        'kind': 'runtime_observed'
-                    })
-        else:
-            # Fallback: show current graph structure with runtime_observed annotation
-            for node_id, node in graph._nodes.items():
-                if node.get('level') == 'function':
-                    nodes.append({
-                        'id': node_id,
-                        'name': node.get('name', node_id),
-                        'file': node.get('file', ''),
-                        'type': 'function',
-                        'provenance': 'static'
-                    })
-
-        # Emit graph
-        _emit_command(tool_context, 'show_graph',
-                     nodes=nodes,
-                     edges=edges,
-                     title=f'Execution Flow: {trace_id}')
-
-        return {
-            'status': 'ok',
-            'trace_id': trace_id,
-            'node_count': len(nodes),
-            'edge_count': len(edges),
-            'note': 'Visualization ready - requires actual application execution for real runtime data'
-        }
-    except Exception as e:
-        return {
-            'status': 'error',
-            'error': str(e)
-        }
+    # Return unsupported until we have real trace data
+    return {
+        'status': 'unsupported',
+        'reason': 'Execution flow visualization requires actual execution trace data from sys.setprofile',
+        'trace_id': trace_id,
+        'note': 'Visualization infrastructure in place but requires runtime events'
+    }
 
 
 @safe
@@ -1295,7 +1236,8 @@ def visualize_security_flow(
 ) -> dict:
     """Visualize security flow with taint paths."""
     try:
-        from .security_quality_tools import scan_vulnerabilities, trace_taint
+        from .security_quality_tools import scan_vulnerabilities
+        from .data_flow_intelligence_tools import trace_taint_flow
         from .. import codegraph
 
         graph = codegraph.load_current_graph()
@@ -1312,7 +1254,7 @@ def visualize_security_flow(
         vuln_result = scan_vulnerabilities(component_id, tool_context)
         
         # Get taint analysis
-        taint_result = trace_taint(component_id, tool_context)
+        taint_result = trace_taint_flow(component_id, tool_context)
 
         # Build visualization nodes
         nodes = []
@@ -1389,39 +1331,7 @@ def visualize_git_history(
     tool_context: ToolContext,
     branch: str = 'main'
 ) -> dict:
-    """Visualize git history."""
-    try:
-        viz_id = str(uuid.uuid4())
-        
-        viz_state = _get_session_state(tool_context, 'visualization_state', {})
-        viz_state[viz_id] = {
-            'type': 'git_history',
-            'repository_path': repository_path,
-            'branch': branch,
-            'created_at': time.time()
-        }
-        _set_session_state(tool_context, 'visualization_state', viz_state)
-        
-        return {
-            'status': 'ok',
-            'repository_path': repository_path,
-            'branch': branch,
-            'visualization_id': viz_id,
-            'note': 'Real visualization requires git integration'
-        }
-    except Exception as e:
-        return {
-            'status': 'error',
-            'error': str(e)
-        }
-
-
-@safe
-def visualize_git_history_from_toolkit(
-    repository_path: str,
-    tool_context: ToolContext
-) -> dict:
-    """Visualize git history using git_history_toolkit."""
+    """Visualize git history with churn and author overlays."""
     try:
         from .git_history_toolkit import visualize_git_history as git_viz
         return git_viz(repository_path, tool_context)
