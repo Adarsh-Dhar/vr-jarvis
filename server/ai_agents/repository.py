@@ -235,51 +235,52 @@ def index_repo(name):
         # Filter calls to only those within this function's line range
         function_calls = [c for c in calls if n['start'] <= c['line'] <= n['end']]
         
+        # Get imports for this file to resolve ambiguous calls
+        file_imports = _imports(texts.get(file_path, ''))
+        
         # Resolve each call
         for call in function_calls:
             callee = call['name']
             call_type = call.get('type', 'direct')
             line_idx = call['line'] - 1  # Convert to 0-based
             
-            targets = by_name.get(callee, [])
+            targets = [t for t in by_name.get(callee, []) if t['id'] != n['id'] and (n['id'], t['id']) not in seen]
             if not targets:
                 continue
             
-            for t in targets:
-                if t['id'] == n['id'] or (n['id'], t['id']) in seen:
-                    continue
-                
-                # Determine confidence based on call type and scope
-                kind = 'unresolved'
-                if call_type == 'direct':
-                    # Direct calls are most reliable
-                    stem = t['file'].rsplit('/', 1)[-1].rsplit('.', 1)[0]
-                    imported = _imports(texts.get(n['file'], ''))
-                    if t['file'] == n['file'] or stem in imported:
-                        kind = 'confirmed'
-                    else:
-                        kind = 'likely'
-                elif call_type == 'method':
-                    # Method calls need more context
-                    kind = 'likely'
-                elif call_type == 'constructor':
-                    # Constructors are usually reliable
-                    kind = 'confirmed'
-                
-                # If we have too many targets, mark as unresolved
-                if len(targets) > 3:
-                    kind = 'unresolved'
-                
-                seen.add((n['id'], t['id']))
-                edges.append({
-                    'src': n['id'], 
-                    'dst': t['id'], 
-                    'type': 'calls', 
-                    'kind': kind,
-                    'file': n['file'],
-                    'line': line_idx + 1,  # Convert to 1-based line number
-                    'call_type': call_type
-                })
+            # Disambiguate: prefer targets in the same file, then targets whose
+            # module the caller imports, then a single remaining candidate.
+            same_file = [t for t in targets if t['file'] == n['file']]
+            if same_file:
+                chosen, kind = same_file[0], 'confirmed'
+            else:
+                imported = [t for t in targets
+                            if t['file'].rsplit('/', 1)[-1].rsplit('.', 1)[0] in file_imports
+                            or _dotted(t['file']) in file_imports
+                            or any(_dotted(t['file']).endswith('.' + imp) or imp.endswith('.' + _dotted(t['file']))
+                                   for imp in file_imports)]
+                if len(imported) == 1:
+                    chosen, kind = imported[0], 'confirmed'
+                elif len(targets) == 1:
+                    chosen, kind = targets[0], 'likely' if call_type != 'constructor' else 'confirmed'
+                else:
+                    # Truly ambiguous: emit one unresolved edge to the first candidate
+                    # rather than N edges, so callers/callees stay accurate.
+                    chosen, kind = targets[0], 'unresolved'
+            
+            if call_type == 'method' and kind == 'confirmed':
+                kind = 'likely'   # method dispatch is never fully confirmed statically
+            
+            seen.add((n['id'], chosen['id']))
+            edges.append({
+                'src': n['id'],
+                'dst': chosen['id'],
+                'type': 'calls',
+                'kind': kind,
+                'file': n['file'],
+                'line': line_idx + 1,
+                'call_type': call_type
+            })
 
     # Remove MAX_NODES cap - return all nodes for level-based graph serving
     # The server will handle pagination via /graph?focus=<id>&depth=2

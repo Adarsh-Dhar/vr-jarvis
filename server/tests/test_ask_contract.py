@@ -40,7 +40,7 @@ def test_ask_response_contract():
     client = TestClient(app)
 
     # Create a session first
-    session_resp = client.post("/session")
+    session_resp = client.post("/session", headers={"authorization": "Bearer test-token"})
     assert session_resp.status_code == 200
     session_id = session_resp.json()["session_id"]
 
@@ -66,6 +66,7 @@ def test_ask_response_contract():
             "test_results",
             "test_source",
             "evidence",
+            "approval_type",  # Added for approval workflow
         }
         assert set(data.keys()) == expected_fields, f"Response has unexpected fields: {set(data.keys())}"
 

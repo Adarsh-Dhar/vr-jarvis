@@ -8,3 +8,8 @@ httpx
 tree-sitter
 tree-sitter-typescript
 tree-sitter-python
+tree-sitter-go
+tree-sitter-rust
+tree-sitter-java
+tree-sitter-c-sharp
+tree-sitter-cpp

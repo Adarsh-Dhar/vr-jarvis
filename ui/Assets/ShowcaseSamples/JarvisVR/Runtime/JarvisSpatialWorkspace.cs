@@ -634,6 +634,24 @@ namespace JarvisVR
     {
       switch (c.type)
       {
+        case "show_graph":
+          if (c.nodes != null && c.edges != null)
+          {
+            // Rebuild the scene graph with the provided nodes and edges
+            var newGraph = new GraphDto();
+            if (c.nodes != null)
+            {
+              foreach (var node in c.nodes) newGraph.nodes.Add(node);
+            }
+            if (c.edges != null)
+            {
+              foreach (var edge in c.edges) newGraph.edges.Add(edge);
+            }
+            LoadGraph(newGraph);
+            Log("show_graph: loaded " + newGraph.nodes.Count + " nodes, " + newGraph.edges.Count + " edges");
+            return true;
+          }
+          return false;
         case "highlight_path":
           if (c.node_ids == null) return false;
           foreach (string id in c.node_ids) if (_nodes.ContainsKey(id)) _hot.Add(id);

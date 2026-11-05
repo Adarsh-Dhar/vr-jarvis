@@ -23,7 +23,7 @@ class TestAskContract:
         client = TestClient(app)
         
         # Create a session first
-        session_resp = client.post('/session')
+        session_resp = client.post('/session', headers={'authorization': 'Bearer test-token'})
         assert session_resp.status_code == 200
         session_id = session_resp.json()['session_id']
         
@@ -63,7 +63,7 @@ class TestApproveContract:
         client = TestClient(app)
         
         # Create a session
-        session_resp = client.post('/session')
+        session_resp = client.post('/session', headers={'authorization': 'Bearer test-token'})
         session_id = session_resp.json()['session_id']
         
         # Test rejection
@@ -92,7 +92,7 @@ class TestProgressContract:
         client = TestClient(app)
 
         # Create a session
-        session_resp = client.post('/session')
+        session_resp = client.post('/session', headers={'authorization': 'Bearer test-token'})
         session_id = session_resp.json()['session_id']
 
         response = client.get(
@@ -116,7 +116,7 @@ class TestTaskContract:
         client = TestClient(app)
         
         # Create a session
-        session_resp = client.post('/session')
+        session_resp = client.post('/session', headers={'authorization': 'Bearer test-token'})
         session_id = session_resp.json()['session_id']
         
         response = client.get(
@@ -126,8 +126,9 @@ class TestTaskContract:
         
         assert response.status_code == 200
         data = response.json()
-        assert 'session_id' in data
-        assert 'plan' in data
+        # session_id is in the URL, not the response body
+        assert 'busy' in data
+        assert 'plan_summary' in data
         assert 'findings' in data
         assert 'agent_results' in data
         assert isinstance(data['findings'], list)
@@ -169,11 +170,13 @@ class TestToolsContract:
             headers={'authorization': 'Bearer test-token'}
         )
 
-        # Accept 422 for empty body, but should still block if request gets through
-        if response.status_code == 422:
-            # Empty body is invalid - that's fine, just return
+        # Accept 403 (direct tools disabled) or 422 (empty body), but should not allow write tools
+        # When direct tools are disabled, the endpoint returns 403
+        if response.status_code in [403, 422]:
+            # Either direct tools are disabled (403) or empty body is invalid (422) - both are fine
             return
 
+        # If the request gets through, it should be blocked
         assert response.status_code == 200
         data = response.json()
         assert data['status'] == 'blocked'

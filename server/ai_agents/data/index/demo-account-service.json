@@ -61,6 +61,18 @@
    "parent": "lib"
   },
   {
+   "id": "routes.account.handler",
+   "name": "handler",
+   "kind": "function",
+   "file": "routes/account.ts",
+   "start": 9,
+   "end": 12,
+   "cluster": "routes",
+   "loc": 4,
+   "level": "route",
+   "parent": "routes"
+  },
+  {
    "id": "services.account.getAccount",
    "name": "getAccount",
    "kind": "function",
@@ -117,6 +129,12 @@
    "kind": "confirmed"
   },
   {
+   "src": "routes.account",
+   "dst": "routes.account.handler",
+   "type": "contains",
+   "kind": "confirmed"
+  },
+  {
    "src": "services.account",
    "dst": "services.account.getAccount",
    "type": "contains",
@@ -142,6 +160,22 @@
    "type": "imports",
    "kind": "confirmed",
    "file": "db/users.repo.ts",
+   "line": 1
+  },
+  {
+   "src": "routes.account.handler",
+   "dst": "routes.account.handler",
+   "type": "imports",
+   "kind": "confirmed",
+   "file": "routes/account.ts",
+   "line": 1
+  },
+  {
+   "src": "routes.account.handler",
+   "dst": "auth.requireAuth.requireAuth",
+   "type": "imports",
+   "kind": "confirmed",
+   "file": "routes/account.ts",
    "line": 1
   },
   {
@@ -176,6 +210,15 @@
    "kind": "confirmed",
    "file": "db/users.repo.ts",
    "line": 4,
+   "call_type": "direct"
+  },
+  {
+   "src": "routes.account.handler",
+   "dst": "services.account.deleteAccount",
+   "type": "calls",
+   "kind": "confirmed",
+   "file": "routes/account.ts",
+   "line": 10,
    "call_type": "direct"
   }
  ],

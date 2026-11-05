@@ -1027,11 +1027,15 @@ def visualize_architecture(
         
         # Build architecture layers based on folder names and file patterns
         layers = defaultdict(list)
+        modules = defaultdict(list)  # directory/module level
+        files = defaultdict(list)    # file level
+        classes = defaultdict(list)  # class level
         external_services = set()
         
         for node in nodes:
             file_path = node.get('file', '')
             name = node.get('name', '')
+            level = node.get('level', 'function')
             
             # Determine layer based on file path and name
             layer = 'other'
@@ -1050,40 +1054,230 @@ def visualize_architecture(
             
             layers[layer].append(node)
             
-            # Detect external services from imports
-            if 'import' in file_path or 'require' in file_path:
-                # Simple heuristic: if the module name is not a local file, it's external
-                pass
+            # Extract module (directory) from file path
+            if file_path:
+                parts = file_path.split('/')
+                if len(parts) > 1:
+                    module = parts[0]  # top-level directory
+                    modules[module].append(node)
+                else:
+                    modules['root'].append(node)
+                
+                # File level
+                files[file_path].append(node)
+            
+            # Class level
+            if level == 'class':
+                class_name = node.get('name', '')
+                classes[class_name].append(node)
+            elif level == 'function' and '.' in node.get('id', ''):
+                # Function inside a class
+                parts = node.get('id', '').split('.')
+                if len(parts) >= 2:
+                    class_name = '.'.join(parts[:-1])
+                    classes[class_name].append(node)
+            
+            # Detect external services
+            if node.get('kind') == 'external':
+                external_services.add(node.get('name', ''))
         
         # Build hierarchy with parent-child relationships
         architecture_nodes = []
         architecture_edges = []
+        node_set = set()  # Track all node IDs to avoid duplicates
+        
+        # Helper to add node if not already added
+        def add_node(node_dict):
+            node_id = node_dict.get('id')
+            if node_id and node_id not in node_set:
+                architecture_nodes.append(node_dict)
+                node_set.add(node_id)
+                return True
+            return False
         
         # Add layer nodes
         for layer_name, layer_nodes in layers.items():
             if layer_nodes:
                 layer_id = f"layer.{layer_name}"
-                architecture_nodes.append({
+                add_node({
                     'id': layer_id,
                     'name': layer_name.title(),
-                    'type': 'layer',
+                    'kind': 'layer',
+                    'cluster': layer_name,
+                    'level': 'layer',
+                    'file': '',
                     'count': len(layer_nodes)
                 })
-                
-                # Add nodes in this layer as children
-                for node in layer_nodes:
-                    node_id = node.get('id')
+        
+        # Add module (directory) nodes
+        for module_name, module_nodes in modules.items():
+            if module_name:
+                module_id = f"module.{module_name}"
+                add_node({
+                    'id': module_id,
+                    'name': module_name,
+                    'kind': 'module',
+                    'cluster': module_name,
+                    'level': 'module',
+                    'file': module_name,
+                    'count': len(module_nodes)
+                })
+        
+        # Add file nodes
+        for file_path, file_nodes in files.items():
+            if file_path:
+                file_id = f"file.{file_path.replace('/', '.')}"
+                add_node({
+                    'id': file_id,
+                    'name': file_path.split('/')[-1],
+                    'kind': 'file',
+                    'cluster': file_path.split('/')[0] if '/' in file_path else 'root',
+                    'level': 'file',
+                    'file': file_path,
+                    'count': len(file_nodes)
+                })
+        
+        # Add class nodes
+        for class_name, class_nodes in classes.items():
+            if class_name:
+                class_id = f"class.{class_name}"
+                add_node({
+                    'id': class_id,
+                    'name': class_name.split('.')[-1],
+                    'kind': 'object',
+                    'cluster': class_name.split('.')[0] if '.' in class_name else 'root',
+                    'level': 'class',
+                    'file': class_nodes[0].get('file', '') if class_nodes else '',
+                    'count': len(class_nodes)
+                })
+        
+        # Add all original function/leaf nodes
+        for node in nodes:
+            if node.get('level') in ('function', 'route', 'service', 'repository', 'test'):
+                add_node(node)
+        
+        # Build hierarchy edges: layer -> module -> file -> class -> function
+        for node in nodes:
+            file_path = node.get('file', '')
+            level = node.get('level', 'function')
+            node_id = node.get('id')
+            
+            if not node_id:
+                continue
+            
+            # Determine layer
+            layer = 'other'
+            if any(x in file_path.lower() for x in ['route', 'controller', 'api', 'endpoint']):
+                layer = 'api'
+            elif any(x in file_path.lower() for x in ['service', 'business', 'logic']):
+                layer = 'services'
+            elif any(x in file_path.lower() for x in ['repository', 'repo', 'dao', 'database']):
+                layer = 'database'
+            elif any(x in file_path.lower() for x in ['auth', 'security', 'login', 'permission']):
+                layer = 'auth'
+            elif 'test' in file_path.lower():
+                layer = 'tests'
+            elif any(x in file_path.lower() for x in ['util', 'helper', 'common', 'lib']):
+                layer = 'lib'
+            
+            layer_id = f"layer.{layer}"
+            
+            # Module (directory)
+            parts = file_path.split('/') if file_path else []
+            module_id = f"module.{parts[0]}" if len(parts) > 1 else "module.root"
+            
+            # File
+            file_id = f"file.{file_path.replace('/', '.')}" if file_path else None
+            
+            # Class (if applicable)
+            class_id = None
+            if level == 'function' and '.' in node_id:
+                class_parts = node_id.split('.')
+                if len(class_parts) >= 2:
+                    class_id = f"class.{'.'.join(class_parts[:-1])}"
+            
+            # Create hierarchy edges
+            if node_id in node_set:
+                # layer -> module
+                if module_id in node_set:
                     architecture_edges.append({
                         'src': layer_id,
-                        'dst': node_id,
-                        'type': 'contains'
+                        'dst': module_id,
+                        'type': 'contains',
+                        'kind': 'confirmed'
                     })
+                    # module -> file
+                    if file_id and file_id in node_set:
+                        architecture_edges.append({
+                            'src': module_id,
+                            'dst': file_id,
+                            'type': 'contains',
+                            'kind': 'confirmed'
+                        })
+                        # file -> class or file -> function
+                        if class_id and class_id in node_set:
+                            architecture_edges.append({
+                                'src': file_id,
+                                'dst': class_id,
+                                'type': 'contains',
+                                'kind': 'confirmed'
+                            })
+                            # class -> function
+                            architecture_edges.append({
+                                'src': class_id,
+                                'dst': node_id,
+                                'type': 'contains',
+                                'kind': 'confirmed'
+                            })
+                        else:
+                            # file -> function directly
+                            architecture_edges.append({
+                                'src': file_id,
+                                'dst': node_id,
+                                'type': 'contains',
+                                'kind': 'confirmed'
+                            })
         
-        # Compute coupling metrics
+        # Aggregate module->module edges from imports edges
+        module_connections = defaultdict(set)
+        for edge in edges:
+            if edge.get('type') == 'imports':
+                src = edge.get('src')
+                dst = edge.get('dst')
+                if src and dst:
+                    # Find modules for src and dst
+                    src_module = None
+                    dst_module = None
+                    for node in nodes:
+                        if node.get('id') == src:
+                            file_path = node.get('file', '')
+                            parts = file_path.split('/') if file_path else []
+                            src_module = parts[0] if len(parts) > 1 else 'root'
+                        if node.get('id') == dst:
+                            file_path = node.get('file', '')
+                            parts = file_path.split('/') if file_path else []
+                            dst_module = parts[0] if len(parts) > 1 else 'root'
+                    if src_module and dst_module and src_module != dst_module:
+                        module_connections[f"module.{src_module}"].add(f"module.{dst_module}")
+        
+        # Add module->module edges
+        for src_mod, dst_mods in module_connections.items():
+            for dst_mod in dst_mods:
+                architecture_edges.append({
+                    'src': src_mod,
+                    'dst': dst_mod,
+                    'type': 'imports',
+                    'kind': 'confirmed'
+                })
+        
+        # Compute coupling metrics - only calls and imports edges count,
+        # not contains/hierarchy edges
         fan_in = defaultdict(int)
         fan_out = defaultdict(int)
         
         for edge in edges:
+            if edge.get('type') not in ('calls', 'imports'):
+                continue
             src = edge.get('src')
             dst = edge.get('dst')
             if src and dst:
@@ -1096,7 +1290,10 @@ def visualize_architecture(
             'fan_out': dict(fan_out),
             'total_nodes': len(nodes),
             'total_edges': len(edges),
-            'layers': {k: len(v) for k, v in layers.items()}
+            'layers': {k: len(v) for k, v in layers.items()},
+            'modules': {k: len(v) for k, v in modules.items()},
+            'files': {k: len(v) for k, v in files.items()},
+            'classes': {k: len(v) for k, v in classes.items()}
         }
         
         # Emit scene command for Unity
@@ -1110,6 +1307,9 @@ def visualize_architecture(
             'type': 'architecture',
             'scope': scope,
             'layers': dict(layers),
+            'modules': dict(modules),
+            'files': dict(files),
+            'classes': dict(classes),
             'coupling_metrics': coupling_metrics,
             'created_at': time.time()
         }
@@ -1120,6 +1320,9 @@ def visualize_architecture(
             'scope': scope,
             'visualization_id': viz_id,
             'layers': {k: len(v) for k, v in layers.items()},
+            'modules': {k: len(v) for k, v in modules.items()},
+            'files': {k: len(v) for k, v in files.items()},
+            'classes': {k: len(v) for k, v in classes.items()},
             'node_count': len(architecture_nodes),
             'edge_count': len(architecture_edges),
             'coupling_metrics': coupling_metrics,
