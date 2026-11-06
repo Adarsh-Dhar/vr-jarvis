@@ -111,12 +111,8 @@ class PythonCFGBuilder:
         ctx.ast_node_map[id(function_ast)] = entry_id
         ctx.ast_index.bind(function_ast, entry_id, "function_entry")
 
-        # Build body
-        result = self._build_suite(function_ast.body, cfg, ctx)
-        if result.entry_nodes:
-            self._add_edge(cfg, ctx, entry_id, result.entry_nodes[0], 'next')
-
-        # Exit node
+        # Create exit nodes BEFORE building body so completions have valid targets
+        # Normal exit node
         exit_id = ctx.generate_node_id()
         exit_node = CFGNode(
             id=exit_id, kind='exit', label='exit',
@@ -128,14 +124,7 @@ class PythonCFGBuilder:
         cfg.add_node(exit_node)
         cfg.exit_node_id = exit_id
 
-        for normal_exit in result.normal_exits:
-            self._add_edge(cfg, ctx, normal_exit, exit_id, 'next')
-
-        for completion in result.abrupt_exits:
-            if completion.kind == 'return':
-                self._add_edge(cfg, ctx, completion.node_id, exit_id, 'return')
-
-        # Exception exit
+        # Exception exit node
         exception_exit_id = ctx.generate_node_id()
         exception_exit_node = CFGNode(
             id=exception_exit_id, kind='exception_exit', label='exception_exit',
@@ -147,9 +136,49 @@ class PythonCFGBuilder:
         cfg.add_node(exception_exit_node)
         cfg.exception_exit_node_id = exception_exit_id
 
+        # Build body (now completions can reference valid exit node IDs)
+        result = self._build_suite(function_ast.body, cfg, ctx)
+
+        # Handle empty functions (no body statements)
+        if not result.entry_nodes and not result.normal_exits:
+            # No body: connect entry directly to exit
+            self._add_edge(cfg, ctx, entry_id, exit_id, 'next')
+        else:
+            # Connect entry to first statement
+            if result.entry_nodes:
+                self._add_edge(cfg, ctx, entry_id, result.entry_nodes[0], 'next')
+
+            # Connect normal exits to exit node
+            for normal_exit in result.normal_exits:
+                self._add_edge(cfg, ctx, normal_exit, exit_id, 'next')
+
+        # Connect abrupt completions to their intended targets
+        # Only add edges for completions that don't already have edges through finally routing
         for completion in result.abrupt_exits:
-            if completion.kind == 'raise':
-                self._add_edge(cfg, ctx, completion.node_id, exception_exit_id, 'raise')
+            # Check if this completion already has outgoing edges (added by its builder)
+            existing_edges = cfg.get_edges_from(completion.node_id)
+            if existing_edges:
+                # Already has edges (likely through finally routing), skip
+                continue
+
+            if completion.kind == 'return':
+                if completion.intended_target:
+                    self._add_edge(cfg, ctx, completion.node_id, completion.intended_target, 'return')
+                else:
+                    # Fallback if target not set (shouldn't happen with new architecture)
+                    self._add_edge(cfg, ctx, completion.node_id, exit_id, 'return')
+            elif completion.kind == 'raise':
+                if completion.intended_target:
+                    self._add_edge(cfg, ctx, completion.node_id, completion.intended_target, 'raise')
+                else:
+                    # Fallback if target not set
+                    self._add_edge(cfg, ctx, completion.node_id, exception_exit_id, 'raise')
+            elif completion.kind == 'break':
+                if completion.intended_target:
+                    self._add_edge(cfg, ctx, completion.node_id, completion.intended_target, 'break')
+            elif completion.kind == 'continue':
+                if completion.intended_target:
+                    self._add_edge(cfg, ctx, completion.node_id, completion.intended_target, 'continue')
 
         cfg.metadata = {
             'function_name': function_ast.name,
@@ -168,36 +197,53 @@ class PythonCFGBuilder:
         )
 
     def _build_suite(self, statements, cfg, ctx) -> FlowResult:
-        """Build a suite of statements, connecting fragments sequentially."""
+        """Build a suite of statements with sequential reachable-flow construction.
+
+        Only connect a statement if there's a normal continuation from the previous
+        statement. Unreachable statements are diagnosed but do not contribute to the
+        flow result.
+        """
         if not statements:
             return FlowResult(entry_nodes=[], normal_exits=[], abrupt_exits=[])
 
-        # Build each statement fragment
-        fragments = [self._build_statement(stmt, cfg, ctx) for stmt in statements]
+        # Build the first statement
+        first_result = self._build_statement(statements[0], cfg, ctx)
+        entry_nodes = first_result.entry_nodes
+        current_normal_exits = first_result.normal_exits
+        all_abrupt_exits = list(first_result.abrupt_exits)
 
-        # Connect fragments: previous normal exits to next entry nodes
-        for previous, current in zip(fragments, fragments[1:]):
-            if previous.normal_exits and current.entry_nodes:
-                self._connect(cfg, ctx, previous.normal_exits, current.entry_nodes, kind="next")
-            if not previous.normal_exits:
-                # Mark current as unreachable
-                for entry_id in current.entry_nodes:
-                    ctx.add_diagnostic("unreachable_statement", 0, "Statement unreachable due to abrupt completion", "warning")
+        # Process remaining statements sequentially
+        for stmt in statements[1:]:
+            if not current_normal_exits:
+                # No normal continuation - statement is unreachable
+                ctx.add_diagnostic(
+                    "unreachable_statement",
+                    stmt.lineno,
+                    "Statement unreachable due to abrupt completion",
+                    "warning"
+                )
+                # Build the statement anyway for diagnostics, but don't connect it
+                # Don't add its exits to the result
+                unreachable_result = self._build_statement(stmt, cfg, ctx)
+                all_abrupt_exits.extend(unreachable_result.abrupt_exits)
+                continue
 
-        # Collect all entry nodes (for the first statement)
-        entry_nodes = fragments[0].entry_nodes if fragments else []
+            # Build the next statement
+            next_result = self._build_statement(stmt, cfg, ctx)
 
-        # Last normal exits
-        normal_exits = fragments[-1].normal_exits if fragments else []
+            # Connect current normal exits to next entry nodes
+            if next_result.entry_nodes:
+                self._connect(cfg, ctx, current_normal_exits, next_result.entry_nodes, kind="next")
 
-        # Collect all abrupt completions
-        abrupt_exits = [
-            completion
-            for fragment in fragments
-            for completion in fragment.abrupt_exits
-        ]
+            # Update current state
+            current_normal_exits = next_result.normal_exits
+            all_abrupt_exits.extend(next_result.abrupt_exits)
 
-        return FlowResult(entry_nodes=entry_nodes, normal_exits=normal_exits, abrupt_exits=abrupt_exits)
+        return FlowResult(
+            entry_nodes=entry_nodes,
+            normal_exits=current_normal_exits,
+            abrupt_exits=all_abrupt_exits
+        )
 
     def _build_statement(self, statement, cfg, ctx) -> FlowResult:
         if isinstance(statement, ast.If):
@@ -323,32 +369,45 @@ class PythonCFGBuilder:
                 for entry_id in false_result.entry_nodes:
                     self._add_edge(cfg, ctx, condition_id, entry_id, "false", "false")
         else:
-            # No else: false edge goes directly from condition to join
-            false_result = FlowResult(entry_nodes=[], normal_exits=[], abrupt_exits=[])
+            # No else: false edge is a normal continuation
+            false_result = FlowResult(entry_nodes=[], normal_exits=[condition_id], abrupt_exits=[])
 
-        join_id = ctx.generate_node_id()
-        join_node = CFGNode(
-            id=join_id, kind='join', label='join',
-            function_id=ctx.function_id, file=ctx.file,
-            start_line=statement.lineno, end_line=statement.end_lineno or statement.lineno,
-            ast_kind='If',
-        )
-        cfg.add_node(join_node)
+        # Collect all abrupt completions from both branches
+        all_abrupt_exits = true_result.abrupt_exits + false_result.abrupt_exits
 
-        # Connect true branch exits to join
-        for exit_id in true_result.normal_exits:
-            self._add_edge(cfg, ctx, exit_id, join_id, 'next')
+        # Determine if there's a normal continuation (at least one branch has normal exits)
+        has_normal_continuation = bool(true_result.normal_exits) or bool(false_result.normal_exits)
 
-        # Connect false branch exits to join
-        if statement.orelse:
+        if has_normal_continuation:
+            # Create join node for branches that complete normally
+            join_id = ctx.generate_node_id()
+            join_node = CFGNode(
+                id=join_id, kind='join', label='join',
+                function_id=ctx.function_id, file=ctx.file,
+                start_line=statement.lineno, end_line=statement.end_lineno or statement.lineno,
+                ast_kind='If',
+            )
+            cfg.add_node(join_node)
+
+            # Connect true branch normal exits to join
+            for exit_id in true_result.normal_exits:
+                self._add_edge(cfg, ctx, exit_id, join_id, 'next')
+
+            # Connect false branch normal exits to join
             for exit_id in false_result.normal_exits:
                 self._add_edge(cfg, ctx, exit_id, join_id, 'next')
-        else:
-            # No else: false edge goes directly from condition to join
-            self._add_edge(cfg, ctx, condition_id, join_id, 'false', 'false')
 
-        all_abrupt_exits = true_result.abrupt_exits + false_result.abrupt_exits
-        return FlowResult(entry_nodes=[condition_id], normal_exits=[join_id], abrupt_exits=all_abrupt_exits)
+            # If no else, condition's false path goes directly to join
+            if not statement.orelse:
+                self._add_edge(cfg, ctx, condition_id, join_id, 'false', 'false')
+
+            normal_exits = [join_id]
+        else:
+            # Both branches end abruptly (return, raise, break, continue)
+            # No normal continuation
+            normal_exits = []
+
+        return FlowResult(entry_nodes=[condition_id], normal_exits=normal_exits, abrupt_exits=all_abrupt_exits)
 
     def _build_for(self, statement, cfg, ctx, is_async=False):
         # For async for, add suspension node before iteration
@@ -396,7 +455,7 @@ class PythonCFGBuilder:
         else:
             entry_nodes.append(header_id)
 
-        # Loop context
+        # Loop context nodes
         loop_exit_id = ctx.generate_node_id()
         loop_exit_node = CFGNode(
             id=loop_exit_id, kind='join', label='loop exit',
@@ -406,7 +465,33 @@ class PythonCFGBuilder:
         )
         cfg.add_node(loop_exit_node)
 
-        # Loop else (executes on natural exhaustion)
+        # Push loop context BEFORE building else suite or body
+        # so break/continue in the else suite or body can resolve correctly
+        # break_target should bypass the else suite (natural exhaustion path)
+        post_loop_id = ctx.generate_node_id()
+        post_loop_node = CFGNode(
+            id=post_loop_id, kind='join', label='post loop',
+            function_id=ctx.function_id, file=ctx.file,
+            start_line=statement.lineno, end_line=statement.end_lineno or statement.lineno,
+            ast_kind='For',
+        )
+        cfg.add_node(post_loop_node)
+
+        ctx.push_loop(header_id, post_loop_id, header_id)
+
+        # Build loop body
+        body_result = self._build_suite(statement.body, cfg, ctx)
+        if body_result.entry_nodes:
+            self._connect(cfg, ctx, [header_id], body_result.entry_nodes, kind="next")
+
+        # Connect body exits back to header (loop back)
+        for exit_id in body_result.normal_exits:
+            self._add_edge(cfg, ctx, exit_id, header_id, 'loop_back')
+
+        # Add loop_exhausted edge from header to loop_exit (natural exhaustion)
+        self._add_edge(cfg, ctx, header_id, loop_exit_id, 'loop_exhausted')
+
+        # Loop else (executes on natural exhaustion only, not on break)
         if statement.orelse:
             else_result = self._build_suite(statement.orelse, cfg, ctx)
             else_join_id = ctx.generate_node_id()
@@ -418,33 +503,24 @@ class PythonCFGBuilder:
                 ast_kind='For',
             )
             cfg.add_node(else_join_node)
+            # Connect natural exhaustion to else entry
             if else_result.entry_nodes:
                 self._connect(cfg, ctx, [loop_exit_id], else_result.entry_nodes, kind="next")
+            # Connect else exits to post-loop
             for exit_id in else_result.normal_exits:
-                self._add_edge(cfg, ctx, exit_id, else_join_id, 'next')
-            post_loop_exits = [else_join_id]
+                self._add_edge(cfg, ctx, exit_id, post_loop_id, 'next')
+            post_loop_exits = [post_loop_id]
+            # Abrupt exits from else branch
+            all_abrupt_exits = body_result.abrupt_exits + else_result.abrupt_exits
         else:
-            post_loop_exits = [loop_exit_id]
-
-        ctx.push_loop(header_id, loop_exit_id, header_id)
-
-        # Build loop body
-        body_result = self._build_suite(statement.body, cfg, ctx)
-        if body_result.entry_nodes:
-            self._connect(cfg, ctx, [header_id], body_result.entry_nodes, kind="next")
-
-        # Connect body exits back to header (loop back)
-        for exit_id in body_result.normal_exits:
-            self._add_edge(cfg, ctx, exit_id, header_id, 'loop_back')
-
-        # Add loop_exit edge from header to loop_exit
-        self._add_edge(cfg, ctx, header_id, loop_exit_id, 'loop_exit')
-
-        # Connect body abrupt exits (break/continue) handled in their builders
+            # No else: loop_exit goes directly to post_loop
+            self._add_edge(cfg, ctx, loop_exit_id, post_loop_id, 'next')
+            post_loop_exits = [post_loop_id]
+            all_abrupt_exits = body_result.abrupt_exits
 
         ctx.pop_loop()
 
-        return FlowResult(entry_nodes=entry_nodes, normal_exits=post_loop_exits, abrupt_exits=body_result.abrupt_exits)
+        return FlowResult(entry_nodes=entry_nodes, normal_exits=post_loop_exits, abrupt_exits=all_abrupt_exits)
 
     def _build_while(self, statement, cfg, ctx) -> FlowResult:
         header_id = ctx.generate_node_id()
@@ -500,7 +576,7 @@ class PythonCFGBuilder:
             self._add_edge(cfg, ctx, body_exit, header_id, 'loop_back')
 
         # Natural loop exit (condition false) goes to loop_exit
-        self._add_edge(cfg, ctx, header_id, loop_exit_id, 'loop_exit', 'false')
+        self._add_edge(cfg, ctx, header_id, loop_exit_id, 'loop_exhausted', 'false')
 
         # Connect loop_exit to post_loop (unless there's an else block)
         if statement.orelse:
@@ -510,16 +586,25 @@ class PythonCFGBuilder:
             if else_result.entry_nodes:
                 for entry_id in else_result.entry_nodes:
                     self._add_edge(cfg, ctx, loop_exit_id, entry_id, 'next')
+            # Connect else normal exits to post_loop
             for else_exit in else_result.normal_exits:
                 self._add_edge(cfg, ctx, else_exit, post_loop_id, 'next')
-            final_exit = else_result.normal_exits if else_result.normal_exits else [loop_exit_id]
+            # Final exit is post_loop if else completes normally, else it's determined by else's abrupt exits
+            if else_result.normal_exits:
+                final_exit = [post_loop_id]
+            else:
+                # Else suite ended abruptly (return, raise, break, continue)
+                final_exit = []
+            # Abrupt exits from both body and else
+            all_abrupt_exits = body_result.abrupt_exits + else_result.abrupt_exits
         else:
             # No else: loop_exit goes directly to post_loop
             self._add_edge(cfg, ctx, loop_exit_id, post_loop_id, 'next')
             final_exit = [post_loop_id]
+            all_abrupt_exits = body_result.abrupt_exits
 
         ctx.pop_loop()
-        abrupt_exits = [c for c in body_result.abrupt_exits if c.kind not in ('break', 'continue')]
+        abrupt_exits = [c for c in all_abrupt_exits if c.kind not in ('break', 'continue')]
         return FlowResult(entry_nodes=[header_id], normal_exits=final_exit, abrupt_exits=abrupt_exits)
 
     def _build_return(self, statement, cfg, ctx) -> FlowResult:
@@ -538,6 +623,7 @@ class PythonCFGBuilder:
         if statement.value:
             ctx.ast_index.bind_expression_tree(statement.value, return_id, "return_value")
 
+        # Create completion with target (exit_node_id is now guaranteed to exist)
         completion = Completion(
             node_id=return_id,
             kind='return',
@@ -549,9 +635,11 @@ class PythonCFGBuilder:
         try_ctx = ctx.current_try()
         if try_ctx and try_ctx['finally']:
             ctx.add_abrupt_completion(completion)
-            # Normal exits from finally will handle the original completion
+            # Don't add direct edge - will be added through finally routing
             return FlowResult(entry_nodes=[return_id], normal_exits=[], abrupt_exits=[completion])
         else:
+            # Add direct edge only when no finally is present
+            self._add_edge(cfg, ctx, return_id, cfg.exit_node_id, 'return')
             return FlowResult(entry_nodes=[return_id], normal_exits=[], abrupt_exits=[completion])
 
     def _build_raise(self, statement, cfg, ctx) -> FlowResult:
@@ -570,6 +658,7 @@ class PythonCFGBuilder:
         if statement.exc:
             ctx.ast_index.bind_expression_tree(statement.exc, raise_id, "exception")
 
+        # Create completion with target (exception_exit_node_id is now guaranteed to exist)
         completion = Completion(
             node_id=raise_id,
             kind='raise',
@@ -582,8 +671,11 @@ class PythonCFGBuilder:
         try_ctx = ctx.current_try()
         if try_ctx and try_ctx['finally']:
             ctx.add_abrupt_completion(completion)
+            # Don't add direct edge - will be added through finally routing
             return FlowResult(entry_nodes=[raise_id], normal_exits=[], abrupt_exits=[completion])
         else:
+            # Add direct edge only when no finally is present
+            self._add_edge(cfg, ctx, raise_id, cfg.exception_exit_node_id, 'raise')
             return FlowResult(entry_nodes=[raise_id], normal_exits=[], abrupt_exits=[completion])
 
     def _build_await(self, statement: ast.Await, cfg, ctx) -> FlowResult:
@@ -623,7 +715,6 @@ class PythonCFGBuilder:
         cfg.add_node(break_node)
         ctx.ast_node_map[id(statement)] = break_id
         ctx.ast_index.bind(statement, break_id, "break")
-        self._add_edge(cfg, ctx, break_id, loop_ctx['break_target'], 'break')
 
         completion = Completion(
             node_id=break_id,
@@ -637,8 +728,11 @@ class PythonCFGBuilder:
         try_ctx = ctx.current_try()
         if try_ctx and try_ctx['finally']:
             ctx.add_abrupt_completion(completion)
+            # Don't add direct edge - will be added through finally routing
             return FlowResult(entry_nodes=[break_id], normal_exits=[], abrupt_exits=[completion])
         else:
+            # Add direct edge only when no finally is present
+            self._add_edge(cfg, ctx, break_id, loop_ctx['break_target'], 'break')
             return FlowResult(entry_nodes=[break_id], normal_exits=[], abrupt_exits=[completion])
 
     def _build_continue(self, statement: ast.Continue, cfg, ctx) -> FlowResult:
@@ -656,7 +750,6 @@ class PythonCFGBuilder:
         cfg.add_node(continue_node)
         ctx.ast_node_map[id(statement)] = continue_id
         ctx.ast_index.bind(statement, continue_id, "continue")
-        self._add_edge(cfg, ctx, continue_id, loop_ctx['continue_target'], 'continue')
 
         completion = Completion(
             node_id=continue_id,
@@ -670,15 +763,18 @@ class PythonCFGBuilder:
         try_ctx = ctx.current_try()
         if try_ctx and try_ctx['finally']:
             ctx.add_abrupt_completion(completion)
+            # Don't add direct edge - will be added through finally routing
             return FlowResult(entry_nodes=[continue_id], normal_exits=[], abrupt_exits=[completion])
         else:
+            # Add direct edge only when no finally is present
+            self._add_edge(cfg, ctx, continue_id, loop_ctx['continue_target'], 'continue')
             return FlowResult(entry_nodes=[continue_id], normal_exits=[], abrupt_exits=[completion])
 
     def _build_try(self, statement, cfg, ctx) -> FlowResult:
-        # Build try body first
-        try_result = self._build_suite(statement.body, cfg, ctx)
+        # Create nodes and establish try context BEFORE building try body
+        # This ensures completions from the try body can be associated with the correct exception region
 
-        # Create finally node before building other parts
+        # Create finally node first if it exists
         finally_id = None
         if statement.finalbody:
             finally_id = ctx.generate_node_id()
@@ -691,10 +787,14 @@ class PythonCFGBuilder:
             )
             cfg.add_node(finally_node)
             ctx.ast_index.bind(statement, finally_id, "finally")
-        
-        # Push try context for routing abrupt completions through finally
-        ctx.push_try(try_result.entry_nodes[0] if statement.body else None, finally_id)
 
+        # Push try context with finally node reference
+        ctx.push_try(None, finally_id)
+
+        # Build try body now that try context is established
+        try_result = self._build_suite(statement.body, cfg, ctx)
+
+        # Create exception dispatcher
         dispatch_id = ctx.generate_node_id()
         dispatch_node = CFGNode(
             id=dispatch_id, kind='exception_dispatch', label='exception dispatch',
@@ -706,6 +806,7 @@ class PythonCFGBuilder:
         ctx.ast_node_map[id(statement)] = dispatch_id
         ctx.ast_index.bind(statement, dispatch_id, "try")
 
+        # Connect raise completions from try body to dispatcher
         for completion in try_result.abrupt_exits:
             if completion.kind == 'raise':
                 self._add_edge(cfg, ctx, completion.node_id, dispatch_id, 'exception')
@@ -719,6 +820,9 @@ class PythonCFGBuilder:
         )
         cfg.add_node(handler_join_node)
 
+        # Build handlers (build each handler once and preserve the result)
+        # Handlers are tried in order; first matching handler catches the exception
+        handler_results = []
         for handler in statement.handlers:
             handler_id = ctx.generate_node_id()
             handler_type = ast.unparse(handler.type) if handler.type else 'Exception'
@@ -734,6 +838,7 @@ class PythonCFGBuilder:
             # Bind exception type expression if present
             if handler.type:
                 ctx.ast_index.bind_expression_tree(handler.type, handler_id, "exception_type")
+            # Edge from dispatcher to handler (representing "this handler matches")
             self._add_edge(cfg, ctx, dispatch_id, handler_id, 'exception')
 
             if handler.name:
@@ -742,6 +847,7 @@ class PythonCFGBuilder:
                 ctx.ast_index.bind(handler.name, handler_id, "exception_variable")
 
             handler_result = self._build_suite(handler.body, cfg, ctx)
+            handler_results.append(handler_result)
             # Connect handler to handler body entry nodes
             if handler_result.entry_nodes:
                 for entry_id in handler_result.entry_nodes:
@@ -749,18 +855,29 @@ class PythonCFGBuilder:
             for handler_exit in handler_result.normal_exits:
                 self._add_edge(cfg, ctx, handler_exit, handler_join_id, 'next')
 
+        # Add edge from dispatcher to handler_join for unmatched exceptions
+        # This represents "no handler matched, propagate to outer scope"
+        self._add_edge(cfg, ctx, dispatch_id, handler_join_id, 'exception')
+
+        # Build else suite (only executes on normal completion of try body)
+        # Else does NOT execute on raise, return, break, or continue from try body
         if statement.orelse:
             else_result = self._build_suite(statement.orelse, cfg, ctx)
-            # Connect try exits to else entry nodes
+            # Connect try normal exits to else entry nodes (only normal completions)
             if else_result.entry_nodes:
                 for entry_id in else_result.entry_nodes:
                     for try_exit in try_result.normal_exits:
                         self._add_edge(cfg, ctx, try_exit, entry_id, 'next')
+            # Connect else normal exits to handler join
             for else_exit in else_result.normal_exits:
                 self._add_edge(cfg, ctx, else_exit, handler_join_id, 'next')
+            # Abrupt exits from else branch need to be preserved
+            else_abrupt_exits = else_result.abrupt_exits
         else:
+            # No else: connect try normal exits directly to handler join
             for try_exit in try_result.normal_exits:
                 self._add_edge(cfg, ctx, try_exit, handler_join_id, 'next')
+            else_abrupt_exits = []
 
         ctx.pop_try()
 
@@ -768,65 +885,54 @@ class PythonCFGBuilder:
         if statement.finalbody:
             # Connect handler_join to finally node for normal completions
             self._add_edge(cfg, ctx, handler_join_id, finally_id, 'next')
-            
+
             # Also connect try normal exits directly to finally
             for try_exit in try_result.normal_exits:
                 self._add_edge(cfg, ctx, try_exit, finally_id, 'finally')
-            
+
             finally_result = self._build_suite(statement.finalbody, cfg, ctx)
             # Connect finally node to finally body entry nodes
             if finally_result.entry_nodes:
                 for entry_id in finally_result.entry_nodes:
                     self._add_edge(cfg, ctx, finally_id, entry_id, 'next')
-            
+
             # Route all abrupt completions through finally
             all_abrupt_exits = []
-            
-            # Route try body abrupt completions through finally
-            for completion in try_result.abrupt_exits:
+
+            # Collect all pending completions from try, handlers, and else
+            pending_completions = try_result.abrupt_exits + [c for hr in handler_results for c in hr.abrupt_exits] + else_abrupt_exits
+
+            # Route all pending completions through finally
+            for completion in pending_completions:
                 self._add_edge(cfg, ctx, completion.node_id, finally_id, 'finally')
-                # The completion will be re-emitted after finally
                 all_abrupt_exits.append(completion)
-            
-            # Route handler abrupt completions through finally
-            for handler in statement.handlers:
-                handler_result = self._build_suite(handler.body, cfg, ctx)
-                for completion in handler_result.abrupt_exits:
-                    self._add_edge(cfg, ctx, completion.node_id, finally_id, 'finally')
-                    all_abrupt_exits.append(completion)
-            
-            # Route else abrupt completions through finally
-            if statement.orelse:
-                for completion in else_result.abrupt_exits:
-                    self._add_edge(cfg, ctx, completion.node_id, finally_id, 'finally')
-                    all_abrupt_exits.append(completion)
-            
+
             # If finally has abrupt completions, they override the original ones
             if finally_result.abrupt_exits:
                 all_abrupt_exits = finally_result.abrupt_exits
-            
-            # If finally completes normally, resume original completions
-            if finally_result.normal_exits:
-                # Connect finally exits to the original completion targets
-                for completion in try_result.abrupt_exits:
-                    if completion.kind == 'return' and completion.intended_target:
-                        for exit_id in finally_result.normal_exits:
-                            self._add_edge(cfg, ctx, exit_id, completion.intended_target, 'return')
-                    elif completion.kind == 'raise' and completion.intended_target:
-                        for exit_id in finally_result.normal_exits:
-                            self._add_edge(cfg, ctx, exit_id, completion.intended_target, 'raise')
-                    elif completion.kind == 'break' and completion.intended_target:
-                        for exit_id in finally_result.normal_exits:
-                            self._add_edge(cfg, ctx, exit_id, completion.intended_target, 'break')
-                    elif completion.kind == 'continue' and completion.intended_target:
-                        for exit_id in finally_result.normal_exits:
-                            self._add_edge(cfg, ctx, exit_id, completion.intended_target, 'continue')
-            
+            else:
+                # If finally completes normally, resume original completions
+                if finally_result.normal_exits:
+                    # Connect finally exits to the original completion targets
+                    for completion in pending_completions:
+                        if completion.kind == 'return' and completion.intended_target:
+                            for exit_id in finally_result.normal_exits:
+                                self._add_edge(cfg, ctx, exit_id, completion.intended_target, 'return')
+                        elif completion.kind == 'raise' and completion.intended_target:
+                            for exit_id in finally_result.normal_exits:
+                                self._add_edge(cfg, ctx, exit_id, completion.intended_target, 'raise')
+                        elif completion.kind == 'break' and completion.intended_target:
+                            for exit_id in finally_result.normal_exits:
+                                self._add_edge(cfg, ctx, exit_id, completion.intended_target, 'break')
+                        elif completion.kind == 'continue' and completion.intended_target:
+                            for exit_id in finally_result.normal_exits:
+                                self._add_edge(cfg, ctx, exit_id, completion.intended_target, 'continue')
+
             final_exit = finally_result.normal_exits if finally_result.normal_exits else [finally_id]
         else:
             final_exit = [handler_join_id]
-            all_abrupt_exits = try_result.abrupt_exits
-        
+            all_abrupt_exits = try_result.abrupt_exits + [c for hr in handler_results for c in hr.abrupt_exits] + else_abrupt_exits
+
         return FlowResult(entry_nodes=try_result.entry_nodes, normal_exits=final_exit, abrupt_exits=all_abrupt_exits)
 
     def _build_with(self, statement, cfg, ctx, is_async=False):
@@ -929,8 +1035,11 @@ class PythonCFGBuilder:
 
         # Track if we have a wildcard pattern (unmatched continuation)
         has_wildcard = False
+        all_abrupt_exits = []
+        prev_failure_node = match_id  # Start with match as failure point
 
-        for case in statement.cases:
+        # Process cases sequentially, connecting failures to next case
+        for i, case in enumerate(statement.cases):
             case_id = ctx.generate_node_id()
             pattern = ast.unparse(case.pattern) if hasattr(ast, 'unparse') else 'pattern'
             
@@ -955,8 +1064,9 @@ class PythonCFGBuilder:
             if case.guard:
                 ctx.ast_index.bind_expression_tree(case.guard, case_id, "match_guard")
             
-            self._add_edge(cfg, ctx, match_id, case_id, 'next')
-
+            # Connect from previous failure point to this case
+            self._add_edge(cfg, ctx, prev_failure_node, case_id, 'next')
+            
             # Guard evaluation if present
             if case.guard:
                 guard_id = ctx.generate_node_id()
@@ -978,11 +1088,12 @@ class PythonCFGBuilder:
                         self._add_edge(cfg, ctx, guard_id, entry_id, 'true')
                 for case_exit in case_result.normal_exits:
                     self._add_edge(cfg, ctx, case_exit, join_id, 'next')
+                all_abrupt_exits.extend(case_result.abrupt_exits)
                 
-                # Guard false -> next case
-                if case != statement.cases[-1]:
-                    # Connect to next case (will be done by loop)
-                    pass
+                # Guard false -> next case or join
+                if i < len(statement.cases) - 1:
+                    # Connect to next case (update prev_failure_node for next iteration)
+                    prev_failure_node = guard_id
                 else:
                     # Last case, guard false -> join
                     self._add_edge(cfg, ctx, guard_id, join_id, 'false')
@@ -994,11 +1105,12 @@ class PythonCFGBuilder:
                         self._add_edge(cfg, ctx, case_id, entry_id, 'true')
                 for case_exit in case_result.normal_exits:
                     self._add_edge(cfg, ctx, case_exit, join_id, 'next')
+                all_abrupt_exits.extend(case_result.abrupt_exits)
                 
-                # Pattern failure -> next case
-                if case != statement.cases[-1]:
-                    # Connect to next case (will be done by loop)
-                    pass
+                # Pattern failure -> next case or join
+                if i < len(statement.cases) - 1:
+                    # Connect to next case (update prev_failure_node for next iteration)
+                    prev_failure_node = case_id
                 else:
                     # Last case, pattern failure -> join
                     self._add_edge(cfg, ctx, case_id, join_id, 'false')
@@ -1009,10 +1121,10 @@ class PythonCFGBuilder:
 
         # If no wildcard, add explicit unmatched path to join
         if not has_wildcard:
-            # All patterns failed, flow continues to join
-            pass
+            # All patterns failed, flow continues to join from last failure point
+            self._add_edge(cfg, ctx, prev_failure_node, join_id, 'next')
 
-        return FlowResult(entry_nodes=[match_id], normal_exits=[join_id], abrupt_exits=[])
+        return FlowResult(entry_nodes=[match_id], normal_exits=[join_id], abrupt_exits=all_abrupt_exits)
 
     def _get_pattern_kind(self, pattern):
         """Determine the kind of pattern for semantic labeling."""
@@ -1062,7 +1174,11 @@ class PythonCFGBuilder:
         cfg.add_node(success_node)
         self._add_edge(cfg, ctx, assert_id, success_id, 'next', 'true')
 
-        # False branch raises AssertionError
+        # False branch raises AssertionError (exception_exit_node_id now guaranteed to exist)
+        # Always add false edge for validator compatibility
+        self._add_edge(cfg, ctx, assert_id, cfg.exception_exit_node_id, 'raise', 'false')
+
+        # Create completion for tracking
         failure_completion = Completion(
             node_id=assert_id,
             kind='raise',

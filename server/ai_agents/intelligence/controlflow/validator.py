@@ -73,13 +73,18 @@ def validate_cfg(cfg: ControlFlowGraph) -> Dict[str, Any]:
     elif cfg.exception_exit_node_id not in node_id_set:
         errors.append(f"CFG exception_exit_node_id references non-existent node: {cfg.exception_exit_node_id}")
 
-    # Check return statements have no successors (except to exit)
+    # Check return statements - they can connect to exit, finally, or with exit nodes
     return_nodes = [n for n in cfg.nodes if n.kind == 'return']
     for return_node in return_nodes:
         outgoing = cfg.get_edges_from(return_node.id)
         for edge in outgoing:
+            target = cfg.get_node(edge.target)
+            # Allow return to connect to exit, finally, or with exit node
             if edge.target != cfg.exit_node_id:
-                errors.append(f"Return node {return_node.id} has outgoing edge to non-exit: {edge.target}")
+                if target and target.kind not in ('finally', 'statement'):
+                    errors.append(f"Return node {return_node.id} has outgoing edge to non-exit/non-cleanup: {edge.target} ({target.kind if target else 'unknown'})")
+                elif target and target.kind == 'statement' and 'exit' not in target.label.lower():
+                    errors.append(f"Return node {return_node.id} has outgoing edge to non-exit/non-cleanup: {edge.target} ({target.kind if target else 'unknown'})")
 
     # Check break and continue edges target correct loops
     break_edges = [e for e in cfg.edges if e.kind == 'break']

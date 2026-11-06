@@ -158,6 +158,35 @@ def _annassign_type_names(annotation: ast.expr) -> List[str]:
     return []
 
 
+def parse_python_module(source: str, file_path: str = '') -> ast.Module:
+    """
+    Parse Python source code and return the AST module.
+
+    This is a dedicated parser API for CFG/DFG analysis that returns
+    the raw ast.Module object. For repository indexing and symbol extraction,
+    use analyze_python_source() instead.
+
+    Args:
+        source: Python source code string
+        file_path: Optional file path for error reporting
+
+    Returns:
+        ast.Module: The parsed AST module
+
+    Raises:
+        SyntaxError: If the source code has syntax errors
+        ValueError: If the source cannot be parsed
+    """
+    try:
+        tree = ast.parse(source, filename=file_path)
+        return tree
+    except (SyntaxError, ValueError) as exc:
+        # Add file context to the error message
+        if file_path:
+            exc.filename = file_path
+        raise
+
+
 def analyze_python_source(text: str, file_path: str = '') -> dict:
     """Analyze Python source once and return symbols, call sites and facts."""
     result = {

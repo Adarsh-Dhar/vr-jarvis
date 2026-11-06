@@ -1,12 +1,24 @@
 """Python symbol locator for finding function AST nodes by qualified name."""
 import ast
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Union
+
+
+def _compute_qualname(node: Union[ast.FunctionDef, ast.AsyncFunctionDef], tree: ast.AST) -> str:
+    """
+    Compute the qualified name of a function from the AST.
+
+    This walks up the AST to find enclosing classes and functions.
+    """
+    # For now, return the simple name - computing full qualified names
+    # requires walking the AST to find parent relationships
+    # TODO: Implement full qualified name computation
+    return node.name
 
 
 def find_function_ast(
     tree: ast.AST,
     graph_symbol: Dict[str, Any]
-) -> Optional[ast.FunctionDef]:
+) -> Optional[Union[ast.FunctionDef, ast.AsyncFunctionDef]]:
     """
     Find a function AST node by graph symbol information.
 
@@ -31,19 +43,21 @@ def find_function_ast(
     if not target_name or not target_file:
         return None
 
-    # Collect all candidate functions
-    candidates: List[ast.FunctionDef] = []
+    # Collect all candidate functions with their qualified names
+    candidates: List[tuple[Union[ast.FunctionDef, ast.AsyncFunctionDef], str]] = []
 
     class FunctionVisitor(ast.NodeVisitor):
         def __init__(self):
             self.functions = []
 
         def visit_FunctionDef(self, node: ast.FunctionDef):
-            self.functions.append(node)
+            qualname = _compute_qualname(node, tree)
+            self.functions.append((node, qualname))
             self.generic_visit(node)
 
         def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef):
-            self.functions.append(node)
+            qualname = _compute_qualname(node, tree)
+            self.functions.append((node, qualname))
             self.generic_visit(node)
 
     visitor = FunctionVisitor()
@@ -53,32 +67,36 @@ def find_function_ast(
     # Filter by line range if provided
     if target_start is not None:
         candidates = [
-            f for f in candidates
+            (f, q) for f, q in candidates
             if f.lineno == target_start
         ]
 
     # Filter by end line if provided
     if target_end is not None:
         candidates = [
-            f for f in candidates
+            (f, q) for f, q in candidates
             if (f.end_lineno or f.lineno) == target_end
         ]
 
-    # Filter by name
+    # Filter by qualified name (or simple name as fallback)
+    target_simple_name = target_name.split('.')[-1] if '.' in target_name else target_name
     candidates = [
-        f for f in candidates
-        if f.name == target_name
+        (f, q) for f, q in candidates
+        if q == target_name or f.name == target_simple_name
     ]
 
     # If we have exactly one match, return it
     if len(candidates) == 1:
-        return candidates[0]
+        return candidates[0][0]
 
     # If we have multiple matches, try to disambiguate by qualified name
     if len(candidates) > 1:
-        # In a real implementation, we'd compute qualified names from the AST
-        # For now, return the first match
-        return candidates[0]
+        # Prefer exact qualified name match
+        for func, qualname in candidates:
+            if qualname == target_name:
+                return func
+        # Fallback to first match (this should be improved)
+        return candidates[0][0]
 
     # No match found
     return None

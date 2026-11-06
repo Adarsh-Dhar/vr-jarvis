@@ -1,6 +1,6 @@
 """Control-flow analysis service."""
 from typing import Dict, Any
-from ..parsers.python_ast import parse_python_source
+from ..parsers.python_ast import parse_python_module
 from ..parsers.python_symbol_locator import find_function_ast
 from .python_cfg import PythonCFGBuilder
 from .validator import validate_cfg
@@ -39,7 +39,7 @@ def analyze_python_control_flow(
                 'metadata': {},
             }
 
-        tree = parse_python_source(source, file_path)
+        tree = parse_python_module(source, file_path)
 
         # Find the function AST node
         function_ast = find_function_ast(tree, symbol)

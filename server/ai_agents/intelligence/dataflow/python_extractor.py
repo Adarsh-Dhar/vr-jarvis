@@ -3,6 +3,7 @@ import ast
 import symtable
 from typing import List, Dict, Any, Optional, Set
 from .models import Definition, VariableUse, DefUseFacts
+from .recursive_expression_evaluator import RecursiveExpressionEvaluator, ExpressionEvaluationContext
 
 
 class PythonDefUseExtractor:
@@ -230,32 +231,30 @@ class DefUseVisitor(ast.NodeVisitor):
         return node_ids
 
     def visit_Assign(self, node: ast.Assign) -> None:
-        """Visit assignment statements with operation linking."""
-        # Extract uses from RHS and track if it's a complex expression
-        use_ids_before = [u.id for u in self.facts.uses]
-        op_ids_before = [o.id for o in self.facts.operations]
+        """Visit assignment statements with operation linking using recursive evaluator."""
+        # Use recursive evaluator for RHS
+        ctx = ExpressionEvaluationContext(
+            function_id=self.function_id,
+            file=self.file,
+            local_vars=self.local_vars,
+            cfg_node_map=self.cfg_node_map,
+            ast_index=self.ast_index,
+            facts=self.facts
+        )
+        evaluator = RecursiveExpressionEvaluator(ctx)
+        use_ids, op_id = evaluator.evaluate(node.value)
         
-        self.visit(node.value)
-        
-        # Get new uses and operations created by RHS
-        new_use_ids = [u.id for u in self.facts.uses if u.id not in use_ids_before]
-        new_op_ids = [o.id for o in self.facts.operations if o.id not in op_ids_before]
-        
-        # If RHS created operations, link the last one to the target definitions
-        last_op_id = new_op_ids[-1] if new_op_ids else None
-        
-        # Extract definitions from targets using the existing method
+        # Extract definitions from targets
         for target in node.targets:
             binding_key = f"{self.function_id}::{self._get_variable_name(target)}"
-            # Temporarily collect definition IDs to link to operation
             def_ids_before = [d.id for d in self.facts.definitions]
             self._extract_target_definitions(target, node, 'assignment', binding_key)
             new_def_ids = [d.id for d in self.facts.definitions if d.id not in def_ids_before]
             
-            # Link the last operation to these new definitions
-            if last_op_id:
+            # Link the operation to these new definitions
+            if op_id:
                 for op in self.facts.operations:
-                    if op.id == last_op_id:
+                    if op.id == op_id:
                         op.output_definition_ids.extend(new_def_ids)
                         break
 
@@ -263,14 +262,32 @@ class DefUseVisitor(ast.NodeVisitor):
 
     def visit_AnnAssign(self, node: ast.AnnAssign) -> None:
         """Visit annotated assignment statements."""
-        # Extract uses from RHS
+        # Extract uses from RHS using recursive evaluator
         if node.value:
-            self.visit(node.value)
-
-        # Extract definition from target
-        if node.target:
-            binding_key = f"{self.function_id}::{self._get_variable_name(node.target)}"
-            self._extract_target_definitions(node.target, node, 'annotated_assignment', binding_key)
+            ctx = ExpressionEvaluationContext(
+                function_id=self.function_id,
+                file=self.file,
+                local_vars=self.local_vars,
+                cfg_node_map=self.cfg_node_map,
+                ast_index=self.ast_index,
+                facts=self.facts
+            )
+            evaluator = RecursiveExpressionEvaluator(ctx)
+            use_ids, op_id = evaluator.evaluate(node.value)
+            
+            # Extract definition from target
+            if node.target:
+                binding_key = f"{self.function_id}::{self._get_variable_name(node.target)}"
+                def_ids_before = [d.id for d in self.facts.definitions]
+                self._extract_target_definitions(node.target, node, 'annotated_assignment', binding_key)
+                new_def_ids = [d.id for d in self.facts.definitions if d.id not in def_ids_before]
+                
+                # Link operation to definition
+                if op_id:
+                    for op in self.facts.operations:
+                        if op.id == op_id:
+                            op.output_definition_ids.extend(new_def_ids)
+                            break
 
         # Do NOT call generic_visit(node)
 
@@ -293,19 +310,46 @@ class DefUseVisitor(ast.NodeVisitor):
                 expression=ast.unparse(node.target) if hasattr(ast, 'unparse') else node.target.id,
             ))
 
-        # Extract uses from RHS
-        self.visit(node.value)
+        # Extract uses from RHS using recursive evaluator
+        ctx = ExpressionEvaluationContext(
+            function_id=self.function_id,
+            file=self.file,
+            local_vars=self.local_vars,
+            cfg_node_map=self.cfg_node_map,
+            ast_index=self.ast_index,
+            facts=self.facts
+        )
+        evaluator = RecursiveExpressionEvaluator(ctx)
+        use_ids, op_id = evaluator.evaluate(node.value)
 
         # Extract definition from target
         binding_key = f"{self.function_id}::{self._get_variable_name(node.target)}"
+        def_ids_before = [d.id for d in self.facts.definitions]
         self._extract_target_definitions(node.target, node, 'augmented_assignment', binding_key, cfg_node_ids)
+        new_def_ids = [d.id for d in self.facts.definitions if d.id not in def_ids_before]
+        
+        # Link operation to definition
+        if op_id:
+            for op in self.facts.operations:
+                if op.id == op_id:
+                    op.output_definition_ids.extend(new_def_ids)
+                    break
 
         # Do NOT call generic_visit(node)
 
     def visit_For(self, node: ast.For) -> None:
         """Visit for loops."""
-        # Extract uses from iterable
-        self.visit(node.iter)
+        # Extract uses from iterable using recursive evaluator
+        ctx = ExpressionEvaluationContext(
+            function_id=self.function_id,
+            file=self.file,
+            local_vars=self.local_vars,
+            cfg_node_map=self.cfg_node_map,
+            ast_index=self.ast_index,
+            facts=self.facts
+        )
+        evaluator = RecursiveExpressionEvaluator(ctx)
+        use_ids, op_id = evaluator.evaluate(node.iter)
 
         # Loop variable is a definition
         binding_key = f"{self.function_id}::{self._get_variable_name(node.target)}"
@@ -324,9 +368,19 @@ class DefUseVisitor(ast.NodeVisitor):
 
     def visit_With(self, node: ast.With) -> None:
         """Visit with statements."""
-        # Extract uses from context managers
+        # Extract uses from context managers using recursive evaluator
+        ctx = ExpressionEvaluationContext(
+            function_id=self.function_id,
+            file=self.file,
+            local_vars=self.local_vars,
+            cfg_node_map=self.cfg_node_map,
+            ast_index=self.ast_index,
+            facts=self.facts
+        )
+        evaluator = RecursiveExpressionEvaluator(ctx)
+        
         for item in node.items:
-            self.visit(item.context_expr)
+            use_ids, op_id = evaluator.evaluate(item.context_expr)
 
             # Optional binding: `with resource as x`
             if item.optional_vars:
@@ -361,17 +415,44 @@ class DefUseVisitor(ast.NodeVisitor):
 
     def visit_NamedExpr(self, node: ast.NamedExpr) -> None:
         """Visit named expressions (walrus operator :=)."""
-        # Extract uses from value
-        self.visit(node.value)
+        # Extract uses from value using recursive evaluator
+        ctx = ExpressionEvaluationContext(
+            function_id=self.function_id,
+            file=self.file,
+            local_vars=self.local_vars,
+            cfg_node_map=self.cfg_node_map,
+            ast_index=self.ast_index,
+            facts=self.facts
+        )
+        evaluator = RecursiveExpressionEvaluator(ctx)
+        use_ids, op_id = evaluator.evaluate(node.value)
 
         # Target is a definition
         binding_key = f"{self.function_id}::{self._get_variable_name(node.target)}"
+        def_ids_before = [d.id for d in self.facts.definitions]
         self._extract_target_definitions(node.target, node, 'named_expression', binding_key)
+        new_def_ids = [d.id for d in self.facts.definitions if d.id not in def_ids_before]
+        
+        # Link operation to definition
+        if op_id:
+            for op in self.facts.operations:
+                if op.id == op_id:
+                    op.output_definition_ids.extend(new_def_ids)
+                    break
 
     def visit_Return(self, node: ast.Return) -> None:
         """Visit return statements."""
         if node.value:
-            self.visit(node.value)
+            ctx = ExpressionEvaluationContext(
+                function_id=self.function_id,
+                file=self.file,
+                local_vars=self.local_vars,
+                cfg_node_map=self.cfg_node_map,
+                ast_index=self.ast_index,
+                facts=self.facts
+            )
+            evaluator = RecursiveExpressionEvaluator(ctx)
+            use_ids, op_id = evaluator.evaluate(node.value)
 
     def visit_Name(self, node: ast.Name) -> None:
         """Visit name nodes."""
@@ -432,300 +513,135 @@ class DefUseVisitor(ast.NodeVisitor):
                 expression=None,
             ))
 
-    def visit_BinOp(self, node: ast.BinOp) -> None:
-        """Visit binary operations (a + b, etc.)."""
-        # Visit left and right operands first to create use nodes
-        self.visit(node.left)
-        self.visit(node.right)
-
-        # Collect use IDs for operands
-        input_use_ids = []
-        for operand in [node.left, node.right]:
-            if isinstance(operand, ast.Name):
-                binding_key = f"{self.function_id}::{operand.id}"
-                use_id = self._generate_use_id(operand.id)
-                # Find if we already created this use
-                for use in self.facts.uses:
-                    if use.variable == operand.id and use.line == operand.lineno:
-                        input_use_ids.append(use.id)
-                        break
-
-        # Create operation fact
-        op_type = type(node.op).__name__
-        op_id = self._generate_operation_id()
-        expression = ast.unparse(node) if hasattr(ast, 'unparse') else str(op_type)
-        cfg_node_ids = self._get_cfg_node_ids(node)
-
-        from .models import ExpressionFact
-        self.facts.operations.append(ExpressionFact(
-            id=op_id,
-            function_id=self.function_id,
-            file=self.file,
-            line=node.lineno,
-            column=node.col_offset if hasattr(node, 'col_offset') else 0,
-            cfg_node_ids=cfg_node_ids,
-            expression=expression,
-            operation=op_type,
-            input_use_ids=input_use_ids,
-            output_definition_ids=[],  # Will be filled when we know which definition this produces
-            metadata={},
-        ))
-
-        # Continue generic visit for nested structures
-        self.generic_visit(node)
-
-    def visit_UnaryOp(self, node: ast.UnaryOp) -> None:
-        """Visit unary operations (-a, not a, etc.)."""
-        # Visit operand first to create use node
-        self.visit(node.operand)
-
-        # Collect use ID for operand
-        input_use_ids = []
-        if isinstance(node.operand, ast.Name):
-            binding_key = f"{self.function_id}::{node.operand.id}"
-            for use in self.facts.uses:
-                if use.variable == node.operand.id and use.line == node.operand.lineno:
-                    input_use_ids.append(use.id)
-                    break
-
-        # Create operation fact
-        op_type = type(node.op).__name__
-        op_id = self._generate_operation_id()
-        expression = ast.unparse(node) if hasattr(ast, 'unparse') else str(op_type)
-        cfg_node_ids = self._get_cfg_node_ids(node)
-
-        from .models import ExpressionFact
-        self.facts.operations.append(ExpressionFact(
-            id=op_id,
-            function_id=self.function_id,
-            file=self.file,
-            line=node.lineno,
-            column=node.col_offset if hasattr(node, 'col_offset') else 0,
-            cfg_node_ids=cfg_node_ids,
-            expression=expression,
-            operation=op_type,
-            input_use_ids=input_use_ids,
-            output_definition_ids=[],
-            metadata={},
-        ))
-
-        self.generic_visit(node)
-
-    def visit_Attribute(self, node: ast.Attribute) -> None:
-        """Visit attribute access (obj.attr) with write context tracking."""
-        # Visit the object being accessed first
-        self.visit(node.value)
-        
-        # Check if this is in a write context (simplified check)
-        is_write = False
-        # This is a simplified check - full context tracking would require parent AST info
-        
-        # Track attribute access as an operation
-        op_id = self._generate_operation_id()
-        expression = ast.unparse(node) if hasattr(ast, 'unparse') else f"{ast.unparse(node.value)}.{node.attr}"
-        cfg_node_ids = self._get_cfg_node_ids(node)
-        
-        from .models import ExpressionFact
-        self.facts.operations.append(ExpressionFact(
-            id=op_id,
-            function_id=self.function_id,
-            file=self.file,
-            line=node.lineno,
-            column=node.col_offset if hasattr(node, 'col_offset') else 0,
-            cfg_node_ids=cfg_node_ids,
-            expression=expression,
-            operation='Attribute',
-            input_use_ids=[],
-            output_definition_ids=[],
-            metadata={
-                'attribute': node.attr,
-                'access_type': 'write' if is_write else 'read',
-                'mutation': is_write,
-                'receiver': ast.unparse(node.value) if hasattr(ast, 'unparse') else str(node.value)
-            },
-        ))
-        # Don't call generic_visit - we already visited node.value
-
-    def visit_Subscript(self, node: ast.Subscript) -> None:
-        """Visit subscript access (obj[index]) with write context tracking."""
-        # Visit the object and index first
-        self.visit(node.value)
-        self.visit(node.slice)
-        
-        # Simplified write context check
-        is_write = False
-        
-        op_id = self._generate_operation_id()
-        expression = ast.unparse(node) if hasattr(ast, 'unparse') else "subscript"
-        cfg_node_ids = self._get_cfg_node_ids(node)
-        
-        from .models import ExpressionFact
-        self.facts.operations.append(ExpressionFact(
-            id=op_id,
-            function_id=self.function_id,
-            file=self.file,
-            line=node.lineno,
-            column=node.col_offset if hasattr(node, 'col_offset') else 0,
-            cfg_node_ids=cfg_node_ids,
-            expression=expression,
-            operation='Subscript',
-            input_use_ids=[],
-            output_definition_ids=[],
-            metadata={
-                'access_type': 'write' if is_write else 'read',
-                'mutation': is_write,
-                'base': ast.unparse(node.value) if hasattr(ast, 'unparse') else str(node.value)
-            },
-        ))
-        
-        # Track subscript access as an operation
-        op_id = self._generate_operation_id()
-        expression = ast.unparse(node) if hasattr(ast, 'unparse') else f"{ast.unparse(node.value)}[...]"
-        cfg_node_ids = self._get_cfg_node_ids(node)
-        
-        from .models import ExpressionFact
-        self.facts.operations.append(ExpressionFact(
-            id=op_id,
-            function_id=self.function_id,
-            file=self.file,
-            line=node.lineno,
-            column=node.col_offset if hasattr(node, 'col_offset') else 0,
-            cfg_node_ids=cfg_node_ids,
-            expression=expression,
-            operation='Subscript',
-            input_use_ids=[],  # Object and index uses tracked via explicit visit above
-            output_definition_ids=[],
-            metadata={},
-        ))
-        # Don't call generic_visit - we already visited node.value and node.slice
+    # Expression visit methods are now handled by RecursiveExpressionEvaluator
+    # in the higher-level statement visitors (Assign, AugAssign, Return, etc.)
+    # These individual expression visitors are no longer needed.
 
     def visit_ListComp(self, node: ast.ListComp) -> None:
         """Visit list comprehensions."""
-        # Visit the iterable first
-        self.visit(node.elt)
-        for generator in node.generators:
-            self.visit(generator.iter)
-            if generator.ifs:
-                for if_test in generator.ifs:
-                    self.visit(if_test)
+        # Use recursive evaluator for elements and generators
+        ctx = ExpressionEvaluationContext(
+            function_id=self.function_id,
+            file=self.file,
+            local_vars=self.local_vars,
+            cfg_node_map=self.cfg_node_map,
+            ast_index=self.ast_index,
+            facts=self.facts
+        )
+        evaluator = RecursiveExpressionEvaluator(ctx)
+        use_ids, op_id = evaluator.evaluate(node.elt)
         
-        # Comprehension creates a new scope for the loop variable
-        # Track the target as a definition in comprehension scope
+        for generator in node.generators:
+            iter_uses, _ = evaluator.evaluate(generator.iter)
+            for if_test in generator.ifs:
+                if_uses, _ = evaluator.evaluate(if_test)
+        
+        # Track loop variable as definition
         if node.generators:
             target = node.generators[0].target
             cfg_node_ids = self._get_cfg_node_ids(node)
-            binding_key = f"{self.function_id}::comprehension::{ast.unparse(target)}"
-            
-            # Extract target definitions (may be a simple name or unpacking)
-            self._extract_target_definitions(target, node, binding_key, cfg_node_ids)
+            target_str = ast.unparse(target) if hasattr(ast, 'unparse') else str(target)
+            binding_key = f"{self.function_id}::comprehension::{target_str}"
+            self._extract_target_definitions(target, node, 'comprehension', binding_key, cfg_node_ids)
 
     def visit_SetComp(self, node: ast.SetComp) -> None:
         """Visit set comprehensions."""
-        self.visit(node.elt)
+        ctx = ExpressionEvaluationContext(
+            function_id=self.function_id,
+            file=self.file,
+            local_vars=self.local_vars,
+            cfg_node_map=self.cfg_node_map,
+            ast_index=self.ast_index,
+            facts=self.facts
+        )
+        evaluator = RecursiveExpressionEvaluator(ctx)
+        use_ids, op_id = evaluator.evaluate(node.elt)
+        
         for generator in node.generators:
-            self.visit(generator.iter)
-            if generator.ifs:
-                for if_test in generator.ifs:
-                    self.visit(if_test)
+            iter_uses, _ = evaluator.evaluate(generator.iter)
+            for if_test in generator.ifs:
+                if_uses, _ = evaluator.evaluate(if_test)
         
         if node.generators:
             target = node.generators[0].target
             cfg_node_ids = self._get_cfg_node_ids(node)
-            binding_key = f"{self.function_id}::comprehension::{ast.unparse(target)}"
-            self._extract_target_definitions(target, node, binding_key, cfg_node_ids)
+            target_str = ast.unparse(target) if hasattr(ast, 'unparse') else str(target)
+            binding_key = f"{self.function_id}::comprehension::{target_str}"
+            self._extract_target_definitions(target, node, 'comprehension', binding_key, cfg_node_ids)
 
     def visit_DictComp(self, node: ast.DictComp) -> None:
         """Visit dict comprehensions."""
-        self.visit(node.key)
-        self.visit(node.value)
+        ctx = ExpressionEvaluationContext(
+            function_id=self.function_id,
+            file=self.file,
+            local_vars=self.local_vars,
+            cfg_node_map=self.cfg_node_map,
+            ast_index=self.ast_index,
+            facts=self.facts
+        )
+        evaluator = RecursiveExpressionEvaluator(ctx)
+        use_ids, op_id = evaluator.evaluate(node.key)
+        use_ids, op_id = evaluator.evaluate(node.value)
+        
         for generator in node.generators:
-            self.visit(generator.iter)
-            if generator.ifs:
-                for if_test in generator.ifs:
-                    self.visit(if_test)
+            iter_uses, _ = evaluator.evaluate(generator.iter)
+            for if_test in generator.ifs:
+                if_uses, _ = evaluator.evaluate(if_test)
         
         if node.generators:
             target = node.generators[0].target
             cfg_node_ids = self._get_cfg_node_ids(node)
-            binding_key = f"{self.function_id}::comprehension::{ast.unparse(target)}"
-            self._extract_target_definitions(target, node, binding_key, cfg_node_ids)
+            target_str = ast.unparse(target) if hasattr(ast, 'unparse') else str(target)
+            binding_key = f"{self.function_id}::comprehension::{target_str}"
+            self._extract_target_definitions(target, node, 'comprehension', binding_key, cfg_node_ids)
 
     def visit_GeneratorExp(self, node: ast.GeneratorExp) -> None:
         """Visit generator expressions."""
-        self.visit(node.elt)
+        ctx = ExpressionEvaluationContext(
+            function_id=self.function_id,
+            file=self.file,
+            local_vars=self.local_vars,
+            cfg_node_map=self.cfg_node_map,
+            ast_index=self.ast_index,
+            facts=self.facts
+        )
+        evaluator = RecursiveExpressionEvaluator(ctx)
+        use_ids, op_id = evaluator.evaluate(node.elt)
+        
         for generator in node.generators:
-            self.visit(generator.iter)
-            if generator.ifs:
-                for if_test in generator.ifs:
-                    self.visit(if_test)
+            iter_uses, _ = evaluator.evaluate(generator.iter)
+            for if_test in generator.ifs:
+                if_uses, _ = evaluator.evaluate(if_test)
         
         if node.generators:
             target = node.generators[0].target
             cfg_node_ids = self._get_cfg_node_ids(node)
-            binding_key = f"{self.function_id}::comprehension::{ast.unparse(target)}"
-            self._extract_target_definitions(target, node, binding_key, cfg_node_ids)
-
-    def visit_Call(self, node: ast.Call) -> None:
-        """Visit function calls with side-effect tracking."""
-        # Visit function and arguments
-        self.visit(node.func)
-        for arg in node.args:
-            self.visit(arg)
-
-        # Collect use IDs for arguments
-        input_use_ids = []
-        for arg in node.args:
-            if isinstance(arg, ast.Name):
-                for use in self.facts.uses:
-                    if use.variable == arg.id and use.line == arg.lineno:
-                        input_use_ids.append(use.id)
-                        break
-
-        # Determine if this is a known mutation
-        known_mutations = ['append', 'extend', 'insert', 'remove', 'pop', 'clear', 'sort', 'reverse', 'update', 'add', 'discard']
-        metadata = {'side_effect': 'unknown', 'confidence': 'low'}
-        
-        if isinstance(node.func, ast.Attribute):
-            if node.func.attr in known_mutations:
-                metadata = {
-                    'side_effect': 'known_mutation',
-                    'mutation_kind': node.func.attr,
-                    'receiver': ast.unparse(node.func.value) if hasattr(ast, 'unparse') else str(node.func.value)
-                }
-
-        # Create operation fact for the call
-        op_id = self._generate_operation_id()
-        expression = ast.unparse(node) if hasattr(ast, 'unparse') else "call"
-        cfg_node_ids = self._get_cfg_node_ids(node)
-
-        from .models import ExpressionFact
-        self.facts.operations.append(ExpressionFact(
-            id=op_id,
-            function_id=self.function_id,
-            file=self.file,
-            line=node.lineno,
-            column=node.col_offset if hasattr(node, 'col_offset') else 0,
-            cfg_node_ids=cfg_node_ids,
-            expression=expression,
-            operation="Call",
-            input_use_ids=input_use_ids,
-            output_definition_ids=[],
-            metadata=metadata
-        ))
-
-        self.generic_visit(node)
+            target_str = ast.unparse(target) if hasattr(ast, 'unparse') else str(target)
+            binding_key = f"{self.function_id}::comprehension::{target_str}"
+            self._extract_target_definitions(target, node, 'comprehension', binding_key, cfg_node_ids)
 
     def visit_Match(self, node: ast.Match) -> None:
         """Visit match statements and pattern bindings."""
-        # Visit the subject expression
-        self.visit(node.subject)
+        # Visit the subject expression using recursive evaluator
+        ctx = ExpressionEvaluationContext(
+            function_id=self.function_id,
+            file=self.file,
+            local_vars=self.local_vars,
+            cfg_node_map=self.cfg_node_map,
+            ast_index=self.ast_index,
+            facts=self.facts
+        )
+        evaluator = RecursiveExpressionEvaluator(ctx)
+        use_ids, op_id = evaluator.evaluate(node.subject)
         
         # Visit each case and its pattern
         for case in node.cases:
             self.visit(case.pattern)
             if case.guard:
                 self.visit(case.guard)
-            self.visit(case.body)
+            # Visit body statements individually, not as a list
+            for stmt in case.body:
+                self.visit(stmt)
 
     def visit_MatchAs(self, node: ast.MatchAs) -> None:
         """Visit capture patterns (e.g., `as name`)."""

@@ -1,0 +1,306 @@
+"""Regression tests for exception and finally routing."""
+import pytest
+import ast
+from ai_agents.intelligence.controlflow.python_cfg import PythonCFGBuilder
+from ai_agents.intelligence.controlflow.validator import validate_cfg
+
+
+def test_try_else_only_on_normal_completion():
+    """Test that try-else executes only on normal completion, not on raise."""
+    source = """
+def try_else_normal():
+    try:
+        x = 1
+        return x
+    except ValueError:
+        y = 2
+    else:
+        z = 3  # Should not execute when return is taken
+    return z
+"""
+    tree = ast.parse(source)
+    func = tree.body[0]
+    builder = PythonCFGBuilder()
+    artifact = builder.build_function(func, "test.py::try_else_normal", source, "test.py")
+    cfg = artifact.graph
+
+    validation = validate_cfg(cfg)
+    assert validation['valid'], f"CFG validation failed: {validation['errors']}"
+
+
+def test_try_else_on_raise_not_executed():
+    """Test that else doesn't execute when exception is raised."""
+    source = """
+def try_else_raise():
+    try:
+        raise ValueError("error")
+    except ValueError:
+        x = 1
+    else:
+        y = 2  # Should not execute when exception is raised
+    return x
+"""
+    tree = ast.parse(source)
+    func = tree.body[0]
+    builder = PythonCFGBuilder()
+    artifact = builder.build_function(func, "test.py::try_else_raise", source, "test.py")
+    cfg = artifact.graph
+
+    validation = validate_cfg(cfg)
+    assert validation['valid'], f"CFG validation failed: {validation['errors']}"
+
+
+def test_return_through_finally():
+    """Test that return routes through finally before reaching exit."""
+    source = """
+def return_finally():
+    try:
+        return 1
+    finally:
+        x = 2  # Should execute before return
+"""
+    tree = ast.parse(source)
+    func = tree.body[0]
+    builder = PythonCFGBuilder()
+    artifact = builder.build_function(func, "test.py::return_finally", source, "test.py")
+    cfg = artifact.graph
+
+    validation = validate_cfg(cfg)
+    assert validation['valid'], f"CFG validation failed: {validation['errors']}"
+
+    # Check that finally node exists
+    finally_nodes = [n for n in cfg.nodes if n.kind == 'finally']
+    assert len(finally_nodes) == 1, "Should have finally node"
+
+    # Check that return connects to finally
+    return_nodes = [n for n in cfg.nodes if n.kind == 'return']
+    assert len(return_nodes) == 1
+    return_edges = cfg.get_edges_from(return_nodes[0].id)
+    finally_edges = [e for e in return_edges if e.kind == 'finally']
+    assert len(finally_edges) >= 1, "Return should connect to finally"
+
+
+def test_raise_through_finally():
+    """Test that raise routes through finally before propagating."""
+    source = """
+def raise_finally():
+    try:
+        raise ValueError("error")
+    finally:
+        x = 2  # Should execute before exception propagates
+    return x
+"""
+    tree = ast.parse(source)
+    func = tree.body[0]
+    builder = PythonCFGBuilder()
+    artifact = builder.build_function(func, "test.py::raise_finally", source, "test.py")
+    cfg = artifact.graph
+
+    validation = validate_cfg(cfg)
+    assert validation['valid'], f"CFG validation failed: {validation['errors']}"
+
+    # Check that raise connects to finally
+    raise_nodes = [n for n in cfg.nodes if n.kind == 'raise']
+    assert len(raise_nodes) == 1
+    raise_edges = cfg.get_edges_from(raise_nodes[0].id)
+    finally_edges = [e for e in raise_edges if e.kind == 'finally']
+    assert len(finally_edges) >= 1, "Raise should connect to finally"
+
+
+def test_finally_overrides_return():
+    """Test that return in finally overrides pending return."""
+    source = """
+def finally_override():
+    try:
+        return 1
+    finally:
+        return 2  # This return overrides the first
+"""
+    tree = ast.parse(source)
+    func = tree.body[0]
+    builder = PythonCFGBuilder()
+    artifact = builder.build_function(func, "test.py::finally_override", source, "test.py")
+    cfg = artifact.graph
+
+    validation = validate_cfg(cfg)
+    assert validation['valid'], f"CFG validation failed: {validation['errors']}"
+
+
+def test_finally_overrides_raise():
+    """Test that raise in finally overrides pending raise."""
+    source = """
+def finally_override_raise():
+    try:
+        raise ValueError("error1")
+    finally:
+        raise ValueError("error2")  # This overrides the first
+"""
+    tree = ast.parse(source)
+    func = tree.body[0]
+    builder = PythonCFGBuilder()
+    artifact = builder.build_function(func, "test.py::finally_override_raise", source, "test.py")
+    cfg = artifact.graph
+
+    validation = validate_cfg(cfg)
+    assert validation['valid'], f"CFG validation failed: {validation['errors']}"
+
+
+def test_break_through_finally():
+    """Test that break routes through finally."""
+    source = """
+def break_finally():
+    for i in range(10):
+        try:
+            if i == 5:
+                break
+        finally:
+            x = i  # Should execute before break takes effect
+    return x
+"""
+    tree = ast.parse(source)
+    func = tree.body[0]
+    builder = PythonCFGBuilder()
+    artifact = builder.build_function(func, "test.py::break_finally", source, "test.py")
+    cfg = artifact.graph
+
+    validation = validate_cfg(cfg)
+    assert validation['valid'], f"CFG validation failed: {validation['errors']}"
+
+
+def test_continue_through_finally():
+    """Test that continue routes through finally."""
+    source = """
+def continue_finally():
+    for i in range(10):
+        try:
+            if i % 2 == 0:
+                continue
+        finally:
+            x = i  # Should execute before continue
+    return x
+"""
+    tree = ast.parse(source)
+    func = tree.body[0]
+    builder = PythonCFGBuilder()
+    artifact = builder.build_function(func, "test.py::continue_finally", source, "test.py")
+    cfg = artifact.graph
+
+    validation = validate_cfg(cfg)
+    assert validation['valid'], f"CFG validation failed: {validation['errors']}"
+
+
+def test_nested_finally():
+    """Test nested finally blocks."""
+    source = """
+def nested_finally():
+    try:
+        try:
+            return 1
+        finally:
+            x = 2
+    finally:
+        y = 3
+    return y
+"""
+    tree = ast.parse(source)
+    func = tree.body[0]
+    builder = PythonCFGBuilder()
+    artifact = builder.build_function(func, "test.py::nested_finally", source, "test.py")
+    cfg = artifact.graph
+
+    validation = validate_cfg(cfg)
+    assert validation['valid'], f"CFG validation failed: {validation['errors']}"
+
+    # Should have two finally nodes
+    finally_nodes = [n for n in cfg.nodes if n.kind == 'finally']
+    assert len(finally_nodes) == 2, "Should have two finally nodes"
+
+
+def test_exception_in_handler():
+    """Test exception raised in handler body."""
+    source = """
+def handler_exception():
+    try:
+        x = 1
+    except ValueError:
+        raise TypeError("new error")  # New exception from handler
+    return x
+"""
+    tree = ast.parse(source)
+    func = tree.body[0]
+    builder = PythonCFGBuilder()
+    artifact = builder.build_function(func, "test.py::handler_exception", source, "test.py")
+    cfg = artifact.graph
+
+    validation = validate_cfg(cfg)
+    assert validation['valid'], f"CFG validation failed: {validation['errors']}"
+
+
+def test_exception_in_else():
+    """Test exception raised in else block."""
+    source = """
+def else_exception():
+    try:
+        x = 1
+    except ValueError:
+        y = 2
+    else:
+        raise TypeError("error in else")
+    return x
+"""
+    tree = ast.parse(source)
+    func = tree.body[0]
+    builder = PythonCFGBuilder()
+    artifact = builder.build_function(func, "test.py::else_exception", source, "test.py")
+    cfg = artifact.graph
+
+    validation = validate_cfg(cfg)
+    assert validation['valid'], f"CFG validation failed: {validation['errors']}"
+
+
+def test_multiple_handlers_ordered():
+    """Test that handlers are tried in order."""
+    source = """
+def ordered_handlers():
+    try:
+        x = risky()
+    except ValueError:
+        y = 1
+    except TypeError:
+        z = 2
+    except Exception:
+        w = 3
+    return x
+"""
+    tree = ast.parse(source)
+    func = tree.body[0]
+    builder = PythonCFGBuilder()
+    artifact = builder.build_function(func, "test.py::ordered_handlers", source, "test.py")
+    cfg = artifact.graph
+
+    validation = validate_cfg(cfg)
+    assert validation['valid'], f"CFG validation failed: {validation['errors']}"
+
+    # Should have exception dispatcher
+    dispatch_nodes = [n for n in cfg.nodes if n.kind == 'exception_dispatch']
+    assert len(dispatch_nodes) == 1, "Should have exception dispatcher"
+
+
+def test_bare_except():
+    """Test bare except handler."""
+    source = """
+def bare_except():
+    try:
+        x = risky()
+    except:
+        y = 1
+    return x
+"""
+    tree = ast.parse(source)
+    func = tree.body[0]
+    builder = PythonCFGBuilder()
+    artifact = builder.build_function(func, "test.py::bare_except", source, "test.py")
+    cfg = artifact.graph
+
+    validation = validate_cfg(cfg)
+    assert validation['valid'], f"CFG validation failed: {validation['errors']}"

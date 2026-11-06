@@ -1,7 +1,7 @@
 """Data-flow analysis service."""
 from typing import Dict, Any
 import ast
-from ..parsers.python_ast import parse_python_source
+from ..parsers.python_ast import parse_python_module
 from ..parsers.python_symbol_locator import find_function_ast
 from ..controlflow.python_cfg import PythonCFGBuilder
 from ..controlflow.validator import validate_cfg
@@ -28,15 +28,15 @@ def analyze_python_data_flow_simple(
     """
     try:
         # Parse source
-        tree = parse_python_source(source, file_path)
-        
-        # Find function AST
-        function_ast = None
-        for node in ast.walk(tree):
-            if isinstance(node, ast.FunctionDef) and node.name == function_name:
-                function_ast = node
-                break
-        
+        tree = parse_python_module(source, file_path)
+
+        # Find function AST using the proper locator
+        symbol = {
+            'name': function_name,
+            'file': file_path,
+        }
+        function_ast = find_function_ast(tree, symbol)
+
         if not function_ast:
             return {
                 'status': 'error',
@@ -85,7 +85,7 @@ def analyze_python_data_flow_simple(
         dfg = dfg_builder.build(cfg, facts, analysis_result)
         
         # Convert to Unity format
-        unity_format = dfg_to_unity_format(dfg, cfg)
+        unity_format = dfg_to_unity_format(dfg)
         
         return {
             'status': 'ok',
@@ -149,7 +149,7 @@ def analyze_python_data_flow(
                 'metadata': {},
             }
 
-        tree = parse_python_source(source, file_path)
+        tree = parse_python_module(source, file_path)
 
         # Find the function AST node
         function_ast = find_function_ast(tree, symbol)

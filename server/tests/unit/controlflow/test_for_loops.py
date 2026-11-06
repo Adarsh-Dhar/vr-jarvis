@@ -38,7 +38,7 @@ def process(items):
 
 
 def test_for_loop_has_loop_exit_edge():
-    """Test that for loop has loop-exit edge."""
+    """Test that for loop has loop-exhausted edge."""
     code = """
 def process(items):
     for item in items:
@@ -60,8 +60,8 @@ def process(items):
     validation = validate_cfg(cfg)
     assert validation["valid"], f"CFG validation failed: {validation['errors']}"
 
-    loop_exit_edges = [e for e in cfg.edges if e.kind == "loop_exit"]
-    assert len(loop_exit_edges) >= 1, "Should have at least one loop-exit edge"
+    loop_exhausted_edges = [e for e in cfg.edges if e.kind == "loop_exhausted"]
+    assert len(loop_exhausted_edges) >= 1, "Should have at least one loop-exhausted edge"
 
 
 def test_for_loop_with_break():
