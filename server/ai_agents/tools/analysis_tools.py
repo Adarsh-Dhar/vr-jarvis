@@ -288,9 +288,10 @@ def resolve_references(file_path: str, tool_context: ToolContext) -> dict:
 
 @safe
 def analyze_control_flow(function_name: str, tool_context: ToolContext) -> dict:
-    """Generate control-flow information with basic blocks for Python functions."""
+    """Generate control-flow information with CFG for Python functions."""
     try:
         from ..intelligence.graph_engine.codegraph import codegraph
+        from ..intelligence.controlflow import PythonCFGBuilder, validate_cfg, cfg_to_dict
 
         # Use CodeGraph to resolve the function (handles dotted IDs, short names, paths)
         graph = codegraph.load_current_graph()
@@ -330,7 +331,7 @@ def analyze_control_flow(function_name: str, tool_context: ToolContext) -> dict:
         simple_name = node.get('name', '')
         if not simple_name and '.' in node.get('id', ''):
             simple_name = node['id'].split('.')[-1]
-        
+
         for node_ast in ast.walk(tree):
             if isinstance(node_ast, ast.FunctionDef) and node_ast.name == simple_name:
                 func_node = node_ast
@@ -343,101 +344,38 @@ def analyze_control_flow(function_name: str, tool_context: ToolContext) -> dict:
                 'message': f'Function {simple_name} not found in AST'
             }
 
-        # Build basic blocks
-        blocks = []
-        edges = []
-        block_id_counter = 0
+        # Read source file
+        with open(file_path, 'r', encoding='utf-8') as f:
+            source = f.read()
 
-        def create_block(start_line, end_line, label, block_type='sequence'):
-            nonlocal block_id_counter
-            block_id = f"{simple_name}#B{block_id_counter}"
-            block_id_counter += 1
+        # Build CFG using the new engine
+        function_id = node.get('id', f'{file_path}::{simple_name}')
+        builder = PythonCFGBuilder()
+        cfg = builder.build_function(
+            function_ast=func_node,
+            function_id=function_id,
+            source=source,
+            file_path=file_path
+        )
+
+        # Validate CFG
+        validation = validate_cfg(cfg)
+        if not validation['valid']:
             return {
-                'id': block_id,
-                'start': start_line,
-                'end': end_line,
-                'label': label,
-                'type': block_type,
-                'file': file_path
+                'status': 'error',
+                'error': 'CFG validation failed',
+                'validation_errors': validation['errors'],
+                'validation_warnings': validation['warnings']
             }
 
-        # Entry block
-        entry_block = create_block(func_node.lineno, func_node.lineno, 'entry', 'entry')
-        blocks.append(entry_block)
+        # Convert to dict format
+        result = cfg_to_dict(cfg)
+        result['status'] = 'ok'
+        result['function_name'] = function_name
+        result['simple_name'] = simple_name
+        result['validation'] = validation
 
-        # Process function body
-        for stmt in func_node.body:
-            if isinstance(stmt, ast.If):
-                # Create blocks for if-else
-                condition_line = stmt.lineno
-                if_block = create_block(condition_line, condition_line, f'if condition', 'condition')
-                blocks.append(if_block)
-
-                # Process if body
-                if stmt.body:
-                    then_start = stmt.body[0].lineno
-                    then_end = stmt.body[-1].end_lineno if stmt.body[-1].end_lineno else then_start
-                    then_block = create_block(then_start, then_end, 'then branch', 'sequence')
-                    blocks.append(then_block)
-                    edges.append({'src': if_block['id'], 'dst': then_block['id'], 'type': 'controlflow', 'kind': 'confirmed', 'edge_type': 'true'})
-
-                # Process else body
-                if stmt.orelse:
-                    else_start = stmt.orelse[0].lineno
-                    else_end = stmt.orelse[-1].end_lineno if stmt.orelse[-1].end_lineno else else_start
-                    else_block = create_block(else_start, else_end, 'else branch', 'sequence')
-                    blocks.append(else_block)
-                    edges.append({'src': if_block['id'], 'dst': else_block['id'], 'type': 'controlflow', 'kind': 'confirmed', 'edge_type': 'false'})
-
-            elif isinstance(stmt, (ast.For, ast.While)):
-                # Create blocks for loops
-                loop_type = 'for' if isinstance(stmt, ast.For) else 'while'
-                condition_line = stmt.lineno
-                loop_block = create_block(condition_line, condition_line, f'{loop_type} condition', 'loop')
-                blocks.append(loop_block)
-
-                # Process loop body
-                if stmt.body:
-                    body_start = stmt.body[0].lineno
-                    body_end = stmt.body[-1].end_lineno if stmt.body[-1].end_lineno else body_start
-                    body_block = create_block(body_start, body_end, 'loop body', 'sequence')
-                    blocks.append(body_block)
-                    edges.append({'src': loop_block['id'], 'dst': body_block['id'], 'type': 'controlflow', 'kind': 'confirmed', 'edge_type': 'loop'})
-
-            elif isinstance(stmt, ast.Return):
-                return_block = create_block(stmt.lineno, stmt.lineno, 'return', 'return')
-                blocks.append(return_block)
-
-            elif isinstance(stmt, ast.Raise):
-                raise_block = create_block(stmt.lineno, stmt.lineno, 'raise', 'exception')
-                blocks.append(raise_block)
-
-            elif isinstance(stmt, ast.Try):
-                # Create blocks for try-except
-                try_start = stmt.lineno
-                try_end = stmt.body[-1].end_lineno if stmt.body else try_start
-                try_block = create_block(try_start, try_end, 'try block', 'sequence')
-                blocks.append(try_block)
-
-                for handler in stmt.handlers:
-                    except_start = handler.lineno
-                    except_end = handler.body[-1].end_lineno if handler.body else except_start
-                    except_block = create_block(except_start, except_end, f'except {handler.type}', 'exception')
-                    blocks.append(except_block)
-                    edges.append({'src': try_block['id'], 'dst': except_block['id'], 'type': 'controlflow', 'kind': 'confirmed', 'edge_type': 'exception'})
-
-        # Link entry to first block
-        if len(blocks) > 1:
-            edges.append({'src': entry_block['id'], 'dst': blocks[1]['id'], 'type': 'controlflow', 'kind': 'confirmed', 'edge_type': 'next'})
-
-        return {
-            'status': 'ok',
-            'function_name': function_name,
-            'simple_name': simple_name,
-            'blocks': blocks,
-            'edges': edges,
-            'block_count': len(blocks)
-        }
+        return result
     except Exception as e:
         return {
             'status': 'error',

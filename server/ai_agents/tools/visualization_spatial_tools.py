@@ -901,6 +901,7 @@ def visualize_control_flow(
     """Visualize control flow using graph emission."""
     try:
         from .analysis_tools import analyze_control_flow
+        from ..intelligence.controlflow import cfg_to_unity_format
 
         # Get control flow analysis
         cf_result = analyze_control_flow(function_id, tool_context)
@@ -908,42 +909,67 @@ def visualize_control_flow(
         if cf_result.get('status') != 'ok':
             return cf_result
 
-        # Convert blocks to graph nodes
-        nodes = []
-        for block in cf_result.get('blocks', []):
-            nodes.append({
-                'id': block['id'],
-                'name': block['label'],
-                'file': block['file'],
-                'start': block['start'],
-                'end': block['end'],
-                'level': 'block',
-                'kind': block['type'],
-                'cluster': 'control_flow'
-            })
+        # Build CFG and convert to Unity format
+        from ..intelligence.controlflow import PythonCFGBuilder
+        from ..intelligence.graph_engine.codegraph import codegraph
 
-        # Convert edges to graph edges
-        edges = []
-        for edge in cf_result.get('edges', []):
-            edges.append({
-                'src': edge['src'],
-                'dst': edge['dst'],
-                'type': 'controlflow',
-                'kind': edge.get('kind', 'confirmed'),
-                'edge_type': edge.get('edge_type', 'next')
-            })
+        graph = codegraph.load_current_graph()
+        node = graph.get(function_id)
+
+        if not node:
+            return {
+                'status': 'not_found',
+                'function_id': function_id,
+                'message': 'Function not found in graph'
+            }
+
+        file_path = node.get('file', '')
+        with open(file_path, 'r', encoding='utf-8') as f:
+            source = f.read()
+
+        import ast
+        tree = ast.parse(source)
+        simple_name = node.get('name', '')
+        if not simple_name and '.' in node.get('id', ''):
+            simple_name = node['id'].split('.')[-1]
+
+        func_node = None
+        for node_ast in ast.walk(tree):
+            if isinstance(node_ast, ast.FunctionDef) and node_ast.name == simple_name:
+                func_node = node_ast
+                break
+
+        if not func_node:
+            return {
+                'status': 'not_found',
+                'function_id': function_id,
+                'message': f'Function {simple_name} not found in AST'
+            }
+
+        builder = PythonCFGBuilder()
+        cfg = builder.build_function(
+            function_ast=func_node,
+            function_id=node.get('id', function_id),
+            source=source,
+            file_path=file_path
+        )
+
+        # Convert to Unity format
+        unity_graph = cfg_to_unity_format(cfg)
 
         # Emit the graph to Unity
         _emit_command(tool_context, 'show_graph',
-                     nodes=nodes,
-                     edges=edges,
-                     title=f'Control Flow: {function_id}')
+                     nodes=unity_graph['nodes'],
+                     edges=unity_graph['edges'],
+                     title=f'Control Flow: {function_id}',
+                     metadata={'graph_type': 'control_flow', 'function_id': function_id})
 
         return {
             'status': 'ok',
             'function_id': function_id,
-            'block_count': len(nodes),
-            'edge_count': len(edges)
+            'node_count': len(unity_graph['nodes']),
+            'edge_count': len(unity_graph['edges']),
+            'graph_type': 'control_flow'
         }
     except Exception as e:
         return {
@@ -952,34 +978,8 @@ def visualize_control_flow(
         }
 
 
-@safe
-def visualize_data_flow(
-    variable_id: str,
-    tool_context: ToolContext
-) -> dict:
-    """Visualize data flow."""
-    try:
-        viz_id = str(uuid.uuid4())
-        
-        viz_state = _get_session_state(tool_context, 'visualization_state', {})
-        viz_state[viz_id] = {
-            'type': 'data_flow',
-            'variable_id': variable_id,
-            'created_at': time.time()
-        }
-        _set_session_state(tool_context, 'visualization_state', viz_state)
-        
-        return {
-            'status': 'ok',
-            'variable_id': variable_id,
-            'visualization_id': viz_id,
-            'note': 'Real visualization requires code intelligence integration'
-        }
-    except Exception as e:
-        return {
-            'status': 'error',
-            'error': str(e)
-        }
+# visualize_data_flow is implemented in data_flow_intelligence_tools.py
+# This consolidates the implementation to avoid duplication
 
 
 @safe

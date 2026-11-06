@@ -41,11 +41,15 @@ namespace JarvisVR
   // Field names match ai_agents/data/graph.json and the server's /health JSON.
   // Call-graph fields (callsite_id, resolution, confidence, ...) are optional:
   // graphs emitted before schema v3 simply leave them null/0.
+  // Control-flow and data-flow fields (node_kind, variable, expression, ast_kind, edge_kind, condition, evidence) are optional.
   [Serializable] public class GraphNodeDto
   {
     public string id, name, file, cluster, kind, level, parent, type, detail;
     public string qualname, class_name, language, signature;
     public int start, end, count;
+    // Control-flow and data-flow metadata (optional)
+    public string node_kind, variable, expression, ast_kind, function_id;
+    public int column;
   }
   [Serializable] public class GraphEdgeDto
   {
@@ -57,6 +61,9 @@ namespace JarvisVR
     public int column;
     public float confidence;
     public string[] candidates;
+    // Control-flow and data-flow metadata (optional)
+    public string edge_kind, condition;
+    public string evidence;  // JSON string of evidence dict
   }
   [Serializable] public class GraphDto
   {

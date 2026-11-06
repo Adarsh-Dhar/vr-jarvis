@@ -368,75 +368,49 @@ def trace_taint_flow(source_id: str, tool_context: ToolContext) -> dict:
 
 
 @safe
-def visualize_data_flow(variable_id: str, tool_context: ToolContext) -> dict:
+def visualize_data_flow(function_id: str, tool_context: ToolContext) -> dict:
     """Visualize data flow using graph emission."""
     try:
         from .visualization_spatial_tools import _emit_command
-        
-        # Get origin and usage
-        origin_result = trace_variable_origin(variable_id, tool_context)
-        usage_result = trace_variable_usage(variable_id, tool_context)
-        
-        # Build graph nodes
-        nodes = []
-        edges = []
-        
-        if origin_result.get('status') == 'ok':
-            origin = origin_result['origin']
-            nodes.append({
-                'id': f'{variable_id}_origin',
-                'name': 'origin',
-                'file': origin['file'],
-                'start': origin['line'],
-                'end': origin['line'],
-                'level': 'variable',
-                'kind': 'origin'
-            })
-            edges.append({
-                'src': f'{variable_id}_origin',
-                'dst': variable_id,
-                'type': 'dataflow',
-                'kind': 'confirmed',
-                'line': origin['line']
-            })
-        
-        nodes.append({
-            'id': variable_id,
-            'name': variable_id.split('#')[1] if '#' in variable_id else variable_id,
-            'level': 'variable',
-            'kind': 'variable'
-        })
-        
-        if usage_result.get('status') == 'ok':
-            for i, use in enumerate(usage_result.get('uses', [])):
-                nodes.append({
-                    'id': f'{variable_id}_use_{i}',
-                    'name': f'use_{i}',
-                    'level': 'variable',
-                    'kind': 'use',
-                    'line': use['line']
-                })
-                edges.append({
-                    'src': variable_id,
-                    'dst': f'{variable_id}_use_{i}',
-                    'type': 'dataflow',
-                    'kind': 'confirmed',
-                    'line': use['line']
-                })
-        
-        # Emit graph
+        from ..intelligence.dataflow import dfg_to_unity_format
+
+        # Build data-flow graph
+        dfg_result = build_data_flow_graph(function_id, tool_context)
+
+        if dfg_result.get('status') != 'ok':
+            return dfg_result
+
+        # Convert to Unity format
+        from ..intelligence.dataflow.models import DataFlowGraph
+        dfg_dict = dfg_result['graph']
+        dfg = DataFlowGraph(
+            function_id=dfg_dict['function_id'],
+            file=dfg_dict['file'],
+        )
+        # Reconstruct nodes and edges from dict
+        from ..intelligence.dataflow.models import DataFlowNode, DataFlowEdge
+        for node_dict in dfg_dict['nodes']:
+            node = DataFlowNode(**node_dict)
+            dfg.add_node(node)
+        for edge_dict in dfg_dict['edges']:
+            edge = DataFlowEdge(**edge_dict)
+            dfg.add_edge(edge)
+
+        unity_graph = dfg_to_unity_format(dfg)
+
+        # Emit the graph to Unity
         _emit_command(tool_context, 'show_graph',
-                     nodes=nodes,
-                     edges=edges,
-                     title=f'Data Flow: {variable_id}')
-        
+                     nodes=unity_graph['nodes'],
+                     edges=unity_graph['edges'],
+                     title=f'Data Flow: {function_id}',
+                     metadata={'graph_type': 'data_flow', 'function_id': function_id})
+
         return {
             'status': 'ok',
-            'variable_id': variable_id,
-            'origin_found': origin_result.get('status') == 'ok',
-            'usage_count': len(usage_result.get('uses', [])) if usage_result.get('status') == 'ok' else 0,
-            'node_count': len(nodes),
-            'edge_count': len(edges)
+            'function_id': function_id,
+            'node_count': len(unity_graph['nodes']),
+            'edge_count': len(unity_graph['edges']),
+            'graph_type': 'data_flow'
         }
     except Exception as e:
         return {
@@ -1092,13 +1066,108 @@ def trace_state_changes(
 
 @safe
 def build_data_flow_graph(
-    scope: str,
+    function_id: str,
     tool_context: ToolContext
 ) -> dict:
-    """Build data flow graphs."""
+    """Build data flow graphs using the new data-flow engine."""
     try:
-        from .analysis_tools import analyze_data_flow
-        return analyze_data_flow(scope, tool_context)
+        from ..intelligence.graph_engine.codegraph import codegraph
+        from ..intelligence.controlflow import PythonCFGBuilder
+        from ..intelligence.dataflow import (
+            PythonDefUseExtractor,
+            ReachingDefinitionsAnalyzer,
+            DataFlowGraphBuilder,
+        )
+
+        # Resolve the function
+        graph = codegraph.load_current_graph()
+        node = graph.get(function_id)
+
+        if not node:
+            return {
+                'status': 'not_found',
+                'function_id': function_id,
+                'message': 'Function not found in graph'
+            }
+
+        file_path = node.get('file', '')
+        if not file_path:
+            return {
+                'status': 'error',
+                'error': 'Node has no file path'
+            }
+
+        if not _is_python_file(file_path):
+            return {
+                'status': 'not_applicable',
+                'function_id': function_id,
+                'message': 'Data flow analysis only implemented for Python'
+            }
+
+        # Parse the file
+        tree = _parse_python_ast(file_path)
+        if not tree:
+            return {
+                'status': 'error',
+                'error': 'Could not parse file'
+            }
+
+        # Find the function node
+        simple_name = node.get('name', '')
+        if not simple_name and '.' in node.get('id', ''):
+            simple_name = node['id'].split('.')[-1]
+
+        func_node = None
+        for node_ast in ast.walk(tree):
+            if isinstance(node_ast, ast.FunctionDef) and node_ast.name == simple_name:
+                func_node = node_ast
+                break
+
+        if not func_node:
+            return {
+                'status': 'not_found',
+                'function_id': function_id,
+                'message': f'Function {simple_name} not found in AST'
+            }
+
+        # Read source
+        with open(file_path, 'r', encoding='utf-8') as f:
+            source = f.read()
+
+        # Build CFG
+        cfg_builder = PythonCFGBuilder()
+        cfg = cfg_builder.build_function(
+            function_ast=func_node,
+            function_id=node.get('id', function_id),
+            source=source,
+            file_path=file_path
+        )
+
+        # Extract definition/use facts
+        def_use_extractor = PythonDefUseExtractor()
+        facts = def_use_extractor.extract_function(
+            function_ast=func_node,
+            function_id=node.get('id', function_id),
+            source=source
+        )
+
+        # Perform reaching definitions analysis
+        reaching_analyzer = ReachingDefinitionsAnalyzer()
+        analysis_result = reaching_analyzer.analyze(cfg, facts)
+
+        # Build data-flow graph
+        dfg_builder = DataFlowGraphBuilder()
+        dfg = dfg_builder.build(cfg, facts, analysis_result)
+
+        return {
+            'status': 'ok',
+            'function_id': function_id,
+            'graph': dfg.to_dict(),
+            'definition_count': len(facts.definitions),
+            'use_count': len(facts.uses),
+            'node_count': len(dfg.nodes),
+            'edge_count': len(dfg.edges),
+        }
     except Exception as e:
         return {
             'status': 'error',

@@ -197,6 +197,7 @@ from .data_flow_intelligence_tools import (
     identify_data_sinks,
     identify_data_sources,
     identify_validation_gaps,
+    visualize_data_flow,
 )
 
 # Agent 7 - Runtime Intelligence
@@ -381,7 +382,6 @@ from .visualization_spatial_tools import (
     visualize_call_graph,
     visualize_dependency_graph,
     visualize_control_flow,
-    visualize_data_flow,
     visualize_execution_flow,
     visualize_class_hierarchy,
     visualize_architecture,
