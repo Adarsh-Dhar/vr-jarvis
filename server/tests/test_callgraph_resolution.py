@@ -182,3 +182,17 @@ def test_expected_edges_match(shop_graph):
     # every expected node exists
     for node in expected['nodes']:
         assert _node(shop_graph, node['id']) is not None, f"missing node {node['id']}"
+
+
+def test_subgraph_preserves_parallel_call_sites(shop_graph, tmp_path):
+    """P0: two validate() call sites from checkout must both survive subgraph()."""
+    import json as _json
+    from ai_agents.intelligence.graph_engine.codegraph import CodeGraph
+    gp = tmp_path / 'graph.json'
+    gp.write_text(_json.dumps(shop_graph))
+    g = CodeGraph(gp)
+    sub = g.subgraph(['main.py::checkout', 'payments.py::validate'], include_edges=True)
+    call_edges = [e for e in sub['edges'] if e.get('type') == 'calls'
+                  and e['dst'] == 'payments.py::validate']
+    assert len(call_edges) == 2
+    assert {e['callsite_id'] for e in call_edges} == {'main.py:11:4', 'main.py:24:4'}

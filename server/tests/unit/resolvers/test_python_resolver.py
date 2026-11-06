@@ -208,3 +208,45 @@ class D(B, C):
     res = r.resolve(call, fcs['m.py'], ctx)
     assert res.status == STATUS_STATIC_RESOLVED
     assert res.targets == ['m.py::B.who']
+
+
+def test_local_variable_shadows_import():
+    """P0: `validate = get_callback()` inside a function makes validate() dynamic."""
+    files = {
+        'payments.py': 'def validate():\n    return True\n',
+        'main.py': 'from payments import validate\n\ndef get_callback():\n    pass\n\ndef checkout():\n    validate = get_callback()\n    return validate()\n',
+    }
+    r, ctx, fcs, analyses = make_ctx(files)
+    call = call_for(analyses['main.py'], 'validate', 'checkout')
+    res = r.resolve(call, fcs['main.py'], ctx)
+    assert res.status == STATUS_DYNAMIC
+    assert res.targets == []
+
+
+def test_conditional_import_scoped_to_function():
+    files = {
+        'payments.py': 'def process():\n    pass\n',
+        'main.py': 'def f(flag):\n    if flag:\n        from payments import process\n    process()\n',
+    }
+    r, ctx, fcs, analyses = make_ctx(files)
+    call = call_for(analyses['main.py'], 'process', 'f')
+    res = r.resolve(call, fcs['main.py'], ctx)
+    # conditional import is still function-scoped: resolves within f only
+    assert res.status == STATUS_STATIC_RESOLVED
+    assert res.targets == ['payments.py::process']
+
+
+def test_inconsistent_mro_reports_ambiguous():
+    """P0: inconsistent hierarchy must not invent an MRO order."""
+    files = {'m.py': '''class A: pass
+class B(A): pass
+class C(A): pass
+class D(B, C): pass
+class E(C, B): pass
+class F(D, E): pass
+class G(E, D): pass
+class H(F, G): pass
+''' }
+    r, ctx, fcs, analyses = make_ctx(files)
+    mro = r._mro('m.py::H', ctx)
+    assert mro is None  # C3 inconsistency reported, not concatenated

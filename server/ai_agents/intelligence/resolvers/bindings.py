@@ -93,11 +93,27 @@ class BindingTable:
         the call line wins (redefinitions shadow earlier ones). Once a scope
         binds the name, outer scopes are not consulted (shadowing).
         """
+        module_call = (scope_id == '')
         for scope in self.scope_chain(scope_id):
             bindings = self._scopes.get(scope, {}).get(name, [])
+            if scope == '' and not module_call:
+                # Called from inside a function: every module-level binding is
+                # visible at call time; the latest declaration wins.
+                visible = list(bindings)
+                visible.sort(key=lambda b: b.start_line, reverse=True)
+                if visible:
+                    return visible
+                continue
             visible = [b for b in bindings if self._visible(b, line, scope)]
             if visible:
-                # latest binding wins -> descending start_line, [0] is best
+                if scope == '':
+                    # module-level call site: prefer bindings declared at or
+                    # before the call; fall back to all (forward references in
+                    # enclosing functions are handled by the branch above).
+                    before = [b for b in visible if not b.start_line or b.start_line <= line]
+                    pool = before or visible
+                    pool.sort(key=lambda b: b.start_line, reverse=True)
+                    return pool
                 visible.sort(key=lambda b: b.start_line, reverse=True)
                 return visible
         return []

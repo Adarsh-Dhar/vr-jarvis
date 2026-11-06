@@ -288,6 +288,7 @@ def analyze_python_source(text: str, file_path: str = '') -> dict:
                 'local_types': {},      # var -> [type names]
                 'self_attr_types': {},  # attr -> [type names] (only meaningful in methods)
                 'nested_functions': {}, # name -> qualname
+                'locals': {},           # name -> first assignment line (local shadowing)
                 'symbol_id': f'{file_path}::{qual}',
             }
             scope_facts[qual] = facts
@@ -324,6 +325,22 @@ def analyze_python_source(text: str, file_path: str = '') -> dict:
                         'scope': fn_qual or '',
                     })
                 return
+
+            # Ordinary assignments create function-local bindings that shadow
+            # module-level names, regardless of whether a type can be inferred.
+            # Only plain Name targets count (self.x / d[k] are not locals).
+            if isinstance(stmt, (ast.Assign, ast.AnnAssign, ast.AugAssign)):
+                targets = stmt.targets if isinstance(stmt, ast.Assign) else [stmt.target]
+                for t in targets:
+                    stack = [t]
+                    while stack:
+                        cur = stack.pop()
+                        if isinstance(cur, ast.Name):
+                            facts.setdefault('locals', {}).setdefault(cur.id, stmt.lineno)
+                        elif isinstance(cur, ast.Starred):
+                            stack.append(cur.value)
+                        elif isinstance(cur, (ast.Tuple, ast.List)):
+                            stack.extend(cur.elts)
 
             # Type facts from assignments (calls inside the RHS are still visited
             # by the generic child walk below).

@@ -419,12 +419,15 @@ def index_repo(name):
 
         for call in calls:
             caller_id = call.get('caller_id')
-            # validate caller endpoint: must be a real symbol node or file node
+            caller_invalid = False
+            # validate caller endpoint: must be a real symbol node or file node.
+            # A genuinely module-level call has caller_id=None; a non-None id
+            # that fails validation means ownership extraction failed — record
+            # it instead of silently pretending it was module-level.
             if caller_id and caller_id not in node_ids:
+                caller_invalid = True
                 caller_id = None
             if not caller_id:
-                caller_id = f'file::{rel}'
-            if caller_id not in node_ids:
                 caller_id = f'file::{rel}'
             callee_name = call.get('name', '')
             line_no = call.get('line', 0)
@@ -474,7 +477,7 @@ def index_repo(name):
                 'confidence': result.confidence,
                 'resolution_method': result.resolution_method,
                 'dispatch_kind': result.dispatch_kind,
-                'diagnostics': list(result.diagnostics),
+                'diagnostics': list(result.diagnostics) + (['invalid_caller_id'] if caller_invalid else []),
                 'evidence': list(result.evidence),
             }
             call_sites.append(cs_record)

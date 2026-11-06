@@ -355,6 +355,20 @@ class PythonResolver(ResolverAdapter):
                         name=p, symbol_id='', kind='param',
                         scope_id=sid, start_line=sym['start'],
                     ))
+
+        # ordinary local assignments shadow outer names inside the function
+        scopes_facts = (file_ctx.analysis or {}).get('scopes', {})
+        for sym in symbols:
+            if sym.get('kind') not in ('function', 'method'):
+                continue
+            sid = _sid(sym)
+            facts = scopes_facts.get(sym.get('qualname') or '', {})
+            for name, line in (facts.get('locals') or {}).items():
+                # don't shadow the function's own parameters twice
+                table.add_binding(Binding(
+                    name=name, symbol_id='', kind='local_var',
+                    scope_id=sid, start_line=line or sym.get('start', 0),
+                ))
         self._ctx_cache[file_ctx.file_path] = (file_ctx, table)
         return table
 
@@ -444,7 +458,13 @@ class PythonResolver(ResolverAdapter):
         if not info:
             self._mro_cache[class_id] = [class_id]
             return [class_id]
-        base_seqs = [self._mro(b, graph_ctx) for b in info.get('base_ids', [])]
+        base_seqs = []
+        for b in info.get('base_ids', []):
+            m = self._mro(b, graph_ctx)
+            if m is None:
+                self._mro_cache[class_id] = None
+                return None
+            base_seqs.append(m)
         base_list = list(info.get('base_ids', []))
         seqs = [list(s) for s in base_seqs] + [base_list]
 
@@ -455,10 +475,8 @@ class PythonResolver(ResolverAdapter):
                 seqs = [s for s in seqs if s]
                 if not seqs:
                     return out
-                # candidate = head of first non-empty seq
                 for s in seqs:
                     cand = s[0]
-                    # cand must not appear in the tail of any sequence
                     if not any(cand in s2[1:] for s2 in seqs):
                         out.append(cand)
                         for s2 in seqs:
@@ -466,14 +484,15 @@ class PythonResolver(ResolverAdapter):
                                 s2.pop(0)
                         break
                 else:
-                    # inconsistent hierarchy: fall back to concatenation
-                    for s in seqs:
-                        for c in s:
-                            if c not in out:
-                                out.append(c)
-                    return out
+                    # inconsistent hierarchy: C3 has no valid linearization.
+                    # Report it rather than inventing an order.
+                    return None
 
-        result = [class_id] + merge(seqs)
+        merged = merge(seqs)
+        if merged is None:
+            self._mro_cache[class_id] = None
+            return None
+        result = [class_id] + merged
         self._mro_cache[class_id] = result
         return result
 
@@ -496,18 +515,31 @@ class PythonResolver(ResolverAdapter):
         """All implementations of ``name`` reachable from ``class_id``'s MRO,
         plus overrides in known subclasses (virtual dispatch candidates)."""
         impls = []
-        for c in self._mro(class_id, graph_ctx):
+        for c in (self._mro(class_id, graph_ctx) or []):
             sid = self._method_in_class(c, name, graph_ctx)
             if sid:
                 impls.append(sid)
                 break  # MRO: first definition wins for the static target
-        # subclass overrides are additional runtime candidates
-        for sub in graph_ctx.get('subclasses', {}).get(class_id, []):
-            for c in self._mro(sub, graph_ctx):
+        # overrides in ALL descendants are additional runtime candidates
+        for sub in self._descendants(class_id, graph_ctx):
+            for c in (self._mro(sub, graph_ctx) or []):
                 sid = self._method_in_class(c, name, graph_ctx)
                 if sid and sid not in impls:
                     impls.append(sid)
         return impls
+
+    def _descendants(self, class_id: str, graph_ctx: Dict) -> List[str]:
+        """All transitive subclasses of ``class_id``."""
+        out, stack = [], list(graph_ctx.get('subclasses', {}).get(class_id, []))
+        seen = set()
+        while stack:
+            cur = stack.pop()
+            if cur in seen:
+                continue
+            seen.add(cur)
+            out.append(cur)
+            stack.extend(graph_ctx.get('subclasses', {}).get(cur, []))
+        return out
 
     # ------------------------------------------------------------------
     # scope facts
@@ -649,6 +681,15 @@ class PythonResolver(ResolverAdapter):
             return _result(STATUS_UNRESOLVED, f'Class {class_qual} not found',
                            method='super', evidence=evidence)
         mro = self._mro(class_id, graph_ctx)
+        if mro is None:
+            # inconsistent hierarchy: offer every same-file implementation as candidates
+            cands = [f"{file_ctx.file_path}::{cq}.{name}"
+                     for cq in (file_ctx.analysis or {}).get('classes', {})
+                     if f"{file_ctx.file_path}::{cq}.{name}" in self._node_ids(graph_ctx)]
+            return _result(STATUS_AMBIGUOUS,
+                           f'Inconsistent MRO for {class_qual}; cannot order super() lookup',
+                           candidates=cands, method='mro_super', evidence=evidence,
+                           dispatch='virtual')
         # skip the enclosing class itself
         for c in mro[1:]:
             sid = self._method_in_class(c, name, graph_ctx)
@@ -836,6 +877,13 @@ class PythonResolver(ResolverAdapter):
         bindings = table.resolve_name(name, scope_id=scope_id, line=line)
         best = bindings[0] if bindings else None
         if best:
+            if best.kind == 'local_var':
+                return _result(
+                    STATUS_DYNAMIC,
+                    f'Local variable "{name}" shadows outer bindings; call target is runtime-dependent',
+                    method='local_binding', dispatch='dynamic',
+                    diagnostics=['local_var_shadow'],
+                )
             if best.kind == 'param':
                 # callable parameter -> dynamic unless annotation gives a class
                 ann = (self._scope_facts(file_ctx, caller_qual).get('param_types', {})

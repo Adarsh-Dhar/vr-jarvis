@@ -992,34 +992,8 @@
    "language": "python"
   },
   {
-   "id": "external.preprocessing",
-   "name": "preprocessing",
-   "kind": "external",
-   "file": "external",
-   "start": 0,
-   "end": 0,
-   "cluster": "external",
-   "loc": 0,
-   "level": "external",
-   "parent": null,
-   "language": "external"
-  },
-  {
-   "id": "external.matplotlib",
-   "name": "matplotlib",
-   "kind": "external",
-   "file": "external",
-   "start": 0,
-   "end": 0,
-   "cluster": "external",
-   "loc": 0,
-   "level": "external",
-   "parent": null,
-   "language": "external"
-  },
-  {
-   "id": "external.json",
-   "name": "json",
+   "id": "external.pipeline",
+   "name": "pipeline",
    "kind": "external",
    "file": "external",
    "start": 0,
@@ -1044,125 +1018,8 @@
    "language": "external"
   },
   {
-   "id": "external.impute",
-   "name": "impute",
-   "kind": "external",
-   "file": "external",
-   "start": 0,
-   "end": 0,
-   "cluster": "external",
-   "loc": 0,
-   "level": "external",
-   "parent": null,
-   "language": "external"
-  },
-  {
-   "id": "external.math",
-   "name": "math",
-   "kind": "external",
-   "file": "external",
-   "start": 0,
-   "end": 0,
-   "cluster": "external",
-   "loc": 0,
-   "level": "external",
-   "parent": null,
-   "language": "external"
-  },
-  {
-   "id": "external.argparse",
-   "name": "argparse",
-   "kind": "external",
-   "file": "external",
-   "start": 0,
-   "end": 0,
-   "cluster": "external",
-   "loc": 0,
-   "level": "external",
-   "parent": null,
-   "language": "external"
-  },
-  {
-   "id": "external.pyplot",
-   "name": "pyplot",
-   "kind": "external",
-   "file": "external",
-   "start": 0,
-   "end": 0,
-   "cluster": "external",
-   "loc": 0,
-   "level": "external",
-   "parent": null,
-   "language": "external"
-  },
-  {
-   "id": "external.pandas",
-   "name": "pandas",
-   "kind": "external",
-   "file": "external",
-   "start": 0,
-   "end": 0,
-   "cluster": "external",
-   "loc": 0,
-   "level": "external",
-   "parent": null,
-   "language": "external"
-  },
-  {
-   "id": "external.pathlib",
-   "name": "pathlib",
-   "kind": "external",
-   "file": "external",
-   "start": 0,
-   "end": 0,
-   "cluster": "external",
-   "loc": 0,
-   "level": "external",
-   "parent": null,
-   "language": "external"
-  },
-  {
-   "id": "external.metrics",
-   "name": "metrics",
-   "kind": "external",
-   "file": "external",
-   "start": 0,
-   "end": 0,
-   "cluster": "external",
-   "loc": 0,
-   "level": "external",
-   "parent": null,
-   "language": "external"
-  },
-  {
-   "id": "external.pipeline",
-   "name": "pipeline",
-   "kind": "external",
-   "file": "external",
-   "start": 0,
-   "end": 0,
-   "cluster": "external",
-   "loc": 0,
-   "level": "external",
-   "parent": null,
-   "language": "external"
-  },
-  {
-   "id": "external.numpy",
-   "name": "numpy",
-   "kind": "external",
-   "file": "external",
-   "start": 0,
-   "end": 0,
-   "cluster": "external",
-   "loc": 0,
-   "level": "external",
-   "parent": null,
-   "language": "external"
-  },
-  {
-   "id": "external.ensemble",
-   "name": "ensemble",
+   "id": "external.base",
+   "name": "base",
    "kind": "external",
    "file": "external",
    "start": 0,
@@ -1187,8 +1044,8 @@
    "language": "external"
   },
   {
-   "id": "external.base",
-   "name": "base",
+   "id": "external.inspection",
+   "name": "inspection",
    "kind": "external",
    "file": "external",
    "start": 0,
@@ -1200,8 +1057,99 @@
    "language": "external"
   },
   {
-   "id": "external.inspection",
-   "name": "inspection",
+   "id": "external.pathlib",
+   "name": "pathlib",
+   "kind": "external",
+   "file": "external",
+   "start": 0,
+   "end": 0,
+   "cluster": "external",
+   "loc": 0,
+   "level": "external",
+   "parent": null,
+   "language": "external"
+  },
+  {
+   "id": "external.pandas",
+   "name": "pandas",
+   "kind": "external",
+   "file": "external",
+   "start": 0,
+   "end": 0,
+   "cluster": "external",
+   "loc": 0,
+   "level": "external",
+   "parent": null,
+   "language": "external"
+  },
+  {
+   "id": "external.argparse",
+   "name": "argparse",
+   "kind": "external",
+   "file": "external",
+   "start": 0,
+   "end": 0,
+   "cluster": "external",
+   "loc": 0,
+   "level": "external",
+   "parent": null,
+   "language": "external"
+  },
+  {
+   "id": "external.json",
+   "name": "json",
+   "kind": "external",
+   "file": "external",
+   "start": 0,
+   "end": 0,
+   "cluster": "external",
+   "loc": 0,
+   "level": "external",
+   "parent": null,
+   "language": "external"
+  },
+  {
+   "id": "external.math",
+   "name": "math",
+   "kind": "external",
+   "file": "external",
+   "start": 0,
+   "end": 0,
+   "cluster": "external",
+   "loc": 0,
+   "level": "external",
+   "parent": null,
+   "language": "external"
+  },
+  {
+   "id": "external.impute",
+   "name": "impute",
+   "kind": "external",
+   "file": "external",
+   "start": 0,
+   "end": 0,
+   "cluster": "external",
+   "loc": 0,
+   "level": "external",
+   "parent": null,
+   "language": "external"
+  },
+  {
+   "id": "external.numpy",
+   "name": "numpy",
+   "kind": "external",
+   "file": "external",
+   "start": 0,
+   "end": 0,
+   "cluster": "external",
+   "loc": 0,
+   "level": "external",
+   "parent": null,
+   "language": "external"
+  },
+  {
+   "id": "external.pyplot",
+   "name": "pyplot",
    "kind": "external",
    "file": "external",
    "start": 0,
@@ -1228,6 +1176,58 @@
   {
    "id": "external.warnings",
    "name": "warnings",
+   "kind": "external",
+   "file": "external",
+   "start": 0,
+   "end": 0,
+   "cluster": "external",
+   "loc": 0,
+   "level": "external",
+   "parent": null,
+   "language": "external"
+  },
+  {
+   "id": "external.matplotlib",
+   "name": "matplotlib",
+   "kind": "external",
+   "file": "external",
+   "start": 0,
+   "end": 0,
+   "cluster": "external",
+   "loc": 0,
+   "level": "external",
+   "parent": null,
+   "language": "external"
+  },
+  {
+   "id": "external.ensemble",
+   "name": "ensemble",
+   "kind": "external",
+   "file": "external",
+   "start": 0,
+   "end": 0,
+   "cluster": "external",
+   "loc": 0,
+   "level": "external",
+   "parent": null,
+   "language": "external"
+  },
+  {
+   "id": "external.preprocessing",
+   "name": "preprocessing",
+   "kind": "external",
+   "file": "external",
+   "start": 0,
+   "end": 0,
+   "cluster": "external",
+   "loc": 0,
+   "level": "external",
+   "parent": null,
+   "language": "external"
+  },
+  {
+   "id": "external.metrics",
+   "name": "metrics",
    "kind": "external",
    "file": "external",
    "start": 0,
@@ -1522,7 +1522,7 @@
   },
   {
    "src": "file::eutro/models.py",
-   "dst": "file::eutro/tsi.py",
+   "dst": "file::eutro/config.py",
    "type": "imports",
    "kind": "confirmed",
    "file": "eutro/models.py",
@@ -1530,10 +1530,26 @@
   },
   {
    "src": "file::eutro/models.py",
-   "dst": "file::eutro/config.py",
+   "dst": "file::eutro/tsi.py",
    "type": "imports",
    "kind": "confirmed",
    "file": "eutro/models.py",
+   "line": 1
+  },
+  {
+   "src": "file::eutro/predict.py",
+   "dst": "file::eutro/config.py",
+   "type": "imports",
+   "kind": "confirmed",
+   "file": "eutro/predict.py",
+   "line": 1
+  },
+  {
+   "src": "file::eutro/predict.py",
+   "dst": "file::eutro/tsi.py",
+   "type": "imports",
+   "kind": "confirmed",
+   "file": "eutro/predict.py",
    "line": 1
   },
   {
@@ -1546,23 +1562,7 @@
   },
   {
    "src": "file::eutro/predict.py",
-   "dst": "file::eutro/tsi.py",
-   "type": "imports",
-   "kind": "confirmed",
-   "file": "eutro/predict.py",
-   "line": 1
-  },
-  {
-   "src": "file::eutro/predict.py",
    "dst": "file::eutro/features.py",
-   "type": "imports",
-   "kind": "confirmed",
-   "file": "eutro/predict.py",
-   "line": 1
-  },
-  {
-   "src": "file::eutro/predict.py",
-   "dst": "file::eutro/config.py",
    "type": "imports",
    "kind": "confirmed",
    "file": "eutro/predict.py",
@@ -1586,7 +1586,15 @@
   },
   {
    "src": "file::eutro/train.py",
-   "dst": "file::eutro/io.py",
+   "dst": "file::eutro/data.py",
+   "type": "imports",
+   "kind": "confirmed",
+   "file": "eutro/train.py",
+   "line": 1
+  },
+  {
+   "src": "file::eutro/train.py",
+   "dst": "file::eutro/models.py",
    "type": "imports",
    "kind": "confirmed",
    "file": "eutro/train.py",
@@ -1610,23 +1618,15 @@
   },
   {
    "src": "file::eutro/train.py",
+   "dst": "file::eutro/io.py",
+   "type": "imports",
+   "kind": "confirmed",
+   "file": "eutro/train.py",
+   "line": 1
+  },
+  {
+   "src": "file::eutro/train.py",
    "dst": "file::eutro/features.py",
-   "type": "imports",
-   "kind": "confirmed",
-   "file": "eutro/train.py",
-   "line": 1
-  },
-  {
-   "src": "file::eutro/train.py",
-   "dst": "file::eutro/models.py",
-   "type": "imports",
-   "kind": "confirmed",
-   "file": "eutro/train.py",
-   "line": 1
-  },
-  {
-   "src": "file::eutro/train.py",
-   "dst": "file::eutro/data.py",
    "type": "imports",
    "kind": "confirmed",
    "file": "eutro/train.py",
@@ -1650,22 +1650,6 @@
   },
   {
    "src": "file::main.py",
-   "dst": "file::eutro/simulate.py",
-   "type": "imports",
-   "kind": "confirmed",
-   "file": "main.py",
-   "line": 1
-  },
-  {
-   "src": "file::main.py",
-   "dst": "file::eutro/predict.py",
-   "type": "imports",
-   "kind": "confirmed",
-   "file": "main.py",
-   "line": 1
-  },
-  {
-   "src": "file::main.py",
    "dst": "file::eutro/train.py",
    "type": "imports",
    "kind": "confirmed",
@@ -1674,7 +1658,23 @@
   },
   {
    "src": "file::main.py",
+   "dst": "file::eutro/simulate.py",
+   "type": "imports",
+   "kind": "confirmed",
+   "file": "main.py",
+   "line": 1
+  },
+  {
+   "src": "file::main.py",
    "dst": "file::eutro/io.py",
+   "type": "imports",
+   "kind": "confirmed",
+   "file": "main.py",
+   "line": 1
+  },
+  {
+   "src": "file::main.py",
+   "dst": "file::eutro/predict.py",
    "type": "imports",
    "kind": "confirmed",
    "file": "main.py",
@@ -10453,24 +10453,17 @@
    "column": 31,
    "end_line": 28,
    "language": "python",
-   "resolution": "unresolved",
+   "resolution": "dynamic",
    "targets": [],
    "candidates": [],
-   "reason": "No target found for imp",
+   "reason": "Local variable \"imp\" shadows outer bindings; call target is runtime-dependent",
    "confidence": null,
-   "resolution_method": "none",
-   "dispatch_kind": "static",
+   "resolution_method": "local_binding",
+   "dispatch_kind": "dynamic",
    "diagnostics": [
-    "no_match"
+    "local_var_shadow"
    ],
-   "evidence": [
-    {
-     "type": "ast_call",
-     "file": "eutro/models.py",
-     "line": 28,
-     "column": 31
-    }
-   ]
+   "evidence": []
   },
   {
    "id": "eutro/models.py:28:38",
@@ -10623,24 +10616,17 @@
    "column": 39,
    "end_line": 29,
    "language": "python",
-   "resolution": "unresolved",
+   "resolution": "dynamic",
    "targets": [],
    "candidates": [],
-   "reason": "No target found for imp",
+   "reason": "Local variable \"imp\" shadows outer bindings; call target is runtime-dependent",
    "confidence": null,
-   "resolution_method": "none",
-   "dispatch_kind": "static",
+   "resolution_method": "local_binding",
+   "dispatch_kind": "dynamic",
    "diagnostics": [
-    "no_match"
+    "local_var_shadow"
    ],
-   "evidence": [
-    {
-     "type": "ast_call",
-     "file": "eutro/models.py",
-     "line": 29,
-     "column": 39
-    }
-   ]
+   "evidence": []
   },
   {
    "id": "eutro/models.py:29:46",
@@ -10725,24 +10711,17 @@
    "column": 37,
    "end_line": 30,
    "language": "python",
-   "resolution": "unresolved",
+   "resolution": "dynamic",
    "targets": [],
    "candidates": [],
-   "reason": "No target found for imp",
+   "reason": "Local variable \"imp\" shadows outer bindings; call target is runtime-dependent",
    "confidence": null,
-   "resolution_method": "none",
-   "dispatch_kind": "static",
+   "resolution_method": "local_binding",
+   "dispatch_kind": "dynamic",
    "diagnostics": [
-    "no_match"
+    "local_var_shadow"
    ],
-   "evidence": [
-    {
-     "type": "ast_call",
-     "file": "eutro/models.py",
-     "line": 30,
-     "column": 37
-    }
-   ]
+   "evidence": []
   },
   {
    "id": "eutro/models.py:30:44",
@@ -21796,30 +21775,30 @@
   }
  ],
  "external_services": [
-  "preprocessing",
-  "matplotlib",
-  "json",
-  "model_selection",
-  "impute",
-  "math",
-  "argparse",
-  "pyplot",
-  "pandas",
-  "pathlib",
-  "metrics",
   "pipeline",
-  "numpy",
-  "ensemble",
-  "linear_model",
+  "model_selection",
   "base",
+  "linear_model",
   "inspection",
+  "pathlib",
+  "pandas",
+  "argparse",
+  "json",
+  "math",
+  "impute",
+  "numpy",
+  "pyplot",
   "joblib",
-  "warnings"
+  "warnings",
+  "matplotlib",
+  "ensemble",
+  "preprocessing",
+  "metrics"
  ],
  "meta": {
   "schema_version": 3,
-  "revision": "2e7d4df0e9ed505e75c8f97b38ad1b23ba74cf06",
-  "indexed_at": 1793971372.564397,
+  "revision": "aea910f09fa40618deb24282980b5c90d330f6ce",
+  "indexed_at": 1793973616.7354271,
   "languages": [
    "external",
    "python"
