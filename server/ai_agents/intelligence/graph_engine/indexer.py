@@ -1,4 +1,15 @@
-"""Graph indexing - builds the call graph from source files."""
+"""Graph indexing - builds the call graph from source files.
+
+Pipeline per file (parsed exactly once):
+    source -> symbols + call sites (with lexical owners)
+    -> per-call-site semantic resolution -> nodes / edges / call_sites
+
+Edge semantics (schema v3):
+    calls    - statically resolved call (kind 'confirmed')
+    may_call - polymorphic/ambiguous candidate (kind 'possible'/'ambiguous')
+    unresolved/dynamic/external calls produce NO internal edge; they are still
+    recorded in the top-level ``call_sites`` collection.
+"""
 import ast
 import json
 import re
@@ -6,19 +17,18 @@ import subprocess
 from pathlib import Path
 
 from ... import config
-from ..parsers.tree_sitter_parser import extract_symbols_with_tree_sitter, extract_calls_with_tree_sitter
+from ..languages import language_for_path
+from ..parsers.python_ast import analyze_python_source
+from ..parsers.tree_sitter_parser import (
+    extract_symbols_structured, extract_calls_structured,
+    extract_imports_with_tree_sitter,
+)
 from ..resolvers.registry import get_resolver
-from ..resolvers.bindings import Binding
+from ..resolvers.python_resolver import PythonResolver
 from .store import _source_files, SKIP_DIRS, EXTS, MAX_FN_LINES
 
-# Regex patterns for fallback parsing
-_FN = re.compile(r'^\s*(?:export\s+)?(?:default\s+)?(?:async\s+)?function\s*\*?\s*([A-Za-z_$][\w$]*)')
-_ARROW = re.compile(r'^\s*(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*(?::[^=]+)?=\s*(?:async\s+)?'
-                    r'(?:function\b|\([^)]*\)\s*(?::[^=]+)?=>|[A-Za-z_$][\w$]*\s*=>)')
-_CLASS = re.compile(r'^\s*(?:export\s+)?(?:default\s+)?(?:abstract\s+)?class\s+([A-Za-z_$][\w$]*)')
+# Regex patterns kept for the file-level imports aggregation and test coverage.
 _CALL = re.compile(r'\b([A-Za-z_$][\w$]*)\s*\(')
-_METHOD_CALL = re.compile(r'\b(?:self|this|[A-Za-z_$][\w$]*)\.([A-Za-z_$][\w$]*)\s*\(')
-_CONSTRUCTOR = re.compile(r'\bnew\s+([A-Za-z_$][\w$]*)\s*\(')
 _IMPORT = re.compile(r'''(?:from\s+['"]([^'"]+)['"]|require\(\s*['"]([^'"]+)['"]\s*\)|^\s*(?:from\s+([\w.]+)\s+import|import\s+([\w.]+)))''', re.M)
 
 
@@ -92,41 +102,24 @@ def _js_end(lines, start):
 
 
 def _symbols(rel, text):
-    """Yield (name, kind, start_line, end_line) 1-based."""
-    lines = text.splitlines()
-    if rel.endswith('.py'):
-        # Use tree-sitter for Python
-        try:
-            symbols = extract_symbols_with_tree_sitter(rel, text)
-            for sym in symbols:
-                yield sym['name'], sym['kind'], sym['start'], sym['end']
-        except Exception:
-            # Fallback to AST
-            try:
-                tree = ast.parse(text)
-            except SyntaxError:
-                return
-            for node in tree.body:
-                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                    yield node.name, 'function', node.lineno, node.end_lineno
-                elif isinstance(node, ast.ClassDef):
-                    yield node.name, 'object', node.lineno, node.end_lineno
-                    for m in node.body:
-                        if isinstance(m, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                            yield node.name + '.' + m.name, 'function', m.lineno, m.end_lineno
+    """Yield (name, kind, start_line, end_line) 1-based. Compatibility wrapper."""
+    language = language_for_path(rel)
+    if language == 'python':
+        analysis = analyze_python_source(text, rel)
+        for sym in analysis.get('symbols', []):
+            yield sym['qualname'], sym['kind'], sym['start'], sym['end']
         return
-    
-    # Use tree-sitter for JavaScript/TypeScript
     try:
-        symbols = extract_symbols_with_tree_sitter(rel, text)
-        for sym in symbols:
-            yield sym['name'], sym['kind'], sym['start'], sym['end']
+        for sym in extract_symbols_structured(rel, text):
+            yield sym['qualname'], sym['kind'], sym['start'], sym['end']
     except Exception:
-        # Fallback to regex
+        lines = text.splitlines()
         for i, line in enumerate(lines):
             if line.startswith((' ', '\t')) and not line.lstrip().startswith(('export', 'function', 'async', 'const', 'class')):
                 continue
-            for rx, kind in ((_FN, 'function'), (_ARROW, 'function'), (_CLASS, 'object')):
+            for rx, kind in ((re.compile(r'^\s*(?:export\s+)?(?:default\s+)?(?:async\s+)?function\s*\*?\s*([A-Za-z_$][\w$]*)'), 'function'),
+                             (re.compile(r'^\s*(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*(?::[^=]+)?=\s*(?:async\s+)?(?:function\b|\([^)]*\)\s*(?::[^=]+)?=>|[A-Za-z_$][\w$]*\s*=>)'), 'function'),
+                             (re.compile(r'^\s*(?:export\s+)?(?:default\s+)?(?:abstract\s+)?class\s+([A-Za-z_$][\w$]*)'), 'object')):
                 m = rx.match(line)
                 if m:
                     yield m.group(1), kind, i + 1, _js_end(lines, i)
@@ -143,8 +136,18 @@ def _imports(text):
     return out
 
 
+def _module_name_for(rel: str, language: str) -> str:
+    """Dotted module path for a source file (Python only meaningful)."""
+    if language != 'python':
+        return ''
+    mod = re.sub(r'\.py$', '', rel).replace('/', '.')
+    if mod.endswith('.__init__'):
+        mod = mod[:-len('.__init__')]
+    return mod
+
+
 def index_repo(name):
-    """Build {nodes, edges, tests, coverage} for repository/<name>. Pure function of the files on disk."""
+    """Build {nodes, edges, tests, coverage, call_sites} for repository/<name>."""
     repo = config.REPOSITORY_DIR / name
     nodes, texts, tests = [], {}, []
 
@@ -162,10 +165,12 @@ def index_repo(name):
             file_hashes.append(f"{rel}:{stat.st_size}:{stat.st_mtime}")
         revision = str(hash(tuple(sorted(file_hashes))))
 
-    # First pass: collect all files and build module/file nodes
+    # First pass: collect files, build file/module/symbol nodes, parse once.
     module_nodes = {}
     file_nodes = {}
     symbol_nodes = []
+    analyses = {}        # rel -> parser analysis dict
+    file_calls = {}      # rel -> [callsite dicts]
 
     for path, rel in _source_files(repo):
         try:
@@ -176,6 +181,8 @@ def index_repo(name):
         if _is_test(rel):
             tests.append({'id': 'test.' + _dotted(rel), 'file': rel, 'covers': []})
             continue
+
+        language = language_for_path(rel)
 
         # Create file node
         file_id = f'file::{rel}'
@@ -192,7 +199,8 @@ def index_repo(name):
             'cluster': _cluster(rel),
             'loc': text.count('\n') + 1,
             'level': 'file',
-            'parent': f'module::{module_name}'
+            'parent': f'module::{module_name}',
+            'language': language,
         }
 
         # Create module node if not exists
@@ -207,47 +215,106 @@ def index_repo(name):
                 'cluster': module_name,
                 'loc': 0,
                 'level': 'module',
-                'parent': None
+                'parent': None,
+                'language': language,
             }
 
-        # Extract symbols
-        lines = text.splitlines()
-        for sym, kind, start, end in _symbols(rel, text):
-            # Determine layer based on folder names, framework hints, and import direction
+        # Parse once: symbols + call sites with lexical owners.
+        if language == 'python':
+            analysis = analyze_python_source(text, rel)
+            raw_symbols = analysis.get('symbols', [])
+            raw_calls = analysis.get('call_sites', [])
+        else:
+            try:
+                raw_symbols = extract_symbols_structured(rel, text)
+            except Exception:
+                raw_symbols = []
+            try:
+                raw_calls = extract_calls_structured(rel, text)
+            except Exception:
+                raw_calls = []
+            analysis = {
+                'symbols': raw_symbols,
+                'call_sites': raw_calls,
+                'imports': extract_imports_with_tree_sitter(rel, text),
+                'classes': {}, 'scopes': {}, 'ok': True,
+            }
+        analyses[rel] = analysis
+        file_calls[rel] = raw_calls
+
+        # Symbol nodes with canonical ids: <rel>::<qualified.name>
+        for sym in raw_symbols:
+            qualname = sym.get('qualname') or sym.get('name', '')
+            if not qualname:
+                continue
+            kind = sym.get('kind', 'function')
+            node_id = sym.get('id') or f'{rel}::{qualname}'
+            legacy_id = sym.get('legacy_id') or (_dotted(rel) + '.' + qualname)
+            start = sym.get('start', 1)
+            end = sym.get('end', start)
             layer = _compute_layer(rel, texts)
 
-            # Build node with new ID format: <rel_path>::<Class.>name
-            # Example: shop/payments.py::CardPayment.process
-            qualname = sym
-            class_name = ''
-            if '.' in sym:
-                parts = sym.split('.')
-                class_name = parts[0]
-            
-            node_id = f'{rel}::{sym}'
-            legacy_id = _dotted(rel) + '.' + sym  # Old dotted format for backward compatibility
-            
             symbol_nodes.append({
                 'id': node_id,
                 'legacy_id': legacy_id,
                 'qualname': qualname,
-                'module': module_name,
-                'class_name': class_name,
-                'name': sym.split('.')[-1],
+                'name': sym.get('name', qualname.split('.')[-1]),
                 'kind': kind,
+                'class_name': sym.get('class_name', ''),
+                'class_qualname': sym.get('class_qualname', ''),
+                'module': module_name,
                 'file': rel,
                 'start': start,
                 'end': end,
+                'signature': sym.get('signature', ''),
+                'parameters': sym.get('parameters', []),
+                'decorators': sym.get('decorators', []),
                 'cluster': _cluster(rel),
                 'loc': max(end - start + 1, 1),
-                'level': 'function' if kind != 'object' else 'class',
+                'level': 'class' if kind == 'object' else 'function',
                 'layer': layer,
                 'parent': file_id,
-                'language': 'python' if rel.endswith('.py') else 'typescript'
+                'language': language,
             })
 
     # Combine all nodes
     nodes = list(module_nodes.values()) + list(file_nodes.values()) + symbol_nodes
+
+    # ----- repository-wide graph context for resolvers ---------------------
+    symbol_by_id = {n['id']: n for n in symbol_nodes}
+    node_ids = {n['id'] for n in nodes}
+    module_files = {}
+    class_by_name = {}
+    classes_info = {}
+    for rel, analysis in analyses.items():
+        language = language_for_path(rel)
+        if language == 'python':
+            mod = _module_name_for(rel, language)
+            if mod:
+                module_files[mod] = rel
+        for sym in analysis.get('symbols', []):
+            if sym.get('kind') == 'object':
+                sid = sym.get('id') or f"{rel}::{sym.get('qualname', sym.get('name',''))}"
+                class_by_name.setdefault(sym.get('name', ''), []).append(sid)
+                classes_info[sid] = {
+                    'name': sym.get('name', ''),
+                    'qualname': sym.get('qualname', ''),
+                    'file': rel,
+                    'bases': sym.get('bases', []),
+                    'base_ids': [],
+                }
+
+    graph_ctx = {
+        'nodes': nodes,
+        'node_ids': node_ids,
+        'symbol_by_id': symbol_by_id,
+        'module_files': module_files,
+        'file_symbols': {rel: a.get('symbols', []) for rel, a in analyses.items()},
+        'analyses': analyses,
+        'class_by_name': class_by_name,
+        'classes_info': classes_info,
+        'subclasses': {},
+    }
 
     by_name = {}
     for n in nodes:
@@ -257,7 +324,7 @@ def index_repo(name):
     # Add contains edges for hierarchy (module -> file -> class/function)
     for n in nodes:
         parent_id = n.get('parent')
-        if parent_id and parent_id in module_nodes or parent_id in file_nodes:
+        if parent_id and (parent_id in module_nodes or parent_id in file_nodes):
             edges.append({
                 'src': parent_id,
                 'dst': n['id'],
@@ -266,14 +333,10 @@ def index_repo(name):
             })
 
     # Add aggregated imports edges at file level
-    file_imports = {}
     for file_id, file_node in file_nodes.items():
         file_path = file_node['file']
         imports = _imports(texts.get(file_path, ''))
-        file_imports[file_id] = imports
-
         for imp in imports:
-            # Find target file
             for target_file_id, target_file_node in file_nodes.items():
                 target_file = target_file_node['file']
                 if imp in target_file or imp in target_file.rsplit('/', 1)[-1]:
@@ -292,308 +355,161 @@ def index_repo(name):
     module_imports = {}
     for edge in edges:
         if edge['type'] == 'imports':
-            src = edge['src']
-            dst = edge['dst']
+            src, dst = edge['src'], edge['dst']
             if src.startswith('module.') and dst.startswith('module.'):
                 key = (src, dst)
                 module_imports[key] = module_imports.get(key, 0) + 1
-
     for (src, dst), count in module_imports.items():
         edges.append({
-            'src': src,
-            'dst': dst,
-            'type': 'imports',
-            'kind': 'confirmed',
-            'count': count
+            'src': src, 'dst': dst, 'type': 'imports',
+            'kind': 'confirmed', 'count': count
         })
-    
-    # Add call edges with improved resolution using resolver
-    # Only process symbol nodes (functions/classes), not module/file nodes
-    
-    # Build file contexts for resolver
-    file_contexts = {}
+
+    # ----- inheritance edges + subclass index (Python) ---------------------
+    py_resolver = PythonResolver()
     for n in symbol_nodes:
-        if n['kind'] == 'object':
+        if n.get('kind') != 'object' or n.get('language') != 'python':
             continue
-        file_path = n.get('file', '')
-        if not file_path:
+        class_id = n['id']
+        info = classes_info.get(class_id)
+        if not info:
             continue
-        
-        # Build context once per file
-        if file_path not in file_contexts:
-            language = n.get('language', 'python')
-            resolver = get_resolver(language)
-            if resolver:
-                file_contexts[file_path] = resolver.build_context(file_path, texts.get(file_path, ''), nodes)
-            else:
-                file_contexts[file_path] = None
-    
-    for n in symbol_nodes:
-        if n['kind'] == 'object':
-            continue
-        file_path = n.get('file', '')
-        if not file_path:
-            continue
-
-        # Use tree-sitter to extract calls from the entire file
-        try:
-            calls = extract_calls_with_tree_sitter(file_path, texts.get(file_path, ''))
-        except Exception:
-            # Fallback to regex
-            calls = []
-            lines = texts.get(file_path, '').splitlines()
-            for offset, line in enumerate(lines):
-                for callee in _CALL.findall(line):
-                    calls.append({
-                        'name': callee,
-                        'line': offset + 1,
-                        'type': 'direct'
-                    })
-
-        # Filter calls to only those within this function's line range
-        function_calls = [c for c in calls if n['start'] <= c['line'] <= n['end']]
-
-        # Get file context
-        file_ctx = file_contexts.get(file_path)
-        language = n.get('language', 'python')
-        resolver = get_resolver(language)
-        
-        # Build graph context for resolver
-        graph_ctx = {
-            'nodes': nodes,
-            'edges': edges
-        }
-
-        # Resolve each call using the resolver
-        for call in function_calls:
-            callee = call['name']
-            call_type = call.get('call_type', 'direct')
-            line_idx = call['line'] - 1  # Convert to 0-based
-            
-            # Use resolver if available
-            if resolver and file_ctx:
-                result = resolver.resolve(call, file_ctx, graph_ctx)
-                
-                # Map resolution status to edge kind
-                status_to_kind = {
-                    'static_resolved': 'confirmed',
-                    'polymorphic': 'ambiguous',
-                    'ambiguous': 'ambiguous',
-                    'unresolved': 'unresolved',
-                    'external': 'unresolved'
-                }
-                kind = status_to_kind.get(result.status, 'unresolved')
-                
-                # Add edges based on resolution result
-                if result.status == 'static_resolved' and result.targets:
-                    for target_id in result.targets:
-                        if target_id in [node['id'] for node in nodes] and (n['id'], target_id) not in seen:
-                            seen.add((n['id'], target_id))
-                            edges.append({
-                                'src': n['id'],
-                                'dst': target_id,
-                                'type': 'calls',
-                                'kind': kind,
-                                'file': n['file'],
-                                'line': line_idx + 1,
-                                'call_type': call_type,
-                                'resolution': result.status,
-                                'reason': result.reason
-                            })
-                elif result.status == 'polymorphic' and result.targets:
-                    # Add edge to primary target with polymorphic status
-                    target_id = result.targets[0]
-                    if target_id in [node['id'] for node in nodes] and (n['id'], target_id) not in seen:
-                        seen.add((n['id'], target_id))
-                        edges.append({
-                            'src': n['id'],
-                            'dst': target_id,
-                            'type': 'calls',
-                            'kind': kind,
-                            'file': n['file'],
-                            'line': line_idx + 1,
-                            'call_type': call_type,
-                            'resolution': result.status,
-                            'reason': result.reason,
-                            'candidates': result.candidates
-                        })
-                elif result.status == 'ambiguous' and result.candidates:
-                    # If there's an explicit binding in the binding table, use only that target
-                    binding = None
-                    if file_ctx:
-                        from ..resolvers.bindings import BindingTable
-                        table = BindingTable(file_ctx.file_path)
-                        # Rebuild binding table for this check
-                        module_symbols = {}
-                        for node in nodes:
-                            if node.get('file'):
-                                file_path = node['file']
-                                if '/' in file_path:
-                                    module = file_path.rsplit('/', 1)[0]
-                                else:
-                                    module = file_path.rsplit('.', 1)[0] if '.' in file_path else file_path
-                                if module not in module_symbols:
-                                    module_symbols[module] = set()
-                                module_symbols[module].add(node['name'])
-                        
-                        explicit_imports = set()
-                        for imp in file_ctx.imports:
-                            module = imp.get('module', '')
-                            name = imp.get('name')
-                            alias = imp.get('alias')
-                            kind = imp.get('kind', 'import')
-                            
-                            if kind == 'from' and name:
-                                binding_name = alias or name
-                                module_file = None
-                                for node in nodes:
-                                    if node.get('file'):
-                                        file_stem = node['file'].rsplit('.', 1)[0] if '.' in node['file'] else node['file']
-                                        if file_stem == module or node['file'] == module:
-                                            module_file = node['file']
-                                            break
-                                
-                                if module_file:
-                                    symbol_id = f"{module_file}::{name}"
-                                else:
-                                    symbol_id = f"{module.replace('.', '/')}::{name}" if '.' in module else f"{module}::{name}"
-                                table.add_binding(Binding(binding_name, symbol_id, 'alias' if alias else 'import', imp.get('line', 0)))
-                                explicit_imports.add(binding_name)
-                        
-                        binding = table.resolve_name(callee)
-                    
-                    if binding and binding.kind in ['import', 'alias']:
-                        # Use the explicitly bound target
-                        if binding.symbol_id in [node['id'] for node in nodes] and (n['id'], binding.symbol_id) not in seen:
-                            seen.add((n['id'], binding.symbol_id))
-                            edges.append({
-                                'src': n['id'],
-                                'dst': binding.symbol_id,
-                                'type': 'calls',
-                                'kind': 'confirmed',
-                                'file': n['file'],
-                                'line': line_idx + 1,
-                                'call_type': call_type,
-                                'resolution': 'static_resolved',
-                                'reason': f'Explicit binding overrides ambiguity: {binding.kind}'
-                            })
-                    else:
-                        # No explicit binding - add edges to all candidates
-                        for candidate_id in result.candidates:
-                            if candidate_id in [node['id'] for node in nodes] and (n['id'], candidate_id) not in seen:
-                                seen.add((n['id'], candidate_id))
-                                edges.append({
-                                    'src': n['id'],
-                                    'dst': candidate_id,
-                                    'type': 'calls',
-                                    'kind': kind,
-                                    'file': n['file'],
-                                    'line': line_idx + 1,
-                                    'call_type': call_type,
-                                    'resolution': result.status,
-                                    'reason': result.reason
-                                })
-                elif result.status == 'external':
-                    # External call - no edge to internal node
-                    pass
-                else:
-                    # Unresolved - fall back to old heuristic
-                    targets = [t for t in by_name.get(callee, []) if t['id'] != n['id'] and (n['id'], t['id']) not in seen]
-                    if targets:
-                        chosen = targets[0]
-                        seen.add((n['id'], chosen['id']))
-                        edges.append({
-                            'src': n['id'],
-                            'dst': chosen['id'],
-                            'type': 'calls',
-                            'kind': 'unresolved',
-                            'file': n['file'],
-                            'line': line_idx + 1,
-                            'call_type': call_type,
-                            'resolution': 'unresolved',
-                            'reason': 'Fallback heuristic'
-                        })
-            else:
-                # Fallback to old heuristic resolution for languages without resolver
-                file_imports = _imports(texts.get(file_path, ''))
-                
-                targets = [t for t in by_name.get(callee, []) if t['id'] != n['id'] and (n['id'], t['id']) not in seen]
-                if not targets:
-                    continue
-                
-                # Disambiguate: prefer targets in the same file, then targets whose
-                # module the caller imports, then targets in the same package.
-                # Leave truly ambiguous cases as 'unresolved' instead of choosing the first.
-                same_file = [t for t in targets if t['file'] == n['file']]
-                if same_file:
-                    chosen, kind = same_file[0], 'confirmed'
-                else:
-                    # Improved import-aware resolution
-                    imported = []
-                    for t in targets:
-                        target_file = t['file']
-                        target_module = target_file.rsplit('/', 1)[0] if '/' in target_file else target_file
-                        target_module_name = target_module.replace('/', '.')
-
-                        # Check if the target module is imported
-                        for imp in file_imports:
-                            # Exact module match
-                            if imp == target_module_name:
-                                imported.append(t)
-                                break
-                            # Target is a submodule of an import
-                            if target_module_name.startswith(imp + '.'):
-                                imported.append(t)
-                                break
-                            # Import is a submodule of target
-                            if imp.startswith(target_module_name + '.'):
-                                imported.append(t)
-                                break
-                            # Filename match (imported file name matches target file)
-                            if imp == target_file.rsplit('/', 1)[-1].rsplit('.', 1)[0]:
-                                imported.append(t)
-                                break
-
-                    if len(imported) == 1:
-                        chosen, kind = imported[0], 'confirmed'
-                    elif len(imported) > 1:
-                        # Multiple imported matches - try to disambiguate by call context
-                        # For now, mark as likely since we can't be sure
-                        chosen, kind = imported[0], 'likely'
-                    else:
-                        # No imported matches - try same package
-                        caller_module = n['file'].rsplit('/', 1)[0] if '/' in n['file'] else n['file']
-                        same_package = []
-                        for t in targets:
-                            target_module = t['file'].rsplit('/', 1)[0] if '/' in t['file'] else t['file']
-                            if target_module == caller_module:
-                                same_package.append(t)
-
-                        if len(same_package) == 1:
-                            chosen, kind = same_package[0], 'likely'
-                        elif len(same_package) > 1:
-                            # Multiple in same package - mark as likely
-                            chosen, kind = same_package[0], 'likely'
-                        elif len(targets) == 1:
-                            chosen, kind = targets[0], 'likely' if call_type != 'constructor' else 'confirmed'
-                        else:
-                            # Truly ambiguous: emit one unresolved edge to the first candidate
-                            # rather than N edges, so callers/callees stay accurate.
-                            chosen, kind = targets[0], 'unresolved'
-                
-                if call_type == 'method' and kind == 'confirmed':
-                    kind = 'likely'   # method dispatch is never fully confirmed statically
-                
-                seen.add((n['id'], chosen['id']))
+        for base_expr in info.get('bases', []):
+            base_ids = py_resolver.resolve_base_class_ids([base_expr], n['file'], graph_ctx)
+            info['base_ids'].extend(base_ids)
+            for bid in base_ids:
+                graph_ctx['subclasses'].setdefault(bid, set()).add(class_id)
                 edges.append({
-                    'src': n['id'],
-                    'dst': chosen['id'],
-                    'type': 'calls',
-                    'kind': kind,
+                    'src': class_id,
+                    'dst': bid,
+                    'type': 'inherits',
+                    'kind': 'confirmed' if len(base_ids) == 1 else 'likely',
                     'file': n['file'],
-                    'line': line_idx + 1,
-                    'call_type': call_type,
-                    'resolution': 'unresolved'  # Fallback resolution
+                    'line': n.get('start', 0),
+                })
+    graph_ctx['subclasses'] = {k: sorted(v) for k, v in graph_ctx['subclasses'].items()}
+    # dedupe base_ids
+    for info in classes_info.values():
+        info['base_ids'] = sorted(set(info['base_ids']))
+
+    # ----- call-site resolution -------------------------------------------
+    call_sites = []
+    resolvers = {}
+
+    for rel, calls in file_calls.items():
+        if not calls:
+            continue
+        language = language_for_path(rel)
+        resolver = get_resolver(language)
+        if resolver is None:
+            resolver = None
+        file_ctx = None
+        if resolver is not None:
+            resolvers[language] = resolver
+            try:
+                file_ctx = resolver.build_context(rel, texts.get(rel, ''), nodes,
+                                                  analyses.get(rel))
+            except Exception:
+                file_ctx = None
+
+        for call in calls:
+            caller_id = call.get('caller_id')
+            if not caller_id:
+                caller_id = f'file::{rel}'
+            callee_name = call.get('name', '')
+            line_no = call.get('line', 0)
+            column = call.get('column', 0)
+            callsite_id = call.get('callsite_id') or f'{rel}:{line_no}:{column}'
+
+            if resolver is not None and file_ctx is not None:
+                try:
+                    result = resolver.resolve(call, file_ctx, graph_ctx)
+                except Exception as exc:
+                    result = None
+                    resolve_error = str(exc)
+                else:
+                    resolve_error = None
+            else:
+                result = None
+                resolve_error = None
+
+            if result is None:
+                from ..resolvers.base import ResolutionResult, STATUS_UNRESOLVED
+                result = ResolutionResult(
+                    status=STATUS_UNRESOLVED,
+                    reason=(f'No semantic resolver for language "{language}"'
+                            if resolver is None else f'Resolver error: {resolve_error}'),
+                    diagnostics=['no_semantic_resolver' if resolver is None else 'resolver_error'],
+                )
+
+            cs_record = {
+                'id': callsite_id,
+                'caller_id': call.get('caller_id'),
+                'caller_node_id': caller_id,
+                'expression': call.get('full_expression') or callee_name,
+                'callee_name': callee_name,
+                'receiver': call.get('receiver', ''),
+                'receiver_root': call.get('receiver_root', ''),
+                'call_type': call.get('call_type', 'direct'),
+                'arg_count': call.get('arg_count', 0),
+                'file': rel,
+                'line': line_no,
+                'column': column,
+                'end_line': call.get('end_line', line_no),
+                'language': language,
+                'resolution': result.status,
+                'targets': list(result.targets),
+                'candidates': list(result.candidates),
+                'reason': result.reason,
+                'confidence': result.confidence,
+                'resolution_method': result.resolution_method,
+                'dispatch_kind': result.dispatch_kind,
+                'diagnostics': list(result.diagnostics),
+                'evidence': list(result.evidence),
+            }
+            call_sites.append(cs_record)
+
+            # ----- edges -------------------------------------------------
+            if result.status == 'static_resolved':
+                edge_targets = result.targets
+                edge_type, edge_kind = 'calls', 'confirmed'
+            elif result.status in ('polymorphic', 'ambiguous'):
+                # dedupe targets+candidates preserving order
+                seen_t = set()
+                edge_targets = []
+                for t in list(result.targets) + list(result.candidates):
+                    if t not in seen_t:
+                        seen_t.add(t)
+                        edge_targets.append(t)
+                edge_type = 'may_call'
+                edge_kind = 'possible' if result.status == 'polymorphic' else 'ambiguous'
+            else:
+                edge_targets = []
+                edge_type = edge_kind = None
+
+            for target_id in edge_targets or []:
+                if target_id not in node_ids:
+                    continue
+                key = (callsite_id, target_id, edge_type)
+                if key in seen:
+                    continue
+                seen.add(key)
+                edges.append({
+                    'id': f'edge:{callsite_id}:{target_id}',
+                    'src': caller_id,
+                    'dst': target_id,
+                    'type': edge_type,
+                    'kind': edge_kind,
+                    'callsite_id': callsite_id,
+                    'resolution': result.status,
+                    'confidence': result.confidence,
+                    'call_type': call.get('call_type', 'direct'),
+                    'file': rel,
+                    'line': line_no,
+                    'column': column,
+                    'reason': result.reason,
+                    'resolution_method': result.resolution_method,
+                    'evidence': list(result.evidence),
                 })
 
     # Remove MAX_NODES cap - return all nodes for level-based graph serving
@@ -609,7 +525,7 @@ def index_repo(name):
                 # Check if it's a known external library
                 if not any(imp in n2.get('file', '') for n2 in nodes):
                     external_services.add(imp)
-    
+
     # Add external services as nodes
     for service in external_services:
         nodes.append({
@@ -622,26 +538,28 @@ def index_repo(name):
             'cluster': 'external',
             'loc': 0,
             'level': 'external',
-            'parent': None
+            'parent': None,
+            'language': 'external',
         })
-    
+
     ids = {n['id'] for n in nodes}
     for t in tests:
         called = set(_CALL.findall(texts[t['file']]))
         t['covers'] = sorted({x['id'] for c in called for x in by_name.get(c, []) if x['id'] in ids and len(by_name[c]) <= 3})
-    
+
     # Add graph metadata
     import time
     languages = set(n.get('language', 'unknown') for n in nodes)
-    
+
     return {
         'nodes': nodes,
         'edges': edges,
         'tests': tests,
         'coverage': {},
+        'call_sites': call_sites,
         'external_services': list(external_services),
         'meta': {
-            'schema_version': 2,
+            'schema_version': 3,
             'revision': revision,
             'indexed_at': time.time(),
             'languages': sorted(languages)

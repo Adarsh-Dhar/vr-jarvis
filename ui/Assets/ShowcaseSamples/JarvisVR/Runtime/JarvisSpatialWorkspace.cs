@@ -476,7 +476,17 @@ namespace JarvisVR
     private void StyleEdge(EdgeView ev, string kind)
     {
       JarvisPalette pal = JarvisPalette.Current;
-      string style = kind == "inferred" || kind == "dashed" ? "dashed" : kind == "runtime" || kind == "dotted" ? "dotted" : "solid";
+      // Resolution-aware styling (schema v3):
+      //   confirmed calls        -> solid cyan
+      //   possible (polymorphic) -> dashed violet
+      //   ambiguous candidates   -> dotted green
+      //   legacy inferred/runtime keep their old look
+      string resolution = ev.Dto != null ? ev.Dto.resolution : null;
+      string etype = ev.Dto != null ? ev.Dto.type : null;
+      string style;
+      if (etype == "may_call" || kind == "possible" || resolution == "polymorphic") style = "dashed";
+      else if (kind == "ambiguous" || resolution == "ambiguous") style = "dotted";
+      else style = kind == "inferred" || kind == "dashed" ? "dashed" : kind == "runtime" || kind == "dotted" ? "dotted" : "solid";
       ev.Style = style;
       ev.Base = style == "dashed" ? pal.Violet : style == "dotted" ? pal.Green : pal.Cyan;
       LineRenderer l = ev.Line;
@@ -562,15 +572,30 @@ namespace JarvisVR
       string edgeInfo = $"Edge: {edge.Dto.src} → {edge.Dto.dst}\n";
       edgeInfo += $"Type: {edge.Dto.type}\n";
       edgeInfo += $"Kind: {edge.Dto.kind}\n";
-      
+
+      if (!string.IsNullOrEmpty(edge.Dto.resolution))
+        edgeInfo += $"Resolution: {edge.Dto.resolution}\n";
+      if (!string.IsNullOrEmpty(edge.Dto.callsite_id))
+        edgeInfo += $"Call site: {edge.Dto.callsite_id}\n";
+      if (!string.IsNullOrEmpty(edge.Dto.call_type))
+        edgeInfo += $"Call type: {edge.Dto.call_type}\n";
+      if (edge.Dto.confidence > 0f)
+        edgeInfo += $"Confidence: {edge.Dto.confidence:0.00}\n";
+      if (!string.IsNullOrEmpty(edge.Dto.reason))
+        edgeInfo += $"Reason: {edge.Dto.reason}\n";
+      if (edge.Dto.candidates != null && edge.Dto.candidates.Length > 0)
+        edgeInfo += $"Candidates: {edge.Dto.candidates.Length}\n";
+
       if (!string.IsNullOrEmpty(edge.Dto.file))
       {
         edgeInfo += $"File: {edge.Dto.file}\n";
       }
-      
+
       if (edge.Dto.line > 0)
       {
-        edgeInfo += $"Line: {edge.Dto.line}\n";
+        edgeInfo += $"Line: {edge.Dto.line}";
+        if (edge.Dto.column > 0) edgeInfo += $":{edge.Dto.column}";
+        edgeInfo += "\n";
       }
       
       // Highlight the edge

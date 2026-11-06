@@ -1,11 +1,16 @@
 id: function_call_graph
 name: Function Call Graph
-version: 1.0.0
+version: 2.0.0
 owner: relationship_intelligence
 status: implemented
-supported_languages: [python, typescript]
-capabilities: [resolve_calls, callers, callees, trace_chain, visualize]
+supported_languages: [python]
+capabilities: [resolve_calls, callers, callees, trace_chain, get_call_sites, explain_call_resolution, visualize]
 dependencies:
-  tools: [find_callers, find_callees, trace_call_chain, build_call_graph, visualize_call_graph]
+  tools: [find_callers, find_callees, get_call_sites, explain_call_resolution, trace_call_chain, build_call_graph, visualize_call_graph]
 permissions: [repository.read, graph.read]
-description: Build and analyze function call graphs with semantic resolution, including imports, inheritance, and polymorphic dispatch.
+description: >-
+  Build and analyze function call graphs with evidence-based semantic resolution.
+  Only static_resolved calls produce confirmed edges; polymorphic/ambiguous
+  targets are preserved as may_call relationships; unresolved/dynamic/external
+  calls are recorded without fabricated destinations. Python is fully supported;
+  other tree-sitter languages are indexed structurally with unresolved call sites.

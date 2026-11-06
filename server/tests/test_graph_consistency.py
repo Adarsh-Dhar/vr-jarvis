@@ -81,6 +81,6 @@ def test_cross_tool_agreement(graph_index, monkeypatch):
     
     # If both ok, check agreement
     if callers_result['status'] == 'ok' and hierarchy_result['status'] == 'ok':
-        callers_from_find = {c['from'] for c in callers_result['callers']}
+        callers_from_find = {c['from'] for c in callers_result.get('confirmed_callers', callers_result.get('callers', []))}
         callers_from_hierarchy = {c['from'] for c in hierarchy_result['incoming_calls']}
         assert callers_from_find == callers_from_hierarchy

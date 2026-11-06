@@ -158,6 +158,8 @@ from .relationship_intelligence_tools import (
     build_call_graph,
     find_callers,
     find_callees,
+    get_call_sites,
+    explain_call_resolution,
     trace_call_chain,
     find_indirect_callers,
     build_dependency_graph,

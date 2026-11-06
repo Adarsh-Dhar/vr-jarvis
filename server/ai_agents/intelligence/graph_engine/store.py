@@ -4,6 +4,7 @@ import subprocess
 from pathlib import Path, PurePosixPath
 
 from ... import config
+from ..languages import SOURCE_EXTS
 
 # Constants
 MAX_FN_LINES = 400
@@ -65,7 +66,10 @@ def activate(name):
 SKIP_DIRS = {'.git', 'node_modules', 'dist', 'build', 'out', 'coverage', '__pycache__', '.venv', 'venv',
              'env', '.next', '.idea', '.vscode', 'target', 'vendor'}
 JS_EXT = {'.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs'}
-EXTS = JS_EXT | {'.py'}
+# All languages with a tree-sitter grammar and structural extraction support.
+# Semantic call resolution is only claimed for languages with a resolver;
+# the rest are indexed structurally and their call sites recorded as unresolved.
+EXTS = SOURCE_EXTS
 MAX_FILE_BYTES = 400_000
 MAX_BROWSER_FILE_BYTES = 512_000
 

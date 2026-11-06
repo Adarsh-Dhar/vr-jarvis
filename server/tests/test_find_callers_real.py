@@ -28,10 +28,10 @@ def test_find_callers_make_dataset(rp_graph):
         pytest.skip("Node not found - graph may need re-indexing with new ID format")
     
     assert result['status'] == 'ok'
-    assert 'callers' in result
+    assert 'confirmed_callers' in result
 
     # Should have at least 1 caller: eutro.train.train
-    callers = result['callers']
+    callers = result['confirmed_callers']
     
     # Skip if no callers found - graph may need full re-index with new ID format
     if len(callers) == 0:
@@ -47,7 +47,7 @@ def test_find_callers_make_dataset(rp_graph):
     assert train_caller['kind'] == 'confirmed'
 
     # Check that no caller is a container or import
-    for caller in result['callers']:
+    for caller in result['confirmed_callers']:
         caller_id = caller['from']
         # Should not be a container node (e.g., eutro.data)
         assert not caller_id.startswith('module.'), f"Found module as caller: {caller_id}"
@@ -62,7 +62,7 @@ def test_find_callers_no_false_positives(rp_graph):
     assert result['status'] == 'ok'
     
     # Check that no caller is a container or import
-    for caller in result['callers']:
+    for caller in result['confirmed_callers']:
         caller_id = caller['from']
         # Should not be a container node (e.g., eutro.data)
         assert caller_id != 'eutro.data', f"Found container as caller: {caller_id}"
@@ -74,10 +74,10 @@ def test_find_callees_make_dataset(rp_graph):
     result = find_callees('eutro.data.make_dataset', None)
     
     assert result['status'] == 'ok'
-    assert 'outgoing_calls' in result
+    assert 'confirmed_callees' in result
     
     # Should have callees (functions called by make_dataset)
-    callees = result['outgoing_calls']
+    callees = result['confirmed_callees']
     # The exact number depends on the implementation, but should be > 0
     assert len(callees) >= 0
 

@@ -1,77 +1,124 @@
-"""Binding table for tracking import and local name bindings."""
-from typing import Dict, List, Optional, Set
+"""Scope-aware binding table for tracking name -> symbol bindings.
+
+Bindings are stored per lexical scope (``scope_id`` is a symbol id such as
+``payments.py::CardPayment.process``; the empty string is module scope). A name
+defined inside one function is never visible from another function: lookup walks
+the scope-parent chain from the call site's scope outward to module scope and
+stops at the first scope that binds the name.
+"""
+from typing import Dict, List, Optional
 from dataclasses import dataclass, field
 
 
 @dataclass
 class Binding:
-    """A binding from a local name to a symbol."""
-    name: str  # Local name (e.g., 'validate', 'auth_validate')
-    symbol_id: str  # Resolved symbol ID (e.g., 'authentication.py::validate')
-    kind: str  # 'local', 'import', 'alias', 'module'
-    line: int  # Line where binding occurs
+    """A binding from a local name to a symbol or module."""
+    name: str                    # local bound name (e.g. 'validate', 'auth_validate', 'payments')
+    symbol_id: str = ''          # resolved symbol id, '' when target is a module/external
+    kind: str = 'local'          # 'import' | 'alias' | 'module' | 'local' | 'param' | 'class' | 'nested'
+    scope_id: str = ''           # owning scope symbol id ('' = module scope)
+    start_line: int = 0          # first line where the binding is visible
+    end_line: int = 0            # last line (0 = rest of scope)
+    module: str = ''             # dotted module for import/module bindings
+    imported_name: str = ''      # original name before aliasing
+    resolved_file: str = ''      # repo-relative file the binding points into
 
 
 class BindingTable:
-    """Tracks name-to-symbol bindings for a file."""
-    
+    """Tracks name-to-symbol bindings for one file, organized by lexical scope."""
+
     def __init__(self, file_path: str):
         self.file_path = file_path
-        self.bindings: Dict[str, List[Binding]] = {}  # name -> bindings
-        self.module_bindings: Dict[str, str] = {}  # module name -> symbol ID prefix
-        self.class_bindings: Dict[str, str] = {}  # class name -> symbol ID
-        self.scopes: List[Set[str]] = [set()]  # Stack of scopes for local variables
-    
+        # scope_id -> {name: [Binding,...]}
+        self._scopes: Dict[str, Dict[str, List[Binding]]] = {'': {}}
+        # scope_id -> parent scope_id ('' parent = module scope)
+        self.scope_parent: Dict[str, str] = {}
+        # bound name -> dotted module path, for `import x [as y]` style bindings
+        self.module_bindings: Dict[str, str] = {}
+        # class name -> class symbol id (module-level classes)
+        self.class_bindings: Dict[str, str] = {}
+
+    # -- scope management -----------------------------------------------------
+    def add_scope(self, scope_id: str, parent: str = ''):
+        """Register a lexical scope and its parent (first registration wins)."""
+        self._scopes.setdefault(scope_id, {})
+        if scope_id not in self.scope_parent:
+            self.scope_parent[scope_id] = parent if parent == '' or parent in self._scopes else ''
+
+    def scope_chain(self, scope_id: str) -> List[str]:
+        """Return scope ids from innermost to module scope ('' last)."""
+        chain = []
+        seen = set()
+        cur = scope_id
+        while cur and cur not in seen:
+            seen.add(cur)
+            chain.append(cur)
+            cur = self.scope_parent.get(cur, '')
+        chain.append('')
+        return chain
+
+    # -- binding management ---------------------------------------------------
     def add_binding(self, binding: Binding):
-        """Add a binding to the current scope."""
-        name = binding.name
-        if name not in self.bindings:
-            self.bindings[name] = []
-        self.bindings[name].append(binding)
-        self.scopes[-1].add(name)
-    
-    def add_module_binding(self, module_name: str, symbol_prefix: str):
-        """Add a module-level import binding."""
-        self.module_bindings[module_name] = symbol_prefix
-    
+        scope = binding.scope_id or ''
+        self._scopes.setdefault(scope, {})
+        self._scopes[scope].setdefault(binding.name, []).append(binding)
+        if binding.kind == 'module' and binding.module:
+            self.module_bindings[binding.name] = binding.module
+        if binding.kind == 'class' and binding.symbol_id:
+            self.class_bindings[binding.name] = binding.symbol_id
+
+    def add_module_binding(self, bound_name: str, module: str):
+        self.module_bindings[bound_name] = module
+
     def add_class_binding(self, class_name: str, symbol_id: str):
-        """Add a class definition binding."""
         self.class_bindings[class_name] = symbol_id
-    
-    def push_scope(self):
-        """Push a new scope (e.g., entering a function)."""
-        self.scopes.append(set())
-    
-    def pop_scope(self):
-        """Pop the current scope."""
-        if len(self.scopes) > 1:
-            self.scopes.pop()
-    
-    def resolve_name(self, name: str) -> Optional[Binding]:
-        """Resolve a name to its binding, checking from innermost scope outward."""
-        if name in self.bindings:
-            # Return the most recent binding
-            return self.bindings[name][-1]
-        return None
-    
+
+    # -- lookup ----------------------------------------------------------------
+    def _visible(self, binding: Binding, line: int) -> bool:
+        if line and binding.start_line and binding.start_line > line:
+            return False
+        if binding.end_line and line and line > binding.end_line:
+            return False
+        return True
+
+    def resolve_name(self, name: str, scope_id: str = '', line: int = 0) -> List[Binding]:
+        """Return candidate bindings for ``name`` visible from ``scope_id``.
+
+        Ordered innermost scope first; the first element is the best candidate.
+        Shadowing is honoured: once a scope binds the name, outer scopes are
+        not consulted for that name.
+        """
+        for scope in self.scope_chain(scope_id):
+            bindings = self._scopes.get(scope, {}).get(name, [])
+            visible = [b for b in bindings if self._visible(b, line)]
+            if visible:
+                # latest binding before the call line wins within the scope
+                visible.sort(key=lambda b: b.start_line)
+                return visible
+        return []
+
     def resolve_module_name(self, module_name: str) -> Optional[str]:
-        """Resolve a module name to its symbol prefix."""
+        """Resolve a module alias to its dotted module path."""
         return self.module_bindings.get(module_name)
-    
+
     def resolve_class_name(self, class_name: str) -> Optional[str]:
         """Resolve a class name to its symbol ID."""
         return self.class_bindings.get(class_name)
-    
+
     def get_all_bindings(self, name: str) -> List[Binding]:
-        """Get all bindings for a name (for ambiguous cases)."""
-        return self.bindings.get(name, [])
-    
+        """Get every binding for a name across all scopes (ambiguity analysis)."""
+        out = []
+        for scope in self._scopes.values():
+            out.extend(scope.get(name, []))
+        return out
+
     def to_dict(self) -> Dict:
-        """Convert to dictionary for debugging."""
         return {
             'file_path': self.file_path,
-            'bindings': {k: [{'name': b.name, 'symbol_id': b.symbol_id, 'kind': b.kind, 'line': b.line} 
-                           for b in v] for k, v in self.bindings.items()},
+            'scopes': {
+                sid: {n: [b.__dict__ for b in bl] for n, bl in names.items()}
+                for sid, names in self._scopes.items()
+            },
             'module_bindings': self.module_bindings,
-            'class_bindings': self.class_bindings
+            'class_bindings': self.class_bindings,
         }

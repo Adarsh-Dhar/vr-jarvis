@@ -748,93 +748,79 @@ def summarize_graph(
 def visualize_call_graph(
     function_id: str,
     tool_context: ToolContext,
-    scope: str = 'local'
+    scope: str = 'local',
+    depth: int = 2,
+    include_possible: bool = False
 ) -> dict:
     """
-    Visualize call graph using the graph index.
-    
-    Builds actual call graph from the repository index where available.
+    Visualize the call-graph neighborhood of a function and emit ``show_graph``.
+
+    Uses the canonical CodeGraph so edges carry resolution metadata
+    (callsite_id, resolution, confidence, reason). ``scope`` controls the
+    neighborhood: 'local' = direct callers/callees, 'neighborhood' = multi-hop,
+    'repo' = whole repository call graph. Uncertain edges (may_call) are only
+    included when ``include_possible`` is true.
     """
     try:
-        from .navigation_tools import _load_graph_index, resolve_symbol
-        
+        from ..intelligence.graph_engine.codegraph import load_current_graph
+
         viz_id = str(uuid.uuid4())
-        
-        # Handle special case for whole repository
-        if function_id == '.' or function_id == 'repo':
-            graph = _load_graph_index()
-            nodes = graph.get('nodes', [])
-            edges = graph.get('edges', [])
-            
-            viz_state = _get_session_state(tool_context, 'visualization_state', {})
-            viz_state[viz_id] = {
-                'type': 'call_graph',
-                'function_id': function_id,
-                'scope': scope,
-                'nodes': nodes,
-                'edges': edges,
-                'created_at': time.time()
-            }
-            _set_session_state(tool_context, 'visualization_state', viz_state)
-            
+        graph = load_current_graph()
+
+        # Whole-repository view
+        if function_id in ('.', 'repo'):
+            sub = graph.subgraph(
+                [n['id'] for n in graph._nodes.values()
+                 if n.get('level') in ('function', 'class') or n.get('kind') in ('function', 'method', 'object')],
+                include_edges=True)
+            nodes, edges = sub['nodes'], [
+                e for e in sub['edges'] if e.get('type') in ('calls', 'may_call', 'inherits')]
+            if not include_possible:
+                edges = [e for e in edges if e.get('type') != 'may_call']
+            _emit_command(tool_context, 'show_graph',
+                          nodes=nodes, edges=edges,
+                          title='Call Graph: repository')
             return {
-                'status': 'ok',
-                'function_id': function_id,
-                'scope': scope,
+                'status': 'ok', 'function_id': function_id, 'scope': scope,
                 'visualization_id': viz_id,
-                'nodes_count': len(nodes),
-                'edges_count': len(edges),
-                'note': 'Full repository call graph'
+                'nodes_count': len(nodes), 'edges_count': len(edges),
+                'resolution_counts': _edge_resolution_counts(edges),
             }
-        
-        # Load graph from index
-        graph = _load_graph_index()
-        graph_nodes = graph.get('nodes', [])
-        graph_edges = graph.get('edges', [])
-        
-        # Find the function in the graph
-        target_node = resolve_symbol(function_id)
-        if not target_node:
-            # Try by name
-            nodes_by_name = [n for n in graph_nodes if n.get('name') == function_id]
-            if nodes_by_name:
-                target_node = nodes_by_name[0]
-            else:
-                return {
-                    'status': 'error',
-                    'error': f'Function not found in graph index: {function_id}'
-                }
-        
-        # Get callers (edges where this node is the destination) - only call edges
-        callers = [e for e in graph_edges if e.get('dst') == target_node.get('id') and e.get('type') == 'calls']
-        # Get callees (edges where this node is the source) - only call edges
-        callees = [e for e in graph_edges if e.get('src') == target_node.get('id') and e.get('type') == 'calls']
-        
-        # Build graph structure
-        nodes = [target_node]
-        edges = callers + callees
-        
-        # Add related nodes
-        added_ids = {target_node.get('id')}
-        for edge in edges:
-            src_id = edge.get('src')
-            dst_id = edge.get('dst')
-            if src_id not in added_ids:
-                src_node = resolve_symbol(src_id)
-                if src_node:
-                    nodes.append(src_node)
-                    added_ids.add(src_id)
-            if dst_id not in added_ids:
-                dst_node = resolve_symbol(dst_id)
-                if dst_node:
-                    nodes.append(dst_node)
-                    added_ids.add(dst_id)
-        
+
+        # Resolve the selected symbol strictly
+        resolved = graph.resolve(function_id)
+        if resolved['status'] == 'not_found':
+            return {'status': 'error',
+                    'error': f'Function not found in graph index: {function_id}'}
+        if resolved['status'] == 'ambiguous':
+            return {'status': 'ambiguous',
+                    'message': f'"{function_id}" matches multiple symbols; '
+                               'pass a full id such as file.py::Class.method',
+                    'candidates': [c['id'] for c in resolved['candidates'][:20]]}
+        target = resolved['node']
+
+        # Neighborhood depth from scope
+        eff_depth = {'local': 1, 'neighborhood': max(depth, 2), 'repo': 6}.get(scope, depth)
+        sub = graph.neighborhood(target['id'], depth=eff_depth, direction='both',
+                                 include_unresolved=include_possible,
+                                 max_nodes=800)
+        nodes = sub['nodes']
+        edges = [e for e in sub['edges'] if e.get('type') in ('calls', 'may_call', 'inherits')]
+        if not include_possible:
+            edges = [e for e in edges if e.get('type') != 'may_call']
+
+        _emit_command(tool_context, 'show_graph',
+                      nodes=nodes, edges=edges,
+                      title=f'Call Graph: {target.get("name", function_id)}',
+                      callsite_metadata=True)
+
         viz_state = _get_session_state(tool_context, 'visualization_state', {})
         viz_state[viz_id] = {
             'type': 'call_graph',
-            'function_id': function_id,
+            'function_id': target['id'],
             'scope': scope,
+            'depth': eff_depth,
+            'include_possible': include_possible,
             'nodes': nodes,
             'edges': edges,
             'created_at': time.time()
@@ -843,18 +829,30 @@ def visualize_call_graph(
 
         return {
             'status': 'ok',
-            'function_id': function_id,
+            'function_id': target['id'],
             'scope': scope,
+            'depth': eff_depth,
+            'include_possible': include_possible,
             'visualization_id': viz_id,
             'nodes_count': len(nodes),
             'edges_count': len(edges),
-            'note': 'Call graph built from graph index'
+            'truncated': sub.get('truncated', False),
+            'resolution_counts': _edge_resolution_counts(edges),
+            'note': 'Call graph emitted to VR scene'
         }
     except Exception as e:
         return {
             'status': 'error',
             'error': str(e)
         }
+
+
+def _edge_resolution_counts(edges):
+    counts = {}
+    for e in edges:
+        key = e.get('resolution') or e.get('kind') or 'unknown'
+        counts[key] = counts.get(key, 0) + 1
+    return counts
 
 
 @safe

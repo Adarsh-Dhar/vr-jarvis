@@ -27,21 +27,28 @@ def build_call_graph(scope: str, tool_context: ToolContext) -> dict:
         filtered_nodes = []
         filtered_edges = []
         
+        # Only call-graph relationships belong in a call graph.
+        CALL_EDGE_TYPES = {'calls', 'may_call'}
+        all_edges = [e for e in graph.get('edges', []) if e.get('type') in CALL_EDGE_TYPES]
+
         # Handle scope: '.' means whole repository
         if scope == '.' or scope == 'repo':
-            # Return all nodes and edges
-            filtered_nodes = graph.get('nodes', [])
-            filtered_edges = graph.get('edges', [])
+            # Function-level nodes only (plus file/module context is noise here)
+            filtered_nodes = [n for n in graph.get('nodes', [])
+                              if n.get('level') in ('function', 'class') or n.get('kind') in ('function', 'method', 'object')]
+            node_ids = {n.get('id') for n in filtered_nodes}
+            filtered_edges = [e for e in all_edges
+                              if e.get('src') in node_ids and e.get('dst') in node_ids]
         else:
             # Check if scope is a node ID
             if '/' not in scope and '.' in scope:
                 # It's likely a node ID (e.g., "routes.account.deleteAccount")
                 node = resolve_symbol(scope)
                 if node:
-                    # Return this node and its direct connections
+                    # Return this node and its direct call connections
                     filtered_nodes = [node]
                     node_id = node.get('id')
-                    for edge in graph.get('edges', []):
+                    for edge in all_edges:
                         if edge.get('src') == node_id or edge.get('dst') == node_id:
                             filtered_edges.append(edge)
                             # Add connected nodes
@@ -76,7 +83,7 @@ def build_call_graph(scope: str, tool_context: ToolContext) -> dict:
                 node_ids = {n.get('id') for n in filtered_nodes}
                 connected_node_ids = set()
                 
-                for edge in graph.get('edges', []):
+                for edge in all_edges:
                     src_id = edge.get('src')
                     dst_id = edge.get('dst')
                     
@@ -93,7 +100,15 @@ def build_call_graph(scope: str, tool_context: ToolContext) -> dict:
                 for node in graph.get('nodes', []):
                     if node.get('id') in connected_node_ids:
                         filtered_nodes.append(node)
-        
+
+        # Attach recorded call-site records for the included edges so callers can
+        # report source evidence without a second lookup.
+        call_sites = {c.get('id'): c for c in graph.get('call_sites', []) if isinstance(c, dict)}
+        for edge in filtered_edges:
+            csid = edge.get('callsite_id')
+            if csid and csid in call_sites:
+                edge['call_site'] = call_sites[csid]
+
         return {
             'status': 'ok',
             'scope': scope,
@@ -111,19 +126,55 @@ def build_call_graph(scope: str, tool_context: ToolContext) -> dict:
         }
 
 
+def _split_call_results(entries):
+    """Split caller/callee entries into confirmed vs possible groups."""
+    confirmed, possible = [], []
+    for e in entries:
+        res = e.get('resolution', '')
+        kind = e.get('kind', '')
+        if res == 'static_resolved' or kind == 'confirmed':
+            confirmed.append(e)
+        else:
+            possible.append(e)
+    return confirmed, possible
+
+
 @safe
-def find_callers(function_id: str, tool_context: ToolContext, depth: int = 1) -> dict:
-    """Find functions calling a selected function using CodeGraph."""
+def find_callers(function_id: str, tool_context: ToolContext, depth: int = 1,
+                 include_possible: bool = False) -> dict:
+    """Find functions calling a selected function using CodeGraph.
+
+    Confirmed callers (static_resolved) are reported separately from possible
+    callers (polymorphic/ambiguous may_call edges) so the agent never presents
+    uncertain relationships as fact.
+    """
     try:
         from .. import codegraph
 
         graph = codegraph.load_current_graph()
-        callers = graph.callers(function_id, depth=depth)
+        node = graph.get(function_id)
+        if node is None:
+            resolved = graph.resolve(function_id)
+            if resolved['status'] == 'ambiguous':
+                return {
+                    'status': 'ambiguous',
+                    'function_id': function_id,
+                    'message': f'"{function_id}" matches {len(resolved["candidates"])} symbols; disambiguate with a full id',
+                    'candidates': [c['id'] for c in resolved['candidates'][:20]],
+                }
+            return {'status': 'not_found', 'error': f'Symbol not found: {function_id}'}
+        function_id = node['id']
+
+        callers = graph.callers(function_id, depth=depth,
+                                include_possible=include_possible,
+                                include_ambiguous=include_possible)
+        confirmed, possible = _split_call_results(callers)
 
         return {
             'status': 'ok',
             'function_id': function_id,
-            'callers': callers,
+            'confirmed_callers': confirmed,
+            'possible_callers': possible if include_possible else [],
             'depth': depth
         }
     except Exception as e:
@@ -134,18 +185,124 @@ def find_callers(function_id: str, tool_context: ToolContext, depth: int = 1) ->
 
 
 @safe
-def find_callees(function_id: str, tool_context: ToolContext) -> dict:
-    """Find functions called by a selected function using CodeGraph."""
+def find_callees(function_id: str, tool_context: ToolContext,
+                 include_possible: bool = False) -> dict:
+    """Find functions called by a selected function using CodeGraph.
+
+    Confirmed callees are separated from possible callees (may_call edges).
+    """
     try:
         from .. import codegraph
 
         graph = codegraph.load_current_graph()
-        callees = graph.callees(function_id, depth=1)
+        node = graph.get(function_id)
+        if node is None:
+            resolved = graph.resolve(function_id)
+            if resolved['status'] == 'ambiguous':
+                return {
+                    'status': 'ambiguous',
+                    'function_id': function_id,
+                    'message': f'"{function_id}" matches {len(resolved["candidates"])} symbols; disambiguate with a full id',
+                    'candidates': [c['id'] for c in resolved['candidates'][:20]],
+                }
+            return {'status': 'not_found', 'error': f'Symbol not found: {function_id}'}
+        function_id = node['id']
+
+        callees = graph.callees(function_id, depth=1,
+                                include_possible=include_possible,
+                                include_ambiguous=include_possible)
+        confirmed, possible = _split_call_results(callees)
 
         return {
             'status': 'ok',
             'function_id': function_id,
-            'outgoing_calls': callees
+            'confirmed_callees': confirmed,
+            'possible_callees': possible if include_possible else [],
+        }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
+
+
+@safe
+def get_call_sites(function_id: str, tool_context: ToolContext) -> dict:
+    """List recorded call sites owned by a function, with resolution status."""
+    try:
+        from .. import codegraph
+
+        graph = codegraph.load_current_graph()
+        node = graph.get(function_id)
+        if node is None:
+            resolved = graph.resolve(function_id)
+            if resolved['status'] == 'ambiguous':
+                return {
+                    'status': 'ambiguous',
+                    'function_id': function_id,
+                    'candidates': [c['id'] for c in resolved['candidates'][:20]],
+                }
+            return {'status': 'not_found', 'error': f'Symbol not found: {function_id}'}
+        function_id = node['id']
+
+        sites = [c for c in getattr(graph, '_call_sites', {}).values()
+                 if c.get('caller_node_id') == function_id or c.get('caller_id') == function_id]
+        sites.sort(key=lambda c: (c.get('file', ''), c.get('line', 0), c.get('column', 0)))
+
+        return {
+            'status': 'ok',
+            'function_id': function_id,
+            'call_sites': sites,
+            'count': len(sites),
+        }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
+
+
+@safe
+def explain_call_resolution(callsite_id: str, tool_context: ToolContext) -> dict:
+    """Explain why a call site resolves the way it does, from recorded evidence.
+
+    The answer comes from resolver-recorded evidence (resolution method,
+    reason, candidates, source span) — never an invented explanation.
+    """
+    try:
+        from .. import codegraph
+
+        graph = codegraph.load_current_graph()
+        site = graph.call_site(callsite_id)
+        if site is None:
+            # allow lookup by "file:line" prefix
+            matches = [c for c in getattr(graph, '_call_sites', {}).values()
+                       if c.get('id', '').startswith(callsite_id) or
+                       f"{c.get('file')}:{c.get('line')}" == callsite_id]
+            if len(matches) == 1:
+                site = matches[0]
+            elif len(matches) > 1:
+                return {
+                    'status': 'ambiguous',
+                    'callsite_id': callsite_id,
+                    'candidates': [m['id'] for m in matches],
+                }
+        if site is None:
+            return {'status': 'error', 'error': f'Call site not found: {callsite_id}'}
+
+        # attach target/candidate node details
+        def _node(sid):
+            n = graph._nodes.get(sid)
+            return {'id': sid, 'name': n.get('name') if n else None,
+                    'file': n.get('file') if n else None} if n else {'id': sid}
+
+        return {
+            'status': 'ok',
+            'call_site': site,
+            'caller': _node(site.get('caller_node_id') or ''),
+            'targets': [_node(t) for t in site.get('targets', [])],
+            'candidates': [_node(c) for c in site.get('candidates', [])],
+            'edges': graph.candidates(callsite_id),
         }
     except Exception as e:
         return {
@@ -158,59 +315,83 @@ def find_callees(function_id: str, tool_context: ToolContext) -> dict:
 def trace_call_chain(
     function_id: str,
     tool_context: ToolContext,
-    depth: int = 3
+    depth: int = 3,
+    include_possible: bool = False
 ) -> dict:
-    """Trace the complete call chain using CodeGraph."""
+    """Trace call chains from a function using CodeGraph.
+
+    Uses path-local visited sets so recursion, cycles and diamond-shaped call
+    graphs produce every distinct path (bounded by ``depth``). Each step carries
+    the call-site id, source line and resolution status of the edge taken.
+    """
     try:
         from .. import codegraph
 
         graph = codegraph.load_current_graph()
+        start = graph.get(function_id)
+        if start is None:
+            resolved = graph.resolve(function_id)
+            if resolved['status'] == 'ambiguous':
+                return {
+                    'status': 'ambiguous',
+                    'function_id': function_id,
+                    'candidates': [c['id'] for c in resolved['candidates'][:20]],
+                }
+            return {'status': 'not_found', 'error': f'Symbol not found: {function_id}'}
+        start_id = start['id']
 
-        # Build call chains by BFS following outgoing calls
+        MAX_CHAINS = 200
+        MAX_CHAIN_LEN = depth + 1
         chains = []
-        visited = set()
+        truncated = False
 
-        def build_chain(current_id, current_chain, current_depth):
-            if current_depth > depth or current_id in visited:
-                if current_chain:
-                    chains.append(current_chain)
+        def node_entry(nid):
+            n = graph._nodes.get(nid, {})
+            return {'id': nid, 'name': n.get('name'), 'file': n.get('file')}
+
+        def walk(current_id, path, visited, d):
+            nonlocal truncated
+            if len(chains) >= MAX_CHAINS:
+                truncated = True
                 return
-            visited.add(current_id)
-
-            node = graph.get(current_id)
-            if node:
-                current_chain.append({
-                    'id': current_id,
-                    'name': node.get('name'),
-                    'file': node.get('file')
-                })
-
-            # Get outgoing calls
-            callees = graph.callees(current_id, depth=1)
+            if d > depth:
+                chains.append(list(path))
+                return
+            callees = graph.callees(current_id, depth=1,
+                                    include_possible=include_possible,
+                                    include_ambiguous=include_possible)
             if not callees:
-                if current_chain:
-                    chains.append(current_chain)
+                chains.append(list(path))
                 return
-
             for callee in callees:
-                next_id = callee['to']
-                build_chain(next_id, current_chain.copy(), current_depth + 1)
+                nxt = callee['to']
+                step = dict(node_entry(nxt))
+                step['via'] = {
+                    'callsite_id': callee.get('callsite_id'),
+                    'line': callee.get('line'),
+                    'resolution': callee.get('resolution'),
+                    'kind': callee.get('kind'),
+                    'confidence': callee.get('confidence'),
+                }
+                if nxt in visited:
+                    # cycle: record the edge but do not recurse
+                    cyc = list(path) + [step]
+                    chains.append(cyc)
+                    continue
+                if len(path) + 1 >= MAX_CHAIN_LEN:
+                    chains.append(list(path) + [step])
+                    continue
+                walk(nxt, path + [step], visited | {nxt}, d + 1)
 
-        # Start building chains from the initial function
-        node = graph.get(function_id)
-        if node:
-            initial_chain = [{
-                'id': function_id,
-                'name': node.get('name'),
-                'file': node.get('file')
-            }]
-            build_chain(function_id, initial_chain, 0)
+        walk(start_id, [node_entry(start_id)], {start_id}, 0)
 
         return {
             'status': 'ok',
-            'function_id': function_id,
+            'function_id': start_id,
             'chains': chains,
-            'depth': depth
+            'depth': depth,
+            'include_possible': include_possible,
+            'truncated': truncated,
         }
     except Exception as e:
         return {

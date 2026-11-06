@@ -39,8 +39,25 @@ namespace JarvisVR
   [Serializable] internal class ApproveRequest { public string session_id; public bool approved; }
 
   // Field names match ai_agents/data/graph.json and the server's /health JSON.
-  [Serializable] public class GraphNodeDto { public string id, name, file, cluster, kind, level, parent, type, detail; public int start, end, count; }
-  [Serializable] public class GraphEdgeDto { public string src, dst, type, kind, file; public int line; }
+  // Call-graph fields (callsite_id, resolution, confidence, ...) are optional:
+  // graphs emitted before schema v3 simply leave them null/0.
+  [Serializable] public class GraphNodeDto
+  {
+    public string id, name, file, cluster, kind, level, parent, type, detail;
+    public string qualname, class_name, language, signature;
+    public int start, end, count;
+  }
+  [Serializable] public class GraphEdgeDto
+  {
+    public string src, dst, type, kind, file;
+    public int line;
+    // schema v3 call-graph metadata (all optional)
+    public string callsite_id, resolution, resolution_method, reason, call_type;
+    public string edge_id;
+    public int column;
+    public float confidence;
+    public string[] candidates;
+  }
   [Serializable] public class GraphDto
   {
     public System.Collections.Generic.List<GraphNodeDto> nodes = new System.Collections.Generic.List<GraphNodeDto>();

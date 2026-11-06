@@ -2,14 +2,17 @@
 from typing import Dict, Optional
 from .base import ResolverAdapter
 from .python_resolver import PythonResolver
+from .javascript_resolver import JavaScriptResolver
 
 
 # Mapping from language identifiers to resolver classes
-# Language identifiers match those used in graph nodes
+# Language identifiers match those used in graph nodes. A language is only
+# registered here when a real resolver exists; languages with only tree-sitter
+# grammar support stay unresolvable (call sites recorded as unresolved).
 _RESOLVERS: Dict[str, type] = {
     'python': PythonResolver,
-    # TypeScript resolver will be added in M10
-    # 'typescript': TypeScriptResolver,
+    'javascript': JavaScriptResolver,
+    'typescript': JavaScriptResolver,
 }
 
 
