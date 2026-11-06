@@ -8,11 +8,14 @@ from .ast_cfg_index import ASTCFGIndex
 
 @dataclass
 class Completion:
-    """Represents an abrupt completion (return, raise, break, continue)."""
+    """Represents an abrupt completion (return, raise, break, continue, yield)."""
     node_id: str
-    kind: str
-    target_loop_id: Optional[str] = None
-    exception_type: Optional[str] = None
+    kind: str  # 'return', 'raise', 'break', 'continue', 'yield'
+    target_loop_id: Optional[str] = None  # For break/continue: which loop
+    exception_type: Optional[str] = None  # For raise: exception type
+    intended_target: Optional[str] = None  # Where this completion should resume
+    source_metadata: Optional[Dict[str, Any]] = None  # Source location, etc.
+    completion_id: Optional[str] = None  # Unique ID for tracking through finally
 
 
 @dataclass
@@ -21,6 +24,7 @@ class FlowResult:
     entry_nodes: List[str] = field(default_factory=list)
     normal_exits: List[str] = field(default_factory=list)
     abrupt_exits: List[Completion] = field(default_factory=list)
+    diagnostics: List[Dict[str, Any]] = field(default_factory=list)
 
 
 class BuildContext:
@@ -31,6 +35,7 @@ class BuildContext:
         self.file = file
         self.node_counter = 0
         self.edge_counter = 0
+        self.completion_counter = 0
         self.loop_stack: List[Dict[str, str]] = []
         self.try_stack: List[Dict[str, str]] = []
         self.ast_node_map: Dict[int, str] = {}
@@ -46,6 +51,11 @@ class BuildContext:
         edge_id = f"{self.function_id}_E{self.edge_counter}"
         self.edge_counter += 1
         return edge_id
+
+    def generate_completion_id(self) -> str:
+        completion_id = f"{self.function_id}_C{self.completion_counter}"
+        self.completion_counter += 1
+        return completion_id
 
     def add_diagnostic(self, code: str, line: int, message: str = "", severity: str = "warning"):
         self.diagnostics.append({'code': code, 'line': line, 'message': message, 'severity': severity})
@@ -212,6 +222,23 @@ class PythonCFGBuilder:
             return self._build_continue(statement, cfg, ctx)
         elif isinstance(statement, ast.Assert):
             return self._build_assert(statement, cfg, ctx)
+        elif isinstance(statement, ast.TryStar):
+            return self._build_trystar(statement, cfg, ctx)
+        elif isinstance(statement, (ast.Global, ast.Nonlocal)):
+            # Global and nonlocal declarations are simple statements
+            return self._build_simple_statement(statement, cfg, ctx)
+        elif isinstance(statement, (ast.AsyncFor, ast.AsyncWith)):
+            # Handle async constructs - for now treat like their sync counterparts
+            if isinstance(statement, ast.AsyncFor):
+                return self._build_for(statement, cfg, ctx, is_async=True)
+            else:
+                return self._build_with(statement, cfg, ctx, is_async=True)
+        elif isinstance(statement, ast.Yield):
+            return self._build_yield(statement, cfg, ctx)
+        elif isinstance(statement, ast.YieldFrom):
+            return self._build_yield_from(statement, cfg, ctx)
+        elif isinstance(statement, ast.Await):
+            return self._build_await(statement, cfg, ctx)
         else:
             return self._build_simple_statement(statement, cfg, ctx)
 
@@ -254,6 +281,10 @@ class PythonCFGBuilder:
         ctx.ast_index.bind(statement, node_id, "statement")
         if hasattr(statement, 'value'):
             ctx.ast_index.bind_expression_tree(statement.value, node_id, "assignment_value")
+        # Special handling for augmented assignments
+        if isinstance(statement, ast.AugAssign):
+            ctx.ast_index.bind(statement.target, node_id, "augmented_target")
+            ctx.ast_index.bind_expression_tree(statement.value, node_id, "augmented_value")
         return FlowResult(entry_nodes=[node_id], normal_exits=[node_id], abrupt_exits=[])
 
     def _build_if(self, statement, cfg, ctx) -> FlowResult:
@@ -319,13 +350,34 @@ class PythonCFGBuilder:
         all_abrupt_exits = true_result.abrupt_exits + false_result.abrupt_exits
         return FlowResult(entry_nodes=[condition_id], normal_exits=[join_id], abrupt_exits=all_abrupt_exits)
 
-    def _build_for(self, statement, cfg, ctx) -> FlowResult:
+    def _build_for(self, statement, cfg, ctx, is_async=False):
+        # For async for, add suspension node before iteration
+        if is_async:
+            suspension_id = ctx.generate_node_id()
+            suspension_node = CFGNode(
+                id=suspension_id,
+                kind='suspension',
+                label='await iter',
+                function_id=ctx.function_id,
+                file=ctx.file,
+                start_line=statement.lineno,
+                end_line=statement.lineno,
+                ast_kind='AsyncFor',
+                metadata={'suspension_point': 'async_iteration'}
+            )
+            cfg.add_node(suspension_node)
+            ctx.ast_node_map[id(statement)] = suspension_id
+            ctx.ast_index.bind(statement, suspension_id, "async_for")
+            entry_nodes = [suspension_id]
+        else:
+            entry_nodes = []
+
         header_id = ctx.generate_node_id()
         header_node = CFGNode(
             id=header_id, kind='loop_header', label='for loop',
             function_id=ctx.function_id, file=ctx.file,
             start_line=statement.lineno, end_line=statement.lineno,
-            ast_kind='For',
+            ast_kind='AsyncFor' if is_async else 'For',
         )
         cfg.add_node(header_node)
         ctx.ast_node_map[id(statement)] = header_id
@@ -336,6 +388,13 @@ class PythonCFGBuilder:
         # Bind target to header
         if statement.target:
             ctx.ast_index.bind(statement.target, header_id, "for_target")
+
+        # For async, connect suspension to header
+        if is_async:
+            self._add_edge(cfg, ctx, suspension_id, header_id, 'resume')
+            entry_nodes.append(header_id)
+        else:
+            entry_nodes.append(header_id)
 
         # Loop context
         loop_exit_id = ctx.generate_node_id()
@@ -385,7 +444,7 @@ class PythonCFGBuilder:
 
         ctx.pop_loop()
 
-        return FlowResult(entry_nodes=[header_id], normal_exits=post_loop_exits, abrupt_exits=body_result.abrupt_exits)
+        return FlowResult(entry_nodes=entry_nodes, normal_exits=post_loop_exits, abrupt_exits=body_result.abrupt_exits)
 
     def _build_while(self, statement, cfg, ctx) -> FlowResult:
         header_id = ctx.generate_node_id()
@@ -479,7 +538,13 @@ class PythonCFGBuilder:
         if statement.value:
             ctx.ast_index.bind_expression_tree(statement.value, return_id, "return_value")
 
-        completion = Completion(return_id, 'return')
+        completion = Completion(
+            node_id=return_id,
+            kind='return',
+            intended_target=cfg.exit_node_id,
+            source_metadata={'line': statement.lineno, 'file': ctx.file},
+            completion_id=ctx.generate_completion_id()
+        )
         # Check if there's a finally block to route through
         try_ctx = ctx.current_try()
         if try_ctx and try_ctx['finally']:
@@ -505,7 +570,14 @@ class PythonCFGBuilder:
         if statement.exc:
             ctx.ast_index.bind_expression_tree(statement.exc, raise_id, "exception")
 
-        completion = Completion(raise_id, 'raise')
+        completion = Completion(
+            node_id=raise_id,
+            kind='raise',
+            exception_type=raise_expr,
+            intended_target=cfg.exception_exit_node_id,
+            source_metadata={'line': statement.lineno, 'file': ctx.file},
+            completion_id=ctx.generate_completion_id()
+        )
         # Check if there's a finally block to route through
         try_ctx = ctx.current_try()
         if try_ctx and try_ctx['finally']:
@@ -513,6 +585,28 @@ class PythonCFGBuilder:
             return FlowResult(entry_nodes=[raise_id], normal_exits=[], abrupt_exits=[completion])
         else:
             return FlowResult(entry_nodes=[raise_id], normal_exits=[], abrupt_exits=[completion])
+
+    def _build_await(self, statement: ast.Await, cfg, ctx) -> FlowResult:
+        """Build CFG for await expressions with suspension node."""
+        await_id = ctx.generate_node_id()
+        await_node = CFGNode(
+            id=await_id,
+            kind='suspension',
+            label='await',
+            function_id=ctx.function_id,
+            file=ctx.file,
+            start_line=statement.lineno,
+            end_line=statement.lineno,
+            ast_kind='Await',
+            metadata={'suspension_point': 'await_expression'}
+        )
+        cfg.add_node(await_node)
+        ctx.ast_node_map[id(statement)] = await_id
+        ctx.ast_index.bind(statement, await_id, "await")
+        if statement.value:
+            ctx.ast_index.bind_expression_tree(statement.value, await_id, "await_value")
+        
+        return FlowResult(entry_nodes=[await_id], normal_exits=[await_id], abrupt_exits=[])
 
     def _build_break(self, statement: ast.Break, cfg, ctx) -> FlowResult:
         loop_ctx = ctx.current_loop()
@@ -524,14 +618,21 @@ class PythonCFGBuilder:
         break_node = CFGNode(
             id=break_id, kind='statement', label='break',
             function_id=ctx.function_id, file=ctx.file,
-            start_line=0, end_line=0, ast_kind='Break',
+            start_line=statement.lineno, end_line=statement.lineno, ast_kind='Break',
         )
         cfg.add_node(break_node)
         ctx.ast_node_map[id(statement)] = break_id
         ctx.ast_index.bind(statement, break_id, "break")
         self._add_edge(cfg, ctx, break_id, loop_ctx['break_target'], 'break')
 
-        completion = Completion(break_id, 'break', target_loop_id=loop_ctx['header'])
+        completion = Completion(
+            node_id=break_id,
+            kind='break',
+            target_loop_id=loop_ctx['header'],
+            intended_target=loop_ctx['break_target'],
+            source_metadata={'line': statement.lineno, 'file': ctx.file},
+            completion_id=ctx.generate_completion_id()
+        )
         # Check if there's a finally block to route through
         try_ctx = ctx.current_try()
         if try_ctx and try_ctx['finally']:
@@ -550,14 +651,21 @@ class PythonCFGBuilder:
         continue_node = CFGNode(
             id=continue_id, kind='statement', label='continue',
             function_id=ctx.function_id, file=ctx.file,
-            start_line=0, end_line=0, ast_kind='Continue',
+            start_line=statement.lineno, end_line=statement.lineno, ast_kind='Continue',
         )
         cfg.add_node(continue_node)
         ctx.ast_node_map[id(statement)] = continue_id
         ctx.ast_index.bind(statement, continue_id, "continue")
         self._add_edge(cfg, ctx, continue_id, loop_ctx['continue_target'], 'continue')
 
-        completion = Completion(continue_id, 'continue', target_loop_id=loop_ctx['header'])
+        completion = Completion(
+            node_id=continue_id,
+            kind='continue',
+            target_loop_id=loop_ctx['header'],
+            intended_target=loop_ctx['continue_target'],
+            source_metadata={'line': statement.lineno, 'file': ctx.file},
+            completion_id=ctx.generate_completion_id()
+        )
         # Check if there's a finally block to route through
         try_ctx = ctx.current_try()
         if try_ctx and try_ctx['finally']:
@@ -567,7 +675,25 @@ class PythonCFGBuilder:
             return FlowResult(entry_nodes=[continue_id], normal_exits=[], abrupt_exits=[completion])
 
     def _build_try(self, statement, cfg, ctx) -> FlowResult:
+        # Build try body first
         try_result = self._build_suite(statement.body, cfg, ctx)
+
+        # Create finally node before building other parts
+        finally_id = None
+        if statement.finalbody:
+            finally_id = ctx.generate_node_id()
+            finally_node = CFGNode(
+                id=finally_id, kind='finally', label='finally',
+                function_id=ctx.function_id, file=ctx.file,
+                start_line=statement.finalbody[0].lineno,
+                end_line=statement.finalbody[-1].end_lineno or statement.finalbody[0].lineno,
+                ast_kind='Try',
+            )
+            cfg.add_node(finally_node)
+            ctx.ast_index.bind(statement, finally_id, "finally")
+        
+        # Push try context for routing abrupt completions through finally
+        ctx.push_try(try_result.entry_nodes[0] if statement.body else None, finally_id)
 
         dispatch_id = ctx.generate_node_id()
         dispatch_node = CFGNode(
@@ -604,10 +730,16 @@ class PythonCFGBuilder:
             )
             cfg.add_node(handler_node)
             ctx.ast_node_map[id(handler)] = handler_id
+            ctx.ast_index.bind(handler, handler_id, "except_handler")
+            # Bind exception type expression if present
+            if handler.type:
+                ctx.ast_index.bind_expression_tree(handler.type, handler_id, "exception_type")
             self._add_edge(cfg, ctx, dispatch_id, handler_id, 'exception')
 
             if handler.name:
                 ctx.ast_node_map[id(handler)] = handler_id
+                # Note: handler.name is a string, the variable binding is handled in DFG extraction
+                ctx.ast_index.bind(handler.name, handler_id, "exception_variable")
 
             handler_result = self._build_suite(handler.body, cfg, ctx)
             # Connect handler to handler body entry nodes
@@ -630,49 +762,101 @@ class PythonCFGBuilder:
             for try_exit in try_result.normal_exits:
                 self._add_edge(cfg, ctx, try_exit, handler_join_id, 'next')
 
+        ctx.pop_try()
+
+        # Handle finally routing
         if statement.finalbody:
-            finally_id = ctx.generate_node_id()
-            finally_node = CFGNode(
-                id=finally_id, kind='finally', label='finally',
-                function_id=ctx.function_id, file=ctx.file,
-                start_line=statement.finalbody[0].lineno,
-                end_line=statement.finalbody[-1].end_lineno or statement.finalbody[0].lineno,
-                ast_kind='Try',
-            )
-            cfg.add_node(finally_node)
-            self._add_edge(cfg, ctx, handler_join_id, finally_id, 'finally')
-
-            # Push try context with finally node
-            ctx.push_try(handler_join_id, finally_id)
-
+            # Connect handler_join to finally node for normal completions
+            self._add_edge(cfg, ctx, handler_join_id, finally_id, 'next')
+            
+            # Also connect try normal exits directly to finally
+            for try_exit in try_result.normal_exits:
+                self._add_edge(cfg, ctx, try_exit, finally_id, 'finally')
+            
             finally_result = self._build_suite(statement.finalbody, cfg, ctx)
             # Connect finally node to finally body entry nodes
             if finally_result.entry_nodes:
                 for entry_id in finally_result.entry_nodes:
                     self._add_edge(cfg, ctx, finally_id, entry_id, 'next')
-            final_exit = finally_result.normal_exits if finally_result.normal_exits else [finally_id]
-
-            # Pop try context and get stored abrupt completions
-            try_ctx = ctx.pop_try()
-            abrupt_exits = try_ctx['original_completions'] if try_ctx.get('original_completions') else []
-
-            # Route stored abrupt completions through finally
-            for completion in abrupt_exits:
-                # Connect completion node to finally
+            
+            # Route all abrupt completions through finally
+            all_abrupt_exits = []
+            
+            # Route try body abrupt completions through finally
+            for completion in try_result.abrupt_exits:
                 self._add_edge(cfg, ctx, completion.node_id, finally_id, 'finally')
                 # The completion will be re-emitted after finally
+                all_abrupt_exits.append(completion)
+            
+            # Route handler abrupt completions through finally
+            for handler in statement.handlers:
+                handler_result = self._build_suite(handler.body, cfg, ctx)
+                for completion in handler_result.abrupt_exits:
+                    self._add_edge(cfg, ctx, completion.node_id, finally_id, 'finally')
+                    all_abrupt_exits.append(completion)
+            
+            # Route else abrupt completions through finally
+            if statement.orelse:
+                for completion in else_result.abrupt_exits:
+                    self._add_edge(cfg, ctx, completion.node_id, finally_id, 'finally')
+                    all_abrupt_exits.append(completion)
+            
+            # If finally has abrupt completions, they override the original ones
+            if finally_result.abrupt_exits:
+                all_abrupt_exits = finally_result.abrupt_exits
+            
+            # If finally completes normally, resume original completions
+            if finally_result.normal_exits:
+                # Connect finally exits to the original completion targets
+                for completion in try_result.abrupt_exits:
+                    if completion.kind == 'return' and completion.intended_target:
+                        for exit_id in finally_result.normal_exits:
+                            self._add_edge(cfg, ctx, exit_id, completion.intended_target, 'return')
+                    elif completion.kind == 'raise' and completion.intended_target:
+                        for exit_id in finally_result.normal_exits:
+                            self._add_edge(cfg, ctx, exit_id, completion.intended_target, 'raise')
+                    elif completion.kind == 'break' and completion.intended_target:
+                        for exit_id in finally_result.normal_exits:
+                            self._add_edge(cfg, ctx, exit_id, completion.intended_target, 'break')
+                    elif completion.kind == 'continue' and completion.intended_target:
+                        for exit_id in finally_result.normal_exits:
+                            self._add_edge(cfg, ctx, exit_id, completion.intended_target, 'continue')
+            
+            final_exit = finally_result.normal_exits if finally_result.normal_exits else [finally_id]
         else:
             final_exit = [handler_join_id]
-            abrupt_exits = try_result.abrupt_exits
-        return FlowResult(entry_nodes=try_result.entry_nodes, normal_exits=final_exit, abrupt_exits=abrupt_exits)
+            all_abrupt_exits = try_result.abrupt_exits
+        
+        return FlowResult(entry_nodes=try_result.entry_nodes, normal_exits=final_exit, abrupt_exits=all_abrupt_exits)
 
-    def _build_with(self, statement, cfg, ctx) -> FlowResult:
+    def _build_with(self, statement, cfg, ctx, is_async=False):
+        # For async with, add suspension node for __aenter__
+        if is_async:
+            enter_suspension_id = ctx.generate_node_id()
+            enter_suspension_node = CFGNode(
+                id=enter_suspension_id,
+                kind='suspension',
+                label='await __aenter__',
+                function_id=ctx.function_id,
+                file=ctx.file,
+                start_line=statement.lineno,
+                end_line=statement.lineno,
+                ast_kind='AsyncWith',
+                metadata={'suspension_point': 'async_enter'}
+            )
+            cfg.add_node(enter_suspension_node)
+            ctx.ast_index.bind(statement, enter_suspension_id, "async_with_enter")
+            entry_nodes = [enter_suspension_id]
+        else:
+            entry_nodes = []
+
         with_id = ctx.generate_node_id()
         with_node = CFGNode(
             id=with_id, kind='statement', label='with',
             function_id=ctx.function_id, file=ctx.file,
             start_line=statement.lineno, end_line=statement.lineno,
-            ast_kind='With',
+            ast_kind='AsyncWith' if is_async else 'With',
+            metadata={'is_async': is_async}
         )
         cfg.add_node(with_node)
         ctx.ast_node_map[id(statement)] = with_id
@@ -681,17 +865,49 @@ class PythonCFGBuilder:
         for item in statement.items:
             ctx.ast_index.bind_expression_tree(item.context_expr, with_id, "context")
 
+        # For async, connect enter suspension to with node
+        if is_async:
+            self._add_edge(cfg, ctx, enter_suspension_id, with_id, 'resume')
+            entry_nodes.append(with_id)
+        else:
+            entry_nodes.append(with_id)
+
         body_result = self._build_suite(statement.body, cfg, ctx)
+        
+        # Create exit node for context manager cleanup
+        exit_id = ctx.generate_node_id()
+        exit_node = CFGNode(
+            id=exit_id, kind='statement', label='with exit',
+            function_id=ctx.function_id, file=ctx.file,
+            start_line=statement.lineno, end_line=statement.end_lineno or statement.lineno,
+            ast_kind='With',
+            metadata={'is_exit': True, 'is_async': is_async}
+        )
+        cfg.add_node(exit_node)
+        ctx.ast_index.bind(statement, exit_id, "with_exit")
+        
         # Connect with node to body entry nodes
         if body_result.entry_nodes:
             for entry_id in body_result.entry_nodes:
                 self._add_edge(cfg, ctx, with_id, entry_id, 'next')
-        return FlowResult(entry_nodes=[with_id], normal_exits=body_result.normal_exits, abrupt_exits=body_result.abrupt_exits)
+        
+        # Connect body normal exits to exit node
+        for body_exit in body_result.normal_exits:
+            self._add_edge(cfg, ctx, body_exit, exit_id, 'next')
+        
+        # Route abrupt completions through exit node
+        all_abrupt_exits = []
+        for completion in body_result.abrupt_exits:
+            all_abrupt_exits.append(completion)
+            # Connect abrupt completion source to exit node
+            self._add_edge(cfg, ctx, completion.node_id, exit_id, 'finally')
+        
+        return FlowResult(entry_nodes=[with_id], normal_exits=[exit_id], abrupt_exits=all_abrupt_exits)
 
     def _build_match(self, statement, cfg, ctx) -> FlowResult:
         match_id = ctx.generate_node_id()
         match_node = CFGNode(
-            id=match_id, kind='condition', label='match',
+            id=match_id, kind='statement', label='match',
             function_id=ctx.function_id, file=ctx.file,
             start_line=statement.lineno, end_line=statement.lineno,
             ast_kind='Match',
@@ -711,31 +927,115 @@ class PythonCFGBuilder:
         )
         cfg.add_node(join_node)
 
+        # Track if we have a wildcard pattern (unmatched continuation)
+        has_wildcard = False
+
         for case in statement.cases:
             case_id = ctx.generate_node_id()
             pattern = ast.unparse(case.pattern) if hasattr(ast, 'unparse') else 'pattern'
+            
+            # Determine pattern kind
+            pattern_kind = self._get_pattern_kind(case.pattern)
+            
+            # Derive line number from pattern since case.lineno doesn't exist
+            pattern_line = case.pattern.lineno if hasattr(case.pattern, 'lineno') else statement.lineno
+            
             case_node = CFGNode(
                 id=case_id, kind='condition', label=pattern,
                 function_id=ctx.function_id, file=ctx.file,
-                start_line=case.lineno, end_line=case.lineno,
+                start_line=pattern_line, end_line=pattern_line,
                 ast_kind='match_case', condition=pattern,
+                metadata={'pattern_kind': pattern_kind}
             )
             cfg.add_node(case_node)
             ctx.ast_node_map[id(case)] = case_id
             ctx.ast_index.bind(case, case_id, "match_case")
+            # Bind pattern expression tree
+            ctx.ast_index.bind_expression_tree(case.pattern, case_id, "match_pattern")
             if case.guard:
                 ctx.ast_index.bind_expression_tree(case.guard, case_id, "match_guard")
+            
             self._add_edge(cfg, ctx, match_id, case_id, 'next')
 
-            case_result = self._build_suite(case.body, cfg, ctx)
-            # Connect case node to case body entry nodes
-            if case_result.entry_nodes:
-                for entry_id in case_result.entry_nodes:
-                    self._add_edge(cfg, ctx, case_id, entry_id, 'next')
-            for case_exit in case_result.normal_exits:
-                self._add_edge(cfg, ctx, case_exit, join_id, 'next')
+            # Guard evaluation if present
+            if case.guard:
+                guard_id = ctx.generate_node_id()
+                guard_line = case.guard.lineno if hasattr(case.guard, 'lineno') else pattern_line
+                guard_node = CFGNode(
+                    id=guard_id, kind='condition', label='guard',
+                    function_id=ctx.function_id, file=ctx.file,
+                    start_line=guard_line, end_line=guard_line,
+                    ast_kind='match_guard',
+                )
+                cfg.add_node(guard_node)
+                ctx.ast_index.bind(case.guard, guard_id, "guard")
+                self._add_edge(cfg, ctx, case_id, guard_id, 'next')
+                
+                # Guard true -> case body
+                case_result = self._build_suite(case.body, cfg, ctx)
+                if case_result.entry_nodes:
+                    for entry_id in case_result.entry_nodes:
+                        self._add_edge(cfg, ctx, guard_id, entry_id, 'true')
+                for case_exit in case_result.normal_exits:
+                    self._add_edge(cfg, ctx, case_exit, join_id, 'next')
+                
+                # Guard false -> next case
+                if case != statement.cases[-1]:
+                    # Connect to next case (will be done by loop)
+                    pass
+                else:
+                    # Last case, guard false -> join
+                    self._add_edge(cfg, ctx, guard_id, join_id, 'false')
+            else:
+                # No guard, pattern match -> case body
+                case_result = self._build_suite(case.body, cfg, ctx)
+                if case_result.entry_nodes:
+                    for entry_id in case_result.entry_nodes:
+                        self._add_edge(cfg, ctx, case_id, entry_id, 'true')
+                for case_exit in case_result.normal_exits:
+                    self._add_edge(cfg, ctx, case_exit, join_id, 'next')
+                
+                # Pattern failure -> next case
+                if case != statement.cases[-1]:
+                    # Connect to next case (will be done by loop)
+                    pass
+                else:
+                    # Last case, pattern failure -> join
+                    self._add_edge(cfg, ctx, case_id, join_id, 'false')
+
+            # Check for wildcard pattern
+            if pattern_kind == 'wildcard':
+                has_wildcard = True
+
+        # If no wildcard, add explicit unmatched path to join
+        if not has_wildcard:
+            # All patterns failed, flow continues to join
+            pass
 
         return FlowResult(entry_nodes=[match_id], normal_exits=[join_id], abrupt_exits=[])
+
+    def _get_pattern_kind(self, pattern):
+        """Determine the kind of pattern for semantic labeling."""
+        if isinstance(pattern, ast.MatchValue):
+            return 'literal'
+        elif isinstance(pattern, ast.MatchSingleton):
+            return 'singleton'
+        elif isinstance(pattern, ast.MatchSequence):
+            return 'sequence'
+        elif isinstance(pattern, ast.MatchMapping):
+            return 'mapping'
+        elif isinstance(pattern, ast.MatchClass):
+            return 'class'
+        elif isinstance(pattern, ast.MatchStar):
+            return 'star'
+        elif isinstance(pattern, ast.MatchAs):
+            if pattern.pattern is None:
+                return 'wildcard'
+            return 'capture'
+        elif isinstance(pattern, ast.MatchOr):
+            return 'or'
+        else:
+            return 'unknown'
 
     def _build_assert(self, statement, cfg, ctx) -> FlowResult:
         assert_id = ctx.generate_node_id()
@@ -762,7 +1062,111 @@ class PythonCFGBuilder:
         cfg.add_node(success_node)
         self._add_edge(cfg, ctx, assert_id, success_id, 'next', 'true')
 
-        return FlowResult(entry_nodes=[assert_id], normal_exits=[success_id], abrupt_exits=[Completion(assert_id, 'raise', exception_type='AssertionError')])
+        # False branch raises AssertionError
+        failure_completion = Completion(
+            node_id=assert_id,
+            kind='raise',
+            exception_type='AssertionError',
+            intended_target=cfg.exception_exit_node_id,
+            source_metadata={'line': statement.lineno, 'file': ctx.file},
+            completion_id=ctx.generate_completion_id()
+        )
+
+        return FlowResult(entry_nodes=[assert_id], normal_exits=[success_id], abrupt_exits=[failure_completion])
+
+    def _build_yield(self, statement, cfg, ctx) -> FlowResult:
+        """Handle yield statements for generator functions with suspension."""
+        yield_id = ctx.generate_node_id()
+        yield_expr = ast.unparse(statement.value) if statement.value else 'None'
+        yield_node = CFGNode(
+            id=yield_id, kind='suspension', label=f'yield {yield_expr}',
+            function_id=ctx.function_id, file=ctx.file,
+            start_line=statement.lineno, end_line=statement.lineno,
+            ast_kind='Yield',
+            metadata={
+                'suspension_point': 'yield',
+                'yielded_value': yield_expr
+            }
+        )
+        cfg.add_node(yield_node)
+        ctx.ast_node_map[id(statement)] = yield_id
+        ctx.ast_index.bind(statement, yield_id, "yield")
+        if statement.value:
+            ctx.ast_index.bind_expression_tree(statement.value, yield_id, "yield_value")
+
+        # Yield is a suspension that may resume after the caller's next iteration
+        return FlowResult(entry_nodes=[yield_id], normal_exits=[yield_id], abrupt_exits=[])
+
+    def _build_yield_from(self, statement, cfg, ctx) -> FlowResult:
+        """Handle yield from statements for generator functions with suspension."""
+        yield_from_id = ctx.generate_node_id()
+        yield_from_expr = ast.unparse(statement.value) if statement.value else 'None'
+        yield_from_node = CFGNode(
+            id=yield_from_id, kind='suspension', label=f'yield from {yield_from_expr}',
+            function_id=ctx.function_id, file=ctx.file,
+            start_line=statement.lineno, end_line=statement.lineno,
+            ast_kind='YieldFrom',
+            metadata={
+                'suspension_point': 'yield_from',
+                'delegated_generator': yield_from_expr
+            }
+        )
+        cfg.add_node(yield_from_node)
+        ctx.ast_node_map[id(statement)] = yield_from_id
+        ctx.ast_index.bind(statement, yield_from_id, "yield_from")
+        if statement.value:
+            ctx.ast_index.bind_expression_tree(statement.value, yield_from_id, "yield_from_value")
+
+        return FlowResult(entry_nodes=[yield_from_id], normal_exits=[yield_from_id], abrupt_exits=[])
+
+    def _build_trystar(self, statement, cfg, ctx) -> FlowResult:
+        """Build CFG for try* statements (exception groups)."""
+        try_star_id = ctx.generate_node_id()
+        try_star_node = CFGNode(
+            id=try_star_id,
+            kind='statement',
+            label='try*',
+            function_id=ctx.function_id,
+            file=ctx.file,
+            start_line=statement.lineno,
+            end_line=statement.lineno,
+            ast_kind='TryStar',
+            metadata={'exception_group': True}
+        )
+        cfg.add_node(try_star_node)
+        ctx.ast_node_map[id(statement)] = try_star_id
+        ctx.ast_index.bind(statement, try_star_id, "trystar")
+        
+        # Build try body
+        body_result = self._build_suite(statement.body, cfg, ctx)
+        
+        # Build except* handlers (exception group handlers)
+        handler_join_id = ctx.generate_node_id()
+        for handler in statement.excepthandlers:
+            handler_id = ctx.generate_node_id()
+            handler_node = CFGNode(
+                id=handler_id,
+                kind='exception_dispatch',
+                label='except*',
+                function_id=ctx.function_id,
+                file=ctx.file,
+                start_line=handler.lineno if hasattr(handler, 'lineno') else statement.lineno,
+                end_line=handler.lineno if hasattr(handler, 'lineno') else statement.lineno,
+                ast_kind='ExceptStar',
+                metadata={'exception_group_handler': True}
+            )
+            cfg.add_node(handler_node)
+            ctx.ast_index.bind(handler, handler_id, "except_star")
+            
+            # Connect try to handler
+            self._add_edge(cfg, ctx, try_star_id, handler_id, 'exception_group')
+            
+            # Build handler body
+            handler_result = self._build_suite(handler.body, cfg, ctx)
+            for handler_exit in handler_result.normal_exits:
+                self._add_edge(cfg, ctx, handler_exit, handler_join_id, 'next')
+        
+        return FlowResult(entry_nodes=[try_star_id], normal_exits=[handler_join_id], abrupt_exits=body_result.abrupt_exits)
 
     def _add_edge(self, cfg, ctx, source, target, kind, condition=None):
         edge_id = ctx.generate_edge_id()

@@ -190,32 +190,42 @@ class DataFlowGraphBuilder:
                             )
                             graph.add_edge(edge)
 
-        # Add return edges
-        for definition in facts.definitions:
-            if definition.kind == 'parameter':
-                # Parameters don't need return edges
+        # Add return edges using reaching definitions
+        in_sets = analysis_result.get('in_sets', {})
+        node_uses = analysis_result.get('node_uses', {})
+        
+        for cfg_node_id, reaching_def_ids in in_sets.items():
+            # Check if this CFG node is a return node
+            cfg_node = cfg.get_node(cfg_node_id)
+            if not cfg_node or cfg_node.kind != 'return':
                 continue
-
-            # Check if this definition is used in a return statement
-            for use in facts.uses:
-                if use.variable == definition.variable and use.binding_key == definition.binding_key:
-                    # Check if this use is in a return context (simplified)
-                    use_cfg_node = cfg.get_node(use.cfg_node_ids[0]) if use.cfg_node_ids else None
-                    if use_cfg_node and use_cfg_node.kind == 'return':
-                        def_node_id = def_nodes.get(definition.id)
-                        use_node_id = use_nodes.get(use.id)
-                        if def_node_id and use_node_id:
+            
+            uses_at_node = node_uses.get(cfg_node_id, [])
+            
+            for use in uses_at_node:
+                use_node_id = use_nodes.get(use.id)
+                if not use_node_id:
+                    continue
+                
+                # Find all definitions of the same binding that reach this return node
+                for def_id in reaching_def_ids:
+                    def_node = self._find_definition(facts.definitions, def_id)
+                    if def_node and def_node.binding_key == use.binding_key:
+                        def_graph_node_id = def_nodes.get(def_id)
+                        if def_graph_node_id:
+                            # Add return edge from definition to use in return
                             edge_id = self._generate_edge_id()
                             edge = DataFlowEdge(
                                 id=edge_id,
-                                source=def_node_id,
+                                source=def_graph_node_id,
                                 target=use_node_id,
                                 kind='returns',
-                                resolution='static',
+                                resolution='may_reach',
                                 condition=None,
                                 evidence={
                                     'file': facts.file,
-                                    'return_cfg_node': use.cfg_node_ids[0],
+                                    'cfg_node': cfg_node_id,
+                                    'binding_key': use.binding_key,
                                 },
                             )
                             graph.add_edge(edge)

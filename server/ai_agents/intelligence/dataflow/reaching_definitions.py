@@ -212,6 +212,93 @@ class ReachingDefinitionsAnalyzer:
 
         return in_sets, out_sets
 
+    def analyze_must_reach(
+        self,
+        cfg: ControlFlowGraph,
+        facts: DefUseFacts
+    ) -> Dict[str, Any]:
+        """
+        Perform must-reaching definitions analysis.
+        
+        Unlike may-reaching (union of predecessor OUT sets),
+        must-reaching uses intersection of predecessor OUT sets.
+        A definition must-reach a use only if it reaches on ALL paths.
+        """
+        # Build node_defs and node_uses
+        node_defs = self._build_node_definitions(cfg, facts.definitions)
+        node_uses = self._build_node_uses(cfg, facts.uses)
+        
+        # Build binding_defs map
+        binding_defs = {}
+        for definition in facts.definitions:
+            key = definition.binding_key
+            if key not in binding_defs:
+                binding_defs[key] = []
+            binding_defs[key].append(definition.id)
+        
+        # Initialize sets
+        must_in_sets: Dict[str, Set[str]] = {node.id: set() for node in cfg.nodes}
+        must_out_sets: Dict[str, Set[str]] = {node.id: set() for node in cfg.nodes}
+        
+        # Calculate GEN for must analysis (definitions that must occur)
+        gen = {}
+        for node_id in node_defs:
+            gen[node_id] = set(d.id for d in node_defs[node_id])
+        
+        # Calculate KILL (same as may analysis)
+        kill = {}
+        for node_id in node_defs:
+            kill[node_id] = set()
+            for definition in node_defs[node_id]:
+                key = definition.binding_key
+                if key in binding_defs:
+                    for def_id in binding_defs[key]:
+                        if def_id != definition.id:
+                            kill[node_id].add(def_id)
+        
+        # Ensure all nodes have gen and kill sets
+        for node in cfg.nodes:
+            if node.id not in gen:
+                gen[node.id] = set()
+            if node.id not in kill:
+                kill[node.id] = set()
+        
+        # Worklist algorithm with intersection instead of union
+        worklist = list(node.id for node in cfg.nodes)
+        
+        while worklist:
+            node_id = worklist.pop(0)
+            
+            # Calculate IN[B] = intersection of OUT[P] for all predecessors P
+            predecessors = self._get_predecessors(cfg, node_id)
+            if predecessors:
+                predecessor_outs = [must_out_sets[pred_id] for pred_id in predecessors if pred_id in must_out_sets]
+                if predecessor_outs:
+                    # Use intersection for must analysis
+                    new_in = set.intersection(*predecessor_outs) if len(predecessor_outs) > 1 else predecessor_outs[0]
+                else:
+                    new_in = set()
+            else:
+                new_in = set()
+            
+            # Calculate OUT[B] = GEN[B] union (IN[B] - KILL[B])
+            new_out = gen[node_id].union(new_in - kill[node_id])
+            
+            # If changed, add successors to worklist
+            if new_out != must_out_sets[node_id]:
+                must_out_sets[node_id] = new_out
+                must_in_sets[node_id] = new_in
+                successors = self._get_successors(cfg, node_id)
+                for succ_id in successors:
+                    if succ_id not in worklist:
+                        worklist.append(succ_id)
+        
+        return {
+            'must_in_sets': must_in_sets,
+            'must_out_sets': must_out_sets,
+            'diagnostics': []
+        }
+
     def _get_predecessors(self, cfg: ControlFlowGraph, node_id: str) -> List[str]:
         """Get predecessor node IDs for a given node."""
         predecessors = []

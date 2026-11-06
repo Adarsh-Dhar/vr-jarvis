@@ -65,6 +65,21 @@ def analyze_python_control_flow(
 
         # Validate CFG
         validation = validate_cfg(cfg)
+        
+        # Do not return invalid graphs as successful
+        if not validation['valid']:
+            return {
+                'error': f'CFG validation failed: {validation["errors"]}',
+                'graph': cfg,
+                'validation': validation,
+                'diagnostics': cfg.metadata.get('diagnostics', []),
+                'metadata': {
+                    'language': 'python',
+                    'scope': 'intra_function',
+                    'function_name': function_ast.name,
+                    'function_id': function_id,
+                },
+            }
 
         return {
             'graph': cfg,

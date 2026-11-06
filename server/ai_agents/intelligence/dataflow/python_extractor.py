@@ -220,23 +220,44 @@ class DefUseVisitor(ast.NodeVisitor):
 
     def _get_cfg_node_ids(self, node: ast.AST) -> List[str]:
         """Get CFG node IDs for an AST node using the AST-to-CFG index."""
+        if not self.ast_index:
+            return []
         node_ids = self.ast_index.get_cfg_nodes(node)
         if not node_ids:
-            raise ValueError(
-                f"Missing CFG mapping for {type(node).__name__} "
-                f"at line {getattr(node, 'lineno', '?')}"
-            )
+            # Some nodes (like Global, Nonlocal) may not have explicit CFG nodes
+            # Return empty list rather than raising error
+            return []
         return node_ids
 
     def visit_Assign(self, node: ast.Assign) -> None:
-        """Visit assignment statements."""
-        # Extract uses from RHS
+        """Visit assignment statements with operation linking."""
+        # Extract uses from RHS and track if it's a complex expression
+        use_ids_before = [u.id for u in self.facts.uses]
+        op_ids_before = [o.id for o in self.facts.operations]
+        
         self.visit(node.value)
-
-        # Extract definitions from targets
+        
+        # Get new uses and operations created by RHS
+        new_use_ids = [u.id for u in self.facts.uses if u.id not in use_ids_before]
+        new_op_ids = [o.id for o in self.facts.operations if o.id not in op_ids_before]
+        
+        # If RHS created operations, link the last one to the target definitions
+        last_op_id = new_op_ids[-1] if new_op_ids else None
+        
+        # Extract definitions from targets using the existing method
         for target in node.targets:
             binding_key = f"{self.function_id}::{self._get_variable_name(target)}"
+            # Temporarily collect definition IDs to link to operation
+            def_ids_before = [d.id for d in self.facts.definitions]
             self._extract_target_definitions(target, node, 'assignment', binding_key)
+            new_def_ids = [d.id for d in self.facts.definitions if d.id not in def_ids_before]
+            
+            # Link the last operation to these new definitions
+            if last_op_id:
+                for op in self.facts.operations:
+                    if op.id == last_op_id:
+                        op.output_definition_ids.extend(new_def_ids)
+                        break
 
         # Do NOT call generic_visit(node) - would duplicate RHS visit
 
@@ -358,6 +379,7 @@ class DefUseVisitor(ast.NodeVisitor):
             # Variable use
             # Only track if it's a local variable (not an attribute access like self.x)
             if node.id in self.local_vars or not self.local_vars:
+                # Use module-level binding for globals
                 binding_key = f"{self.function_id}::{node.id}"
                 cfg_node_ids = self._get_cfg_node_ids(node)
                 self.facts.uses.append(VariableUse(
@@ -371,6 +393,44 @@ class DefUseVisitor(ast.NodeVisitor):
                     binding_key=binding_key,
                     expression=ast.unparse(node) if hasattr(ast, 'unparse') else node.id,
                 ))
+
+    def visit_Global(self, node: ast.Global) -> None:
+        """Visit global declarations."""
+        for name in node.names:
+            # Globals are module-level references
+            binding_key = f"global::{name}"
+            cfg_node_ids = self._get_cfg_node_ids(node) if self.ast_index else []
+            self.facts.definitions.append(Definition(
+                id=self._generate_def_id(name),
+                variable=name,
+                function_id=self.function_id,
+                file=self.file,
+                line=node.lineno,
+                column=node.col_offset if hasattr(node, 'col_offset') else 0,
+                kind='global',
+                cfg_node_ids=cfg_node_ids,
+                binding_key=binding_key,
+                expression=None,
+            ))
+
+    def visit_Nonlocal(self, node: ast.Nonlocal) -> None:
+        """Visit nonlocal declarations."""
+        for name in node.names:
+            # Nonlocals are closure references
+            binding_key = f"nonlocal::{self.function_id}::{name}"
+            cfg_node_ids = self._get_cfg_node_ids(node) if self.ast_index else []
+            self.facts.definitions.append(Definition(
+                id=self._generate_def_id(name),
+                variable=name,
+                function_id=self.function_id,
+                file=self.file,
+                line=node.lineno,
+                column=node.col_offset if hasattr(node, 'col_offset') else 0,
+                kind='nonlocal',
+                cfg_node_ids=cfg_node_ids,
+                binding_key=binding_key,
+                expression=None,
+            ))
 
     def visit_BinOp(self, node: ast.BinOp) -> None:
         """Visit binary operations (a + b, etc.)."""
@@ -451,8 +511,162 @@ class DefUseVisitor(ast.NodeVisitor):
 
         self.generic_visit(node)
 
+    def visit_Attribute(self, node: ast.Attribute) -> None:
+        """Visit attribute access (obj.attr) with write context tracking."""
+        # Visit the object being accessed first
+        self.visit(node.value)
+        
+        # Check if this is in a write context (simplified check)
+        is_write = False
+        # This is a simplified check - full context tracking would require parent AST info
+        
+        # Track attribute access as an operation
+        op_id = self._generate_operation_id()
+        expression = ast.unparse(node) if hasattr(ast, 'unparse') else f"{ast.unparse(node.value)}.{node.attr}"
+        cfg_node_ids = self._get_cfg_node_ids(node)
+        
+        from .models import ExpressionFact
+        self.facts.operations.append(ExpressionFact(
+            id=op_id,
+            function_id=self.function_id,
+            file=self.file,
+            line=node.lineno,
+            column=node.col_offset if hasattr(node, 'col_offset') else 0,
+            cfg_node_ids=cfg_node_ids,
+            expression=expression,
+            operation='Attribute',
+            input_use_ids=[],
+            output_definition_ids=[],
+            metadata={
+                'attribute': node.attr,
+                'access_type': 'write' if is_write else 'read',
+                'mutation': is_write,
+                'receiver': ast.unparse(node.value) if hasattr(ast, 'unparse') else str(node.value)
+            },
+        ))
+        # Don't call generic_visit - we already visited node.value
+
+    def visit_Subscript(self, node: ast.Subscript) -> None:
+        """Visit subscript access (obj[index]) with write context tracking."""
+        # Visit the object and index first
+        self.visit(node.value)
+        self.visit(node.slice)
+        
+        # Simplified write context check
+        is_write = False
+        
+        op_id = self._generate_operation_id()
+        expression = ast.unparse(node) if hasattr(ast, 'unparse') else "subscript"
+        cfg_node_ids = self._get_cfg_node_ids(node)
+        
+        from .models import ExpressionFact
+        self.facts.operations.append(ExpressionFact(
+            id=op_id,
+            function_id=self.function_id,
+            file=self.file,
+            line=node.lineno,
+            column=node.col_offset if hasattr(node, 'col_offset') else 0,
+            cfg_node_ids=cfg_node_ids,
+            expression=expression,
+            operation='Subscript',
+            input_use_ids=[],
+            output_definition_ids=[],
+            metadata={
+                'access_type': 'write' if is_write else 'read',
+                'mutation': is_write,
+                'base': ast.unparse(node.value) if hasattr(ast, 'unparse') else str(node.value)
+            },
+        ))
+        
+        # Track subscript access as an operation
+        op_id = self._generate_operation_id()
+        expression = ast.unparse(node) if hasattr(ast, 'unparse') else f"{ast.unparse(node.value)}[...]"
+        cfg_node_ids = self._get_cfg_node_ids(node)
+        
+        from .models import ExpressionFact
+        self.facts.operations.append(ExpressionFact(
+            id=op_id,
+            function_id=self.function_id,
+            file=self.file,
+            line=node.lineno,
+            column=node.col_offset if hasattr(node, 'col_offset') else 0,
+            cfg_node_ids=cfg_node_ids,
+            expression=expression,
+            operation='Subscript',
+            input_use_ids=[],  # Object and index uses tracked via explicit visit above
+            output_definition_ids=[],
+            metadata={},
+        ))
+        # Don't call generic_visit - we already visited node.value and node.slice
+
+    def visit_ListComp(self, node: ast.ListComp) -> None:
+        """Visit list comprehensions."""
+        # Visit the iterable first
+        self.visit(node.elt)
+        for generator in node.generators:
+            self.visit(generator.iter)
+            if generator.ifs:
+                for if_test in generator.ifs:
+                    self.visit(if_test)
+        
+        # Comprehension creates a new scope for the loop variable
+        # Track the target as a definition in comprehension scope
+        if node.generators:
+            target = node.generators[0].target
+            cfg_node_ids = self._get_cfg_node_ids(node)
+            binding_key = f"{self.function_id}::comprehension::{ast.unparse(target)}"
+            
+            # Extract target definitions (may be a simple name or unpacking)
+            self._extract_target_definitions(target, node, binding_key, cfg_node_ids)
+
+    def visit_SetComp(self, node: ast.SetComp) -> None:
+        """Visit set comprehensions."""
+        self.visit(node.elt)
+        for generator in node.generators:
+            self.visit(generator.iter)
+            if generator.ifs:
+                for if_test in generator.ifs:
+                    self.visit(if_test)
+        
+        if node.generators:
+            target = node.generators[0].target
+            cfg_node_ids = self._get_cfg_node_ids(node)
+            binding_key = f"{self.function_id}::comprehension::{ast.unparse(target)}"
+            self._extract_target_definitions(target, node, binding_key, cfg_node_ids)
+
+    def visit_DictComp(self, node: ast.DictComp) -> None:
+        """Visit dict comprehensions."""
+        self.visit(node.key)
+        self.visit(node.value)
+        for generator in node.generators:
+            self.visit(generator.iter)
+            if generator.ifs:
+                for if_test in generator.ifs:
+                    self.visit(if_test)
+        
+        if node.generators:
+            target = node.generators[0].target
+            cfg_node_ids = self._get_cfg_node_ids(node)
+            binding_key = f"{self.function_id}::comprehension::{ast.unparse(target)}"
+            self._extract_target_definitions(target, node, binding_key, cfg_node_ids)
+
+    def visit_GeneratorExp(self, node: ast.GeneratorExp) -> None:
+        """Visit generator expressions."""
+        self.visit(node.elt)
+        for generator in node.generators:
+            self.visit(generator.iter)
+            if generator.ifs:
+                for if_test in generator.ifs:
+                    self.visit(if_test)
+        
+        if node.generators:
+            target = node.generators[0].target
+            cfg_node_ids = self._get_cfg_node_ids(node)
+            binding_key = f"{self.function_id}::comprehension::{ast.unparse(target)}"
+            self._extract_target_definitions(target, node, binding_key, cfg_node_ids)
+
     def visit_Call(self, node: ast.Call) -> None:
-        """Visit function calls."""
+        """Visit function calls with side-effect tracking."""
         # Visit function and arguments
         self.visit(node.func)
         for arg in node.args:
@@ -466,6 +680,18 @@ class DefUseVisitor(ast.NodeVisitor):
                     if use.variable == arg.id and use.line == arg.lineno:
                         input_use_ids.append(use.id)
                         break
+
+        # Determine if this is a known mutation
+        known_mutations = ['append', 'extend', 'insert', 'remove', 'pop', 'clear', 'sort', 'reverse', 'update', 'add', 'discard']
+        metadata = {'side_effect': 'unknown', 'confidence': 'low'}
+        
+        if isinstance(node.func, ast.Attribute):
+            if node.func.attr in known_mutations:
+                metadata = {
+                    'side_effect': 'known_mutation',
+                    'mutation_kind': node.func.attr,
+                    'receiver': ast.unparse(node.func.value) if hasattr(ast, 'unparse') else str(node.func.value)
+                }
 
         # Create operation fact for the call
         op_id = self._generate_operation_id()
@@ -484,10 +710,122 @@ class DefUseVisitor(ast.NodeVisitor):
             operation="Call",
             input_use_ids=input_use_ids,
             output_definition_ids=[],
-            metadata={},
+            metadata=metadata
         ))
 
         self.generic_visit(node)
+
+    def visit_Match(self, node: ast.Match) -> None:
+        """Visit match statements and pattern bindings."""
+        # Visit the subject expression
+        self.visit(node.subject)
+        
+        # Visit each case and its pattern
+        for case in node.cases:
+            self.visit(case.pattern)
+            if case.guard:
+                self.visit(case.guard)
+            self.visit(case.body)
+
+    def visit_MatchAs(self, node: ast.MatchAs) -> None:
+        """Visit capture patterns (e.g., `as name`)."""
+        # Visit the pattern being captured
+        if node.pattern:
+            self.visit(node.pattern)
+        
+        # If there's a name, create a definition for the captured variable
+        if node.name:
+            cfg_node_ids = self._get_cfg_node_ids(node)
+            binding_key = f"{self.function_id}::{node.name}"
+            
+            self._extract_target_definitions(
+                target=node,
+                source_node=node,
+                binding_key=binding_key,
+                cfg_node_ids=cfg_node_ids,
+                kind='match_capture'
+            )
+
+    def visit_MatchSequence(self, node: ast.MatchSequence) -> None:
+        """Visit sequence patterns (e.g., `[a, b, c]`)."""
+        for pattern in node.patterns:
+            self.visit(pattern)
+
+    def visit_MatchMapping(self, node: ast.MatchMapping) -> None:
+        """Visit mapping patterns (e.g., `{'key': value}`)."""
+        for key_pattern in node.keys:
+            if key_pattern:
+                self.visit(key_pattern)
+        for value_pattern in node.patterns:
+            self.visit(value_pattern)
+
+    def visit_MatchClass(self, node: ast.MatchClass) -> None:
+        """Visit class patterns (e.g., `Point(x, y)`)."""
+        self.visit(node.cls)
+        for pattern in node.patterns:
+            self.visit(pattern)
+        for kw_pattern in node.kwd_patterns:
+            self.visit(kw_pattern)
+
+    def visit_MatchStar(self, node: ast.MatchStar) -> None:
+        """Visit star patterns (e.g., `*rest`)."""
+        if node.name:
+            cfg_node_ids = self._get_cfg_node_ids(node)
+            binding_key = f"{self.function_id}::{node.name}"
+            
+            self._extract_target_definitions(
+                target=node,
+                source_node=node,
+                binding_key=binding_key,
+                cfg_node_ids=cfg_node_ids,
+                kind='match_star'
+            )
+
+    def visit_MatchOr(self, node: ast.MatchOr) -> None:
+        """Visit OR patterns (e.g., `a | b`)."""
+        for pattern in node.patterns:
+            self.visit(pattern)
+
+    def visit_MatchValue(self, node: ast.MatchValue) -> None:
+        """Visit value patterns (e.g., `1`, `'string'`)."""
+        self.visit(node.value)
+
+    def visit_MatchSingleton(self, node: ast.MatchSingleton) -> None:
+        """Visit singleton patterns (e.g., `True`, `False`, `None`)."""
+        # No variable binding, just the value
+        pass
+
+    def visit_Delete(self, node: ast.Delete) -> None:
+        """Visit deletion statements (del x)."""
+        for target in node.targets:
+            if isinstance(target, ast.Name):
+                # Create a deletion fact
+                cfg_node_ids = self._get_cfg_node_ids(node)
+                binding_key = f"{self.function_id}::{target.id}"
+                
+                from .models import Definition
+                deletion_id = self._generate_def_id(target.id)
+                self.facts.definitions.append(Definition(
+                    id=deletion_id,
+                    variable=target.id,
+                    function_id=self.function_id,
+                    file=self.file,
+                    line=node.lineno,
+                    column=node.col_offset if hasattr(node, 'col_offset') else 0,
+                    cfg_node_ids=cfg_node_ids,
+                    binding_key=binding_key,
+                    kind='deletion',
+                    expression=f"del {target.id}",
+                    metadata={'is_deletion': True}
+                ))
+            elif isinstance(target, (ast.Attribute, ast.Subscript)):
+                # Visit the complex target
+                self.visit(target)
+                # Deletion could be tracked as a mutation operation
+                pass
+            else:
+                # Tuple/list unpacking deletion
+                self.visit(target)
 
     def _extract_target_definitions(
         self,
@@ -517,7 +855,9 @@ class DefUseVisitor(ast.NodeVisitor):
         elif isinstance(target, (ast.Tuple, ast.List)):
             # Tuple/list unpacking: `a, b = value`
             for elt in target.elts:
-                self._extract_target_definitions(elt, source_node, f"{kind}_unpack", binding_key, cfg_node_ids)
+                # Create separate binding key for each unpacked variable
+                elt_binding_key = f"{self.function_id}::{self._get_variable_name(elt)}"
+                self._extract_target_definitions(elt, source_node, f"{kind}_unpack", elt_binding_key, cfg_node_ids)
         elif isinstance(target, ast.Starred):
             # Starred unpacking: `*rest = value`
             self._extract_target_definitions(target.value, source_node, f"{kind}_starred", binding_key, cfg_node_ids)

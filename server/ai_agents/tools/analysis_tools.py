@@ -406,17 +406,52 @@ def analyze_control_flow(function_name: str, tool_context: ToolContext) -> dict:
 
 
 @safe
-def analyze_data_flow(variable_name: str, tool_context: ToolContext) -> dict:
-    """Track data propagation."""
+@safe
+def analyze_data_flow(function_name: str, file_path: str, tool_context: ToolContext) -> dict:
+    """Analyze data flow for a Python function."""
     try:
-        # This is a simplified implementation
-        # Real data flow analysis would require more sophisticated tracking
-        return {
-            'status': 'ok',
-            'variable_name': variable_name,
-            'data_flow': [],
-            'note': 'Full data flow analysis requires additional infrastructure'
-        }
+        from ai_agents.intelligence.dataflow.service import analyze_python_data_flow
+        from pathlib import Path
+        
+        # Resolve file path in repository
+        resolved_path = resolve_in_repo(file_path, tool_context)
+        if not resolved_path or not Path(resolved_path).exists():
+            return {
+                'status': 'error',
+                'error': f'File not found: {file_path}'
+            }
+        
+        # Read source code
+        with open(resolved_path, 'r', encoding='utf-8') as f:
+            source = f.read()
+        
+        # Parse AST to find function
+        tree = ast.parse(source)
+        func_node = None
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef) and node.name == function_name:
+                func_node = node
+                break
+        
+        if not func_node:
+            return {
+                'status': 'error',
+                'error': f'Function not found: {function_name}'
+            }
+        
+        # Build function ID
+        file_id = str(Path(resolved_path).relative_to(tool_context.repo_root))
+        function_id = f"{file_id}::{function_name}"
+        
+        # Call the real DFG service
+        from ai_agents.intelligence.dataflow.service import analyze_python_data_flow_simple
+        result = analyze_python_data_flow_simple(
+            function_name=function_name,
+            source=source,
+            file_path=file_id
+        )
+        
+        return result
     except Exception as e:
         return {
             'status': 'error',
