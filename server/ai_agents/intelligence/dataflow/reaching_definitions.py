@@ -99,6 +99,7 @@ class ReachingDefinitionsAnalyzer:
         node_defs: Dict[str, List[Definition]] = {}
 
         for definition in definitions:
+            # Use ALL cfg_node_ids, not just the first one
             for cfg_node_id in definition.cfg_node_ids:
                 if cfg_node_id not in node_defs:
                     node_defs[cfg_node_id] = []
@@ -115,6 +116,7 @@ class ReachingDefinitionsAnalyzer:
         node_uses: Dict[str, List[VariableUse]] = {}
 
         for use in uses:
+            # Use ALL cfg_node_ids, not just the first one
             for cfg_node_id in use.cfg_node_ids:
                 if cfg_node_id not in node_uses:
                     node_uses[cfg_node_id] = []
@@ -179,10 +181,18 @@ class ReachingDefinitionsAnalyzer:
 
         IN[B] = union of OUT[P] for all predecessors P of B
         OUT[B] = GEN[B] union (IN[B] - KILL[B])
+
+        Edge-specific transfer: For exceptional edges, filter out definitions
+        that shouldn't propagate (e.g., assignment RHS evaluation vs commit).
         """
         # Initialize all sets to empty
         in_sets: Dict[str, Set[str]] = {node.id: set() for node in cfg.nodes}
         out_sets: Dict[str, Set[str]] = {node.id: set() for node in cfg.nodes}
+
+        # Build edge-specific transfer info: map (source, target) -> edge kind
+        edge_kinds = {}
+        for edge in cfg.edges:
+            edge_kinds[(edge.source, edge.target)] = edge.kind
 
         # Worklist of nodes to process
         worklist = list(node.id for node in cfg.nodes)
@@ -194,7 +204,19 @@ class ReachingDefinitionsAnalyzer:
             predecessors = self._get_predecessors(cfg, node_id)
             new_in = set()
             for pred_id in predecessors:
-                new_in.update(out_sets[pred_id])
+                # Check if this is an exceptional edge
+                edge_kind = edge_kinds.get((pred_id, node_id), 'next')
+                if edge_kind in ('exception', 'raise', 'may_raise'):
+                    # For exceptional edges, only propagate definitions that existed
+                    # BEFORE the current node's assignments (filter out new definitions)
+                    # This prevents x = risky() from propagating x's new def to handlers
+                    pred_out = out_sets[pred_id].copy()
+                    # Remove definitions created at the predecessor node itself
+                    if pred_id in gen:
+                        pred_out -= gen[pred_id]
+                    new_in.update(pred_out)
+                else:
+                    new_in.update(out_sets[pred_id])
 
             # Calculate OUT[B] = GEN[B] union (IN[B] - KILL[B])
             new_out = gen[node_id].union(new_in - kill[node_id])
@@ -325,21 +347,22 @@ class ReachingDefinitionsAnalyzer:
         Resolve which definitions reach a given use.
 
         Returns a list of reaching definitions (may be multiple due to branches).
+        Uses binding identity instead of variable-name matching.
         """
-        node_id = use.cfg_node_ids[0]
+        # Use ALL cfg_node_ids for the use
         in_sets = analysis_result['in_sets']
+        reaching_def_ids = set()
 
-        if node_id not in in_sets:
-            return []
+        # Collect reaching definitions from all CFG nodes associated with this use
+        for node_id in use.cfg_node_ids:
+            if node_id in in_sets:
+                reaching_def_ids.update(in_sets[node_id])
 
-        # Get all definitions that reach this node
-        reaching_def_ids = in_sets[node_id]
-
-        # Filter to definitions of the same variable
+        # Filter to definitions with the same binding identity
         reaching_defs = []
         for def_id in reaching_def_ids:
             for definition in facts.definitions:
-                if definition.id == def_id and definition.variable == use.variable:
+                if definition.id == def_id and definition.binding_key == use.binding_key:
                     reaching_defs.append(definition)
                     break
 

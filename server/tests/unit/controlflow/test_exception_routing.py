@@ -68,11 +68,11 @@ def return_finally():
     validation = validate_cfg(cfg)
     assert validation['valid'], f"CFG validation failed: {validation['errors']}"
 
-    # Check that finally node exists
+    # Check that finally nodes exist (completion-specific finalizers)
     finally_nodes = [n for n in cfg.nodes if n.kind == 'finally']
-    assert len(finally_nodes) == 1, "Should have finally node"
+    assert len(finally_nodes) >= 1, "Should have finally nodes"
 
-    # Check that return connects to finally
+    # Check that return connects to a finally node with return completion kind
     return_nodes = [n for n in cfg.nodes if n.kind == 'return']
     assert len(return_nodes) == 1
     return_edges = cfg.get_edges_from(return_nodes[0].id)
@@ -211,9 +211,11 @@ def nested_finally():
     validation = validate_cfg(cfg)
     assert validation['valid'], f"CFG validation failed: {validation['errors']}"
 
-    # Should have two finally nodes
+    # Should have finally nodes for each try (completion-specific finalizers)
+    # Each try creates 5 finally nodes (normal, return, raise, break, continue)
+    # Two nested tries = 10 finally nodes total
     finally_nodes = [n for n in cfg.nodes if n.kind == 'finally']
-    assert len(finally_nodes) == 2, "Should have two finally nodes"
+    assert len(finally_nodes) == 10, "Should have 10 finally nodes (5 per try for completion-specific routing)"
 
 
 def test_exception_in_handler():

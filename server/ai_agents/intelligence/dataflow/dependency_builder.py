@@ -136,6 +136,26 @@ class DataFlowGraphBuilder:
                     )
                     graph.add_edge(edge)
 
+            # Connect input operations to this operation (nested operations)
+            for input_op_id in operation.input_operation_ids:
+                input_op_node_id = operation_nodes.get(input_op_id)
+                if input_op_node_id:
+                    edge_id = self._generate_edge_id()
+                    edge = DataFlowEdge(
+                        id=edge_id,
+                        source=input_op_node_id,
+                        target=node_id,
+                        kind='operand',
+                        resolution='static',
+                        condition=None,
+                        evidence={
+                            'file': facts.file,
+                            'operation': operation.operation,
+                            'nested_operation': True,
+                        },
+                    )
+                    graph.add_edge(edge)
+
             # Connect operation to output definitions (definition nodes already created)
             for def_id in operation.output_definition_ids:
                 def_node_id = def_nodes.get(def_id)
@@ -167,7 +187,7 @@ class DataFlowGraphBuilder:
                 if not use_node_id:
                     continue
 
-                # Find all definitions of the same binding that reach this node
+                # Find all definitions with the same binding that reach this node
                 for def_id in reaching_def_ids:
                     def_node = self._find_definition(facts.definitions, def_id)
                     if def_node and def_node.binding_key == use.binding_key:
@@ -193,21 +213,21 @@ class DataFlowGraphBuilder:
         # Add return edges using reaching definitions
         in_sets = analysis_result.get('in_sets', {})
         node_uses = analysis_result.get('node_uses', {})
-        
+
         for cfg_node_id, reaching_def_ids in in_sets.items():
             # Check if this CFG node is a return node
             cfg_node = cfg.get_node(cfg_node_id)
             if not cfg_node or cfg_node.kind != 'return':
                 continue
-            
+
             uses_at_node = node_uses.get(cfg_node_id, [])
-            
+
             for use in uses_at_node:
                 use_node_id = use_nodes.get(use.id)
                 if not use_node_id:
                     continue
-                
-                # Find all definitions of the same binding that reach this return node
+
+                # Find all definitions with the same binding that reach this return node
                 for def_id in reaching_def_ids:
                     def_node = self._find_definition(facts.definitions, def_id)
                     if def_node and def_node.binding_key == use.binding_key:

@@ -17,10 +17,11 @@ def validate_cfg(cfg: ControlFlowGraph) -> Dict[str, Any]:
     errors = []
     warnings = []
 
-    # Handle both CFG object and dict
     # Handle CFGBuildArtifact
     if isinstance(cfg, CFGBuildArtifact):
         cfg = cfg.graph
+
+    # Handle both CFG object and dict
     if isinstance(cfg, dict):
         nodes = cfg.get('nodes', [])
         edges = cfg.get('edges', [])
@@ -30,6 +31,7 @@ def validate_cfg(cfg: ControlFlowGraph) -> Dict[str, Any]:
         entry_id = cfg.get('entry_node_id')
         exit_id = cfg.get('exit_node_id')
         exception_exit_id = cfg.get('exception_exit_node_id')
+        ast_node_map = cfg.get('ast_node_map', {})
     else:
         nodes = cfg.nodes
         edges = cfg.edges
@@ -39,92 +41,209 @@ def validate_cfg(cfg: ControlFlowGraph) -> Dict[str, Any]:
         entry_id = cfg.entry_node_id
         exit_id = cfg.exit_node_id
         exception_exit_id = cfg.exception_exit_node_id
+        ast_node_map = cfg.ast_node_map
+
+    # Check node uniqueness
     if len(node_ids) != len(set(node_ids)):
         duplicates = [nid for nid in node_ids if node_ids.count(nid) > 1]
         errors.append(f"Duplicate node IDs: {set(duplicates)}")
 
     # Check edge uniqueness
-    edge_ids = [e.id for e in cfg.edges]
     if len(edge_ids) != len(set(edge_ids)):
         duplicates = [eid for eid in edge_ids if edge_ids.count(eid) > 1]
         errors.append(f"Duplicate edge IDs: {set(duplicates)}")
 
     # Check edge references
     node_id_set = set(node_ids)
-    for edge in cfg.edges:
-        if edge.source not in node_id_set:
-            errors.append(f"Edge {edge.id} references non-existent source node: {edge.source}")
-        if edge.target not in node_id_set:
-            errors.append(f"Edge {edge.id} references non-existent target node: {edge.target}")
+    for edge in edges:
+        if isinstance(edge, dict):
+            source = edge.get('source')
+            target = edge.get('target')
+            edge_id = edge.get('id')
+            kind = edge.get('kind')
+        else:
+            source = edge.source
+            target = edge.target
+            edge_id = edge.id
+            kind = edge.kind
+
+        if source not in node_id_set:
+            errors.append(f"Edge {edge_id} references non-existent source node: {source}")
+        if target not in node_id_set:
+            errors.append(f"Edge {edge_id} references non-existent target node: {target}")
 
     # Check for entry and exit nodes
-    if not cfg.entry_node_id:
+    if not entry_id:
         errors.append("CFG missing entry_node_id")
-    elif cfg.entry_node_id not in node_id_set:
-        errors.append(f"CFG entry_node_id references non-existent node: {cfg.entry_node_id}")
+    elif entry_id not in node_id_set:
+        errors.append(f"CFG entry_node_id references non-existent node: {entry_id}")
 
-    if not cfg.exit_node_id:
+    if not exit_id:
         errors.append("CFG missing exit_node_id")
-    elif cfg.exit_node_id not in node_id_set:
-        errors.append(f"CFG exit_node_id references non-existent node: {cfg.exit_node_id}")
+    elif exit_id not in node_id_set:
+        errors.append(f"CFG exit_node_id references non-existent node: {exit_id}")
 
-    if not cfg.exception_exit_node_id:
+    if not exception_exit_id:
         errors.append("CFG missing exception_exit_node_id")
-    elif cfg.exception_exit_node_id not in node_id_set:
-        errors.append(f"CFG exception_exit_node_id references non-existent node: {cfg.exception_exit_node_id}")
+    elif exception_exit_id not in node_id_set:
+        errors.append(f"CFG exception_exit_node_id references non-existent node: {exception_exit_id}")
 
     # Check return statements - they can connect to exit, finally, or with exit nodes
-    return_nodes = [n for n in cfg.nodes if n.kind == 'return']
+    return_nodes = [n for n in nodes if (n.get('kind') if isinstance(n, dict) else n.kind) == 'return']
     for return_node in return_nodes:
-        outgoing = cfg.get_edges_from(return_node.id)
+        node_id = return_node.get('id') if isinstance(return_node, dict) else return_node.id
+        # Get outgoing edges for this node
+        outgoing = [e for e in edges if (e.get('source') if isinstance(e, dict) else e.source) == node_id]
         for edge in outgoing:
-            target = cfg.get_node(edge.target)
+            target_id = edge.get('target') if isinstance(edge, dict) else edge.target
+            target_node = node_map.get(target_id)
             # Allow return to connect to exit, finally, or with exit node
-            if edge.target != cfg.exit_node_id:
-                if target and target.kind not in ('finally', 'statement'):
-                    errors.append(f"Return node {return_node.id} has outgoing edge to non-exit/non-cleanup: {edge.target} ({target.kind if target else 'unknown'})")
-                elif target and target.kind == 'statement' and 'exit' not in target.label.lower():
-                    errors.append(f"Return node {return_node.id} has outgoing edge to non-exit/non-cleanup: {edge.target} ({target.kind if target else 'unknown'})")
+            if target_id != exit_id:
+                if target_node:
+                    target_kind = target_node.get('kind') if isinstance(target_node, dict) else target_node.kind
+                    target_label = target_node.get('label') if isinstance(target_node, dict) else target_node.label
+                    if target_kind not in ('finally', 'statement'):
+                        errors.append(f"Return node {node_id} has outgoing edge to non-exit/non-cleanup: {target_id} ({target_kind})")
+                    elif target_kind == 'statement' and 'exit' not in target_label.lower():
+                        errors.append(f"Return node {node_id} has outgoing edge to non-exit/non-cleanup: {target_id} ({target_kind})")
 
     # Check break and continue edges target correct loops
-    break_edges = [e for e in cfg.edges if e.kind == 'break']
-    continue_edges = [e for e in cfg.edges if e.kind == 'continue']
+    break_edges = [e for e in edges if (e.get('kind') if isinstance(e, dict) else e.kind) == 'break']
+    continue_edges = [e for e in edges if (e.get('kind') if isinstance(e, dict) else e.kind) == 'continue']
 
     for edge in break_edges:
-        target = cfg.get_node(edge.target)
-        if target and target.kind not in ('join', 'exit'):
-            errors.append(f"Break edge {edge.id} targets non-join node: {target.kind}")
+        target_id = edge.get('target') if isinstance(edge, dict) else edge.target
+        edge_id = edge.get('id') if isinstance(edge, dict) else edge.id
+        target_node = node_map.get(target_id)
+        if target_node:
+            target_kind = target_node.get('kind') if isinstance(target_node, dict) else target_node.kind
+            if target_kind not in ('join', 'exit'):
+                errors.append(f"Break edge {edge_id} targets non-join node: {target_kind}")
 
     for edge in continue_edges:
-        target = cfg.get_node(edge.target)
-        if target and target.kind != 'loop_header':
-            errors.append(f"Continue edge {edge.id} targets non-loop-header node: {target.kind}")
+        target_id = edge.get('target') if isinstance(edge, dict) else edge.target
+        edge_id = edge.get('id') if isinstance(edge, dict) else edge.id
+        target_node = node_map.get(target_id)
+        if target_node:
+            target_kind = target_node.get('kind') if isinstance(target_node, dict) else target_node.kind
+            if target_kind != 'loop_header':
+                errors.append(f"Continue edge {edge_id} targets non-loop-header node: {target_kind}")
 
     # Check loop-back edges target their own loop header
-    loop_back_edges = [e for e in cfg.edges if e.kind == 'loop_back']
+    loop_back_edges = [e for e in edges if (e.get('kind') if isinstance(e, dict) else e.kind) == 'loop_back']
     for edge in loop_back_edges:
-        source = cfg.get_node(edge.source)
-        target = cfg.get_node(edge.target)
-        if source and target:
-            if target.kind != 'loop_header':
-                errors.append(f"Loop-back edge {edge.id} targets non-loop-header node")
-            if source.kind != 'loop_header' and source.kind != 'statement':
-                warnings.append(f"Loop-back edge {edge.id} source is not loop-related: {source.kind}")
+        source_id = edge.get('source') if isinstance(edge, dict) else edge.source
+        target_id = edge.get('target') if isinstance(edge, dict) else edge.target
+        edge_id = edge.get('id') if isinstance(edge, dict) else edge.id
+        source_node = node_map.get(source_id)
+        target_node = node_map.get(target_id)
+        if source_node and target_node:
+            source_kind = source_node.get('kind') if isinstance(source_node, dict) else source_node.kind
+            target_kind = target_node.get('kind') if isinstance(target_node, dict) else target_node.kind
+            if target_kind != 'loop_header':
+                errors.append(f"Loop-back edge {edge_id} targets non-loop-header node")
+            if source_kind != 'loop_header' and source_kind != 'statement':
+                warnings.append(f"Loop-back edge {edge_id} source is not loop-related: {source_kind}")
 
     # Check condition nodes have true/false edges
-    condition_nodes = [n for n in cfg.nodes if n.kind == 'condition']
+    condition_nodes = [n for n in nodes if (n.get('kind') if isinstance(n, dict) else n.kind) == 'condition']
     for cond_node in condition_nodes:
-        outgoing = cfg.get_edges_from(cond_node.id)
-        true_edges = [e for e in outgoing if e.kind == 'true']
-        false_edges = [e for e in outgoing if e.kind == 'false']
+        node_id = cond_node.get('id') if isinstance(cond_node, dict) else cond_node.id
+        # Get outgoing edges for this node
+        outgoing = [e for e in edges if (e.get('source') if isinstance(e, dict) else e.source) == node_id]
+        true_edges = [e for e in outgoing if (e.get('kind') if isinstance(e, dict) else e.kind) == 'true']
+        false_edges = [e for e in outgoing if (e.get('kind') if isinstance(e, dict) else e.kind) == 'false']
         if not true_edges:
-            errors.append(f"Condition node {cond_node.id} missing true edge")
+            errors.append(f"Condition node {node_id} missing true edge")
         if not false_edges:
-            errors.append(f"Condition node {cond_node.id} missing false edge")
+            errors.append(f"Condition node {node_id} missing false edge")
 
     # Check AST node mapping
-    if not cfg.ast_node_map:
+    if not ast_node_map:
         warnings.append("CFG has no AST node mapping")
+
+    # Semantic validation: Check loop headers have proper break/continue targets
+    loop_headers = [n for n in nodes if (n.get('kind') if isinstance(n, dict) else n.kind) == 'loop_header']
+    for header in loop_headers:
+        node_id = header.get('id') if isinstance(header, dict) else header.id
+        metadata = header.get('metadata', {}) if isinstance(header, dict) else header.metadata
+        if metadata and 'break_target' in metadata:
+            break_target = metadata['break_target']
+            if break_target not in node_id_set:
+                errors.append(f"Loop header {node_id} has invalid break_target: {break_target}")
+        if metadata and 'continue_target' in metadata:
+            continue_target = metadata['continue_target']
+            if continue_target not in node_id_set:
+                errors.append(f"Loop header {node_id} has invalid continue_target: {continue_target}")
+
+    # Semantic validation: Check exception handlers have proper ordering
+    except_handlers = [n for n in nodes if (n.get('ast_kind') if isinstance(n, dict) else n.ast_kind) == 'ExceptHandler']
+    if len(except_handlers) > 1:
+        # Verify handlers are in order
+        handler_orders = []
+        for handler in except_handlers:
+            metadata = handler.get('metadata', {}) if isinstance(handler, dict) else handler.metadata
+            if metadata and 'handler_order' in metadata:
+                handler_orders.append(metadata['handler_order'])
+        if handler_orders != sorted(handler_orders):
+            warnings.append("Exception handlers are not in proper order")
+
+    # Semantic validation: Check finally nodes exist for try statements with finally
+    try_nodes = [n for n in nodes if (n.get('ast_kind') if isinstance(n, dict) else n.ast_kind) == 'Try']
+    finally_nodes = [n for n in nodes if (n.get('kind') if isinstance(n, dict) else n.kind) == 'finally']
+    if try_nodes and not finally_nodes:
+        warnings.append("Try statements found but no finally nodes - may indicate missing finally handling")
+
+    # Semantic validation: Check for unreachable nodes (no incoming edges except entry)
+    entry_set = {entry_id} if entry_id else set()
+    for node in nodes:
+        node_id = node.get('id') if isinstance(node, dict) else node.id
+        if node_id not in entry_set:
+            # Check if node has any incoming edges
+            has_incoming = any(
+                (e.get('target') if isinstance(e, dict) else e.target) == node_id
+                for e in edges
+            )
+            if not has_incoming:
+                warnings.append(f"Node {node_id} appears unreachable (no incoming edges)")
+
+    # Semantic validation: Check break/continue edges don't cross loop boundaries
+    break_edges = [e for e in edges if (e.get('kind') if isinstance(e, dict) else e.kind) == 'break']
+    continue_edges = [e for e in edges if (e.get('kind') if isinstance(e, dict) else e.kind) == 'continue']
+
+    for edge in break_edges:
+        source_id = edge.get('source') if isinstance(edge, dict) else edge.source
+        target_id = edge.get('target') if isinstance(edge, dict) else edge.target
+        source_node = node_map.get(source_id)
+        target_node = node_map.get(target_id)
+        if source_node and target_node:
+            # Break should target a join/exit node, not a loop header
+            target_kind = target_node.get('kind') if isinstance(target_node, dict) else target_node.kind
+            if target_kind == 'loop_header':
+                errors.append(f"Break edge {edge.get('id') if isinstance(edge, dict) else edge.id} targets loop header (should target exit)")
+
+    for edge in continue_edges:
+        source_id = edge.get('source') if isinstance(edge, dict) else edge.source
+        target_id = edge.get('target') if isinstance(edge, dict) else edge.target
+        source_node = node_map.get(source_id)
+        target_node = node_map.get(target_id)
+        if source_node and target_node:
+            # Continue should target a loop header
+            target_kind = target_node.get('kind') if isinstance(target_node, dict) else target_node.kind
+            if target_kind != 'loop_header':
+                errors.append(f"Continue edge {edge.get('id') if isinstance(edge, dict) else edge.id} targets non-loop-header node")
+
+    # Semantic validation: Check exception edges don't bypass handlers
+    exception_edges = [e for e in edges if (e.get('kind') if isinstance(e, dict) else e.kind) == 'exception']
+    for edge in exception_edges:
+        target_id = edge.get('target') if isinstance(edge, dict) else edge.target
+        target_node = node_map.get(target_id)
+        if target_node:
+            target_kind = target_node.get('kind') if isinstance(target_node, dict) else target_node.kind
+            target_ast_kind = target_node.get('ast_kind') if isinstance(target_node, dict) else target_node.ast_kind
+            # Exception edges should target handlers, dispatchers, or exception exits
+            if target_kind not in ('statement', 'exception_dispatch', 'exit') and target_ast_kind not in ('ExceptHandler', 'Try'):
+                warnings.append(f"Exception edge targets unexpected node kind: {target_kind}/{target_ast_kind}")
 
     return {
         'valid': len(errors) == 0,

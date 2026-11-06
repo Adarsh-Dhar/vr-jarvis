@@ -46,6 +46,7 @@ class ExpressionFact:
     expression: str
     operation: str
     input_use_ids: List[str] = field(default_factory=list)
+    input_operation_ids: List[str] = field(default_factory=list)
     output_definition_ids: List[str] = field(default_factory=list)
     metadata: Dict[str, Any] = field(default_factory=dict)
 

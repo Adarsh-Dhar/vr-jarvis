@@ -534,6 +534,26 @@ namespace JarvisVR
             ev.Style = "solid";
             ev.Base = pal.Green;
             return;
+          case "loop_exhausted":
+            ev.Style = "solid";
+            ev.Base = pal.Amber;
+            return;
+          case "finally":
+            ev.Style = "dashed";
+            ev.Base = pal.Violet;
+            return;
+          case "raise":
+            ev.Style = "dotted";
+            ev.Base = JarvisPalette.Red;
+            return;
+          case "may_raise":
+            ev.Style = "dashed";
+            ev.Base = JarvisPalette.Orange;
+            return;
+          case "resume":
+            ev.Style = "dashed";
+            ev.Base = pal.Cyan;
+            return;
         }
       }
 
@@ -551,8 +571,18 @@ namespace JarvisVR
             ev.Base = pal.Green;
             return;
           case "reaches":
-            ev.Style = "solid";
-            ev.Base = pal.Violet;
+            // Check resolution field: may_reach should be dashed, must_reach solid
+            string resolution = ev.Dto != null ? ev.Dto.resolution : null;
+            if (resolution == "may_reach")
+            {
+              ev.Style = "dashed";
+              ev.Base = pal.Violet;
+            }
+            else
+            {
+              ev.Style = "solid";
+              ev.Base = pal.Violet;
+            }
             return;
           case "may_reach":
             ev.Style = "dashed";
