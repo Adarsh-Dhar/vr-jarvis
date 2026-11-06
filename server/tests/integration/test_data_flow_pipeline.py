@@ -1,4 +1,4 @@
-"""Integration test for data-flow analysis pipeline."""
+"""Integration test for data-flow analysis pipeline with exact correctness assertions."""
 import ast
 import pytest
 from ai_agents.intelligence.controlflow import PythonCFGBuilder
@@ -10,7 +10,7 @@ from ai_agents.intelligence.dataflow import (
 )
 
 
-def test_data_flow_pipeline():
+def test_data_flow_pipeline_end_to_end():
     """Test the complete data-flow analysis pipeline."""
     code = """
 def calculate(price, discount_enabled):
@@ -38,50 +38,59 @@ def calculate(price, discount_enabled):
     facts = extractor.extract_function(
         function_ast=func_node,
         function_id="test::calculate",
-        source=code
+        source=code,
+        cfg=cfg,
+        file_path="test.py"
     )
 
-    # Step 3: Perform reaching definitions analysis
+    # Step 3: Perform reaching-definitions analysis
     analyzer = ReachingDefinitionsAnalyzer()
     analysis_result = analyzer.analyze(cfg, facts)
+
+    assert "error" not in analysis_result, f"Analysis failed: {analysis_result.get('error')}"
 
     # Step 4: Build data-flow graph
     dfg_builder = DataFlowGraphBuilder()
     dfg = dfg_builder.build(cfg, facts, analysis_result)
 
-    # Step 5: Convert to dict
-    dfg_dict = dfg.to_dict()
-    assert 'nodes' in dfg_dict
-    assert 'edges' in dfg_dict
-    assert len(dfg_dict['nodes']) > 0
-    assert len(dfg_dict['edges']) > 0
+    # Step 5: Validate DFG
+    validation = dfg_builder.validate_dataflow_graph(cfg, facts, dfg)
+    assert validation["valid"], f"DFG validation failed: {validation['errors']}"
 
-    # Step 6: Convert to Unity format
+    # Step 6: Convert to dict
+    dfg_dict = dfg.to_dict()
+    assert "nodes" in dfg_dict
+    assert "edges" in dfg_dict
+    assert len(dfg_dict["nodes"]) > 0
+    assert len(dfg_dict["edges"]) > 0
+
+    # Step 7: Convert to Unity format
     unity_graph = dfg_to_unity_format(dfg)
-    assert 'graph_type' in unity_graph
-    assert unity_graph['graph_type'] == 'data_flow'
-    assert 'nodes' in unity_graph
-    assert 'edges' in unity_graph
+    assert "graph_type" in unity_graph
+    assert unity_graph["graph_type"] == "data_flow"
+    assert "nodes" in unity_graph
+    assert "edges" in unity_graph
 
     # Verify Unity nodes have required fields
-    for node in unity_graph['nodes']:
-        assert 'id' in node
-        assert 'name' in node
-        assert 'node_kind' in node
-        assert 'variable' in node
-        assert 'function_id' in node
-        assert 'file' in node
-        assert 'line' in node
+    for node in unity_graph["nodes"]:
+        assert "id" in node
+        assert "name" in node
+        assert "node_kind" in node
+        assert "variable" in node
+        assert "function_id" in node
+        assert "file" in node
+        assert "line" in node
 
     # Verify Unity edges have required fields
-    for edge in unity_graph['edges']:
-        assert 'src' in edge
-        assert 'dst' in edge
-        assert 'edge_kind' in edge
-        assert 'resolution' in edge
+    for edge in unity_graph["edges"]:
+        assert "src" in edge
+        assert "dst" in edge
+        assert "edge_kind" in edge
+        assert "edge_id" in edge
+        assert "resolution" in edge
 
 
-def test_data_flow_with_loops():
+def test_data_flow_pipeline_with_loops():
     """Test data-flow pipeline with loops."""
     code = """
 def process(items):
@@ -105,23 +114,30 @@ def process(items):
     facts = extractor.extract_function(
         function_ast=func_node,
         function_id="test::process",
-        source=code
+        source=code,
+        cfg=cfg,
+        file_path="test.py"
     )
 
     analyzer = ReachingDefinitionsAnalyzer()
     analysis_result = analyzer.analyze(cfg, facts)
 
+    assert "error" not in analysis_result, f"Analysis failed: {analysis_result.get('error')}"
+
     dfg_builder = DataFlowGraphBuilder()
     dfg = dfg_builder.build(cfg, facts, analysis_result)
 
+    validation = dfg_builder.validate_dataflow_graph(cfg, facts, dfg)
+    assert validation["valid"], f"DFG validation failed: {validation['errors']}"
+
     # Should have nodes for definitions and uses
-    assert len(dfg.nodes) > 0, "Should have nodes"
+    assert len(dfg.nodes) > 0, "Should have DFG nodes"
 
     # Should have edges for data flow
-    assert len(dfg.edges) > 0, "Should have edges"
+    assert len(dfg.edges) > 0, "Should have DFG edges"
 
 
-def test_data_flow_with_parameters():
+def test_data_flow_pipeline_with_parameters():
     """Test data-flow pipeline with parameters."""
     code = """
 def process(a, b, c):
@@ -144,18 +160,25 @@ def process(a, b, c):
     facts = extractor.extract_function(
         function_ast=func_node,
         function_id="test::process",
-        source=code
+        source=code,
+        cfg=cfg,
+        file_path="test.py"
     )
 
     # Should have parameter definitions
-    param_defs = [d for d in facts.definitions if d.kind == 'parameter']
+    param_defs = [d for d in facts.definitions if d.kind == "parameter"]
     assert len(param_defs) >= 3, "Should have 3 parameter definitions"
 
     analyzer = ReachingDefinitionsAnalyzer()
     analysis_result = analyzer.analyze(cfg, facts)
 
+    assert "error" not in analysis_result, f"Analysis failed: {analysis_result.get('error')}"
+
     dfg_builder = DataFlowGraphBuilder()
     dfg = dfg_builder.build(cfg, facts, analysis_result)
+
+    validation = dfg_builder.validate_dataflow_graph(cfg, facts, dfg)
+    assert validation["valid"], f"DFG validation failed: {validation['errors']}"
 
     # Should have data-flow edges from parameters to uses
     assert len(dfg.edges) > 0, "Should have edges"

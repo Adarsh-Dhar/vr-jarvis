@@ -34,7 +34,9 @@ def process(value):
     facts = extractor.extract_function(
         function_ast=func_node,
         function_id="test::process",
-        source=code
+        source=code,
+        cfg=cfg,
+        file_path="test.py"
     )
 
     # Perform reaching definitions analysis
@@ -76,7 +78,9 @@ def test_dfg_to_dict():
     facts = extractor.extract_function(
         function_ast=func_node,
         function_id="test::process",
-        source=code
+        source=code,
+        cfg=cfg,
+        file_path="test.py"
     )
 
     # Perform reaching definitions analysis

@@ -20,6 +20,7 @@ namespace JarvisVR
     public string node_id1, node_id2;
     public GraphNodeDto[] nodes;
     public GraphEdgeDto[] edges;
+    public string graph_type;
   }
   [Serializable] public class AskResponse
   {
@@ -69,6 +70,7 @@ namespace JarvisVR
   {
     public System.Collections.Generic.List<GraphNodeDto> nodes = new System.Collections.Generic.List<GraphNodeDto>();
     public System.Collections.Generic.List<GraphEdgeDto> edges = new System.Collections.Generic.List<GraphEdgeDto>();
+    public string graph_type;
   }
   [Serializable] public class RepoInfoDto { public string name, branch; public int files; }
   [Serializable] public class ReposDto { public string active; public System.Collections.Generic.List<RepoInfoDto> repos = new System.Collections.Generic.List<RepoInfoDto>(); }

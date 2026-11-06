@@ -1,11 +1,9 @@
-"""CFG validation utilities."""
+"""CFG validation utilities - strict validation."""
 from typing import List, Dict, Any, Set
 from .models import ControlFlowGraph, CFGNode, CFGEdge
 
 
 class CFGValidationError(Exception):
-    """Raised when CFG validation fails."""
-
     def __init__(self, message: str, details: Dict[str, Any] = None):
         self.message = message
         self.details = details or {}
@@ -14,18 +12,30 @@ class CFGValidationError(Exception):
 
 def validate_cfg(cfg: ControlFlowGraph) -> Dict[str, Any]:
     """
-    Validate a control-flow graph.
-
-    Returns a dict with:
-    - valid: bool
-    - errors: list of error messages
-    - warnings: list of warnings
+    Strict validation of a control-flow graph.
     """
     errors = []
     warnings = []
 
-    # Check node uniqueness
-    node_ids = [n.id for n in cfg.nodes]
+    # Handle both CFG object and dict
+    if isinstance(cfg, dict):
+        nodes = cfg.get('nodes', [])
+        edges = cfg.get('edges', [])
+        node_ids = [n.get('id') for n in nodes]
+        edge_ids = [e.get('id') for e in edges]
+        node_map = {n.get('id'): n for n in nodes}
+        entry_id = cfg.get('entry_node_id')
+        exit_id = cfg.get('exit_node_id')
+        exception_exit_id = cfg.get('exception_exit_node_id')
+    else:
+        nodes = cfg.nodes
+        edges = cfg.edges
+        node_ids = [n.id for n in nodes]
+        edge_ids = [e.id for e in edges]
+        node_map = {n.id: n for n in nodes}
+        entry_id = cfg.entry_node_id
+        exit_id = cfg.exit_node_id
+        exception_exit_id = cfg.exception_exit_node_id
     if len(node_ids) != len(set(node_ids)):
         duplicates = [nid for nid in node_ids if node_ids.count(nid) > 1]
         errors.append(f"Duplicate node IDs: {set(duplicates)}")
@@ -45,23 +55,28 @@ def validate_cfg(cfg: ControlFlowGraph) -> Dict[str, Any]:
             errors.append(f"Edge {edge.id} references non-existent target node: {edge.target}")
 
     # Check for entry and exit nodes
-    entry_nodes = [n for n in cfg.nodes if n.kind == 'entry']
-    exit_nodes = [n for n in cfg.nodes if n.kind == 'exit']
+    if not cfg.entry_node_id:
+        errors.append("CFG missing entry_node_id")
+    elif cfg.entry_node_id not in node_id_set:
+        errors.append(f"CFG entry_node_id references non-existent node: {cfg.entry_node_id}")
 
-    if len(entry_nodes) == 0:
-        errors.append("CFG has no entry node")
-    elif len(entry_nodes) > 1:
-        warnings.append(f"CFG has multiple entry nodes: {len(entry_nodes)}")
+    if not cfg.exit_node_id:
+        errors.append("CFG missing exit_node_id")
+    elif cfg.exit_node_id not in node_id_set:
+        errors.append(f"CFG exit_node_id references non-existent node: {cfg.exit_node_id}")
 
-    if len(exit_nodes) == 0:
-        warnings.append("CFG has no explicit exit node")
+    if not cfg.exception_exit_node_id:
+        errors.append("CFG missing exception_exit_node_id")
+    elif cfg.exception_exit_node_id not in node_id_set:
+        errors.append(f"CFG exception_exit_node_id references non-existent node: {cfg.exception_exit_node_id}")
 
-    # Check return statements have no successors
+    # Check return statements have no successors (except to exit)
     return_nodes = [n for n in cfg.nodes if n.kind == 'return']
     for return_node in return_nodes:
         outgoing = cfg.get_edges_from(return_node.id)
-        if outgoing:
-            errors.append(f"Return node {return_node.id} has outgoing edges")
+        for edge in outgoing:
+            if edge.target != cfg.exit_node_id:
+                errors.append(f"Return node {return_node.id} has outgoing edge to non-exit: {edge.target}")
 
     # Check break and continue edges target correct loops
     break_edges = [e for e in cfg.edges if e.kind == 'break']
@@ -70,12 +85,12 @@ def validate_cfg(cfg: ControlFlowGraph) -> Dict[str, Any]:
     for edge in break_edges:
         target = cfg.get_node(edge.target)
         if target and target.kind not in ('join', 'exit'):
-            warnings.append(f"Break edge {edge.id} targets non-join node: {target.kind}")
+            errors.append(f"Break edge {edge.id} targets non-join node: {target.kind}")
 
     for edge in continue_edges:
         target = cfg.get_node(edge.target)
         if target and target.kind != 'loop_header':
-            warnings.append(f"Continue edge {edge.id} targets non-loop-header node: {target.kind}")
+            errors.append(f"Continue edge {edge.id} targets non-loop-header node: {target.kind}")
 
     # Check loop-back edges target their own loop header
     loop_back_edges = [e for e in cfg.edges if e.kind == 'loop_back']
@@ -84,36 +99,27 @@ def validate_cfg(cfg: ControlFlowGraph) -> Dict[str, Any]:
         target = cfg.get_node(edge.target)
         if source and target:
             if target.kind != 'loop_header':
-                warnings.append(f"Loop-back edge {edge.id} targets non-loop-header node")
+                errors.append(f"Loop-back edge {edge.id} targets non-loop-header node")
+            if source.kind != 'loop_header' and source.kind != 'statement':
+                warnings.append(f"Loop-back edge {edge.id} source is not loop-related: {source.kind}")
 
-    # Check for unreachable nodes (optional, expensive for large graphs)
-    if entry_nodes:
-        entry_id = entry_nodes[0].id
-        reachable = _compute_reachable(cfg, entry_id)
-        unreachable = [n.id for n in cfg.nodes if n.id not in reachable]
-        if unreachable:
-            warnings.append(f"Unreachable nodes: {unreachable}")
+    # Check condition nodes have true/false edges
+    condition_nodes = [n for n in cfg.nodes if n.kind == 'condition']
+    for cond_node in condition_nodes:
+        outgoing = cfg.get_edges_from(cond_node.id)
+        true_edges = [e for e in outgoing if e.kind == 'true']
+        false_edges = [e for e in outgoing if e.kind == 'false']
+        if not true_edges:
+            errors.append(f"Condition node {cond_node.id} missing true edge")
+        if not false_edges:
+            errors.append(f"Condition node {cond_node.id} missing false edge")
+
+    # Check AST node mapping
+    if not cfg.ast_node_map:
+        warnings.append("CFG has no AST node mapping")
 
     return {
         'valid': len(errors) == 0,
         'errors': errors,
         'warnings': warnings,
     }
-
-
-def _compute_reachable(cfg: ControlFlowGraph, start_id: str) -> Set[str]:
-    """Compute all nodes reachable from start_id using BFS."""
-    reachable = set()
-    queue = [start_id]
-
-    while queue:
-        current = queue.pop(0)
-        if current in reachable:
-            continue
-        reachable.add(current)
-
-        for edge in cfg.get_edges_from(current):
-            if edge.target not in reachable:
-                queue.append(edge.target)
-
-    return reachable

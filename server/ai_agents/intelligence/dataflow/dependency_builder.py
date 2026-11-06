@@ -1,15 +1,14 @@
 """Data-flow graph builder from reaching definitions analysis."""
-from typing import Dict, List, Set
+from typing import Dict, List, Set, Any
+import json
 from ..controlflow.models import ControlFlowGraph
-from .models import Definition, VariableUse, DefUseFacts, DataFlowGraph, DataFlowNode, DataFlowEdge
-from .reaching_definitions import ReachingDefinitionsAnalyzer
+from .models import Definition, VariableUse, DefUseFacts, DataFlowGraph, DataFlowNode, DataFlowEdge, ExpressionFact
 
 
 class DataFlowGraphBuilder:
     """Build data-flow graphs from CFG and reaching definitions."""
 
     def __init__(self):
-        self.analyzer = ReachingDefinitionsAnalyzer()
         self._node_counter = 0
         self._edge_counter = 0
 
@@ -17,7 +16,7 @@ class DataFlowGraphBuilder:
         self,
         cfg: ControlFlowGraph,
         facts: DefUseFacts,
-        analysis_result: Dict[str, Set[str]]
+        analysis_result: Dict[str, Any]
     ) -> DataFlowGraph:
         """Build a data-flow graph from CFG and analysis results."""
         graph = DataFlowGraph(
@@ -25,9 +24,37 @@ class DataFlowGraphBuilder:
             file=facts.file,
         )
 
-        # Add definition nodes
+        # Build node mappings
         def_nodes: Dict[str, str] = {}  # definition ID -> graph node ID
-        for definition in facts.definitions:
+        use_nodes: Dict[str, str] = {}  # use ID -> graph node ID
+        operation_nodes: Dict[str, str] = {}  # operation ID -> graph node ID
+
+        # Add parameter nodes
+        param_defs = [d for d in facts.definitions if d.kind == 'parameter']
+        for definition in param_defs:
+            node_id = self._generate_node_id()
+            node = DataFlowNode(
+                id=node_id,
+                kind='parameter',
+                variable=definition.variable,
+                expression=definition.expression,
+                function_id=definition.function_id,
+                file=definition.file,
+                line=definition.line,
+                column=definition.column,
+                cfg_node_id=definition.cfg_node_id,
+                metadata={
+                    'def_id': definition.id,
+                    'kind': definition.kind,
+                    'binding_key': definition.binding_key,
+                },
+            )
+            graph.add_node(node)
+            def_nodes[definition.id] = node_id
+
+        # Add definition nodes (non-parameters)
+        non_param_defs = [d for d in facts.definitions if d.kind != 'parameter']
+        for definition in non_param_defs:
             node_id = self._generate_node_id()
             node = DataFlowNode(
                 id=node_id,
@@ -42,13 +69,72 @@ class DataFlowGraphBuilder:
                 metadata={
                     'def_id': definition.id,
                     'kind': definition.kind,
+                    'binding_key': definition.binding_key,
                 },
             )
             graph.add_node(node)
             def_nodes[definition.id] = node_id
 
+        # Add operation nodes from ExpressionFacts
+        for operation in facts.operations:
+            node_id = self._generate_node_id()
+            node = DataFlowNode(
+                id=node_id,
+                kind='operation',
+                variable=None,
+                expression=operation.expression,
+                function_id=operation.function_id,
+                file=operation.file,
+                line=operation.line,
+                column=operation.column,
+                cfg_node_id=operation.cfg_node_id,
+                metadata={
+                    'operation': operation.operation,
+                    'operation_id': operation.id,
+                },
+            )
+            graph.add_node(node)
+            operation_nodes[operation.id] = node_id
+
+            # Connect input uses to operation
+            for use_id in operation.input_use_ids:
+                use_node_id = use_nodes.get(use_id)
+                if use_node_id:
+                    edge_id = self._generate_edge_id()
+                    edge = DataFlowEdge(
+                        id=edge_id,
+                        source=use_node_id,
+                        target=node_id,
+                        kind='operand',
+                        resolution='static',
+                        condition=None,
+                        evidence={
+                            'file': facts.file,
+                            'operation': operation.operation,
+                        },
+                    )
+                    graph.add_edge(edge)
+
+            # Connect operation to output definitions
+            for def_id in operation.output_definition_ids:
+                def_node_id = def_nodes.get(def_id)
+                if def_node_id:
+                    edge_id = self._generate_edge_id()
+                    edge = DataFlowEdge(
+                        id=edge_id,
+                        source=node_id,
+                        target=def_node_id,
+                        kind='produces',
+                        resolution='static',
+                        condition=None,
+                        evidence={
+                            'file': facts.file,
+                            'operation': operation.operation,
+                        },
+                    )
+                    graph.add_edge(edge)
+
         # Add use nodes
-        use_nodes: Dict[str, str] = {}  # use ID -> graph node ID
         for use in facts.uses:
             node_id = self._generate_node_id()
             node = DataFlowNode(
@@ -63,17 +149,17 @@ class DataFlowGraphBuilder:
                 cfg_node_id=use.cfg_node_id,
                 metadata={
                     'use_id': use.id,
+                    'binding_key': use.binding_key,
                 },
             )
             graph.add_node(node)
             use_nodes[use.id] = node_id
 
         # Build edges from reaching definitions
-        in_sets = analysis_result['in_sets']
-        node_uses = analysis_result['node_uses']
+        in_sets = analysis_result.get('in_sets', {})
+        node_uses = analysis_result.get('node_uses', {})
 
         for cfg_node_id, reaching_def_ids in in_sets.items():
-            # Get uses at this node
             uses_at_node = node_uses.get(cfg_node_id, [])
 
             for use in uses_at_node:
@@ -81,11 +167,10 @@ class DataFlowGraphBuilder:
                 if not use_node_id:
                     continue
 
-                # Find all definitions of this variable that reach this node
+                # Find all definitions of the same binding that reach this node
                 for def_id in reaching_def_ids:
-                    # Check if this definition is for the same variable
                     def_node = self._find_definition(facts.definitions, def_id)
-                    if def_node and def_node.variable == use.variable:
+                    if def_node and def_node.binding_key == use.binding_key:
                         def_graph_node_id = def_nodes.get(def_id)
                         if def_graph_node_id:
                             # Add edge from definition to use
@@ -94,28 +179,121 @@ class DataFlowGraphBuilder:
                                 id=edge_id,
                                 source=def_graph_node_id,
                                 target=use_node_id,
-                                kind='feeds',
+                                kind='reaches',
                                 resolution='may_reach',
                                 condition=None,
                                 evidence={
                                     'file': facts.file,
                                     'cfg_node': cfg_node_id,
+                                    'binding_key': use.binding_key,
                                 },
                             )
                             graph.add_edge(edge)
 
-        # Add operation nodes for complex expressions (simplified)
-        # In a full implementation, we'd analyze the AST to find operations
-        # and create intermediate nodes for them
+        # Add return edges
+        for definition in facts.definitions:
+            if definition.kind == 'parameter':
+                # Parameters don't need return edges
+                continue
+
+            # Check if this definition is used in a return statement
+            for use in facts.uses:
+                if use.variable == definition.variable and use.binding_key == definition.binding_key:
+                    # Check if this use is in a return context (simplified)
+                    use_cfg_node = cfg.get_node(use.cfg_node_id)
+                    if use_cfg_node and use_cfg_node.kind == 'return':
+                        def_node_id = def_nodes.get(definition.id)
+                        use_node_id = use_nodes.get(use.id)
+                        if def_node_id and use_node_id:
+                            edge_id = self._generate_edge_id()
+                            edge = DataFlowEdge(
+                                id=edge_id,
+                                source=def_node_id,
+                                target=use_node_id,
+                                kind='returns',
+                                resolution='static',
+                                condition=None,
+                                evidence={
+                                    'file': facts.file,
+                                    'return_cfg_node': use.cfg_node_id,
+                                },
+                            )
+                            graph.add_edge(edge)
 
         graph.metadata = {
             'language': 'python',
             'scope': 'intra_function',
             'definition_count': len(facts.definitions),
             'use_count': len(facts.uses),
+            'operation_count': len(facts.operations),
         }
 
         return graph
+
+    def validate_dataflow_graph(
+        self,
+        cfg: ControlFlowGraph,
+        facts: DefUseFacts,
+        graph: DataFlowGraph
+    ) -> Dict[str, Any]:
+        """Validate the data-flow graph."""
+        errors = []
+        warnings = []
+
+        # Check node uniqueness
+        node_ids = [n.id for n in graph.nodes]
+        if len(node_ids) != len(set(node_ids)):
+            duplicates = [nid for nid in node_ids if node_ids.count(nid) > 1]
+            errors.append(f"Duplicate node IDs: {set(duplicates)}")
+
+        # Check edge uniqueness
+        edge_ids = [e.id for e in graph.edges]
+        if len(edge_ids) != len(set(edge_ids)):
+            duplicates = [eid for eid in edge_ids if edge_ids.count(eid) > 1]
+            errors.append(f"Duplicate edge IDs: {set(duplicates)}")
+
+        # Check edge references
+        node_id_set = set(node_ids)
+        for edge in graph.edges:
+            if edge.source not in node_id_set:
+                errors.append(f"Edge {edge.id} references non-existent source node: {edge.source}")
+            if edge.target not in node_id_set:
+                errors.append(f"Edge {edge.id} references non-existent target node: {edge.target}")
+
+        # Check source CFG node IDs exist
+        cfg_node_ids = {n.id for n in cfg.nodes}
+        for node in graph.nodes:
+            if node.cfg_node_id and node.cfg_node_id not in cfg_node_ids:
+                errors.append(f"Node {node.id} references non-existent CFG node: {node.cfg_node_id}")
+
+        # Check all definitions and uses are mapped
+        def_ids = {d.id for d in facts.definitions}
+        use_ids = {u.id for u in facts.uses}
+
+        for node in graph.nodes:
+            def_id = node.metadata.get('def_id')
+            if def_id and def_id not in def_ids:
+                errors.append(f"Node {node.id} references non-existent definition: {def_id}")
+
+            use_id = node.metadata.get('use_id')
+            if use_id and use_id not in use_ids:
+                errors.append(f"Node {node.id} references non-existent use: {use_id}")
+
+        # Check binding consistency
+        for edge in graph.edges:
+            source_node = next((n for n in graph.nodes if n.id == edge.source), None)
+            target_node = next((n for n in graph.nodes if n.id == edge.target), None)
+            if source_node and target_node:
+                source_binding = source_node.metadata.get('binding_key')
+                target_binding = target_node.metadata.get('binding_key')
+                if source_binding and target_binding and source_binding != target_binding:
+                    warnings.append(f"Edge {edge.id} connects different bindings: {source_binding} -> {target_binding}")
+
+        return {
+            'valid': len(errors) == 0,
+            'errors': errors,
+            'warnings': warnings,
+        }
 
     def _find_definition(self, definitions: List[Definition], def_id: str) -> Definition:
         """Find a definition by ID."""
@@ -160,6 +338,7 @@ def dfg_to_unity_format(dfg: DataFlowGraph) -> dict:
 
     for edge in dfg.edges:
         edges.append({
+            'edge_id': edge.id,
             'src': edge.source,
             'dst': edge.target,
             'type': 'dataflow',
@@ -167,7 +346,7 @@ def dfg_to_unity_format(dfg: DataFlowGraph) -> dict:
             'edge_kind': edge.kind,
             'resolution': edge.resolution,
             'condition': edge.condition,
-            'evidence': edge.evidence,
+            'evidence': json.dumps(edge.evidence or {}),
         })
 
     return {

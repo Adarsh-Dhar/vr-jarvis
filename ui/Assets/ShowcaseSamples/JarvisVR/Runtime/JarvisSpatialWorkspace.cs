@@ -289,6 +289,7 @@ namespace JarvisVR
     private void LoadGraph(GraphDto g)
     {
       _graph = g;
+      _graph.graph_type = g.graph_type;  // Preserve graph type
       _agentEvidence = null; _agentTestResults = null;   // ids from another repository would not resolve
       for (int i = _graphRoot.childCount - 1; i >= 0; i--) Destroy(_graphRoot.GetChild(i).gameObject);
       _nodes.Clear(); _edges.Clear(); _clusters.Clear(); _pulses.Clear();
@@ -458,7 +459,13 @@ namespace JarvisVR
     // distinct edge ids so each can be selected independently.
     private static string EdgeKey(GraphEdgeDto d)
     {
-      return d.src + "->" + d.dst + "|" + (d.callsite_id ?? "");
+      if (!string.IsNullOrEmpty(d.edge_id))
+        return d.edge_id;
+
+      if (!string.IsNullOrEmpty(d.callsite_id))
+        return d.src + "->" + d.dst + "|" + d.callsite_id;
+
+      return d.src + "->" + d.dst;
     }
 
     private void OnEdgePinch(string edgeId)
@@ -483,11 +490,82 @@ namespace JarvisVR
     private void StyleEdge(EdgeView ev, string kind)
     {
       JarvisPalette pal = JarvisPalette.Current;
-      // Resolution-aware styling (schema v3):
-      //   confirmed calls        -> solid cyan
-      //   possible (polymorphic) -> dashed violet
-      //   ambiguous candidates   -> dotted green
-      //   legacy inferred/runtime keep their old look
+      string graphType = _graph != null ? _graph.graph_type : null;
+      string edgeKind = ev.Dto != null ? ev.Dto.edge_kind : null;
+
+      // Control-flow edge styling
+      if (graphType == "control_flow" && !string.IsNullOrEmpty(edgeKind))
+      {
+        switch (edgeKind)
+        {
+          case "true":
+            ev.Style = "solid";
+            ev.Base = pal.Green;
+            return;
+          case "false":
+            ev.Style = "solid";
+            ev.Base = JarvisPalette.Red;
+            return;
+          case "next":
+            ev.Style = "solid";
+            ev.Base = pal.Cyan;
+            return;
+          case "loop_back":
+            ev.Style = "dashed";
+            ev.Base = pal.Violet;
+            return;
+          case "loop_exit":
+            ev.Style = "solid";
+            ev.Base = pal.Amber;
+            return;
+          case "break":
+            ev.Style = "solid";
+            ev.Base = JarvisPalette.Orange;
+            return;
+          case "continue":
+            ev.Style = "dashed";
+            ev.Base = pal.Violet;
+            return;
+          case "exception":
+            ev.Style = "dotted";
+            ev.Base = JarvisPalette.Red;
+            return;
+          case "return":
+            ev.Style = "solid";
+            ev.Base = pal.Green;
+            return;
+        }
+      }
+
+      // Data-flow edge styling
+      if (graphType == "data_flow" && !string.IsNullOrEmpty(edgeKind))
+      {
+        switch (edgeKind)
+        {
+          case "operand":
+            ev.Style = "solid";
+            ev.Base = pal.Cyan;
+            return;
+          case "produces":
+            ev.Style = "solid";
+            ev.Base = pal.Green;
+            return;
+          case "reaches":
+            ev.Style = "solid";
+            ev.Base = pal.Violet;
+            return;
+          case "may_reach":
+            ev.Style = "dashed";
+            ev.Base = pal.Violet;
+            return;
+          case "returns":
+            ev.Style = "solid";
+            ev.Base = pal.Amber;
+            return;
+        }
+      }
+
+      // Default call graph styling (legacy)
       string resolution = ev.Dto != null ? ev.Dto.resolution : null;
       string etype = ev.Dto != null ? ev.Dto.type : null;
       string style;

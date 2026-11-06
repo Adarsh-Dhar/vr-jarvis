@@ -36,6 +36,10 @@ class ControlFlowGraph:
     file: str
     nodes: List[CFGNode] = field(default_factory=list)
     edges: List[CFGEdge] = field(default_factory=list)
+    entry_node_id: Optional[str] = None
+    exit_node_id: Optional[str] = None
+    exception_exit_node_id: Optional[str] = None
+    ast_node_map: Dict[int, str] = field(default_factory=dict, repr=False)
     metadata: Dict[str, Any] = field(default_factory=dict)
 
     def add_node(self, node: CFGNode) -> None:

@@ -1,4 +1,5 @@
 """Graph builder utilities for CFG."""
+import json
 from .models import ControlFlowGraph
 
 
@@ -13,7 +14,7 @@ def cfg_to_unity_format(cfg: ControlFlowGraph) -> dict:
     edges = []
 
     for node in cfg.nodes:
-        nodes.append({
+        node_dict = {
             'id': node.id,
             'name': node.label,
             'file': node.file,
@@ -27,17 +28,20 @@ def cfg_to_unity_format(cfg: ControlFlowGraph) -> dict:
             'function_id': node.function_id,
             'condition': node.condition,
             'metadata': node.metadata,
-        })
+        }
+        nodes.append(node_dict)
 
     for edge in cfg.edges:
         edges.append({
+            'edge_id': edge.id,
             'src': edge.source,
             'dst': edge.target,
             'type': 'controlflow',
             'kind': 'confirmed',
             'edge_kind': edge.kind,
+            'resolution': 'static',
             'condition': edge.condition,
-            'evidence': edge.evidence,
+            'evidence': json.dumps(edge.evidence or {}),
         })
 
     return {

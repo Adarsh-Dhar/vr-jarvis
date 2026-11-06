@@ -291,9 +291,9 @@ def analyze_control_flow(function_name: str, tool_context: ToolContext) -> dict:
     """Generate control-flow information with CFG for Python functions."""
     try:
         from ..intelligence.graph_engine.codegraph import codegraph
-        from ..intelligence.controlflow import PythonCFGBuilder, validate_cfg, cfg_to_dict
+        from ..intelligence.controlflow.service import analyze_python_control_flow
 
-        # Use CodeGraph to resolve the function (handles dotted IDs, short names, paths)
+        # Use CodeGraph to resolve the function
         graph = codegraph.load_current_graph()
         node = graph.get(function_name)
 
@@ -318,24 +318,46 @@ def analyze_control_flow(function_name: str, tool_context: ToolContext) -> dict:
                 'message': 'Control flow analysis only implemented for Python'
             }
 
-        tree = _parse_python_ast(file_path)
-        if not tree:
+        # Read source code
+        with open(file_path, 'r', encoding='utf-8') as f:
+            source = f.read()
+
+        # Call the control-flow service
+        symbol = {
+            'id': node.get('id'),
+            'name': node.get('name'),
+            'qualname': node.get('qualname'),
+            'file': file_path,
+            'source': source,
+            'start': node.get('start'),
+            'end': node.get('end'),
+            'kind': node.get('kind'),
+        }
+
+        result = analyze_python_control_flow(graph, symbol)
+
+        if 'error' in result:
             return {
                 'status': 'error',
-                'error': 'Could not parse file'
+                'error': result['error'],
+                'function_name': function_name,
             }
 
-        # Find the function node
-        func_node = None
-        # Extract simple name from node id or name
-        simple_name = node.get('name', '')
-        if not simple_name and '.' in node.get('id', ''):
-            simple_name = node['id'].split('.')[-1]
-
-        for node_ast in ast.walk(tree):
-            if isinstance(node_ast, ast.FunctionDef) and node_ast.name == simple_name:
-                func_node = node_ast
-                break
+        return {
+            'status': 'ok',
+            'function_name': function_name,
+            'function_id': result['metadata'].get('function_id'),
+            'cfg': result['graph'].to_dict(),
+            'validation': result['validation'],
+            'diagnostics': result['diagnostics'],
+            'metadata': result['metadata'],
+        }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e),
+            'function_name': function_name,
+        }
 
         if not func_node:
             return {

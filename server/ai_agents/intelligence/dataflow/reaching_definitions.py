@@ -1,5 +1,5 @@
 """Reaching definitions analysis for data-flow graphs."""
-from typing import Dict, List, Set, Optional
+from typing import Dict, List, Set, Optional, Any
 from ..controlflow.models import ControlFlowGraph, CFGNode
 from .models import Definition, VariableUse, DefUseFacts
 
@@ -11,20 +11,46 @@ class ReachingDefinitionsAnalyzer:
         self,
         cfg: ControlFlowGraph,
         facts: DefUseFacts
-    ) -> Dict[str, Set[str]]:
+    ) -> Dict[str, Any]:
         """
         Perform reaching definitions analysis.
 
-        Returns a dict mapping each CFG node ID to the set of definition IDs
-        that reach that node (IN set).
+        Returns a dict with in_sets, out_sets, gen, kill, node_defs, node_uses, and diagnostics.
         """
+        # Validate CFG references
+        cfg_node_ids = {node.id for node in cfg.nodes}
+        for definition in facts.definitions:
+            if definition.cfg_node_id not in cfg_node_ids:
+                return {
+                    'error': f"Definition {definition.id} has invalid CFG node {definition.cfg_node_id}",
+                    'in_sets': {},
+                    'out_sets': {},
+                    'gen': {},
+                    'kill': {},
+                    'node_defs': {},
+                    'node_uses': {},
+                    'diagnostics': [{'code': 'invalid_cfg_reference', 'definition_id': definition.id}],
+                }
+        for use in facts.uses:
+            if use.cfg_node_id not in cfg_node_ids:
+                return {
+                    'error': f"Use {use.id} has invalid CFG node {use.cfg_node_id}",
+                    'in_sets': {},
+                    'out_sets': {},
+                    'gen': {},
+                    'kill': {},
+                    'node_defs': {},
+                    'node_uses': {},
+                    'diagnostics': [{'code': 'invalid_cfg_reference', 'use_id': use.id}],
+                }
+
         # Build node to definitions mapping
         node_defs = self._build_node_definitions(cfg, facts.definitions)
 
         # Build node to uses mapping
         node_uses = self._build_node_uses(cfg, facts.uses)
 
-        # Calculate GEN and KILL sets for each node
+        # Calculate GEN and KILL sets for each node (using binding_key)
         gen, kill = self._calculate_gen_kill(cfg, facts.definitions, node_defs)
 
         # Solve fixed-point
@@ -37,6 +63,7 @@ class ReachingDefinitionsAnalyzer:
             'kill': kill,
             'node_defs': node_defs,
             'node_uses': node_uses,
+            'diagnostics': [],
         }
 
     def _build_node_definitions(
@@ -86,13 +113,13 @@ class ReachingDefinitionsAnalyzer:
         gen: Dict[str, Set[str]] = {}
         kill: Dict[str, Set[str]] = {}
 
-        # Build variable to definitions mapping
-        var_defs: Dict[str, Set[str]] = {}
+        # Build binding_key to definitions mapping (key for lexical identity)
+        binding_defs: Dict[str, Set[str]] = {}
         for definition in definitions:
-            var = definition.variable
-            if var not in var_defs:
-                var_defs[var] = set()
-            var_defs[var].add(definition.id)
+            key = definition.binding_key
+            if key not in binding_defs:
+                binding_defs[key] = set()
+            binding_defs[key].add(definition.id)
 
         # Calculate GEN and KILL for each node
         for node in cfg.nodes:
@@ -104,14 +131,14 @@ class ReachingDefinitionsAnalyzer:
                 for definition in node_defs[node_id]:
                     gen[node_id].add(definition.id)
 
-            # KILL: earlier definitions of the same variable
+            # KILL: earlier definitions of the same binding identity
             kill[node_id] = set()
             if node_id in node_defs:
                 for definition in node_defs[node_id]:
-                    var = definition.variable
-                    if var in var_defs:
-                        # Kill all other definitions of this variable
-                        for def_id in var_defs[var]:
+                    key = definition.binding_key
+                    if key in binding_defs:
+                        # Kill all other definitions of this binding
+                        for def_id in binding_defs[key]:
                             if def_id != definition.id:
                                 kill[node_id].add(def_id)
 

@@ -1,11 +1,11 @@
-"""Test CFG construction for return statements."""
+"""Test CFG construction for return statements with exact correctness assertions."""
 import ast
 import pytest
 from ai_agents.intelligence.controlflow import PythonCFGBuilder, validate_cfg
 
 
-def test_simple_return():
-    """Test CFG for simple return."""
+def test_return_has_return_edge():
+    """Test that return statements have return edges to exit."""
     code = """
 def process(value):
     return value * 2
@@ -22,24 +22,18 @@ def process(value):
     )
 
     validation = validate_cfg(cfg)
-    assert validation['valid'], f"CFG validation failed: {validation['errors']}"
+    assert validation["valid"], f"CFG validation failed: {validation['errors']}"
 
-    # Check for return node
-    return_nodes = [n for n in cfg.nodes if n.kind == 'return']
-    assert len(return_nodes) >= 1, "Should have at least one return node"
-
-    # Check for return edge
-    return_edges = [e for e in cfg.edges if e.kind == 'return']
+    return_edges = [e for e in cfg.edges if e.kind == "return"]
     assert len(return_edges) >= 1, "Should have at least one return edge"
 
-    # Return nodes should have no outgoing edges
-    for return_node in return_nodes:
-        outgoing = cfg.get_edges_from(return_node.id)
-        assert len(outgoing) == 0, f"Return node {return_node.id} should have no outgoing edges"
+    # Return edge should target exit
+    for edge in return_edges:
+        assert edge.target == cfg.exit_node_id, "Return edge should target exit"
 
 
 def test_conditional_return():
-    """Test CFG for conditional return."""
+    """Test that conditional returns create multiple return nodes."""
     code = """
 def process(value):
     if value < 0:
@@ -58,8 +52,7 @@ def process(value):
     )
 
     validation = validate_cfg(cfg)
-    assert validation['valid'], f"CFG validation failed: {validation['errors']}"
+    assert validation["valid"], f"CFG validation failed: {validation['errors']}"
 
-    # Should have multiple return nodes
-    return_nodes = [n for n in cfg.nodes if n.kind == 'return']
-    assert len(return_nodes) >= 2, "Should have at least 2 return nodes"
+    return_nodes = [n for n in cfg.nodes if n.kind == "return"]
+    assert len(return_nodes) >= 2, "Should have at least 2 return nodes for conditional return"

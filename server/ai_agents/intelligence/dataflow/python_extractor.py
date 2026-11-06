@@ -12,7 +12,9 @@ class PythonDefUseExtractor:
         self,
         function_ast: ast.FunctionDef,
         function_id: str,
-        source: str
+        source: str,
+        cfg,
+        file_path: str
     ) -> DefUseFacts:
         """Extract definition/use facts for a function."""
         file_path = function_id.split('::')[0] if '::' in function_id else 'unknown'
@@ -21,6 +23,15 @@ class PythonDefUseExtractor:
             function_id=function_id,
             file=file_path,
         )
+
+        # Get binding key from function
+        binding_key = function_id
+
+        # Track CFG node ID mapping
+        if cfg and hasattr(cfg, 'ast_node_map'):
+            self.cfg_node_map = cfg.ast_node_map
+        else:
+            self.cfg_node_map = {}
 
         # Build symbol table to get scope information
         try:
@@ -32,7 +43,8 @@ class PythonDefUseExtractor:
             local_vars = set()
 
         # Extract parameters as definitions
-        param_defs = self._extract_parameters(function_ast, function_id, file_path)
+        param_cfg_node_id = cfg.entry_node_id if cfg else ""
+        param_defs = self._extract_parameters(function_ast, function_id, file_path, binding_key, param_cfg_node_id)
         facts.definitions.extend(param_defs)
 
         # Track CFG node ID mapping (simplified for now)
@@ -75,7 +87,9 @@ class PythonDefUseExtractor:
         self,
         function_ast: ast.FunctionDef,
         function_id: str,
-        file_path: str
+        file_path: str,
+        binding_key: str,
+        cfg_node_id: str = ""
     ) -> List[Definition]:
         """Extract function parameters as definitions."""
         definitions = []
@@ -91,7 +105,8 @@ class PythonDefUseExtractor:
                 line=function_ast.lineno,
                 column=arg.col_offset if hasattr(arg, 'col_offset') else 0,
                 kind='parameter',
-                cfg_node_id=f"{function_id}_entry",
+                cfg_node_id=cfg_node_id,
+                binding_key=binding_key,
                 expression=None,
             ))
 
@@ -105,11 +120,11 @@ class PythonDefUseExtractor:
                 line=function_ast.lineno,
                 column=arg.col_offset if hasattr(arg, 'col_offset') else 0,
                 kind='parameter',
-                cfg_node_id=f"{function_id}_entry",
+                cfg_node_id=cfg_node_id,
+                binding_key=binding_key,
                 expression=None,
             ))
 
-        # Vararg
         if args.vararg:
             definitions.append(Definition(
                 id=f"{function_id}_param_{args.vararg.arg}",
@@ -119,11 +134,11 @@ class PythonDefUseExtractor:
                 line=function_ast.lineno,
                 column=args.vararg.col_offset if hasattr(args.vararg, 'col_offset') else 0,
                 kind='parameter',
-                cfg_node_id=f"{function_id}_entry",
+                cfg_node_id=cfg_node_id,
+                binding_key=binding_key,
                 expression=None,
             ))
 
-        # Keyword-only args
         for arg in args.kwonlyargs:
             definitions.append(Definition(
                 id=f"{function_id}_param_{arg.arg}",
@@ -133,11 +148,11 @@ class PythonDefUseExtractor:
                 line=function_ast.lineno,
                 column=arg.col_offset if hasattr(arg, 'col_offset') else 0,
                 kind='parameter',
-                cfg_node_id=f"{function_id}_entry",
+                cfg_node_id=cfg_node_id,
+                binding_key=binding_key,
                 expression=None,
             ))
 
-        # Kwarg
         if args.kwarg:
             definitions.append(Definition(
                 id=f"{function_id}_param_{args.kwarg.arg}",
@@ -147,7 +162,8 @@ class PythonDefUseExtractor:
                 line=function_ast.lineno,
                 column=args.kwarg.col_offset if hasattr(args.kwarg, 'col_offset') else 0,
                 kind='parameter',
-                cfg_node_id=f"{function_id}_entry",
+                cfg_node_id=cfg_node_id,
+                binding_key=binding_key,
                 expression=None,
             ))
 
@@ -195,25 +211,30 @@ class DefUseVisitor(ast.NodeVisitor):
         self.visit(node.value)
 
         # Extract definitions from targets
+        binding_key = self.function_id
         for target in node.targets:
-            self._extract_target_definitions(target, node, 'assignment')
+            self._extract_target_definitions(target, node, 'assignment', binding_key)
 
-        self.generic_visit(node)
+        # Do NOT call generic_visit(node) - would duplicate RHS visit
 
     def visit_AnnAssign(self, node: ast.AnnAssign) -> None:
         """Visit annotated assignment statements."""
+        binding_key = self.function_id
+
         # Extract uses from RHS
         if node.value:
             self.visit(node.value)
 
         # Extract definition from target
         if node.target:
-            self._extract_target_definitions(node.target, node, 'annotated_assignment')
+            self._extract_target_definitions(node.target, node, 'annotated_assignment', binding_key)
 
-        self.generic_visit(node)
+        # Do NOT call generic_visit(node)
 
     def visit_AugAssign(self, node: ast.AugAssign) -> None:
         """Visit augmented assignment statements (+=, -=, etc.)."""
+        binding_key = self.function_id
+
         # Target is both used and defined
         if isinstance(node.target, ast.Name):
             # Use
@@ -225,6 +246,7 @@ class DefUseVisitor(ast.NodeVisitor):
                 line=node.lineno,
                 column=node.target.col_offset if hasattr(node.target, 'col_offset') else 0,
                 cfg_node_id=self._get_cfg_node_id(node),
+                binding_key=binding_key,
                 expression=ast.unparse(node.target) if hasattr(ast, 'unparse') else node.target.id,
             ))
 
@@ -232,9 +254,9 @@ class DefUseVisitor(ast.NodeVisitor):
         self.visit(node.value)
 
         # Extract definition from target
-        self._extract_target_definitions(node.target, node, 'augmented_assignment')
+        self._extract_target_definitions(node.target, node, 'augmented_assignment', binding_key)
 
-        self.generic_visit(node)
+        # Do NOT call generic_visit(node)
 
     def visit_For(self, node: ast.For) -> None:
         """Visit for loops."""
@@ -242,10 +264,13 @@ class DefUseVisitor(ast.NodeVisitor):
         self.visit(node.iter)
 
         # Loop variable is a definition
-        self._extract_target_definitions(node.target, node, 'for_loop')
+        self._extract_target_definitions(node.target, node, 'for_loop', binding_key)
 
-        # Visit body
+        # Visit body (but don't traverse into nested functions)
         for stmt in node.body:
+            if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                # Record as binding but don't traverse into nested scope
+                continue
             self.visit(stmt)
 
         # Visit else clause
@@ -260,7 +285,7 @@ class DefUseVisitor(ast.NodeVisitor):
 
             # Optional binding: `with resource as x`
             if item.optional_vars:
-                self._extract_target_definitions(item.optional_vars, node, 'with_binding')
+                self._extract_target_definitions(item.optional_vars, node, 'with_binding', binding_key)
 
         # Visit body
         for stmt in node.body:
@@ -288,11 +313,13 @@ class DefUseVisitor(ast.NodeVisitor):
 
     def visit_NamedExpr(self, node: ast.NamedExpr) -> None:
         """Visit named expressions (walrus operator :=)."""
+        binding_key = self.function_id
+
         # Extract uses from value
         self.visit(node.value)
 
         # Target is a definition
-        self._extract_target_definitions(node.target, node, 'named_expression')
+        self._extract_target_definitions(node.target, node, 'named_expression', binding_key)
 
     def visit_Return(self, node: ast.Return) -> None:
         """Visit return statements."""
@@ -301,6 +328,8 @@ class DefUseVisitor(ast.NodeVisitor):
 
     def visit_Name(self, node: ast.Name) -> None:
         """Visit name nodes."""
+        binding_key = self.function_id
+
         if isinstance(node.ctx, ast.Load):
             # Variable use
             # Only track if it's a local variable (not an attribute access like self.x)
@@ -313,6 +342,7 @@ class DefUseVisitor(ast.NodeVisitor):
                     line=node.lineno,
                     column=node.col_offset if hasattr(node, 'col_offset') else 0,
                     cfg_node_id=self._get_cfg_node_id(node),
+                    binding_key=binding_key,
                     expression=ast.unparse(node) if hasattr(ast, 'unparse') else node.id,
                 ))
 
@@ -320,7 +350,8 @@ class DefUseVisitor(ast.NodeVisitor):
         self,
         target: ast.AST,
         source_node: ast.AST,
-        kind: str
+        kind: str,
+        binding_key: str
     ) -> None:
         """Extract definitions from assignment targets."""
         if isinstance(target, ast.Name):
@@ -334,15 +365,16 @@ class DefUseVisitor(ast.NodeVisitor):
                 column=target.col_offset if hasattr(target, 'col_offset') else 0,
                 kind=kind,
                 cfg_node_id=self._get_cfg_node_id(source_node),
+                binding_key=binding_key,
                 expression=ast.unparse(source_node) if hasattr(ast, 'unparse') else None,
             ))
         elif isinstance(target, (ast.Tuple, ast.List)):
             # Tuple/list unpacking: `a, b = value`
             for elt in target.elts:
-                self._extract_target_definitions(elt, source_node, f"{kind}_unpack")
+                self._extract_target_definitions(elt, source_node, f"{kind}_unpack", binding_key)
         elif isinstance(target, ast.Starred):
             # Starred unpacking: `*rest = value`
-            self._extract_target_definitions(target.value, source_node, f"{kind}_starred")
+            self._extract_target_definitions(target.value, source_node, f"{kind}_starred", binding_key)
         elif isinstance(target, ast.Attribute):
             # Attribute assignment: `self.x = value`
             # For now, we don't track attribute definitions as local variables

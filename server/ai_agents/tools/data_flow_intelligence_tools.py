@@ -1072,12 +1072,7 @@ def build_data_flow_graph(
     """Build data flow graphs using the new data-flow engine."""
     try:
         from ..intelligence.graph_engine.codegraph import codegraph
-        from ..intelligence.controlflow import PythonCFGBuilder
-        from ..intelligence.dataflow import (
-            PythonDefUseExtractor,
-            ReachingDefinitionsAnalyzer,
-            DataFlowGraphBuilder,
-        )
+        from ..intelligence.dataflow.service import analyze_python_data_flow
 
         # Resolve the function
         graph = codegraph.load_current_graph()
@@ -1104,31 +1099,46 @@ def build_data_flow_graph(
                 'message': 'Data flow analysis only implemented for Python'
             }
 
-        # Parse the file
-        tree = _parse_python_ast(file_path)
-        if not tree:
+        # Read source code
+        with open(file_path, 'r', encoding='utf-8') as f:
+            source = f.read()
+
+        # Call the data-flow service
+        symbol = {
+            'id': node.get('id'),
+            'name': node.get('name'),
+            'qualname': node.get('qualname'),
+            'file': file_path,
+            'source': source,
+            'start': node.get('start'),
+            'end': node.get('end'),
+            'kind': node.get('kind'),
+        }
+
+        result = analyze_python_data_flow(graph, symbol)
+
+        if 'error' in result:
             return {
                 'status': 'error',
-                'error': 'Could not parse file'
-            }
-
-        # Find the function node
-        simple_name = node.get('name', '')
-        if not simple_name and '.' in node.get('id', ''):
-            simple_name = node['id'].split('.')[-1]
-
-        func_node = None
-        for node_ast in ast.walk(tree):
-            if isinstance(node_ast, ast.FunctionDef) and node_ast.name == simple_name:
-                func_node = node_ast
-                break
-
-        if not func_node:
-            return {
-                'status': 'not_found',
+                'error': result['error'],
                 'function_id': function_id,
-                'message': f'Function {simple_name} not found in AST'
             }
+
+        return {
+            'status': 'ok',
+            'function_id': function_id,
+            'graph': result['graph'].to_dict(),
+            'validation': result['validation'],
+            'diagnostics': result['diagnostics'],
+            'metadata': result['metadata'],
+        }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e),
+            'function_id': function_id,
+        }
+
 
         # Read source
         with open(file_path, 'r', encoding='utf-8') as f:

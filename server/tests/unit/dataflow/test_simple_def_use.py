@@ -19,7 +19,9 @@ def process(value):
     facts = extractor.extract_function(
         function_ast=func_node,
         function_id="test::process",
-        source=code
+        source=code,
+        cfg=None,
+        file_path="test.py"
     )
 
     # Should have at least one definition (x = value * 2)
@@ -49,7 +51,9 @@ def process(a, b):
     facts = extractor.extract_function(
         function_ast=func_node,
         function_id="test::process",
-        source=code
+        source=code,
+        cfg=None,
+        file_path="test.py"
     )
 
     # Should have parameter definitions (a, b)
@@ -75,7 +79,9 @@ def process(value):
     facts = extractor.extract_function(
         function_ast=func_node,
         function_id="test::process",
-        source=code
+        source=code,
+        cfg=None,
+        file_path="test.py"
     )
 
     # Should have annotated assignment definition
@@ -98,7 +104,9 @@ def process(value):
     facts = extractor.extract_function(
         function_ast=func_node,
         function_id="test::process",
-        source=code
+        source=code,
+        cfg=None,
+        file_path="test.py"
     )
 
     # Should have augmented assignment definition

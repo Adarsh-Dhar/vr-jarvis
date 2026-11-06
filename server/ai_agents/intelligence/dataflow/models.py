@@ -14,6 +14,7 @@ class Definition:
     column: int
     kind: str
     cfg_node_id: str
+    binding_key: str
     expression: Optional[str] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
 
@@ -28,7 +29,24 @@ class VariableUse:
     line: int
     column: int
     cfg_node_id: str
+    binding_key: str
     expression: Optional[str] = None
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class ExpressionFact:
+    """An expression operation fact."""
+    id: str
+    function_id: str
+    file: str
+    line: int
+    column: int
+    cfg_node_id: str
+    expression: str
+    operation: str
+    input_use_ids: List[str] = field(default_factory=list)
+    output_definition_ids: List[str] = field(default_factory=list)
     metadata: Dict[str, Any] = field(default_factory=dict)
 
 
@@ -39,6 +57,8 @@ class DefUseFacts:
     file: str
     definitions: List[Definition] = field(default_factory=list)
     uses: List[VariableUse] = field(default_factory=list)
+    operations: List[ExpressionFact] = field(default_factory=list)
+    diagnostics: List[Dict[str, Any]] = field(default_factory=list)
     metadata: Dict[str, Any] = field(default_factory=dict)
 
 
@@ -47,11 +67,11 @@ class DataFlowNode:
     """A node in the data-flow graph."""
     id: str
     kind: str
-    variable: Optional[str] = None
-    expression: Optional[str] = None
     function_id: str
     file: str
     line: int
+    variable: Optional[str] = None
+    expression: Optional[str] = None
     column: int = 0
     cfg_node_id: Optional[str] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
@@ -134,4 +154,35 @@ class DataFlowGraph:
                 for e in self.edges
             ],
             'metadata': self.metadata,
+        }
+
+    def validate(self) -> Dict[str, Any]:
+        """Validate the data-flow graph."""
+        errors = []
+        warnings = []
+
+        # Check node uniqueness
+        node_ids = [n.id for n in self.nodes]
+        if len(node_ids) != len(set(node_ids)):
+            duplicates = [nid for nid in node_ids if node_ids.count(nid) > 1]
+            errors.append(f"Duplicate node IDs: {set(duplicates)}")
+
+        # Check edge uniqueness
+        edge_ids = [e.id for e in self.edges]
+        if len(edge_ids) != len(set(edge_ids)):
+            duplicates = [eid for eid in edge_ids if edge_ids.count(eid) > 1]
+            errors.append(f"Duplicate edge IDs: {set(duplicates)}")
+
+        # Check edge references
+        node_id_set = set(node_ids)
+        for edge in self.edges:
+            if edge.source not in node_id_set:
+                errors.append(f"Edge {edge.id} references non-existent source node: {edge.source}")
+            if edge.target not in node_id_set:
+                errors.append(f"Edge {edge.id} references non-existent target node: {edge.target}")
+
+        return {
+            'valid': len(errors) == 0,
+            'errors': errors,
+            'warnings': warnings,
         }
