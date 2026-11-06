@@ -74,7 +74,12 @@ class BindingTable:
         self.class_bindings[class_name] = symbol_id
 
     # -- lookup ----------------------------------------------------------------
-    def _visible(self, binding: Binding, line: int) -> bool:
+    def _visible(self, binding: Binding, line: int, scope_id: str) -> bool:
+        # Module-scope names resolve at call time in Python/JS: a def later in
+        # the file is still visible to earlier calls, so line checks only apply
+        # inside function-local scopes (redefinitions, imports in branches).
+        if scope_id == '':
+            return True
         if line and binding.start_line and binding.start_line > line:
             return False
         if binding.end_line and line and line > binding.end_line:
@@ -84,16 +89,16 @@ class BindingTable:
     def resolve_name(self, name: str, scope_id: str = '', line: int = 0) -> List[Binding]:
         """Return candidate bindings for ``name`` visible from ``scope_id``.
 
-        Ordered innermost scope first; the first element is the best candidate.
-        Shadowing is honoured: once a scope binds the name, outer scopes are
-        not consulted for that name.
+        Ordered innermost scope first; within a scope the LATEST binding before
+        the call line wins (redefinitions shadow earlier ones). Once a scope
+        binds the name, outer scopes are not consulted (shadowing).
         """
         for scope in self.scope_chain(scope_id):
             bindings = self._scopes.get(scope, {}).get(name, [])
-            visible = [b for b in bindings if self._visible(b, line)]
+            visible = [b for b in bindings if self._visible(b, line, scope)]
             if visible:
-                # latest binding before the call line wins within the scope
-                visible.sort(key=lambda b: b.start_line)
+                # latest binding wins -> descending start_line, [0] is best
+                visible.sort(key=lambda b: b.start_line, reverse=True)
                 return visible
         return []
 

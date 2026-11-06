@@ -259,8 +259,13 @@ class PythonResolver(ResolverAdapter):
             if pid:
                 table.scope_parent[sid] = pid
 
-        # imports -> bindings (module scope)
+        # imports -> bindings. Function-local imports bind only inside their
+        # own function scope; module-level imports bind at module scope.
         for imp in file_ctx.imports:
+            imp_scope_qual = imp.get('scope') or ''
+            imp_scope_id = f"{file_ctx.file_path}::{imp_scope_qual}" if imp_scope_qual else ''
+            if imp_scope_id:
+                table.add_scope(imp_scope_id)
             alias = imp.get('alias')
             name = imp.get('name')
             kind_imp = imp.get('kind', 'import')
@@ -281,7 +286,7 @@ class PythonResolver(ResolverAdapter):
                 mfile = self._resolve_module_file(dotted, graph_ctx) if dotted else None
                 table.add_binding(Binding(
                     name=bound_name, symbol_id='', kind='module',
-                    scope_id='', start_line=line, module=dotted,
+                    scope_id=imp_scope_id, start_line=line, module=dotted,
                     resolved_file=mfile or '',
                 ))
                 continue
@@ -296,7 +301,7 @@ class PythonResolver(ResolverAdapter):
                 table.add_binding(Binding(
                     name=bound_name, symbol_id=sid,
                     kind='alias' if alias else 'import',
-                    scope_id='', start_line=line, module=dotted,
+                    scope_id=imp_scope_id, start_line=line, module=dotted,
                     imported_name=name or '', resolved_file=rfile,
                 ))
             elif k == 'module':
@@ -304,20 +309,20 @@ class PythonResolver(ResolverAdapter):
                 sub_dotted = f'{dotted}.{name}' if dotted else name
                 table.add_binding(Binding(
                     name=bound_name, symbol_id='', kind='module',
-                    scope_id='', start_line=line, module=sub_dotted,
+                    scope_id=imp_scope_id, start_line=line, module=sub_dotted,
                     imported_name=name or '', resolved_file=rfile,
                 ))
             elif k == 'star':
                 table.add_binding(Binding(
                     name='*', symbol_id='', kind='star',
-                    scope_id='', start_line=line, module=dotted, resolved_file=rfile,
+                    scope_id=imp_scope_id, start_line=line, module=dotted, resolved_file=rfile,
                 ))
             else:
                 # unresolved/external import: record so calls can be classified
                 table.add_binding(Binding(
                     name=bound_name, symbol_id='',
                     kind='external' if k == 'external' else 'unresolved_import',
-                    scope_id='', start_line=line, module=dotted or module,
+                    scope_id=imp_scope_id, start_line=line, module=dotted or module,
                     imported_name=name or '', resolved_file=rfile,
                 ))
 
@@ -428,7 +433,10 @@ class PythonResolver(ResolverAdapter):
         return res
 
     def _mro(self, class_id: str, graph_ctx: Dict) -> List[str]:
-        """Approximate C3 MRO: class first, then bases depth-first, deduped."""
+        """C3 linearization (approximated over resolved base candidates).
+
+        Standard C3: L(C) = [C] + merge(L(B1), L(B2), ..., [B1, B2, ...]).
+        """
         if class_id in self._mro_cache:
             return self._mro_cache[class_id]
         classes = graph_ctx.get('classes_info', {})
@@ -436,11 +444,36 @@ class PythonResolver(ResolverAdapter):
         if not info:
             self._mro_cache[class_id] = [class_id]
             return [class_id]
-        result = [class_id]
-        for base in info.get('base_ids', []):
-            for c in self._mro(base, graph_ctx):
-                if c not in result:
-                    result.append(c)
+        base_seqs = [self._mro(b, graph_ctx) for b in info.get('base_ids', [])]
+        base_list = list(info.get('base_ids', []))
+        seqs = [list(s) for s in base_seqs] + [base_list]
+
+        def merge(seqs):
+            out = []
+            seqs = [list(s) for s in seqs if s]
+            while True:
+                seqs = [s for s in seqs if s]
+                if not seqs:
+                    return out
+                # candidate = head of first non-empty seq
+                for s in seqs:
+                    cand = s[0]
+                    # cand must not appear in the tail of any sequence
+                    if not any(cand in s2[1:] for s2 in seqs):
+                        out.append(cand)
+                        for s2 in seqs:
+                            if s2 and s2[0] == cand:
+                                s2.pop(0)
+                        break
+                else:
+                    # inconsistent hierarchy: fall back to concatenation
+                    for s in seqs:
+                        for c in s:
+                            if c not in out:
+                                out.append(c)
+                    return out
+
+        result = [class_id] + merge(seqs)
         self._mro_cache[class_id] = result
         return result
 

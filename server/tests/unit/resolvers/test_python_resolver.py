@@ -161,3 +161,50 @@ def test_unresolved_no_fabrication():
     res = r.resolve(call, fcs['a.py'], ctx)
     assert res.status in (STATUS_UNRESOLVED, 'ambiguous')
     assert res.targets == []
+
+
+def test_function_local_import_does_not_leak():
+    """P0 regression: an import inside function_a must not bind in function_b."""
+    files = {'a.py': 'def function_a():\n    from payments import process\n    process()\n\ndef function_b():\n    process()\n',
+             'payments.py': 'def process():\n    pass\n'}
+    r, ctx, fcs, analyses = make_ctx(files)
+    call_a = call_for(analyses['a.py'], 'process', 'function_a')
+    call_b = call_for(analyses['a.py'], 'process', 'function_b')
+    res_a = r.resolve(call_a, fcs['a.py'], ctx)
+    res_b = r.resolve(call_b, fcs['a.py'], ctx)
+    assert res_a.status == STATUS_STATIC_RESOLVED
+    assert res_a.targets == ['payments.py::process']
+    # function_b has no such import -> must NOT resolve to payments.process
+    assert res_b.status != STATUS_STATIC_RESOLVED or res_b.targets != ['payments.py::process']
+
+
+def test_forward_reference_same_file():
+    """P0 regression: a def later in the file is visible to earlier calls."""
+    files = {'a.py': 'def checkout():\n    return validate()\n\ndef validate():\n    return True\n'}
+    r, ctx, fcs, analyses = make_ctx(files)
+    call = call_for(analyses['a.py'], 'validate', 'checkout')
+    res = r.resolve(call, fcs['a.py'], ctx)
+    assert res.status == STATUS_STATIC_RESOLVED
+    assert res.targets == ['a.py::validate']
+
+
+def test_c3_mro_multiple_inheritance():
+    """P0: proper C3 order for diamond inheritance."""
+    files = {'m.py': '''class A:
+    def who(self): return 'A'
+class B(A):
+    def who(self): return 'B'
+class C(A):
+    pass
+class D(B, C):
+    def who(self):
+        return super().who()
+''' }
+    r, ctx, fcs, analyses = make_ctx(files)
+    mro = r._mro('m.py::D', ctx)
+    # C3: D, B, C, A  (B before C because declared first in bases)
+    assert mro == ['m.py::D', 'm.py::B', 'm.py::C', 'm.py::A']
+    call = call_for(analyses['m.py'], 'who', 'D.who')
+    res = r.resolve(call, fcs['m.py'], ctx)
+    assert res.status == STATUS_STATIC_RESOLVED
+    assert res.targets == ['m.py::B.who']

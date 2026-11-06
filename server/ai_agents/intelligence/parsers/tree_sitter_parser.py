@@ -744,46 +744,51 @@ def extract_calls_structured(file_path: str, text: str):
     calls = []
 
     func_like = _FUNCTION_LIKE.get(family, set())
+    object_types = _OBJECT_TYPES.get(family, set())
     call_types = _CALL_TYPES.get(family, {'call_expression', 'new_expression'})
 
-    # owner stack: qualnames of enclosing function-like nodes
+    # owner stack: (is_function_scope, qualname) for every named scope
+    # (classes AND functions), so a method's calls get 'Class.method' owners.
     owner_stack = []
 
-    def visit(node):
-        t = node.type
-        # Determine if this node opens a named function scope
-        scope_name = None
-        is_func_scope = False
+    def _scope_name_for(node, t):
         if family == 'js':
-            if t in ('function_declaration', 'function_expression', 'generator_function_declaration',
-                     'generator_function', 'method_definition', 'function_signature'):
-                scope_name = _js_symbol_name(node)
-                is_func_scope = True
-            elif t == 'variable_declarator':
+            if t in ('function_declaration', 'function_expression',
+                     'generator_function_declaration', 'generator_function',
+                     'method_definition', 'function_signature',
+                     'class_declaration', 'class', 'abstract_class_declaration',
+                     'interface_declaration'):
+                return _js_symbol_name(node)
+            if t == 'variable_declarator':
                 value = node.child_by_field_name('value')
                 if value is not None and value.type in ('arrow_function', 'function_expression',
                                                          'generator_function'):
-                    scope_name = _js_declarator_name(node)
-                    is_func_scope = True
-            elif t == 'pair':
+                    return _js_declarator_name(node)
+            if t == 'pair':
                 value = node.child_by_field_name('value')
                 if value is not None and value.type in ('arrow_function', 'function_expression'):
-                    scope_name = _field_text(node, 'key')
-                    is_func_scope = True
-            elif t == 'arrow_function':
-                is_func_scope = True  # anonymous scope keeps owner qualname
-        else:
-            if t in func_like:
-                scope_name = decl_name_fallback(node)
-                is_func_scope = True
+                    return _field_text(node, 'key')
+            return ''
+        if t in func_like or t in object_types:
+            return decl_name_fallback(node)
+        return ''
+
+    def visit(node):
+        t = node.type
+        scope_name = _scope_name_for(node, t)
+        is_func_scope = t in func_like or (family == 'js' and t in (
+            'function_declaration', 'function_expression', 'generator_function_declaration',
+            'generator_function', 'method_definition', 'function_signature', 'arrow_function'))
+        is_object_scope = t in object_types
+        named_scope = bool(scope_name) or (family == 'js' and t == 'arrow_function')
 
         if t in call_types:
             calls.append(_make_call(node, file_path, language, owner_stack))
 
-        if is_func_scope:
-            parent = owner_stack[-1] if owner_stack else ''
+        if named_scope:
+            parent = owner_stack[-1][1] if owner_stack else ''
             qual = f'{parent}.{scope_name}' if (parent and scope_name) else (scope_name or parent)
-            owner_stack.append(qual or '')
+            owner_stack.append((is_func_scope, qual or ''))
             for child in node.children:
                 visit(child)
             owner_stack.pop()
@@ -865,7 +870,13 @@ def extract_calls_structured(file_path: str, text: str):
         line = node.start_point[0] + 1
         col = node.start_point[1]
         end_line = node.end_point[0] + 1
-        caller_qual = owners[-1] if owners else ''
+        # owner = innermost enclosing *function* scope (class scopes only
+        # contribute to the qualname, matching symbol ids like C.m)
+        caller_qual = ''
+        for is_func, qual in reversed(owners):
+            if is_func:
+                caller_qual = qual
+                break
         caller_id = f'{fpath}::{caller_qual}' if caller_qual else None
 
         return {

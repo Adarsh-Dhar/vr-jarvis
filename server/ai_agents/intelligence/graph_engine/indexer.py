@@ -388,9 +388,14 @@ def index_repo(name):
                     'line': n.get('start', 0),
                 })
     graph_ctx['subclasses'] = {k: sorted(v) for k, v in graph_ctx['subclasses'].items()}
-    # dedupe base_ids
+    # dedupe base_ids preserving declaration order
     for info in classes_info.values():
-        info['base_ids'] = sorted(set(info['base_ids']))
+        seen_b, ordered = set(), []
+        for b in info['base_ids']:
+            if b not in seen_b:
+                seen_b.add(b)
+                ordered.append(b)
+        info['base_ids'] = ordered
 
     # ----- call-site resolution -------------------------------------------
     call_sites = []
@@ -414,7 +419,12 @@ def index_repo(name):
 
         for call in calls:
             caller_id = call.get('caller_id')
+            # validate caller endpoint: must be a real symbol node or file node
+            if caller_id and caller_id not in node_ids:
+                caller_id = None
             if not caller_id:
+                caller_id = f'file::{rel}'
+            if caller_id not in node_ids:
                 caller_id = f'file::{rel}'
             callee_name = call.get('name', '')
             line_no = call.get('line', 0)

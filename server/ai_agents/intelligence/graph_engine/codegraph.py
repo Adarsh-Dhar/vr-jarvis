@@ -279,17 +279,18 @@ class CodeGraph:
         if include_edges:
             edge_set = set()
             for node_id in ids:
-                # Outgoing edges
+                # Outgoing edges — keyed by call-site identity so parallel calls
+                # between the same caller/callee survive subgraph extraction.
                 for edge in self._out.get(node_id, []):
                     if edge['dst'] in ids:
-                        edge_key = (edge['src'], edge['dst'])
+                        edge_key = (edge.get('type'), edge.get('callsite_id') or edge.get('id') or (edge['src'], edge['dst']))
                         if edge_key not in edge_set:
                             edge_set.add(edge_key)
                             edges.append(edge)
                 # Incoming edges
                 for edge in self._inn.get(node_id, []):
                     if edge['src'] in ids:
-                        edge_key = (edge['src'], edge['dst'])
+                        edge_key = (edge.get('type'), edge.get('callsite_id') or edge.get('id') or (edge['src'], edge['dst']))
                         if edge_key not in edge_set:
                             edge_set.add(edge_key)
                             edges.append(edge)

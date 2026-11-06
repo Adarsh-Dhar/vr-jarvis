@@ -448,10 +448,17 @@ namespace JarvisVR
       
       // Add edge interaction component
       var edgeComponent = go.AddComponent<JarvisGraphEdge>();
-      string edgeId = ev.Dto.src + "->" + ev.Dto.dst;
+      string edgeId = EdgeKey(ev.Dto);
       edgeComponent.Initialize(edgeId, OnEdgePinch, OnEdgeHold);
       
       StyleEdge(ev, ev.Dto.kind);
+    }
+
+    // Unique per call site: parallel calls between the same functions get
+    // distinct edge ids so each can be selected independently.
+    private static string EdgeKey(GraphEdgeDto d)
+    {
+      return d.src + "->" + d.dst + "|" + (d.callsite_id ?? "");
     }
 
     private void OnEdgePinch(string edgeId)
@@ -459,7 +466,7 @@ namespace JarvisVR
       // Find the edge and select it
       foreach (var edge in _edges)
       {
-        if (edge.Dto.src + "->" + edge.Dto.dst == edgeId)
+        if (EdgeKey(edge.Dto) == edgeId)
         {
           SelectEdge(edge);
           break;

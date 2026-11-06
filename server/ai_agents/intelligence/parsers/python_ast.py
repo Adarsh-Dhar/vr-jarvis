@@ -312,6 +312,7 @@ def analyze_python_source(text: str, file_path: str = '') -> dict:
                     result['imports'].append({
                         'module': alias.name, 'name': None, 'alias': alias.asname,
                         'kind': 'import', 'line': stmt.lineno, 'level': 0,
+                        'scope': fn_qual or '',
                     })
                 return
             if isinstance(stmt, ast.ImportFrom):
@@ -320,6 +321,7 @@ def analyze_python_source(text: str, file_path: str = '') -> dict:
                         'module': stmt.module or '', 'name': alias.name,
                         'alias': alias.asname, 'kind': 'from',
                         'line': stmt.lineno, 'level': stmt.level or 0,
+                        'scope': fn_qual or '',
                     })
                 return
 
