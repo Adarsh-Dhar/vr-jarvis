@@ -55,12 +55,13 @@ def analyze_python_control_flow(
         # Build CFG
         function_id = symbol.get('id') or f"{file_path}::{function_ast.name}"
         builder = PythonCFGBuilder()
-        cfg = builder.build_function(
+        artifact = builder.build_function(
             function_ast=function_ast,
             function_id=function_id,
             source=source,
             file_path=file_path,
         )
+        cfg = artifact.graph
 
         # Validate CFG
         validation = validate_cfg(cfg)

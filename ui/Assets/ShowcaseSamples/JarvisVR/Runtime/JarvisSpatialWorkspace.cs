@@ -848,8 +848,14 @@ namespace JarvisVR
             {
               foreach (var edge in c.edges) newGraph.edges.Add(edge);
             }
+            // Preserve graph_type from command metadata
+            if (c.metadata != null && c.metadata.ContainsKey("graph_type"))
+            {
+              newGraph.graph_type = c.metadata["graph_type"];
+            }
             LoadGraph(newGraph);
-            Log("show_graph: loaded " + newGraph.nodes.Count + " nodes, " + newGraph.edges.Count + " edges");
+            Log("show_graph: loaded " + newGraph.nodes.Count + " nodes, " + newGraph.edges.Count + " edges" +
+                (string.IsNullOrEmpty(newGraph.graph_type) ? "" : " (type: " + newGraph.graph_type + ")"));
             return true;
           }
           return false;

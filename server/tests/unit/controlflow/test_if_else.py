@@ -18,12 +18,13 @@ def process(value):
     func_node = tree.body[0]
 
     builder = PythonCFGBuilder()
-    cfg = builder.build_function(
+    artifact = builder.build_function(
         function_ast=func_node,
         function_id="test::process",
         source=code,
         file_path="test.py"
     )
+    cfg = artifact.graph
 
     validation = validate_cfg(cfg)
     assert validation["valid"], f"CFG validation failed: {validation['errors']}"
@@ -61,12 +62,13 @@ def process(value):
     func_node = tree.body[0]
 
     builder = PythonCFGBuilder()
-    cfg = builder.build_function(
+    artifact = builder.build_function(
         function_ast=func_node,
         function_id="test::process",
         source=code,
         file_path="test.py"
     )
+    cfg = artifact.graph
 
     validation = validate_cfg(cfg)
     assert validation["valid"], f"CFG validation failed: {validation['errors']}"
@@ -92,12 +94,13 @@ def process(value):
     func_node = tree.body[0]
 
     builder = PythonCFGBuilder()
-    cfg = builder.build_function(
+    artifact = builder.build_function(
         function_ast=func_node,
         function_id="test::process",
         source=code,
         file_path="test.py"
     )
+    cfg = artifact.graph
 
     validation = validate_cfg(cfg)
     assert validation["valid"], f"CFG validation failed: {validation['errors']}"

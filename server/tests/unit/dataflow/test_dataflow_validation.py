@@ -16,19 +16,18 @@ def test_dfg_has_unique_node_ids():
     func_node = tree.body[0]
 
     cfg_builder = PythonCFGBuilder()
-    cfg = cfg_builder.build_function(
+    artifact = cfg_builder.build_function(
         function_ast=func_node,
         function_id="test::process",
         source=code,
         file_path="test.py"
     )
+    cfg = artifact.graph
 
     extractor = PythonDefUseExtractor()
     facts = extractor.extract_function(
-        function_ast=func_node,
-        function_id="test::process",
+        artifact=artifact,
         source=code,
-        cfg=cfg,
         file_path="test.py"
     )
 
@@ -52,19 +51,18 @@ def test_dfg_has_unique_edge_ids():
     func_node = tree.body[0]
 
     cfg_builder = PythonCFGBuilder()
-    cfg = cfg_builder.build_function(
+    artifact = cfg_builder.build_function(
         function_ast=func_node,
         function_id="test::process",
         source=code,
         file_path="test.py"
     )
+    cfg = artifact.graph
 
     extractor = PythonDefUseExtractor()
     facts = extractor.extract_function(
-        function_ast=func_node,
-        function_id="test::process",
+        artifact=artifact,
         source=code,
-        cfg=cfg,
         file_path="test.py"
     )
 
@@ -92,19 +90,18 @@ def calculate(price, discount):
     func_node = tree.body[0]
 
     cfg_builder = PythonCFGBuilder()
-    cfg = cfg_builder.build_function(
+    artifact = cfg_builder.build_function(
         function_ast=func_node,
         function_id="test::calculate",
         source=code,
         file_path="test.py"
     )
+    cfg = artifact.graph
 
     extractor = PythonDefUseExtractor()
     facts = extractor.extract_function(
-        function_ast=func_node,
-        function_id="test::calculate",
+        artifact=artifact,
         source=code,
-        cfg=cfg,
         file_path="test.py"
     )
 
@@ -130,19 +127,18 @@ def test_dfg_cfg_node_ids_exist():
     func_node = tree.body[0]
 
     cfg_builder = PythonCFGBuilder()
-    cfg = cfg_builder.build_function(
+    artifact = cfg_builder.build_function(
         function_ast=func_node,
         function_id="test::process",
         source=code,
         file_path="test.py"
     )
+    cfg = artifact.graph
 
     extractor = PythonDefUseExtractor()
     facts = extractor.extract_function(
-        function_ast=func_node,
-        function_id="test::process",
+        artifact=artifact,
         source=code,
-        cfg=cfg,
         file_path="test.py"
     )
 
@@ -157,5 +153,5 @@ def test_dfg_cfg_node_ids_exist():
 
     cfg_node_ids = {n.id for n in cfg.nodes}
     for node in dfg.nodes:
-        if node.cfg_node_id:
-            assert node.cfg_node_id in cfg_node_ids, f"DFG node {node.id} references non-existent CFG node {node.cfg_node_id}"
+        if node.cfg_node_ids:
+            assert node.cfg_node_ids[0] in cfg_node_ids, f"DFG node {node.id} references non-existent CFG node {node.cfg_node_ids[0]}"

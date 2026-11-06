@@ -25,20 +25,19 @@ def calculate(flag):
 
     # Build CFG
     cfg_builder = PythonCFGBuilder()
-    cfg = cfg_builder.build_function(
+    artifact = cfg_builder.build_function(
         function_ast=func_node,
         function_id="test::calculate",
         source=code,
         file_path="test.py"
     )
+    cfg = artifact.graph
 
     # Extract definition/use facts
     extractor = PythonDefUseExtractor()
     facts = extractor.extract_function(
-        function_ast=func_node,
-        function_id="test::calculate",
+        artifact=artifact,
         source=code,
-        cfg=cfg,
         file_path="test.py"
     )
 
@@ -54,7 +53,7 @@ def calculate(flag):
 
     # Get reaching definitions for the use's CFG node
     for use in discount_uses:
-        reaching_defs = analysis_result['in_sets'].get(use.cfg_node_id, set())
+        reaching_defs = analysis_result['in_sets'].get(use.cfg_node_ids[0], set())
         # Should have multiple definitions reaching (from both branches)
         assert len(reaching_defs) >= 2, f"Expected at least 2 reaching definitions, got {len(reaching_defs)}"
 
@@ -72,19 +71,18 @@ def process(items):
     func_node = tree.body[0]
 
     cfg_builder = PythonCFGBuilder()
-    cfg = cfg_builder.build_function(
+    artifact = cfg_builder.build_function(
         function_ast=func_node,
         function_id="test::process",
         source=code,
         file_path="test.py"
     )
+    cfg = artifact.graph
 
     extractor = PythonDefUseExtractor()
     facts = extractor.extract_function(
-        function_ast=func_node,
-        function_id="test::process",
+        artifact=artifact,
         source=code,
-        cfg=cfg,
         file_path="test.py"
     )
 
@@ -99,5 +97,5 @@ def process(items):
 
     # The loop assignment should have the initial definition reaching it
     loop_def = total_defs[1]  # Second definition is in the loop
-    reaching_defs = analysis_result['in_sets'].get(loop_def.cfg_node_id, set())
+    reaching_defs = analysis_result['in_sets'].get(loop_def.cfg_node_ids[0], set())
     assert len(reaching_defs) >= 1, "Loop definition should have at least one reaching definition"

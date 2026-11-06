@@ -29,7 +29,28 @@ class DataFlowGraphBuilder:
         use_nodes: Dict[str, str] = {}  # use ID -> graph node ID
         operation_nodes: Dict[str, str] = {}  # operation ID -> graph node ID
 
-        # Add parameter nodes
+        # Step 1: Add use nodes first (so operation inputs can reference them)
+        for use in facts.uses:
+            node_id = self._generate_node_id()
+            node = DataFlowNode(
+                id=node_id,
+                kind='use',
+                variable=use.variable,
+                expression=use.expression,
+                function_id=use.function_id,
+                file=use.file,
+                line=use.line,
+                column=use.column,
+                cfg_node_ids=use.cfg_node_ids,
+                metadata={
+                    'use_id': use.id,
+                    'binding_key': use.binding_key,
+                },
+            )
+            graph.add_node(node)
+            use_nodes[use.id] = node_id
+
+        # Step 2: Add parameter nodes
         param_defs = [d for d in facts.definitions if d.kind == 'parameter']
         for definition in param_defs:
             node_id = self._generate_node_id()
@@ -42,7 +63,7 @@ class DataFlowGraphBuilder:
                 file=definition.file,
                 line=definition.line,
                 column=definition.column,
-                cfg_node_id=definition.cfg_node_id,
+                cfg_node_ids=definition.cfg_node_ids,
                 metadata={
                     'def_id': definition.id,
                     'kind': definition.kind,
@@ -52,7 +73,7 @@ class DataFlowGraphBuilder:
             graph.add_node(node)
             def_nodes[definition.id] = node_id
 
-        # Add definition nodes (non-parameters)
+        # Step 3: Add definition nodes (non-parameters)
         non_param_defs = [d for d in facts.definitions if d.kind != 'parameter']
         for definition in non_param_defs:
             node_id = self._generate_node_id()
@@ -65,7 +86,7 @@ class DataFlowGraphBuilder:
                 file=definition.file,
                 line=definition.line,
                 column=definition.column,
-                cfg_node_id=definition.cfg_node_id,
+                cfg_node_ids=definition.cfg_node_ids,
                 metadata={
                     'def_id': definition.id,
                     'kind': definition.kind,
@@ -75,7 +96,7 @@ class DataFlowGraphBuilder:
             graph.add_node(node)
             def_nodes[definition.id] = node_id
 
-        # Add operation nodes from ExpressionFacts
+        # Step 4: Add operation nodes from ExpressionFacts
         for operation in facts.operations:
             node_id = self._generate_node_id()
             node = DataFlowNode(
@@ -87,7 +108,7 @@ class DataFlowGraphBuilder:
                 file=operation.file,
                 line=operation.line,
                 column=operation.column,
-                cfg_node_id=operation.cfg_node_id,
+                cfg_node_ids=operation.cfg_node_ids,
                 metadata={
                     'operation': operation.operation,
                     'operation_id': operation.id,
@@ -96,7 +117,7 @@ class DataFlowGraphBuilder:
             graph.add_node(node)
             operation_nodes[operation.id] = node_id
 
-            # Connect input uses to operation
+            # Connect input uses to operation (use nodes already created)
             for use_id in operation.input_use_ids:
                 use_node_id = use_nodes.get(use_id)
                 if use_node_id:
@@ -115,7 +136,7 @@ class DataFlowGraphBuilder:
                     )
                     graph.add_edge(edge)
 
-            # Connect operation to output definitions
+            # Connect operation to output definitions (definition nodes already created)
             for def_id in operation.output_definition_ids:
                 def_node_id = def_nodes.get(def_id)
                 if def_node_id:
@@ -133,27 +154,6 @@ class DataFlowGraphBuilder:
                         },
                     )
                     graph.add_edge(edge)
-
-        # Add use nodes
-        for use in facts.uses:
-            node_id = self._generate_node_id()
-            node = DataFlowNode(
-                id=node_id,
-                kind='use',
-                variable=use.variable,
-                expression=use.expression,
-                function_id=use.function_id,
-                file=use.file,
-                line=use.line,
-                column=use.column,
-                cfg_node_id=use.cfg_node_id,
-                metadata={
-                    'use_id': use.id,
-                    'binding_key': use.binding_key,
-                },
-            )
-            graph.add_node(node)
-            use_nodes[use.id] = node_id
 
         # Build edges from reaching definitions
         in_sets = analysis_result.get('in_sets', {})
@@ -200,7 +200,7 @@ class DataFlowGraphBuilder:
             for use in facts.uses:
                 if use.variable == definition.variable and use.binding_key == definition.binding_key:
                     # Check if this use is in a return context (simplified)
-                    use_cfg_node = cfg.get_node(use.cfg_node_id)
+                    use_cfg_node = cfg.get_node(use.cfg_node_ids[0]) if use.cfg_node_ids else None
                     if use_cfg_node and use_cfg_node.kind == 'return':
                         def_node_id = def_nodes.get(definition.id)
                         use_node_id = use_nodes.get(use.id)
@@ -215,7 +215,7 @@ class DataFlowGraphBuilder:
                                 condition=None,
                                 evidence={
                                     'file': facts.file,
-                                    'return_cfg_node': use.cfg_node_id,
+                                    'return_cfg_node': use.cfg_node_ids[0],
                                 },
                             )
                             graph.add_edge(edge)
@@ -263,8 +263,10 @@ class DataFlowGraphBuilder:
         # Check source CFG node IDs exist
         cfg_node_ids = {n.id for n in cfg.nodes}
         for node in graph.nodes:
-            if node.cfg_node_id and node.cfg_node_id not in cfg_node_ids:
-                errors.append(f"Node {node.id} references non-existent CFG node: {node.cfg_node_id}")
+            if node.cfg_node_ids:
+                for cfg_node_id in node.cfg_node_ids:
+                    if cfg_node_id not in cfg_node_ids:
+                        errors.append(f"Node {node.id} references non-existent CFG node: {cfg_node_id}")
 
         # Check all definitions and uses are mapped
         def_ids = {d.id for d in facts.definitions}

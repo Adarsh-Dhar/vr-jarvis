@@ -1,6 +1,8 @@
 """Control-flow graph models for Python analysis."""
+import ast
 from dataclasses import dataclass, field
 from typing import Optional, List, Dict, Any
+from .ast_cfg_index import ASTCFGIndex
 
 
 @dataclass
@@ -40,6 +42,7 @@ class ControlFlowGraph:
     exit_node_id: Optional[str] = None
     exception_exit_node_id: Optional[str] = None
     ast_node_map: Dict[int, str] = field(default_factory=dict, repr=False)
+    ast_index: Optional[ASTCFGIndex] = field(default=None, repr=False)
     metadata: Dict[str, Any] = field(default_factory=dict)
 
     def add_node(self, node: CFGNode) -> None:
@@ -98,3 +101,11 @@ class ControlFlowGraph:
             ],
             'metadata': self.metadata,
         }
+
+
+@dataclass
+class CFGBuildArtifact:
+    """Complete CFG build artifact including graph, AST index, and function AST."""
+    graph: ControlFlowGraph
+    ast_index: ASTCFGIndex
+    function_ast: ast.FunctionDef

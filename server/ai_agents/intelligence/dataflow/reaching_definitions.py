@@ -20,29 +20,53 @@ class ReachingDefinitionsAnalyzer:
         # Validate CFG references
         cfg_node_ids = {node.id for node in cfg.nodes}
         for definition in facts.definitions:
-            if definition.cfg_node_id not in cfg_node_ids:
+            if not definition.cfg_node_ids:
                 return {
-                    'error': f"Definition {definition.id} has invalid CFG node {definition.cfg_node_id}",
+                    'error': f"Definition {definition.id} has no CFG node IDs",
                     'in_sets': {},
                     'out_sets': {},
                     'gen': {},
                     'kill': {},
                     'node_defs': {},
                     'node_uses': {},
-                    'diagnostics': [{'code': 'invalid_cfg_reference', 'definition_id': definition.id}],
+                    'diagnostics': [{'code': 'no_cfg_reference', 'definition_id': definition.id}],
                 }
+            for cfg_node_id in definition.cfg_node_ids:
+                if cfg_node_id not in cfg_node_ids:
+                    return {
+                        'error': f"Definition {definition.id} has invalid CFG node {cfg_node_id}",
+                        'in_sets': {},
+                        'out_sets': {},
+                        'gen': {},
+                        'kill': {},
+                        'node_defs': {},
+                        'node_uses': {},
+                        'diagnostics': [{'code': 'invalid_cfg_reference', 'definition_id': definition.id}],
+                    }
         for use in facts.uses:
-            if use.cfg_node_id not in cfg_node_ids:
+            if not use.cfg_node_ids:
                 return {
-                    'error': f"Use {use.id} has invalid CFG node {use.cfg_node_id}",
+                    'error': f"Use {use.id} has no CFG node IDs",
                     'in_sets': {},
                     'out_sets': {},
                     'gen': {},
                     'kill': {},
                     'node_defs': {},
                     'node_uses': {},
-                    'diagnostics': [{'code': 'invalid_cfg_reference', 'use_id': use.id}],
+                    'diagnostics': [{'code': 'no_cfg_reference', 'use_id': use.id}],
                 }
+            for cfg_node_id in use.cfg_node_ids:
+                if cfg_node_id not in cfg_node_ids:
+                    return {
+                        'error': f"Use {use.id} has invalid CFG node {cfg_node_id}",
+                        'in_sets': {},
+                        'out_sets': {},
+                        'gen': {},
+                        'kill': {},
+                        'node_defs': {},
+                        'node_uses': {},
+                        'diagnostics': [{'code': 'invalid_cfg_reference', 'use_id': use.id}],
+                    }
 
         # Build node to definitions mapping
         node_defs = self._build_node_definitions(cfg, facts.definitions)
@@ -75,10 +99,10 @@ class ReachingDefinitionsAnalyzer:
         node_defs: Dict[str, List[Definition]] = {}
 
         for definition in definitions:
-            cfg_node_id = definition.cfg_node_id
-            if cfg_node_id not in node_defs:
-                node_defs[cfg_node_id] = []
-            node_defs[cfg_node_id].append(definition)
+            for cfg_node_id in definition.cfg_node_ids:
+                if cfg_node_id not in node_defs:
+                    node_defs[cfg_node_id] = []
+                node_defs[cfg_node_id].append(definition)
 
         return node_defs
 
@@ -91,10 +115,10 @@ class ReachingDefinitionsAnalyzer:
         node_uses: Dict[str, List[VariableUse]] = {}
 
         for use in uses:
-            cfg_node_id = use.cfg_node_id
-            if cfg_node_id not in node_uses:
-                node_uses[cfg_node_id] = []
-            node_uses[cfg_node_id].append(use)
+            for cfg_node_id in use.cfg_node_ids:
+                if cfg_node_id not in node_uses:
+                    node_uses[cfg_node_id] = []
+                node_uses[cfg_node_id].append(use)
 
         return node_uses
 
@@ -215,7 +239,7 @@ class ReachingDefinitionsAnalyzer:
 
         Returns a list of reaching definitions (may be multiple due to branches).
         """
-        node_id = use.cfg_node_id
+        node_id = use.cfg_node_ids[0]
         in_sets = analysis_result['in_sets']
 
         if node_id not in in_sets:

@@ -26,20 +26,19 @@ def calculate(price, discount_enabled):
 
     # Step 1: Build CFG
     cfg_builder = PythonCFGBuilder()
-    cfg = cfg_builder.build_function(
+    artifact = cfg_builder.build_function(
         function_ast=func_node,
         function_id="test::calculate",
         source=code,
         file_path="test.py"
     )
+    cfg = artifact.graph
 
     # Step 2: Extract definition/use facts
     extractor = PythonDefUseExtractor()
     facts = extractor.extract_function(
-        function_ast=func_node,
-        function_id="test::calculate",
+        artifact=artifact,
         source=code,
-        cfg=cfg,
         file_path="test.py"
     )
 
@@ -103,19 +102,18 @@ def process(items):
     func_node = tree.body[0]
 
     cfg_builder = PythonCFGBuilder()
-    cfg = cfg_builder.build_function(
+    artifact = cfg_builder.build_function(
         function_ast=func_node,
         function_id="test::process",
         source=code,
         file_path="test.py"
     )
+    cfg = artifact.graph
 
     extractor = PythonDefUseExtractor()
     facts = extractor.extract_function(
-        function_ast=func_node,
-        function_id="test::process",
+        artifact=artifact,
         source=code,
-        cfg=cfg,
         file_path="test.py"
     )
 
@@ -149,19 +147,18 @@ def process(a, b, c):
     func_node = tree.body[0]
 
     cfg_builder = PythonCFGBuilder()
-    cfg = cfg_builder.build_function(
+    artifact = cfg_builder.build_function(
         function_ast=func_node,
         function_id="test::process",
         source=code,
         file_path="test.py"
     )
+    cfg = artifact.graph
 
     extractor = PythonDefUseExtractor()
     facts = extractor.extract_function(
-        function_ast=func_node,
-        function_id="test::process",
+        artifact=artifact,
         source=code,
-        cfg=cfg,
         file_path="test.py"
     )
 

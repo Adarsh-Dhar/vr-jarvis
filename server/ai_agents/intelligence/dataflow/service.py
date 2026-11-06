@@ -63,12 +63,13 @@ def analyze_python_data_flow(
         # Build CFG first (required for data-flow)
         function_id = symbol.get('id') or f"{file_path}::{function_ast.name}"
         cfg_builder = PythonCFGBuilder()
-        cfg = cfg_builder.build_function(
+        artifact = cfg_builder.build_function(
             function_ast=function_ast,
             function_id=function_id,
             source=source,
             file_path=file_path,
         )
+        cfg = artifact.graph
 
         # Validate CFG
         cfg_validation = validate_cfg(cfg)
@@ -82,13 +83,11 @@ def analyze_python_data_flow(
                 'metadata': {},
             }
 
-        # Extract definition/use facts using the CFG
+        # Extract definition/use facts using the CFG artifact
         extractor = PythonDefUseExtractor()
         facts = extractor.extract_function(
-            function_ast=function_ast,
-            function_id=function_id,
+            artifact=artifact,
             source=source,
-            cfg=cfg,
             file_path=file_path,
         )
 

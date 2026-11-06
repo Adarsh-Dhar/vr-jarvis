@@ -31,12 +31,13 @@ def example(value, items):
 
     # Step 1: Build CFG
     builder = PythonCFGBuilder()
-    cfg = builder.build_function(
+    artifact = builder.build_function(
         function_ast=func_node,
         function_id="test::example",
         source=code,
         file_path="test.py"
     )
+    cfg = artifact.graph
 
     # Step 2: Validate CFG
     validation = validate_cfg(cfg)
@@ -102,12 +103,13 @@ def process(data):
     func_node = tree.body[0]
 
     builder = PythonCFGBuilder()
-    cfg = builder.build_function(
+    artifact = builder.build_function(
         function_ast=func_node,
         function_id="test::process",
         source=code,
         file_path="test.py"
     )
+    cfg = artifact.graph
 
     validation = validate_cfg(cfg)
     assert validation["valid"], f"CFG validation failed: {validation['errors']}"

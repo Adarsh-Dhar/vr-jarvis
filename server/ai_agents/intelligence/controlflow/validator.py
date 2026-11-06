@@ -1,6 +1,6 @@
 """CFG validation utilities - strict validation."""
 from typing import List, Dict, Any, Set
-from .models import ControlFlowGraph, CFGNode, CFGEdge
+from .models import ControlFlowGraph, CFGNode, CFGEdge, CFGBuildArtifact
 
 
 class CFGValidationError(Exception):
@@ -18,6 +18,9 @@ def validate_cfg(cfg: ControlFlowGraph) -> Dict[str, Any]:
     warnings = []
 
     # Handle both CFG object and dict
+    # Handle CFGBuildArtifact
+    if isinstance(cfg, CFGBuildArtifact):
+        cfg = cfg.graph
     if isinstance(cfg, dict):
         nodes = cfg.get('nodes', [])
         edges = cfg.get('edges', [])

@@ -22,20 +22,19 @@ def process(value):
 
     # Build CFG
     cfg_builder = PythonCFGBuilder()
-    cfg = cfg_builder.build_function(
+    artifact = cfg_builder.build_function(
         function_ast=func_node,
         function_id="test::process",
         source=code,
         file_path="test.py"
     )
+    cfg = artifact.graph
 
     # Extract definition/use facts
     extractor = PythonDefUseExtractor()
     facts = extractor.extract_function(
-        function_ast=func_node,
-        function_id="test::process",
+        artifact=artifact,
         source=code,
-        cfg=cfg,
         file_path="test.py"
     )
 
@@ -66,20 +65,19 @@ def test_dfg_to_dict():
 
     # Build CFG
     cfg_builder = PythonCFGBuilder()
-    cfg = cfg_builder.build_function(
+    artifact = cfg_builder.build_function(
         function_ast=func_node,
         function_id="test::process",
         source=code,
         file_path="test.py"
     )
+    cfg = artifact.graph
 
     # Extract definition/use facts
     extractor = PythonDefUseExtractor()
     facts = extractor.extract_function(
-        function_ast=func_node,
-        function_id="test::process",
+        artifact=artifact,
         source=code,
-        cfg=cfg,
         file_path="test.py"
     )
 

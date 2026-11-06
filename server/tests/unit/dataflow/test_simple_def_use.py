@@ -15,12 +15,19 @@ def process(value):
     tree = ast.parse(code)
     func_node = tree.body[0]
 
-    extractor = PythonDefUseExtractor()
-    facts = extractor.extract_function(
+    cfg_builder = PythonCFGBuilder()
+    artifact = cfg_builder.build_function(
         function_ast=func_node,
         function_id="test::process",
         source=code,
-        cfg=None,
+        file_path="test.py"
+    )
+    cfg = artifact.graph
+
+    extractor = PythonDefUseExtractor()
+    facts = extractor.extract_function(
+        artifact=artifact,
+        source=code,
         file_path="test.py"
     )
 
@@ -47,12 +54,19 @@ def process(a, b):
     tree = ast.parse(code)
     func_node = tree.body[0]
 
-    extractor = PythonDefUseExtractor()
-    facts = extractor.extract_function(
+    cfg_builder = PythonCFGBuilder()
+    artifact = cfg_builder.build_function(
         function_ast=func_node,
         function_id="test::process",
         source=code,
-        cfg=None,
+        file_path="test.py"
+    )
+    cfg = artifact.graph
+
+    extractor = PythonDefUseExtractor()
+    facts = extractor.extract_function(
+        artifact=artifact,
+        source=code,
         file_path="test.py"
     )
 
@@ -75,12 +89,19 @@ def process(value):
     tree = ast.parse(code)
     func_node = tree.body[0]
 
-    extractor = PythonDefUseExtractor()
-    facts = extractor.extract_function(
+    cfg_builder = PythonCFGBuilder()
+    artifact = cfg_builder.build_function(
         function_ast=func_node,
         function_id="test::process",
         source=code,
-        cfg=None,
+        file_path="test.py"
+    )
+    cfg = artifact.graph
+
+    extractor = PythonDefUseExtractor()
+    facts = extractor.extract_function(
+        artifact=artifact,
+        source=code,
         file_path="test.py"
     )
 
@@ -100,12 +121,19 @@ def process(value):
     tree = ast.parse(code)
     func_node = tree.body[0]
 
-    extractor = PythonDefUseExtractor()
-    facts = extractor.extract_function(
+    cfg_builder = PythonCFGBuilder()
+    artifact = cfg_builder.build_function(
         function_ast=func_node,
         function_id="test::process",
         source=code,
-        cfg=None,
+        file_path="test.py"
+    )
+    cfg = artifact.graph
+
+    extractor = PythonDefUseExtractor()
+    facts = extractor.extract_function(
+        artifact=artifact,
+        source=code,
         file_path="test.py"
     )
 

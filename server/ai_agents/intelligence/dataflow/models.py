@@ -13,7 +13,7 @@ class Definition:
     line: int
     column: int
     kind: str
-    cfg_node_id: str
+    cfg_node_ids: List[str]
     binding_key: str
     expression: Optional[str] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
@@ -28,7 +28,7 @@ class VariableUse:
     file: str
     line: int
     column: int
-    cfg_node_id: str
+    cfg_node_ids: List[str]
     binding_key: str
     expression: Optional[str] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
@@ -42,7 +42,7 @@ class ExpressionFact:
     file: str
     line: int
     column: int
-    cfg_node_id: str
+    cfg_node_ids: List[str]
     expression: str
     operation: str
     input_use_ids: List[str] = field(default_factory=list)
@@ -73,7 +73,7 @@ class DataFlowNode:
     variable: Optional[str] = None
     expression: Optional[str] = None
     column: int = 0
-    cfg_node_id: Optional[str] = None
+    cfg_node_ids: List[str] = field(default_factory=list)
     metadata: Dict[str, Any] = field(default_factory=dict)
 
 
@@ -136,7 +136,7 @@ class DataFlowGraph:
                     'file': n.file,
                     'line': n.line,
                     'column': n.column,
-                    'cfg_node_id': n.cfg_node_id,
+                    'cfg_node_ids': n.cfg_node_ids,
                     'metadata': n.metadata,
                 }
                 for n in self.nodes

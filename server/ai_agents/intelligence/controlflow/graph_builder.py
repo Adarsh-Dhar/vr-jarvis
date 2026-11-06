@@ -20,6 +20,7 @@ def cfg_to_unity_format(cfg: ControlFlowGraph) -> dict:
             'file': node.file,
             'start': node.start_line,
             'end': node.end_line,
+            'line': node.start_line,
             'level': 'block',
             'kind': node.kind,
             'cluster': 'control_flow',
