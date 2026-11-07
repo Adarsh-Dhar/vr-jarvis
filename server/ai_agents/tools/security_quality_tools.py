@@ -28,14 +28,14 @@ def scan_secrets(
         if not path.is_absolute():
             path = resolve_in_repo(path)
 
-        # Common secret patterns
+        # Common secret patterns - key before =, value after
         secret_patterns = [
-            (r'api[_-]?key\s*=\s*["\']([^"\']{20,})["\']', 'api_key'),
-            (r'password\s*=\s*["\']([^"\']{8,})["\']', 'password'),
-            (r'secret[_-]?key\s*=\s*["\']([^"\']{20,})["\']', 'secret_key'),
-            (r'token\s*=\s*["\']([^"\']{20,})["\']', 'token'),
-            (r'aws[_-]?access[_-]?key[_-]?id\s*=\s*["\']([^"\']{16,})["\']', 'aws_access_key'),
-            (r'aws[_-]?secret[_-]?access[_-]?key\s*=\s*["\']([^"\']{30,})["\']', 'aws_secret_key')
+            (r'(api[_-]?key)\s*=\s*["\'][^"\']{20,}["\']', 'api_key'),
+            (r'(password)\s*=\s*["\'][^"\']{8,}["\']', 'password'),
+            (r'(secret[_-]?key)\s*=\s*["\'][^"\']{20,}["\']', 'secret_key'),
+            (r'(token)\s*=\s*["\'][^"\']{20,}["\']', 'token'),
+            (r'(aws[_-]?access[_-]?key[_-]?id)\s*=\s*["\'][^"\']{16,}["\']', 'aws_access_key'),
+            (r'(aws[_-]?secret[_-]?access[_-]?key)\s*=\s*["\'][^"\']{30,}["\']', 'aws_secret_key')
         ]
 
         findings = []
@@ -54,9 +54,11 @@ def scan_secrets(
                             matches = re.finditer(pattern, line, re.IGNORECASE)
                             for match in matches:
                                 # Redact the actual secret value - replace with ***REDACTED***
-                                masked_line = re.sub(pattern, r'\1=***REDACTED***', line, flags=re.IGNORECASE)
-                                # Further redact to ensure no secret value remains
-                                masked_line = re.sub(r'([a-zA-Z0-9]{20,})', '***REDACTED***', masked_line)
+                                # Group 1 is the key name, the whole match is key=value
+                                key_name = match.group(1)
+                                masked_line = re.sub(pattern, f'{key_name}=***REDACTED***', line, flags=re.IGNORECASE)
+                                # Ensure any remaining long strings are also redacted
+                                masked_line = re.sub(r'["\'][a-zA-Z0-9]{8,}["\']', '***REDACTED***', masked_line)
                                 findings.append({
                                     'id': str(uuid.uuid4()),
                                     'type': secret_type,
@@ -516,7 +518,7 @@ def analyze_injection_risks(
     """Analyze SQL injection, XSS, etc."""
     try:
         from .repository_tools import search_code
-        
+
         # Search for injection risk patterns
         injection_patterns = [
             ('f"SELECT', 'SQL injection risk (f-string)'),
@@ -530,7 +532,7 @@ def analyze_injection_risks(
             ('eval(input', 'code injection risk'),
             ('exec(input', 'code injection risk')
         ]
-        
+
         injection_risks = []
         for pattern, risk_type in injection_patterns:
             search_result = search_code(tool_context, directory=repository_path, query=pattern)
@@ -543,11 +545,134 @@ def analyze_injection_risks(
                         'line': match['line'],
                         'severity': 'high'
                     })
-        
+
         return {
             'status': 'ok',
             'repository_path': repository_path,
             'injection_risks': injection_risks
+        }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
+
+
+@safe
+def detect_sql_injection(
+    repository_path: str,
+    tool_context: ToolContext
+) -> dict:
+    """Detect SQL injection vulnerabilities.
+
+    Distinguishes unsafe string-built queries from parameterized queries.
+    """
+    try:
+        from pathlib import Path
+        import ast
+
+        path = Path(repository_path)
+        if not path.is_absolute():
+            path = resolve_in_repo(path)
+
+        findings = []
+
+        # Find all Python files
+        py_files = list(path.rglob('*.py'))
+
+        for py_file in py_files:
+            try:
+                content = py_file.read_text(encoding='utf-8')
+                lines = content.splitlines()
+
+                # Use AST to find cursor.execute calls
+                tree = ast.parse(content, filename=str(py_file))
+
+                class SQLInjectionVisitor(ast.NodeVisitor):
+                    def __init__(self, file_path, line_source):
+                        self.file_path = file_path
+                        self.line_source = line_source
+                        self.findings = []
+                        self.unsafe_vars = set()  # Track variables with unsafe SQL
+
+                    def visit_Assign(self, node):
+                        # Track assignments with string concatenation
+                        if node.targets and isinstance(node.targets[0], ast.Name):
+                            var_name = node.targets[0].id
+                            if isinstance(node.value, ast.BinOp):
+                                if isinstance(node.value.op, ast.Add):
+                                    # Check if it involves string concatenation
+                                    self.unsafe_vars.add(var_name)
+                        self.generic_visit(node)
+
+                    def visit_Call(self, node):
+                        # Check for cursor.execute or conn.execute
+                        if isinstance(node.func, ast.Attribute):
+                            if node.func.attr == 'execute':
+                                # Check the first argument (the SQL query)
+                                if node.args:
+                                    sql_arg = node.args[0]
+                                    is_unsafe = False
+                                    is_parameterized = False
+
+                                    # Check if the argument is an unsafe variable
+                                    if isinstance(sql_arg, ast.Name):
+                                        if sql_arg.id in self.unsafe_vars:
+                                            is_unsafe = True
+
+                                    # Check for string concatenation
+                                    elif isinstance(sql_arg, ast.BinOp):
+                                        if isinstance(sql_arg.op, ast.Add):
+                                            is_unsafe = True
+
+                                    # Check for f-strings
+                                    elif isinstance(sql_arg, ast.JoinedStr):
+                                        is_unsafe = True
+
+                                    # Check for format() calls
+                                    elif isinstance(sql_arg, ast.Call):
+                                        if isinstance(sql_arg.func, ast.Attribute):
+                                            if sql_arg.func.attr == 'format':
+                                                is_unsafe = True
+
+                                    # Check for parameterized queries
+                                    # If there's a second argument, it's likely parameterized
+                                    if len(node.args) > 1:
+                                        is_parameterized = True
+
+                                    # Check for %s, ?, or :param in string
+                                    if isinstance(sql_arg, ast.Constant):
+                                        if any(marker in sql_arg.value for marker in ['%s', '?', ':param', '@param']):
+                                            is_parameterized = True
+
+                                    if is_unsafe and not is_parameterized:
+                                        line_num = node.lineno
+                                        if line_num <= len(self.line_source):
+                                            self.findings.append({
+                                                'id': f'sql_inj_{len(self.findings)}',
+                                                'type': 'sql_injection',
+                                                'severity': 'high',
+                                                'file': str(self.file_path),
+                                                'line': line_num,
+                                                'evidence': self.line_source[line_num - 1].strip(),
+                                                'confidence': 'confirmed'
+                                            })
+
+                        self.generic_visit(node)
+
+                visitor = SQLInjectionVisitor(py_file, lines)
+                visitor.visit(tree)
+                findings.extend(visitor.findings)
+
+            except Exception:
+                # Skip files that can't be parsed
+                continue
+
+        return {
+            'status': 'ok',
+            'repository_path': str(path),
+            'findings': findings,
+            'count': len(findings)
         }
     except Exception as e:
         return {

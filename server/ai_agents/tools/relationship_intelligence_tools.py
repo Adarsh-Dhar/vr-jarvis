@@ -963,9 +963,10 @@ def calculate_change_impact(
         # Get direct callers (confirmed calls only, depth=1)
         direct_callers = graph.callers(symbol_id, depth=1, include_possible=False)
 
-        # Get indirect dependents through calls and imports (depth up to 6)
+        # Get indirect dependents through calls, may_call, and imports (depth up to 6)
         # This uses the updated get_dependents with edge type filtering
-        dependents_result = get_dependents(symbol_id, tool_context, max_depth=6, edge_types=['calls', 'imports'])
+        # Include may_call to preserve uncertain relationships
+        dependents_result = get_dependents(symbol_id, tool_context, max_depth=6, edge_types=['calls', 'may_call', 'imports'])
         if dependents_result.get('status') != 'ok':
             return dependents_result
 
@@ -973,6 +974,11 @@ def calculate_change_impact(
         direct_caller_ids = {c['from'] for c in direct_callers}
         indirect_dependents = [d for d in dependents_result['dependents']
                              if d['id'] not in direct_caller_ids and d['id'] != symbol_id]
+
+        # Mark may_call edges as uncertain in indirect dependents
+        for dep in indirect_dependents:
+            if dep.get('edge_type') == 'may_call':
+                dep['uncertain'] = True
 
         # Get possible (may_call) relationships separately
         possible_callers = graph.callers(symbol_id, depth=1, include_possible=True)

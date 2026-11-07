@@ -143,7 +143,7 @@ namespace JarvisVR
 
     // =========================================================== panels
 
-    private static readonly string[] NavModes = { "MAP", "CODE", "FLOW", "ISSUES", "TESTS", "GIT", "AGENT" };
+    private static readonly string[] NavModes = { "MAP", "CODE", "FLOW", "ISSUES", "TESTS", "GIT", "IMPACT", "AGENT" };
     private static readonly Dictionary<string, string[]> ModePanels = new Dictionary<string, string[]>
     {
       { "REPOS",  new[] { "repo" } },
@@ -153,6 +153,7 @@ namespace JarvisVR
       { "ISSUES", new[] { "repo", "security", "evidence" } },
       { "TESTS",  new[] { "tests", "code", "legend" } },
       { "GIT",    new[] { "history", "approval" } },
+      { "IMPACT", new[] { "repo", "impact", "evidence", "legend" } },
       { "AGENT",  new[] { "activity", "ghost" } },
     };
 
@@ -368,14 +369,25 @@ namespace JarvisVR
         nv.Body.sharedMaterial = JarvisSpatialGfx.Neon(Color.white, 1.5f, true);
         JarvisSpatialGfx.Flat(nv.Body);
 
-        // Color based on level
-        nv.Base = dto.level == "module" ? pal.Amber
+        // Color based on level, with severity override for security nodes
+        Color baseColor = dto.level == "module" ? pal.Amber
           : dto.level == "file" ? pal.Violet
           : dto.level == "class" ? pal.Green
           : dto.level == "layer" ? pal.Red
           : dto.kind == "external" ? pal.Gray
           : dto.kind == "test" ? pal.Violet
           : pal.Cyan;
+
+        // Apply severity-based coloring for security findings
+        if (dto.type == "vulnerability" || dto.type == "secret" || dto.type == "taint_path")
+        {
+          string severity = dto.severity ?? "medium";
+          baseColor = severity == "high" ? JarvisPalette.Red
+            : severity == "medium" ? pal.Amber
+            : pal.Green;
+        }
+
+        nv.Base = baseColor;
         body.AddComponent<JarvisGraphNode>().Initialize(dto.id, Select, DragCluster, ShowNodeMenu);
         nv.Fx = rootGo.AddComponent<JarvisNodeFx>();
         nv.Fx.Begin(nv.BodyT, 0.06f * _nodes.Count, nv.Base);
@@ -949,10 +961,75 @@ namespace JarvisVR
           {
             var sb = new System.Text.StringBuilder();
             sb.AppendLine($"CHANGE IMPACT");
-            sb.AppendLine($"Risk: {c.summary ?? "Unknown"}");
-            sb.AppendLine($"Direct dependents: {c.depth}");
-            sb.AppendLine($"Total affected: {c.node_ids?.Length ?? 0}");
-            sb.AppendLine($"Associated tests: {c.keep_ids?.Length ?? 0}");
+            sb.AppendLine($"Changed function: {c.text ?? "Unknown"}");
+            sb.AppendLine($"Risk level: {c.summary ?? "Unknown"}");
+            sb.AppendLine();
+
+            // Direct callers
+            if (c.direct_callers != null && c.direct_callers.Length > 0)
+            {
+              sb.AppendLine($"Direct callers ({c.direct_callers.Length}):");
+              foreach (var caller in c.direct_callers.Take(5))
+                sb.AppendLine($"  - {caller}");
+              if (c.direct_callers.Length > 5)
+                sb.AppendLine($"  ... and {c.direct_callers.Length - 5} more");
+              sb.AppendLine();
+            }
+
+            // Indirect dependents
+            if (c.indirect_dependents != null && c.indirect_dependents.Length > 0)
+            {
+              sb.AppendLine($"Indirect dependents ({c.indirect_dependents.Length}):");
+              foreach (var dep in c.indirect_dependents.Take(5))
+                sb.AppendLine($"  - {dep}");
+              if (c.indirect_dependents.Length > 5)
+                sb.AppendLine($"  ... and {c.indirect_dependents.Length - 5} more");
+              sb.AppendLine();
+            }
+
+            // Possible callers
+            if (c.possible_callers != null && c.possible_callers.Length > 0)
+            {
+              sb.AppendLine($"Possible callers ({c.possible_callers.Length}):");
+              foreach (var possible in c.possible_callers.Take(5))
+                sb.AppendLine($"  - {possible}");
+              if (c.possible_callers.Length > 5)
+                sb.AppendLine($"  ... and {c.possible_callers.Length - 5} more");
+              sb.AppendLine();
+            }
+
+            // Import dependents
+            if (c.import_dependents != null && c.import_dependents.Length > 0)
+            {
+              sb.AppendLine($"Import dependents ({c.import_dependents.Length}):");
+              foreach (var imp in c.import_dependents.Take(5))
+                sb.AppendLine($"  - {imp}");
+              if (c.import_dependents.Length > 5)
+                sb.AppendLine($"  ... and {c.import_dependents.Length - 5} more");
+              sb.AppendLine();
+            }
+
+            // Associated tests
+            sb.AppendLine($"Associated tests:");
+            if (c.passed_tests != null && c.passed_tests.Length > 0)
+            {
+              sb.AppendLine($"  Passed ({c.passed_tests.Length}):");
+              foreach (var test in c.passed_tests.Take(3))
+                sb.AppendLine($"    ✓ {test}");
+            }
+            if (c.failed_tests != null && c.failed_tests.Length > 0)
+            {
+              sb.AppendLine($"  Failed ({c.failed_tests.Length}):");
+              foreach (var test in c.failed_tests.Take(3))
+                sb.AppendLine($"    ✗ {test}");
+            }
+            if (c.not_run_tests != null && c.not_run_tests.Length > 0)
+            {
+              sb.AppendLine($"  Not run ({c.not_run_tests.Length}):");
+              foreach (var test in c.not_run_tests.Take(3))
+                sb.AppendLine($"    - {test}");
+            }
+
             _impactPanel.SetBody(sb.ToString());
           }
           return true;
@@ -961,9 +1038,41 @@ namespace JarvisVR
           {
             var sb = new System.Text.StringBuilder();
             sb.AppendLine($"SECURITY FINDINGS");
-            sb.AppendLine($"Findings: {c.node_ids?.Length ?? 0}");
-            sb.AppendLine($"Severity: {c.summary ?? "Unknown"}");
-            sb.AppendLine($"Taint paths: {c.keep_ids?.Length ?? 0}");
+
+            // Display individual findings
+            if (c.findings != null && c.findings.Length > 0)
+            {
+              sb.AppendLine($"Total findings: {c.findings.Length}");
+              sb.AppendLine();
+
+              foreach (var finding in c.findings.Take(10))
+              {
+                sb.AppendLine($"[{finding.severity.ToUpper()}] {finding.type}");
+                sb.AppendLine($"  File: {finding.file}:{finding.line}");
+                if (!string.IsNullOrEmpty(finding.evidence))
+                  sb.AppendLine($"  Evidence: {finding.evidence}");
+                sb.AppendLine();
+              }
+
+              if (c.findings.Length > 10)
+                sb.AppendLine($"... and {c.findings.Length - 10} more");
+            }
+            else
+            {
+              sb.AppendLine("No findings detected.");
+            }
+
+            // Display taint paths
+            if (c.taint_paths != null && c.taint_paths.Length > 0)
+            {
+              sb.AppendLine();
+              sb.AppendLine($"Taint paths: {c.taint_paths.Length}");
+              foreach (var path in c.taint_paths.Take(3))
+              {
+                sb.AppendLine($"  [{path.kind}] {path.source?.call} → {path.sink?.call}");
+              }
+            }
+
             _securityPanel.SetBody(sb.ToString());
           }
           return true;

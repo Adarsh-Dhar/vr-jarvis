@@ -962,7 +962,7 @@ def visualize_control_flow(
                      nodes=unity_graph['nodes'],
                      edges=unity_graph['edges'],
                      title=f'Control Flow: {function_id}',
-                     metadata={'graph_type': 'control_flow', 'function_id': function_id})
+                     graph_type='control_flow')
 
         return {
             'status': 'ok',
@@ -1272,6 +1272,10 @@ def visualize_security_flow(
         # Get vulnerabilities (uses repository path, not component_id)
         vuln_result = scan_vulnerabilities(repository_path, tool_context)
 
+        # Get secrets (uses repository path)
+        from .security_quality_tools import scan_secrets
+        secrets_result = scan_secrets(repository_path, tool_context)
+
         # Get taint analysis (uses component_id)
         taint_result = trace_taint_flow(component_id, tool_context)
 
@@ -1306,23 +1310,50 @@ def visualize_security_flow(
                     'kind': 'confirmed'
                 })
 
+        # Add secret findings (connected to component)
+        if secrets_result.get('status') == 'ok':
+            for i, secret in enumerate(secrets_result.get('findings', [])):
+                secret_id = f'{component_id}_secret_{i}'
+                nodes.append({
+                    'id': secret_id,
+                    'name': secret.get('type', 'secret'),
+                    'level': 'secret',
+                    'type': 'secret',
+                    'severity': secret.get('severity', 'high'),
+                    'file': secret.get('file', ''),
+                    'line': secret.get('line', 0),
+                    'evidence': secret.get('evidence', '')
+                })
+                edges.append({
+                    'src': component_id,
+                    'dst': secret_id,
+                    'type': 'has_secret',
+                    'kind': 'confirmed'
+                })
+
         # Add taint path nodes (handle ok and partial status only)
+        # Each path has: id, source, sink, steps, kind
         if taint_result.get('status') in ('ok', 'partial'):
-            for i, path in enumerate(taint_result.get('paths', [])):
-                path_id = f'{component_id}_taint_{i}'
+            for path in taint_result.get('paths', []):
+                path_id = path.get('id', f'{component_id}_taint_{len(nodes)}')
+                source_info = path.get('source', {})
+                sink_info = path.get('sink', {})
+                path_kind = path.get('kind', 'likely')
+
                 nodes.append({
                     'id': path_id,
-                    'name': f'taint_path_{i}',
+                    'name': f'taint_path_{path_id.split("_")[-1]}',
                     'level': 'taint',
                     'type': 'taint_path',
-                    'source': path.get('source', 'unknown'),
-                    'sink': path.get('sink', 'unknown')
+                    'source': source_info,
+                    'sink': sink_info,
+                    'kind': path_kind
                 })
                 edges.append({
                     'src': component_id,
                     'dst': path_id,
                     'type': 'taint_flow',
-                    'kind': 'likely'
+                    'kind': path_kind
                 })
 
         # Emit graph
@@ -1332,11 +1363,16 @@ def visualize_security_flow(
                      graph_type='security',
                      title=f'Security Flow: {component_id}')
 
-        # Emit security panel
+        # Emit security panel with actual findings
+        all_findings = vuln_result.get('vulnerabilities', []) if vuln_result.get('status') == 'ok' else []
+        all_findings.extend(secrets_result.get('findings', []) if secrets_result.get('status') == 'ok' else [])
+
         _emit_command(tool_context, 'show_security_panel',
-                     summary=f"{len(vuln_result.get('vulnerabilities', []))} findings",
-                     node_ids=[v['id'] for v in vuln_result.get('vulnerabilities', [])] if vuln_result.get('status') == 'ok' else [],
-                     keep_ids=[p['id'] for p in taint_result.get('paths', [])] if taint_result.get('status') in ('ok', 'partial') else [])
+                     summary=f"{len(all_findings)} findings",
+                     node_ids=[f['id'] for f in all_findings],
+                     keep_ids=[p['id'] for p in taint_result.get('paths', [])] if taint_result.get('status') in ('ok', 'partial') else [],
+                     findings=all_findings,
+                     taint_paths=taint_result.get('paths', []) if taint_result.get('status') in ('ok', 'partial') else [])
 
         return {
             'status': 'ok',
@@ -1450,12 +1486,36 @@ def visualize_change_impact(
             if 'id' in test:
                 test_ids.append(test['id'])
 
-        # Separate tests by execution status
-        # For now, all tests are marked as not_run since we don't have actual test results
-        # TODO: Integrate with actual test runner to get passed/failed status
+        # Separate tests by execution status with names
+        # Each test should have: id, name, status (passed/failed/not_run), coverage
         passed = []
         failed = []
-        not_run = test_ids
+        not_run = []
+        for test in impact_result.get('covering_tests', []):
+            test_id = test.get('id', '')
+            test_name = test.get('name', test_id)
+            status = test.get('status', 'not_run')  # passed, failed, or not_run
+            if status == 'passed':
+                passed.append(test_name)
+            elif status == 'failed':
+                failed.append(test_name)
+            else:
+                not_run.append(test_name)
+
+        # Build lists of actual function names for display
+        direct_caller_names = [c.get('name', c['from']) for c in impact_result.get('direct_callers', [])]
+        indirect_dependent_names = [d.get('name', d['id']) for d in impact_result.get('indirect_dependents', [])]
+        possible_caller_names = [c.get('name', c['from']) for c in impact_result.get('possible_callers', [])]
+        import_dependent_names = [i.get('name', i['id']) for i in impact_result.get('import_dependents', [])]
+
+        # Get the changed function name
+        changed_function_name = element_id
+        # Try to get the actual name from the graph
+        from ..intelligence.graph_engine.codegraph import codegraph
+        graph = codegraph.load_current_graph()
+        node = graph.get(element_id)
+        if node:
+            changed_function_name = node.get('name', element_id)
 
         # Emit scene commands
         _emit_command(tool_context, 'dim_unrelated', keep_ids=affected_ids)
@@ -1463,10 +1523,18 @@ def visualize_change_impact(
         _emit_command(tool_context, 'show_test_badges', passed=passed, failed=failed, not_run=not_run)
         _emit_command(tool_context, 'focus_camera', node_id=element_id)
         _emit_command(tool_context, 'show_impact_panel',
+                     text=changed_function_name,
                      summary=impact_result.get('risk_level', 'unknown'),
                      depth=impact_result.get('direct_count', 0),
                      node_ids=affected_ids,
-                     keep_ids=test_ids)
+                     keep_ids=test_ids,
+                     direct_callers=direct_caller_names,
+                     indirect_dependents=indirect_dependent_names,
+                     possible_callers=possible_caller_names,
+                     import_dependents=import_dependent_names,
+                     passed_tests=passed,
+                     failed_tests=failed,
+                     not_run_tests=not_run)
 
         return {
             'status': 'ok',

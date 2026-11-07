@@ -258,6 +258,7 @@ from .security_quality_tools import (
     analyze_permissions,
     analyze_input_validation,
     analyze_injection_risks,
+    detect_sql_injection,
     analyze_cryptography,
     trace_sensitive_data,
     analyze_attack_surface,

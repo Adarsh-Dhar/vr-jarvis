@@ -559,6 +559,8 @@ def index_repo(name):
     for t in tests:
         called = set(_CALL.findall(texts[t['file']]))
         t['covers'] = sorted({x['id'] for c in called for x in by_name.get(c, []) if x['id'] in ids and len(by_name[c]) <= 3})
+        # Label as inferred since this is name-based association, not verified execution
+        t['inferred'] = True
 
     # Add graph metadata
     import time

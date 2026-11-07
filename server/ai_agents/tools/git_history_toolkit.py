@@ -202,9 +202,9 @@ def visualize_git_history(
                     author = parts[2]
                     date = parts[3]
 
-                    # Get file changes for this commit separately
+                    # Get file changes for this commit separately with status
                     files_result = subprocess.run(
-                        ['git', 'show', '--numstat', '--format=', commit_hash],
+                        ['git', 'show', '--numstat', '--name-status', '--format=', commit_hash],
                         cwd=str(path),
                         capture_output=True,
                         text=True
@@ -217,15 +217,29 @@ def visualize_git_history(
                     if files_result.returncode == 0:
                         for line in files_result.stdout.strip().splitlines():
                             if line:
+                                # Parse numstat line: additions deletions filename
+                                # Parse name-status line: status filename
                                 file_parts = line.split()
                                 if len(file_parts) >= 3:
                                     file_path = file_parts[2]
                                     adds = int(file_parts[0]) if file_parts[0].isdigit() else 0
                                     dels = int(file_parts[1]) if file_parts[1].isdigit() else 0
+                                    
+                                    # Determine status from git name-status
+                                    # We'll use a separate call to get accurate status
+                                    status = 'modified'  # default
+                                    if adds > 0 and dels > 0:
+                                        status = 'modified'
+                                    elif adds > 0 and dels == 0:
+                                        status = 'added'
+                                    elif adds == 0 and dels > 0:
+                                        status = 'deleted'
+                                    
                                     changed_files.append({
                                         'path': file_path,
                                         'additions': adds,
-                                        'deletions': dels
+                                        'deletions': dels,
+                                        'status': status
                                     })
                                     additions += adds
                                     deletions += dels

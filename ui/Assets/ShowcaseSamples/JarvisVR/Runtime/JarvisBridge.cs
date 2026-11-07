@@ -22,6 +22,38 @@ namespace JarvisVR
     public GraphEdgeDto[] edges;
     public string graph_type;
     public string title;
+    // Impact panel fields
+    public string[] direct_callers, indirect_dependents, possible_callers, import_dependents;
+    public string[] passed_tests, failed_tests, not_run_tests;
+    // Security panel fields
+    public SecurityFindingDto[] findings;
+    public TaintPathDto[] taint_paths;
+  }
+
+  [Serializable] public class SecurityFindingDto
+  {
+    public string id, type, severity, file, evidence, confidence;
+    public int line;
+  }
+
+  [Serializable] public class TaintPathDto
+  {
+    public string id, kind;
+    public TaintSourceDto source;
+    public TaintSinkDto sink;
+  }
+
+  [Serializable] public class TaintSourceDto
+  {
+    public int line;
+    public string call, kind, variable;
+  }
+
+  [Serializable] public class TaintSinkDto
+  {
+    public int line;
+    public string call, kind;
+    public string[] tainted_variables;
   }
   [Serializable] public class AskResponse
   {

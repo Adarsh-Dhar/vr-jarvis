@@ -264,14 +264,16 @@ def trace_variable_usage(variable_id: str, tool_context: ToolContext) -> dict:
 # Taint sources and sinks
 TAINT_SOURCES = [
     'request.json', 'request.args', 'request.form', 'request.data',
-    'input()', 'sys.argv', 'os.environ', 'open(',
-    'getattr(', 'getattr(', '__dict__', '__getattribute__'
+    'request.get', 'request.post', 'input()', 'sys.argv', 'os.environ',
+    'open(', 'getattr(', '__dict__', '__getattribute__',
+    'flask.request', 'django.http', 'http.request'
 ]
 
 TAINT_SINKS = [
     'execute(', 'exec(', 'eval(', 'compile(',
     'subprocess.', 'os.system(', 'os.popen(',
     'open(', 'file.write(', 'logging.', 'print(',
+    'cursor.execute(', 'cursor.executemany(',
     'requests.', 'urllib.', 'http.'
 ]
 
@@ -420,8 +422,10 @@ def trace_taint_flow(source_id: str, tool_context: ToolContext) -> dict:
         visitor.visit(tree)
 
         # Build paths from sources to sinks through variable assignments
-        for source in visitor.sources:
-            for sink in visitor.sinks:
+        # Make paths consistent with visualization contract: id, source, sink, steps, kind
+        paths = []
+        for i, source in enumerate(visitor.sources):
+            for j, sink in enumerate(visitor.sinks):
                 if source['line'] < sink['line']:
                     # Check if there's a variable assignment chain
                     path_steps = [source]
@@ -432,7 +436,11 @@ def trace_taint_flow(source_id: str, tool_context: ToolContext) -> dict:
                             'kind': 'assignment'
                         })
                     path_steps.append(sink)
-                    visitor.paths.append({
+
+                    paths.append({
+                        'id': f'path_{i}_{j}',
+                        'source': source,
+                        'sink': sink,
                         'steps': path_steps,
                         'kind': 'confirmed' if len(path_steps) > 2 else 'likely'
                     })
@@ -442,9 +450,9 @@ def trace_taint_flow(source_id: str, tool_context: ToolContext) -> dict:
             'source_id': source_id,
             'sources': visitor.sources,
             'sinks': visitor.sinks,
-            'paths': visitor.paths,
+            'paths': paths,
             'safe_cases': visitor.safe_cases,
-            'path_count': len(visitor.paths)
+            'path_count': len(paths)
         }
     except Exception as e:
         return {
@@ -489,7 +497,7 @@ def visualize_data_flow(function_id: str, tool_context: ToolContext) -> dict:
                      nodes=unity_graph['nodes'],
                      edges=unity_graph['edges'],
                      title=f'Data Flow: {function_id}',
-                     metadata={'graph_type': 'data_flow', 'function_id': function_id})
+                     graph_type='data_flow')
 
         return {
             'status': 'ok',
