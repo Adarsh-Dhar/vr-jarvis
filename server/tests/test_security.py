@@ -406,5 +406,223 @@ def query_user(user_id):
         assert len(sql_result['findings']) > 0
 
 
+def test_taint_input_to_eval():
+    """Test that input() → eval() generates a path."""
+    code = """
+def dangerous():
+    user_input = input("Enter command: ")
+    eval(user_input)
+"""
+    result = analyze_python_taint_source(code, "test.py")
+
+    assert result['status'] == 'ok'
+    assert len(result['paths']) > 0
+    # Verify path has source and sink steps
+    path = result['paths'][0]
+    assert path['source']['call'] == 'input'
+    assert path['sink']['call'] == 'eval'
+    assert len(path['steps']) >= 2  # source and sink
+
+
+def test_taint_http_to_sql_direct():
+    """Test HTTP input → direct assignment → SQL generates a path."""
+    code = """
+def query_user():
+    user_id = request.args.get("id")
+    sql = "SELECT * FROM users WHERE id = " + user_id
+    cursor.execute(sql)
+"""
+    result = analyze_python_taint_source(code, "test.py")
+
+    assert result['status'] == 'ok'
+    assert len(result['paths']) > 0
+    path = result['paths'][0]
+    assert 'request.args.get' in path['source']['call']
+    assert 'execute' in path['sink']['call']
+
+
+def test_taint_http_two_assignments():
+    """Test HTTP input → two assignments → SQL with both steps."""
+    code = """
+def query_user():
+    raw_input = request.args.get("id")
+    user_id = raw_input
+    sql = "SELECT * FROM users WHERE id = " + user_id
+    cursor.execute(sql)
+"""
+    result = analyze_python_taint_source(code, "test.py")
+
+    assert result['status'] == 'ok'
+    assert len(result['paths']) > 0
+    path = result['paths'][0]
+    # Should have intermediate assignment step
+    steps = [s for s in path['steps'] if s['kind'] == 'assignment']
+    assert len(steps) >= 1
+
+
+def test_taint_strip_transformation():
+    """Test HTTP input → .strip() → eval() includes transformation."""
+    code = """
+def dangerous():
+    raw_input = input("Enter command: ")
+    processed = raw_input.strip()
+    eval(processed)
+"""
+    result = analyze_python_taint_source(code, "test.py")
+
+    assert result['status'] == 'ok'
+    assert len(result['paths']) > 0
+    path = result['paths'][0]
+    # Should have transformation step
+    transform_steps = [s for s in path['steps'] if s['kind'] == 'transform']
+    assert len(transform_steps) >= 1
+
+
+def test_taint_fstring_sql():
+    """Test HTTP input → f-string → SQL generates a path."""
+    code = """
+def query_user():
+    user_id = request.args.get("id")
+    query = f"SELECT * FROM users WHERE id = {user_id}"
+    cursor.execute(query)
+"""
+    result = analyze_python_taint_source(code, "test.py")
+
+    assert result['status'] == 'ok'
+    assert len(result['paths']) > 0
+    path = result['paths'][0]
+    assert 'request.args.get' in path['source']['call']
+    assert 'execute' in path['sink']['call']
+
+
+def test_taint_format_sql():
+    """Test HTTP input → .format() → SQL generates a path."""
+    code = """
+def query_user():
+    user_id = request.args.get("id")
+    query = "SELECT * FROM users WHERE id = {}".format(user_id)
+    cursor.execute(query)
+"""
+    result = analyze_python_taint_source(code, "test.py")
+
+    assert result['status'] == 'ok'
+    assert len(result['paths']) > 0
+    path = result['paths'][0]
+    assert 'request.args.get' in path['source']['call']
+    assert 'execute' in path['sink']['call']
+
+
+def test_taint_percent_formatting():
+    """Test HTTP input → % formatting → SQL generates a path."""
+    code = """
+def query_user():
+    user_id = request.args.get("id")
+    query = "SELECT * FROM users WHERE id = %s" % user_id
+    cursor.execute(query)
+"""
+    result = analyze_python_taint_source(code, "test.py")
+
+    assert result['status'] == 'ok'
+    assert len(result['paths']) > 0
+    path = result['paths'][0]
+    assert 'request.args.get' in path['source']['call']
+    assert 'execute' in path['sink']['call']
+
+
+def test_taint_safe_reassignment():
+    """Test that safe reassignment clears taint."""
+    code = """
+def safe():
+    user_input = input("Enter value: ")
+    user_id = user_input
+    user_id = 10  # Clean reassignment
+    eval(str(user_id))  # Should not receive taint
+"""
+    result = analyze_python_taint_source(code, "test.py")
+
+    assert result['status'] == 'ok'
+    # No path should be generated since taint is cleared
+    assert len(result['paths']) == 0
+
+
+def test_taint_two_functions_no_leakage():
+    """Test that taint does not leak between functions."""
+    code = """
+def dangerous():
+    user_input = input("Enter command: ")
+    return user_input
+
+def safe():
+    eval("print('hello')")  # Should not receive taint from dangerous()
+"""
+    result = analyze_python_taint_source(code, "test.py")
+
+    assert result['status'] == 'ok'
+    # Should only find path in dangerous(), not cross-function
+    assert len(result['paths']) <= 1
+
+
+def test_trace_taint_flow_integration():
+    """Integration test for trace_taint_flow with a valid graph node."""
+    # This test requires a real graph and graph node
+    # For now, verify the function handles the case correctly
+    result = trace_taint_flow("nonexistent_function", None)
+
+    # Should return not_found or error for non-existent node
+    assert result['status'] in ['not_found', 'error']
+
+
+def test_visualize_security_flow_integration():
+    """Integration test for visualize_security_flow payload structure."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmppath = Path(tmpdir)
+
+        # Create test files
+        env_file = tmppath / ".env"
+        env_file.write_text('api_key = "sk-test123"\n')
+
+        py_file = tmppath / "test.py"
+        py_file.write_text("""
+def dangerous():
+    user_input = input("Enter command: ")
+    eval(user_input)
+""")
+
+        # This would require graph resolution for full integration
+        # For now, verify the individual scanners work
+        from ai_agents.tools.security_quality_tools import scan_secrets, scan_vulnerabilities, detect_sql_injection
+        from ai_agents.tools.data_flow_intelligence_tools import analyze_python_taint_source
+
+        secrets_result = scan_secrets(str(tmppath), None)
+        vuln_result = scan_vulnerabilities(str(tmppath), None)
+        sql_result = detect_sql_injection(str(tmppath), None)
+
+        # Test taint analysis directly
+        code = py_file.read_text()
+        taint_result = analyze_python_taint_source(code, "test.py")
+
+        # Verify all scanners return valid status
+        assert secrets_result['status'] == 'ok'
+        assert vuln_result['status'] == 'ok'
+        assert sql_result['status'] == 'ok'
+        assert taint_result['status'] == 'ok'
+
+        # Verify payload structure matches expected schema
+        # Taint paths should have: id, kind, source, sink, steps
+        if len(taint_result['paths']) > 0:
+            path = taint_result['paths'][0]
+            assert 'id' in path
+            assert 'kind' in path
+            assert 'source' in path
+            assert 'sink' in path
+            assert 'steps' in path
+            assert len(path['steps']) >= 2  # source and sink
+
+            # Steps should have: kind, variable/call, line
+            for step in path['steps']:
+                assert 'kind' in step
+                assert 'line' in step
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

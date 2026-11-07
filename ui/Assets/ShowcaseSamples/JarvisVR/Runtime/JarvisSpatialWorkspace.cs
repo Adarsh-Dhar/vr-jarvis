@@ -977,6 +977,12 @@ namespace JarvisVR
       }
     }
 
+    private string Capitalize(string s)
+    {
+      if (string.IsNullOrEmpty(s)) return s;
+      return char.ToUpper(s[0]) + s.Substring(1);
+    }
+
     private void SelectHistoryCommit(int index)
     {
       if (index < 0 || index >= _historyCommits.Length) return;
@@ -1117,14 +1123,25 @@ namespace JarvisVR
             sb.AppendLine($"Risk level: {c.summary ?? "Unknown"}");
             sb.AppendLine();
 
-            // Direct callers
+            // Direct callers (confirmed)
             if (c.direct_callers != null && c.direct_callers.Length > 0)
             {
-              sb.AppendLine($"Direct callers ({c.direct_callers.Length}):");
+              sb.AppendLine($"Confirmed callers ({c.direct_callers.Length}):");
               foreach (var caller in c.direct_callers.Take(5))
                 sb.AppendLine($"  - {caller}");
               if (c.direct_callers.Length > 5)
                 sb.AppendLine($"  ... and {c.direct_callers.Length - 5} more");
+              sb.AppendLine();
+            }
+
+            // Possible callers (inferred)
+            if (c.possible_callers != null && c.possible_callers.Length > 0)
+            {
+              sb.AppendLine($"Possible callers ({c.possible_callers.Length}):");
+              foreach (var possible in c.possible_callers.Take(5))
+                sb.AppendLine($"  - {possible}");
+              if (c.possible_callers.Length > 5)
+                sb.AppendLine($"  ... and {c.possible_callers.Length - 5} more");
               sb.AppendLine();
             }
 
@@ -1136,17 +1153,6 @@ namespace JarvisVR
                 sb.AppendLine($"  - {dep}");
               if (c.indirect_dependents.Length > 5)
                 sb.AppendLine($"  ... and {c.indirect_dependents.Length - 5} more");
-              sb.AppendLine();
-            }
-
-            // Possible callers
-            if (c.possible_callers != null && c.possible_callers.Length > 0)
-            {
-              sb.AppendLine($"Possible callers ({c.possible_callers.Length}):");
-              foreach (var possible in c.possible_callers.Take(5))
-                sb.AppendLine($"  - {possible}");
-              if (c.possible_callers.Length > 5)
-                sb.AppendLine($"  ... and {c.possible_callers.Length - 5} more");
               sb.AppendLine();
             }
 
@@ -1191,7 +1197,7 @@ namespace JarvisVR
             var sb = new System.Text.StringBuilder();
             sb.AppendLine($"SECURITY FINDINGS");
 
-            // Display individual findings
+            // Display individual findings with full details
             if (c.findings != null && c.findings.Length > 0)
             {
               sb.AppendLine($"Total findings: {c.findings.Length}");
@@ -1199,14 +1205,25 @@ namespace JarvisVR
 
               foreach (var finding in c.findings.Take(10))
               {
-                sb.AppendLine($"[{finding.severity.ToUpper()}] {finding.type}");
-                sb.AppendLine($"  File: {finding.file}:{finding.line}");
-                // Only show masked evidence for secrets
+                sb.AppendLine($"{finding.type.ToUpper()}");
+                sb.AppendLine($"Severity: {Capitalize(finding.severity ?? "medium")}");
+                sb.AppendLine($"File: {finding.file}");
+                sb.AppendLine($"Line: {finding.line}");
+                sb.AppendLine($"Confidence: {Capitalize(finding.confidence ?? "heuristic")}");
+
+                // Mask secret values
                 if (finding.type == "secret" && !string.IsNullOrEmpty(finding.evidence))
-                  sb.AppendLine($"  Evidence: {finding.evidence}");
+                {
+                  // Show only first 4 chars of secret for identification
+                  string masked = finding.evidence.Length > 4
+                    ? finding.evidence.Substring(0, 4) + "***"
+                    : "***";
+                  sb.AppendLine($"Evidence: {masked}");
+                }
                 else if (!string.IsNullOrEmpty(finding.evidence))
-                  sb.AppendLine($"  Evidence: {finding.evidence}");
-                sb.AppendLine($"  Confidence: {finding.confidence}");
+                {
+                  sb.AppendLine($"Evidence: {finding.evidence}");
+                }
                 sb.AppendLine();
               }
 
@@ -1222,31 +1239,39 @@ namespace JarvisVR
             if (c.taint_paths != null && c.taint_paths.Length > 0)
             {
               sb.AppendLine();
-              sb.AppendLine($"TAINT PATHS: {c.taint_paths.Length}");
+              sb.AppendLine($"TAINT FLOWS: {c.taint_paths.Length}");
               foreach (var path in c.taint_paths.Take(3))
               {
                 sb.AppendLine();
-                sb.AppendLine($"[{path.kind.ToUpper()}] {path.source?.call} → {path.sink?.call}");
+                sb.AppendLine($"[{Capitalize(path.kind ?? "heuristic")}] {path.source?.call} → {path.sink?.call}");
 
-                // Display intermediate steps
+                // Display intermediate steps with arrows
                 if (path.steps != null && path.steps.Length > 0)
                 {
-                  foreach (var step in path.steps)
+                  for (int i = 0; i < path.steps.Length; i++)
                   {
+                    var step = path.steps[i];
                     string step_label = "";
                     if (step.kind == "source")
                       step_label = $"{step.call}";
                     else if (step.kind == "sink")
                       step_label = $"{step.call}";
+                    else if (step.kind == "transform")
+                      step_label = $"{step.call}";
                     else
                       step_label = step.variable ?? "unknown";
 
-                    sb.AppendLine($"  {step_label}   Line {step.line}");
-                    if (step.kind != "source" && step.kind != "sink")
+                    sb.AppendLine($"  {step_label}       Line {step.line}");
+
+                    // Add arrow for all but last step
+                    if (i < path.steps.Length - 1)
                       sb.AppendLine($"       ↓");
                   }
                 }
               }
+
+              if (c.taint_paths.Length > 3)
+                sb.AppendLine($"... and {c.taint_paths.Length - 3} more");
             }
 
             _securityPanel.SetBody(sb.ToString());

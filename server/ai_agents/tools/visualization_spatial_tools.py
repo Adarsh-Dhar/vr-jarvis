@@ -1371,7 +1371,7 @@ def visualize_security_flow(
                 path_id = path.get('id', f'{component_id}_taint_{len(nodes)}')
                 source_info = path.get('source', {})
                 sink_info = path.get('sink', {})
-                path_kind = path.get('kind', 'likely')
+                path_kind = path.get('kind', 'heuristic')
                 steps = path.get('steps', [])
 
                 # Generate nodes for each step in the path
@@ -1386,12 +1386,15 @@ def visualize_security_flow(
                     if step_kind == 'source':
                         step_name = f'Source: {step_call}'
                         step_type = 'taint_source'
+                        step_severity = 'medium'
                     elif step_kind == 'sink':
                         step_name = f'Sink: {step_call}'
                         step_type = 'taint_sink'
+                        step_severity = 'high'
                     else:
                         step_name = f'Variable: {step_var}'
                         step_type = 'taint_variable'
+                        step_severity = 'medium'
 
                     nodes.append({
                         'id': step_id,
@@ -1400,7 +1403,9 @@ def visualize_security_flow(
                         'type': step_type,
                         'file': source_info.get('file', ''),
                         'line': step_line,
-                        'severity': 'high' if step_kind == 'sink' else 'medium'
+                        'severity': step_severity,
+                        'confidence': 'heuristic',
+                        'evidence': step_call if step_call else step_var
                     })
 
                     # Create edge from previous step to this step

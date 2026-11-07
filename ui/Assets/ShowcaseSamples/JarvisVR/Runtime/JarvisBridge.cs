@@ -56,7 +56,6 @@ namespace JarvisVR
   {
     public int line;
     public string call, kind, file;
-    public string[] tainted_variables;
   }
 
   [Serializable] public class TaintStepDto
