@@ -947,15 +947,15 @@ def visualize_control_flow(
             }
 
         builder = PythonCFGBuilder()
-        cfg = builder.build_function(
+        cfg_artifact = builder.build_function(
             function_ast=func_node,
             function_id=node.get('id', function_id),
             source=source,
             file_path=file_path
         )
 
-        # Convert to Unity format
-        unity_graph = cfg_to_unity_format(cfg)
+        # Convert to Unity format (use the graph from the artifact)
+        unity_graph = cfg_to_unity_format(cfg_artifact.graph)
 
         # Emit the graph to Unity
         _emit_command(tool_context, 'show_graph',
@@ -980,6 +980,152 @@ def visualize_control_flow(
 
 # visualize_data_flow is implemented in data_flow_intelligence_tools.py
 # This consolidates the implementation to avoid duplication
+
+
+@safe
+def visualize_unified_graph(
+    function_id: str,
+    tool_context: ToolContext,
+    summarize: bool = True,
+    max_nodes: int = 100
+) -> dict:
+    """Visualize unified CFG and DFG graph with optional summarization."""
+    try:
+        from .analysis_tools import analyze_control_flow
+        from ..intelligence.controlflow import cfg_to_unity_format
+        from ..intelligence.dataflow import dfg_to_unity_format
+        from ..intelligence.dataflow.unified_graph import UnifiedGraphBuilder
+        from ..intelligence.dataflow.graph_summarizer import GraphSummarizer
+
+        # Get the graph
+        from ..intelligence.graph_engine.codegraph import codegraph
+        graph = codegraph.load_current_graph()
+        node = graph.get(function_id)
+
+        if not node:
+            return {
+                'status': 'not_found',
+                'function_id': function_id,
+                'message': 'Function not found in graph'
+            }
+
+        file_path = node.get('file', '')
+        with open(file_path, 'r', encoding='utf-8') as f:
+            source = f.read()
+
+        # Build CFG
+        import ast
+        tree = ast.parse(source)
+        simple_name = node.get('name', '')
+        if not simple_name and '.' in node.get('id', ''):
+            simple_name = node['id'].split('.')[-1]
+
+        func_node = None
+        for node_ast in ast.walk(tree):
+            if isinstance(node_ast, ast.FunctionDef) and node_ast.name == simple_name:
+                func_node = node_ast
+                break
+
+        if not func_node:
+            return {
+                'status': 'not_found',
+                'function_id': function_id,
+                'message': f'Function {simple_name} not found in AST'
+            }
+
+        from ..intelligence.controlflow import PythonCFGBuilder
+        builder = PythonCFGBuilder()
+        cfg_artifact = builder.build_function(
+            function_ast=func_node,
+            function_id=node.get('id', function_id),
+            source=source,
+            file_path=file_path
+        )
+
+        # Build DFG
+        from ..intelligence.dataflow import PythonDefUseExtractor
+        from ..intelligence.dataflow.dependency_builder import DataFlowGraphBuilder
+        extractor = PythonDefUseExtractor()
+        facts = extractor.extract_function(
+            artifact=cfg_artifact,
+            source=source,
+            file_path=file_path
+        )
+
+        # Build actual DFG from facts
+        dfg_builder = DataFlowGraphBuilder()
+        dfg = dfg_builder.build_graph(facts)
+
+        # Build unified graph
+        unified_builder = UnifiedGraphBuilder()
+        unified_graph = unified_builder.build_unified(
+            cfg_artifact.graph,
+            dfg
+        )
+
+        # Convert to Unity format
+        unity_nodes = []
+        unity_edges = []
+
+        # Add CFG nodes
+        for node_dict in cfg_to_unity_format(cfg_artifact.graph)['nodes']:
+            node_dict['layer'] = 'cfg'
+            unity_nodes.append(node_dict)
+
+        # Add DFG nodes
+        for node_dict in dfg_to_unity_format(dfg)['nodes']:
+            node_dict['layer'] = 'dfg'
+            unity_nodes.append(node_dict)
+
+        # Add CFG edges
+        for edge_dict in cfg_to_unity_format(cfg_artifact.graph)['edges']:
+            edge_dict['layer'] = 'cfg'
+            unity_edges.append(edge_dict)
+
+        # Add DFG edges
+        for edge_dict in dfg_to_unity_format(dfg)['edges']:
+            edge_dict['layer'] = 'dfg'
+            unity_edges.append(edge_dict)
+
+        # Summarize if requested and graph is large
+        was_summarized = False
+        original_count = len(unity_nodes)
+        if summarize and len(unity_nodes) > max_nodes:
+            summarizer = GraphSummarizer(max_nodes_per_view=max_nodes)
+            graph_dict = {
+                'function_id': function_id,
+                'nodes': unity_nodes,
+                'edges': unity_edges
+            }
+            summary = summarizer.summarize_graph(graph_dict, function_id)
+            unity_nodes = summary.summarized_nodes
+            unity_edges = summary.summarized_edges
+            was_summarized = True
+            original_count = summary.original_node_count
+
+        # Emit the unified graph to Unity
+        _emit_command(tool_context, 'show_graph',
+                     nodes=unity_nodes,
+                     edges=unity_edges,
+                     title=f'Unified Graph: {function_id}',
+                     graph_type='unified')
+
+        return {
+            'status': 'ok',
+            'function_id': function_id,
+            'node_count': len(unity_nodes),
+            'edge_count': len(unity_edges),
+            'graph_type': 'unified',
+            'cfg_nodes': len(cfg_to_unity_format(cfg_artifact.graph)['nodes']),
+            'dfg_nodes': len(dfg_to_unity_format(dfg)['nodes']),
+            'summarized': was_summarized,
+            'original_node_count': original_count
+        }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
 
 
 @safe
@@ -2328,6 +2474,191 @@ def get_current_spatial_context(
 ) -> dict:
     """Alias for get_spatial_selection_context."""
     return get_spatial_selection_context(tool_context)
+
+
+@safe
+def explain_graph_edge(
+    graph_id: str,
+    edge_id: str,
+    tool_context: ToolContext
+) -> dict:
+    """Explain a graph edge with plain-language reasoning."""
+    try:
+        from ..intelligence.dataflow.edge_explainer import EdgeExplainer
+
+        graph_state = _get_session_state(tool_context, 'graph_state', {})
+        if graph_id not in graph_state:
+            return {
+                'status': 'error',
+                'error': f'Graph {graph_id} not found'
+            }
+
+        # Find the edge
+        edge = None
+        for edge_key, edge_data in graph_state[graph_id]['edges'].items():
+            if edge_data.get('edge_id') == edge_id:
+                edge = edge_data
+                edge['id'] = edge_id
+                break
+
+        if not edge:
+            return {
+                'status': 'error',
+                'error': f'Edge {edge_id} not found'
+            }
+
+        # Get nodes
+        nodes = {node_id: node_data for node_id, node_data in graph_state[graph_id]['nodes'].items()}
+
+        # Generate explanation
+        explainer = EdgeExplainer()
+        explanation = explainer.explain_edge(edge_id, edge, nodes)
+
+        return {
+            'status': 'ok',
+            'graph_id': graph_id,
+            'edge_id': edge_id,
+            'explanation': explanation.explanation,
+            'rule': explanation.rule,
+            'source_span': explanation.source_span,
+            'confidence': explanation.confidence,
+            'metadata': explanation.metadata
+        }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
+
+
+@safe
+def query_graph_path(
+    graph_id: str,
+    start_node: str,
+    end_node: str,
+    tool_context: ToolContext,
+    query_type: str = 'shortest',
+    max_depth: int = 20
+) -> dict:
+    """Query paths in the graph (shortest or all paths)."""
+    try:
+        from ..intelligence.dataflow.path_queries import PathQueryEngine
+
+        graph_state = _get_session_state(tool_context, 'graph_state', {})
+        if graph_id not in graph_state:
+            return {
+                'status': 'error',
+                'error': f'Graph {graph_id} not found'
+            }
+
+        # Build graph dict for path engine
+        graph_dict = {
+            'nodes': graph_state[graph_id]['nodes'],
+            'edges': graph_state[graph_id]['edges']
+        }
+
+        engine = PathQueryEngine()
+
+        if query_type == 'shortest':
+            path = engine.find_shortest_path(graph_dict, start_node, end_node)
+            if path:
+                # Highlight the path
+                highlight = engine.highlight_path(graph_dict, path)
+                _emit_command(tool_context, 'highlight_path',
+                             highlighted_nodes=highlight['highlighted_nodes'],
+                             highlighted_edges=highlight['highlighted_edges'])
+
+                return {
+                    'status': 'ok',
+                    'graph_id': graph_id,
+                    'query_type': 'shortest',
+                    'path': path,
+                    'path_length': len(path),
+                    'highlighted': True
+                }
+            else:
+                return {
+                    'status': 'ok',
+                    'graph_id': graph_id,
+                    'query_type': 'shortest',
+                    'path': None,
+                    'message': 'No path found'
+                }
+        elif query_type == 'all':
+            result = engine.find_all_paths(graph_dict, start_node, end_node, max_depth=max_depth)
+            return {
+                'status': 'ok',
+                'graph_id': graph_id,
+                'query_type': 'all',
+                'paths': result.paths,
+                'shortest_path': result.shortest_path,
+                'all_paths_count': result.all_paths_count,
+                'metadata': result.metadata
+            }
+        else:
+            return {
+                'status': 'error',
+                'error': f'Unknown query type: {query_type}'
+            }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
+
+
+@safe
+def expand_graph_neighborhood(
+    graph_id: str,
+    focus_node: str,
+    tool_context: ToolContext,
+    depth: int = 2
+) -> dict:
+    """Expand a neighborhood around a focus node for large graphs."""
+    try:
+        from ..intelligence.dataflow.graph_summarizer import GraphSummarizer
+
+        graph_state = _get_session_state(tool_context, 'graph_state', {})
+        if graph_id not in graph_state:
+            return {
+                'status': 'error',
+                'error': f'Graph {graph_id} not found'
+            }
+
+        # Build graph dict
+        graph_dict = {
+            'nodes': graph_state[graph_id]['nodes'],
+            'edges': graph_state[graph_id]['edges']
+        }
+
+        summarizer = GraphSummarizer()
+        neighborhood = summarizer.stream_neighborhood(graph_dict, focus_node, depth)
+
+        # Update graph state with expanded neighborhood
+        for node in neighborhood.nodes:
+            graph_state[graph_id]['nodes'][node['id']] = node
+
+        for edge in neighborhood.edges:
+            edge_key = f"{edge['source']}->{edge['target']}"
+            graph_state[graph_id]['edges'][edge_key] = edge
+
+        _set_session_state(tool_context, 'graph_state', graph_state)
+
+        return {
+            'status': 'ok',
+            'graph_id': graph_id,
+            'focus_node': focus_node,
+            'depth': depth,
+            'nodes_added': len(neighborhood.nodes),
+            'edges_added': len(neighborhood.edges),
+            'has_more': neighborhood.has_more,
+            'cursor': neighborhood.cursor
+        }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
 
 
 @safe

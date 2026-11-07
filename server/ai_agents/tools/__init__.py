@@ -383,6 +383,7 @@ from .visualization_spatial_tools import (
     visualize_call_graph,
     visualize_dependency_graph,
     visualize_control_flow,
+    visualize_unified_graph,
     visualize_execution_flow,
     visualize_class_hierarchy,
     visualize_architecture,
@@ -429,6 +430,9 @@ from .visualization_spatial_tools import (
     transition_visualization,
     get_selected_node_details,
     get_current_spatial_context,
+    explain_graph_edge,
+    query_graph_path,
+    expand_graph_neighborhood,
     focus_on_code_element,
 )
 

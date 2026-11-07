@@ -465,3 +465,10 @@ def load_current_graph() -> CodeGraph:
 def clear_cache():
     """Clear the graph cache (call when repository is reactivated)."""
     get_graph.cache_clear()
+
+# Export a facade object for backward compatibility with tools that import 'codegraph'
+codegraph = type('CodeGraphFacade', (), {
+    'load_current_graph': staticmethod(load_current_graph),
+    'clear_cache': staticmethod(clear_cache),
+    'get_graph': staticmethod(get_graph),
+})()

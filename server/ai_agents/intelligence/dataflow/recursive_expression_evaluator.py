@@ -2,12 +2,13 @@
 import ast
 from typing import List, Dict, Any, Optional, Set, Tuple
 from .models import VariableUse, ExpressionFact, ExpressionResult, BindingResolver
+from .ids import IdAllocator
 
 
 class ExpressionEvaluationContext:
     """Context for expression evaluation."""
 
-    def __init__(self, function_id: str, file: str, local_vars: Set[str], cfg_node_map: Dict[str, str], ast_index, facts, free_vars: Set[str] = None, global_vars: Set[str] = None, nonlocal_vars: Set[str] = None, symbol_table=None):
+    def __init__(self, function_id: str, file: str, local_vars: Set[str], cfg_node_map: Dict[str, str], ast_index, facts, free_vars: Set[str] = None, global_vars: Set[str] = None, nonlocal_vars: Set[str] = None, symbol_table=None, ids: IdAllocator = None):
         self.function_id = function_id
         self.file = file
         self.local_vars = local_vars
@@ -18,10 +19,9 @@ class ExpressionEvaluationContext:
         self.ast_index = ast_index
         self.facts = facts
         self.symbol_table = symbol_table
-        self._operation_counter = 0
-        self._use_counter = 0
         self._evaluated_nodes: Set[int] = set()
-        
+        self.ids = ids
+
         # Create BindingResolver for unified name resolution
         self.binding_resolver = BindingResolver(
             function_id=function_id,
@@ -35,13 +35,17 @@ class ExpressionEvaluationContext:
 
     def generate_operation_id(self) -> str:
         """Generate a unique operation ID."""
-        self._operation_counter += 1
-        return f"{self.function_id}_op_{self._operation_counter}"
+        if self.ids:
+            return self.ids.operation()
+        # Fallback for backward compatibility
+        raise RuntimeError("IdAllocator not provided to ExpressionEvaluationContext")
 
     def generate_use_id(self, variable: str) -> str:
         """Generate a unique use ID."""
-        self._use_counter += 1
-        return f"{self.function_id}_use_{variable}_{self._use_counter}"
+        if self.ids:
+            return self.ids.use(variable)
+        # Fallback for backward compatibility
+        raise RuntimeError("IdAllocator not provided to ExpressionEvaluationContext")
 
     def get_cfg_node_ids(self, node: ast.AST) -> List[str]:
         """Get CFG node IDs for an AST node."""
@@ -71,19 +75,36 @@ class ExpressionEvaluationContext:
 
 class RecursiveExpressionEvaluator:
     """Recursively evaluates expressions and creates DFG facts."""
-    
+
     def __init__(self, ctx: ExpressionEvaluationContext):
         self.ctx = ctx
-    
-    def _tuple_to_result(self, use_ids: List[str], op_id: Optional[str], child_ops: List[str]) -> ExpressionResult:
-        """Convert old tuple return to ExpressionResult for compatibility."""
-        return ExpressionResult(
-            root_operation_id=op_id,
-            direct_input_use_ids=use_ids,
-            direct_input_operation_ids=[],
-            descendant_operation_ids=child_ops,
-            diagnostics=[]
-        )
+
+    def _collect(self, children: List[ExpressionResult]) -> Tuple[List[str], List[str], List[str], List[Dict[str, Any]]]:
+        """BinOp convention: an operation child contributes its op id,
+        a leaf child contributes its use ids."""
+        use_ids, op_ids, descendants, diagnostics = [], [], [], []
+        for c in children:
+            if c.root_operation_id:
+                op_ids.append(c.root_operation_id)
+                descendants.append(c.root_operation_id)
+            else:
+                use_ids.extend(c.direct_input_use_ids)
+            descendants.extend(c.descendant_operation_ids)
+            diagnostics.extend(c.diagnostics)
+        return use_ids, op_ids, descendants, diagnostics
+
+    def _emit(self, node: ast.AST, operation: str, children: List[ExpressionResult], metadata: Dict[str, Any] = None) -> ExpressionResult:
+        """Record one ExpressionFact and return its ExpressionResult."""
+        use_ids, op_ids, descendants, diagnostics = self._collect(children)
+        op_id = self.ctx.generate_operation_id()
+        self.ctx.facts.operations.append(ExpressionFact(
+            id=op_id, function_id=self.ctx.function_id, file=self.ctx.file,
+            line=node.lineno, column=getattr(node, 'col_offset', 0),
+            cfg_node_ids=self.ctx.get_cfg_node_ids(node),
+            expression=ast.unparse(node), operation=operation,
+            input_use_ids=use_ids, input_operation_ids=op_ids,
+            output_definition_ids=[], metadata=metadata or {}))
+        return ExpressionResult(op_id, use_ids, op_ids, descendants, diagnostics)
     
     def evaluate(self, node: ast.AST) -> ExpressionResult:
         """
@@ -154,12 +175,8 @@ class RecursiveExpressionEvaluator:
         else:
             # Generic fallback
             result = self._evaluate_generic(node)
-        
-        # Convert tuple to ExpressionResult if needed (for backward compatibility during migration)
-        if isinstance(result, tuple):
-            use_ids, op_id, child_ops = result
-            result = self._tuple_to_result(use_ids, op_id, child_ops)
-        
+
+        assert isinstance(result, ExpressionResult), f'{type(node).__name__} handler returned {type(result)}'
         return result
     
     def _evaluate_name(self, node: ast.Name) -> ExpressionResult:
@@ -456,48 +473,21 @@ class RecursiveExpressionEvaluator:
             diagnostics=[]
         )
     
-    def _evaluate_call(self, node: ast.Call) -> Tuple[List[str], Optional[str], List[str]]:
+    def _evaluate_call(self, node: ast.Call) -> ExpressionResult:
         """Evaluate a function call with source order preservation for all argument types."""
         # M5.7: Preserve source evaluation order for all argument types
         # Do NOT group args and kwargs separately - preserve source order
-        
-        # Evaluate function
-        func_uses, func_op_id, func_child_ops = self.evaluate(node.func)
-        all_uses = func_uses[:]
-        child_ops = [func_op_id] if func_op_id else []
-        child_ops.extend(func_child_ops)
-        
-        # M5.7: Track argument evaluation order
-        arg_evaluation_order = []
-        arg_types = []
 
-        # Evaluate positional arguments in source order
-        for arg in node.args:
-            arg_uses, arg_op_id, arg_child_ops = self.evaluate(arg)
-            all_uses.extend(arg_uses)
-            if arg_op_id:
-                child_ops.append(arg_op_id)
-            child_ops.extend(arg_child_ops)
-            arg_evaluation_order.append('positional')
-            arg_types.append(ast.unparse(arg) if hasattr(ast, 'unparse') else 'arg')
-
-        # Evaluate keyword arguments in source order
-        for keyword in node.keywords:
-            if keyword.value:
-                kw_uses, kw_op_id, kw_child_ops = self.evaluate(keyword.value)
-                all_uses.extend(kw_uses)
-                if kw_op_id:
-                    child_ops.append(kw_op_id)
-                child_ops.extend(kw_child_ops)
-                arg_evaluation_order.append(f'keyword:{keyword.arg}')
-                arg_types.append(keyword.arg if keyword.arg else '**kwargs')
+        # Evaluate function and arguments
+        func = self.evaluate(node.func)
+        args = [self.evaluate(a) for a in node.args]
+        kwargs = [self.evaluate(k.value) for k in node.keywords if k.value]
 
         # Determine if this is a known mutation
         known_mutations = ['append', 'extend', 'insert', 'remove', 'pop', 'clear', 'sort', 'reverse', 'update', 'add', 'discard']
         metadata = {
-            'side_effect': 'unknown', 
+            'side_effect': 'unknown',
             'confidence': 'low',
-            'arg_evaluation_order': arg_evaluation_order,  # M5.7: Preserve source order
             'arg_count': len(node.args) + len(node.keywords)
         }
 
@@ -509,32 +499,11 @@ class RecursiveExpressionEvaluator:
                     'receiver': ast.unparse(node.func.value) if hasattr(ast, 'unparse') else str(node.func.value)
                 })
 
-        op_id = self.ctx.generate_operation_id()
-        expression = ast.unparse(node) if hasattr(ast, 'unparse') else "call"
-        cfg_node_ids = self.ctx.get_cfg_node_ids(node)
-
-        self.ctx.facts.operations.append(ExpressionFact(
-            id=op_id,
-            function_id=self.ctx.function_id,
-            file=self.ctx.file,
-            line=node.lineno,
-            column=node.col_offset if hasattr(node, 'col_offset') else 0,
-            cfg_node_ids=cfg_node_ids,
-            expression=expression,
-            operation="Call",
-            input_use_ids=all_uses,
-            input_operation_ids=child_ops,
-            output_definition_ids=[],
-            metadata=metadata
-        ))
-
-        return all_uses, op_id, child_ops
+        return self._emit(node, 'Call', [func, *args, *kwargs], metadata)
     
-    def _evaluate_attribute(self, node: ast.Attribute) -> Tuple[List[str], Optional[str], List[str]]:
+    def _evaluate_attribute(self, node: ast.Attribute) -> ExpressionResult:
         """Evaluate attribute access."""
-        value_uses, value_op_id, value_child_ops = self.evaluate(node.value)
-        child_ops = [value_op_id] if value_op_id else []
-        child_ops.extend(value_child_ops)
+        value = self.evaluate(node.value)
 
         # Track attribute read as a use if the receiver is a local variable
         if isinstance(node.value, ast.Name) and self.ctx.is_local_var(node.value.id):
@@ -559,42 +528,15 @@ class RecursiveExpressionEvaluator:
                     'attribute': node.attr
                 }
             ))
-            value_uses.append(use_id)
+            # Add this use to the result
+            value.direct_input_use_ids.append(use_id)
 
-        op_id = self.ctx.generate_operation_id()
-        expression = ast.unparse(node) if hasattr(ast, 'unparse') else f"{ast.unparse(node.value)}.{node.attr}"
-        cfg_node_ids = self.ctx.get_cfg_node_ids(node)
-
-        self.ctx.facts.operations.append(ExpressionFact(
-            id=op_id,
-            function_id=self.ctx.function_id,
-            file=self.ctx.file,
-            line=node.lineno,
-            column=node.col_offset if hasattr(node, 'col_offset') else 0,
-            cfg_node_ids=cfg_node_ids,
-            expression=expression,
-            operation='Attribute',
-            input_use_ids=value_uses,
-            input_operation_ids=child_ops,
-            output_definition_ids=[],
-            metadata={
-                'is_attribute_access': True,
-                'receiver': ast.unparse(node.value) if hasattr(ast, 'unparse') else str(node.value),
-                'attribute': node.attr,
-                'access_path': f"{ast.unparse(node.value)}.{node.attr}" if hasattr(ast, 'unparse') else f"{node.value.id}.{node.attr}",
-                'conservative_alias': True  # M5.9: Conservative alias handling
-            }
-        ))
-
-        return value_uses, op_id, child_ops
+        return self._emit(node, 'Attribute', [value], {'attr': node.attr})
     
-    def _evaluate_subscript(self, node: ast.Subscript) -> Tuple[List[str], Optional[str], List[str]]:
+    def _evaluate_subscript(self, node: ast.Subscript) -> ExpressionResult:
         """Evaluate subscript access."""
-        value_uses, value_op_id, value_child_ops = self.evaluate(node.value)
-        slice_uses, slice_op_id, slice_child_ops = self.evaluate(node.slice)
-        all_uses = value_uses + slice_uses
-        child_ops = [op_id for op_id in [value_op_id, slice_op_id] if op_id]
-        child_ops.extend(value_child_ops + slice_child_ops)
+        value = self.evaluate(node.value)
+        slice_result = self.evaluate(node.slice)
 
         # Track subscript read as a use if the collection is a local variable
         if isinstance(node.value, ast.Name) and self.ctx.is_local_var(node.value.id):
@@ -619,33 +561,10 @@ class RecursiveExpressionEvaluator:
                     'key': ast.unparse(node.slice) if hasattr(ast, 'unparse') else str(node.slice)
                 }
             ))
-            all_uses.append(use_id)
+            # Add this use to the value result
+            value.direct_input_use_ids.append(use_id)
 
-        op_id = self.ctx.generate_operation_id()
-        expression = ast.unparse(node) if hasattr(ast, 'unparse') else "subscript"
-        cfg_node_ids = self.ctx.get_cfg_node_ids(node)
-
-        self.ctx.facts.operations.append(ExpressionFact(
-            id=op_id,
-            function_id=self.ctx.function_id,
-            file=self.ctx.file,
-            line=node.lineno,
-            column=node.col_offset if hasattr(node, 'col_offset') else 0,
-            cfg_node_ids=cfg_node_ids,
-            expression=expression,
-            operation='Subscript',
-            input_use_ids=all_uses,
-            input_operation_ids=child_ops,
-            output_definition_ids=[],
-            metadata={
-                'base': ast.unparse(node.value) if hasattr(ast, 'unparse') else str(node.value),
-                'index': ast.unparse(node.slice) if hasattr(ast, 'unparse') else str(node.slice),
-                'access_path': f"{ast.unparse(node.value)}[{ast.unparse(node.slice)}]" if hasattr(ast, 'unparse') else f"{node.value.id}[{node.slice}]",
-                'conservative_alias': True  # M5.9: Conservative alias handling
-            },
-        ))
-
-        return all_uses, op_id, child_ops
+        return self._emit(node, 'Subscript', [value, slice_result])
     
     def _evaluate_ifexp(self, node: ast.IfExp) -> ExpressionResult:
         """Evaluate conditional expression (a if cond else b) with branch awareness."""
@@ -773,15 +692,14 @@ class RecursiveExpressionEvaluator:
             diagnostics=[]
         )
     
-    def _evaluate_lambda(self, node: ast.Lambda) -> Tuple[List[str], Optional[str], List[str]]:
+    def _evaluate_lambda(self, node: ast.Lambda) -> ExpressionResult:
         """Evaluate lambda expression with proper scope handling and unique scope ID."""
         # M4.6: Generate unique scope ID for this lambda
         lambda_id = self.ctx.binding_resolver._generate_scope_id()
-        
+
         # Create parameter definitions for lambda
         from .models import Definition
         param_defs = []
-        param_uses = []
         for arg in node.args.args:
             param_id = f"{self.ctx.function_id}_lambda_param_{arg.arg}_{lambda_id}"
             # M4.6: Use unique lambda scope ID in binding key
@@ -805,107 +723,63 @@ class RecursiveExpressionEvaluator:
             param_defs.append(param_id)
 
         # Evaluate body (usually an expression)
-        body_uses, body_op_id, body_child_ops = self.evaluate(node.body)
-        child_ops = [body_op_id] if body_op_id else []
-        child_ops.extend(body_child_ops)
+        body = self.evaluate(node.body)
 
-        op_id = self.ctx.generate_operation_id()
-        expression = ast.unparse(node) if hasattr(ast, 'unparse') else "lambda"
-        cfg_node_ids = self.ctx.get_cfg_node_ids(node)
+        metadata = {
+            'param_count': len(node.args.args),
+            'param_definition_ids': param_defs,
+            'is_lambda': True,
+            'lambda_scope_id': lambda_id
+        }
 
-        self.ctx.facts.operations.append(ExpressionFact(
-            id=op_id,
-            function_id=self.ctx.function_id,
-            file=self.ctx.file,
-            line=node.lineno,
-            column=node.col_offset if hasattr(node, 'col_offset') else 0,
-            cfg_node_ids=cfg_node_ids,
-            expression=expression,
-            operation='Lambda',
-            input_use_ids=body_uses,
-            input_operation_ids=child_ops,
-            output_definition_ids=param_defs,  # Lambda produces parameter definitions
-            metadata={
-                'param_count': len(node.args.args),
-                'param_definition_ids': param_defs,
-                'is_lambda': True,
-                'lambda_scope_id': lambda_id
-            },
-        ))
+        result = self._emit(node, 'Lambda', [body], metadata)
+        # Lambda produces parameter definitions
+        for op in self.ctx.facts.operations:
+            if op.id == result.root_operation_id:
+                op.output_definition_ids = param_defs
+                break
+        return result
 
-        return body_uses, op_id, child_ops
-
-    def _evaluate_list(self, node: ast.List) -> Tuple[List[str], Optional[str], List[str]]:
+    def _evaluate_list(self, node: ast.List) -> ExpressionResult:
         """Evaluate list literal."""
-        all_uses = []
-        child_ops = []
-        for elt in node.elts:
-            elt_uses, elt_op_id, elt_child_ops = self.evaluate(elt)
-            all_uses.extend(elt_uses)
-            if elt_op_id:
-                child_ops.append(elt_op_id)
-            child_ops.extend(elt_child_ops)
-        return all_uses, None, child_ops
+        children = [self.evaluate(elt) for elt in node.elts]
+        use_ids, op_ids, descendants, diagnostics = self._collect(children)
+        return ExpressionResult(None, use_ids, op_ids, descendants, diagnostics)
 
-    def _evaluate_tuple(self, node: ast.Tuple) -> Tuple[List[str], Optional[str], List[str]]:
+    def _evaluate_tuple(self, node: ast.Tuple) -> ExpressionResult:
         """Evaluate tuple literal."""
-        all_uses = []
-        child_ops = []
-        for elt in node.elts:
-            elt_uses, elt_op_id, elt_child_ops = self.evaluate(elt)
-            all_uses.extend(elt_uses)
-            if elt_op_id:
-                child_ops.append(elt_op_id)
-            child_ops.extend(elt_child_ops)
-        return all_uses, None, child_ops
+        children = [self.evaluate(elt) for elt in node.elts]
+        use_ids, op_ids, descendants, diagnostics = self._collect(children)
+        return ExpressionResult(None, use_ids, op_ids, descendants, diagnostics)
 
-    def _evaluate_dict(self, node: ast.Dict) -> Tuple[List[str], Optional[str], List[str]]:
+    def _evaluate_dict(self, node: ast.Dict) -> ExpressionResult:
         """Evaluate dict literal."""
-        all_uses = []
-        child_ops = []
+        children = []
         for key in node.keys:
             if key:
-                key_uses, key_op_id, key_child_ops = self.evaluate(key)
-                all_uses.extend(key_uses)
-                if key_op_id:
-                    child_ops.append(key_op_id)
-                child_ops.extend(key_child_ops)
+                children.append(self.evaluate(key))
         for value in node.values:
-            value_uses, value_op_id, value_child_ops = self.evaluate(value)
-            all_uses.extend(value_uses)
-            if value_op_id:
-                child_ops.append(value_op_id)
-            child_ops.extend(value_child_ops)
-        return all_uses, None, child_ops
+            children.append(self.evaluate(value))
+        use_ids, op_ids, descendants, diagnostics = self._collect(children)
+        return ExpressionResult(None, use_ids, op_ids, descendants, diagnostics)
 
-    def _evaluate_set(self, node: ast.Set) -> Tuple[List[str], Optional[str], List[str]]:
+    def _evaluate_set(self, node: ast.Set) -> ExpressionResult:
         """Evaluate set literal."""
-        all_uses = []
-        child_ops = []
-        for elt in node.elts:
-            elt_uses, elt_op_id, elt_child_ops = self.evaluate(elt)
-            all_uses.extend(elt_uses)
-            if elt_op_id:
-                child_ops.append(elt_op_id)
-            child_ops.extend(elt_child_ops)
-        return all_uses, None, child_ops
+        children = [self.evaluate(elt) for elt in node.elts]
+        use_ids, op_ids, descendants, diagnostics = self._collect(children)
+        return ExpressionResult(None, use_ids, op_ids, descendants, diagnostics)
 
-    def _evaluate_listcomp(self, node: ast.ListComp) -> Tuple[List[str], Optional[str], List[str]]:
+    def _evaluate_listcomp(self, node: ast.ListComp) -> ExpressionResult:
         """Evaluate list comprehension with unique scope ID."""
         # M4.6: Generate unique scope ID for this comprehension
         comprehension_id = self.ctx.binding_resolver._generate_scope_id()
-        
+
         # Evaluate generators first (correct evaluation order)
-        all_uses = []
-        child_ops = []
+        children = []
 
         for generator in node.generators:
             # Evaluate the iterable
-            iter_uses, iter_op_id, iter_child_ops = self.evaluate(generator.iter)
-            all_uses.extend(iter_uses)
-            if iter_op_id:
-                child_ops.append(iter_op_id)
-            child_ops.extend(iter_child_ops)
+            children.append(self.evaluate(generator.iter))
 
             # Create target definition for the loop variable with unique scope ID
             if isinstance(generator.target, ast.Name):
@@ -913,7 +787,7 @@ class RecursiveExpressionEvaluator:
                 cfg_node_ids = self.ctx.get_cfg_node_ids(node)
                 # M4.6: Use unique comprehension scope ID in binding key
                 binding_key = f"{self.ctx.function_id}::comprehension:{comprehension_id}::{target_name}"
-                
+
                 # Create a definition for the comprehension target
                 from .models import Definition
                 target_def_id = f"{self.ctx.function_id}_def_{target_name}_comp_{comprehension_id}"
@@ -936,43 +810,31 @@ class RecursiveExpressionEvaluator:
 
             # Evaluate filter conditions
             for if_test in generator.ifs:
-                if_uses, if_op_id, if_child_ops = self.evaluate(if_test)
-                all_uses.extend(if_uses)
-                if if_op_id:
-                    child_ops.append(if_op_id)
-                child_ops.extend(if_child_ops)
+                children.append(self.evaluate(if_test))
 
         # Then evaluate the element expression
-        elt_uses, elt_op_id, elt_child_ops = self.evaluate(node.elt)
-        all_uses.extend(elt_uses)
-        if elt_op_id:
-            child_ops.append(elt_op_id)
-        child_ops.extend(elt_child_ops)
+        children.append(self.evaluate(node.elt))
 
-        return all_uses, None, child_ops
+        use_ids, op_ids, descendants, diagnostics = self._collect(children)
+        return ExpressionResult(None, use_ids, op_ids, descendants, diagnostics)
 
-    def _evaluate_setcomp(self, node: ast.SetComp) -> Tuple[List[str], Optional[str], List[str]]:
+    def _evaluate_setcomp(self, node: ast.SetComp) -> ExpressionResult:
         """Evaluate set comprehension with unique scope ID."""
         # M4.6: Generate unique scope ID for this comprehension
         comprehension_id = self.ctx.binding_resolver._generate_scope_id()
-        
+
         # Evaluate generators first
-        all_uses = []
-        child_ops = []
+        children = []
 
         for generator in node.generators:
-            iter_uses, iter_op_id, iter_child_ops = self.evaluate(generator.iter)
-            all_uses.extend(iter_uses)
-            if iter_op_id:
-                child_ops.append(iter_op_id)
-            child_ops.extend(iter_child_ops)
+            children.append(self.evaluate(generator.iter))
 
             # M4.6: Create target definition with unique scope ID
             if isinstance(generator.target, ast.Name):
                 target_name = generator.target.id
                 cfg_node_ids = self.ctx.get_cfg_node_ids(node)
                 binding_key = f"{self.ctx.function_id}::comprehension:{comprehension_id}::{target_name}"
-                
+
                 from .models import Definition
                 target_def_id = f"{self.ctx.function_id}_def_{target_name}_comp_{comprehension_id}"
                 self.ctx.facts.definitions.append(Definition(
@@ -993,43 +855,31 @@ class RecursiveExpressionEvaluator:
                 ))
 
             for if_test in generator.ifs:
-                if_uses, if_op_id, if_child_ops = self.evaluate(if_test)
-                all_uses.extend(if_uses)
-                if if_op_id:
-                    child_ops.append(if_op_id)
-                child_ops.extend(if_child_ops)
+                children.append(self.evaluate(if_test))
 
         # Then evaluate the element expression
-        elt_uses, elt_op_id, elt_child_ops = self.evaluate(node.elt)
-        all_uses.extend(elt_uses)
-        if elt_op_id:
-            child_ops.append(elt_op_id)
-        child_ops.extend(elt_child_ops)
+        children.append(self.evaluate(node.elt))
 
-        return all_uses, None, child_ops
+        use_ids, op_ids, descendants, diagnostics = self._collect(children)
+        return ExpressionResult(None, use_ids, op_ids, descendants, diagnostics)
 
-    def _evaluate_dictcomp(self, node: ast.DictComp) -> Tuple[List[str], Optional[str], List[str]]:
+    def _evaluate_dictcomp(self, node: ast.DictComp) -> ExpressionResult:
         """Evaluate dict comprehension with unique scope ID."""
         # M4.6: Generate unique scope ID for this comprehension
         comprehension_id = self.ctx.binding_resolver._generate_scope_id()
-        
+
         # Evaluate generators first
-        all_uses = []
-        child_ops = []
+        children = []
 
         for generator in node.generators:
-            iter_uses, iter_op_id, iter_child_ops = self.evaluate(generator.iter)
-            all_uses.extend(iter_uses)
-            if iter_op_id:
-                child_ops.append(iter_op_id)
-            child_ops.extend(iter_child_ops)
+            children.append(self.evaluate(generator.iter))
 
             # M4.6: Create target definition with unique scope ID
             if isinstance(generator.target, ast.Name):
                 target_name = generator.target.id
                 cfg_node_ids = self.ctx.get_cfg_node_ids(node)
                 binding_key = f"{self.ctx.function_id}::comprehension:{comprehension_id}::{target_name}"
-                
+
                 from .models import Definition
                 target_def_id = f"{self.ctx.function_id}_def_{target_name}_comp_{comprehension_id}"
                 self.ctx.facts.definitions.append(Definition(
@@ -1050,46 +900,32 @@ class RecursiveExpressionEvaluator:
                 ))
 
             for if_test in generator.ifs:
-                if_uses, if_op_id, if_child_ops = self.evaluate(if_test)
-                all_uses.extend(if_uses)
-                if if_op_id:
-                    child_ops.append(if_op_id)
-                child_ops.extend(if_child_ops)
+                children.append(self.evaluate(if_test))
 
         # Then evaluate key and value expressions
-        key_uses, key_op_id, key_child_ops = self.evaluate(node.key)
-        value_uses, value_op_id, value_child_ops = self.evaluate(node.value)
-        all_uses.extend(key_uses + value_uses)
-        if key_op_id:
-            child_ops.append(key_op_id)
-        if value_op_id:
-            child_ops.append(value_op_id)
-        child_ops.extend(key_child_ops + value_child_ops)
+        children.append(self.evaluate(node.key))
+        children.append(self.evaluate(node.value))
 
-        return all_uses, None, child_ops
+        use_ids, op_ids, descendants, diagnostics = self._collect(children)
+        return ExpressionResult(None, use_ids, op_ids, descendants, diagnostics)
 
-    def _evaluate_generatorexp(self, node: ast.GeneratorExp) -> Tuple[List[str], Optional[str], List[str]]:
+    def _evaluate_generatorexp(self, node: ast.GeneratorExp) -> ExpressionResult:
         """Evaluate generator expression with unique scope ID."""
         # M4.6: Generate unique scope ID for this comprehension
         comprehension_id = self.ctx.binding_resolver._generate_scope_id()
-        
+
         # Evaluate generators first
-        all_uses = []
-        child_ops = []
+        children = []
 
         for generator in node.generators:
-            iter_uses, iter_op_id, iter_child_ops = self.evaluate(generator.iter)
-            all_uses.extend(iter_uses)
-            if iter_op_id:
-                child_ops.append(iter_op_id)
-            child_ops.extend(iter_child_ops)
+            children.append(self.evaluate(generator.iter))
 
             # M4.6: Create target definition with unique scope ID
             if isinstance(generator.target, ast.Name):
                 target_name = generator.target.id
                 cfg_node_ids = self.ctx.get_cfg_node_ids(node)
                 binding_key = f"{self.ctx.function_id}::comprehension:{comprehension_id}::{target_name}"
-                
+
                 from .models import Definition
                 target_def_id = f"{self.ctx.function_id}_def_{target_name}_comp_{comprehension_id}"
                 self.ctx.facts.definitions.append(Definition(
@@ -1110,62 +946,39 @@ class RecursiveExpressionEvaluator:
                 ))
 
             for if_test in generator.ifs:
-                if_uses, if_op_id, if_child_ops = self.evaluate(if_test)
-                all_uses.extend(if_uses)
-                if if_op_id:
-                    child_ops.append(if_op_id)
-                child_ops.extend(if_child_ops)
+                children.append(self.evaluate(if_test))
 
         # Then evaluate the element expression
-        elt_uses, elt_op_id, elt_child_ops = self.evaluate(node.elt)
-        all_uses.extend(elt_uses)
-        if elt_op_id:
-            child_ops.append(elt_op_id)
-        child_ops.extend(elt_child_ops)
+        children.append(self.evaluate(node.elt))
 
-        return all_uses, None, child_ops
+        use_ids, op_ids, descendants, diagnostics = self._collect(children)
+        return ExpressionResult(None, use_ids, op_ids, descendants, diagnostics)
 
-    def _evaluate_yield(self, node: ast.Yield) -> Tuple[List[str], Optional[str], List[str]]:
+    def _evaluate_yield(self, node: ast.Yield) -> ExpressionResult:
         """Evaluate yield expression."""
         if node.value:
-            value_uses, value_op_id, value_child_ops = self.evaluate(node.value)
-            child_ops = [value_op_id] if value_op_id else []
-            child_ops.extend(value_child_ops)
-            return value_uses, None, child_ops
-        return [], None, []
+            result = self.evaluate(node.value)
+            return result
+        return ExpressionResult(None, [], [], [], [])
 
-    def _evaluate_yieldfrom(self, node: ast.YieldFrom) -> Tuple[List[str], Optional[str], List[str]]:
+    def _evaluate_yieldfrom(self, node: ast.YieldFrom) -> ExpressionResult:
         """Evaluate yield from expression."""
-        value_uses, value_op_id, value_child_ops = self.evaluate(node.value)
-        child_ops = [value_op_id] if value_op_id else []
-        child_ops.extend(value_child_ops)
-        return value_uses, None, child_ops
+        return self.evaluate(node.value)
 
-    def _evaluate_await(self, node: ast.Await) -> Tuple[List[str], Optional[str], List[str]]:
+    def _evaluate_await(self, node: ast.Await) -> ExpressionResult:
         """Evaluate await expression."""
-        value_uses, value_op_id, value_child_ops = self.evaluate(node.value)
-        child_ops = [value_op_id] if value_op_id else []
-        child_ops.extend(value_child_ops)
-        return value_uses, None, child_ops
+        return self.evaluate(node.value)
 
-    def _evaluate_generic(self, node: ast.AST) -> Tuple[List[str], Optional[str], List[str]]:
+    def _evaluate_generic(self, node: ast.AST) -> ExpressionResult:
         """Generic fallback for unhandled node types."""
         # Try to visit child nodes recursively
-        all_uses = []
-        child_ops = []
+        children = []
         for field, value in ast.iter_fields(node):
             if isinstance(value, ast.AST):
-                child_uses, child_op_id, child_child_ops = self.evaluate(value)
-                all_uses.extend(child_uses)
-                if child_op_id:
-                    child_ops.append(child_op_id)
-                child_ops.extend(child_child_ops)
+                children.append(self.evaluate(value))
             elif isinstance(value, list):
                 for item in value:
                     if isinstance(item, ast.AST):
-                        child_uses, child_op_id, child_child_ops = self.evaluate(item)
-                        all_uses.extend(child_uses)
-                        if child_op_id:
-                            child_ops.append(child_op_id)
-                        child_ops.extend(child_child_ops)
-        return all_uses, None, child_ops
+                        children.append(self.evaluate(item))
+        use_ids, op_ids, descendants, diagnostics = self._collect(children)
+        return ExpressionResult(None, use_ids, op_ids, descendants, diagnostics)

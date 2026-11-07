@@ -33,7 +33,7 @@ def process(obj):
     # Should have an Attribute operation
     attr_ops = [op for op in facts.operations if op.operation == 'Attribute']
     assert len(attr_ops) == 1
-    assert attr_ops[0].metadata.get('attribute') == 'value'
+    assert attr_ops[0].metadata.get('attr') == 'value'
 
 
 def test_chained_attributes():

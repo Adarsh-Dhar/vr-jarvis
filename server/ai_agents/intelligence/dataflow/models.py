@@ -264,6 +264,9 @@ class DataFlowNode:
     column: int = 0
     cfg_node_ids: List[str] = field(default_factory=list)
     metadata: Dict[str, Any] = field(default_factory=dict)
+    # Source span metadata for VR highlighting
+    start_col: int = 0
+    end_col: int = 0
 
 
 @dataclass

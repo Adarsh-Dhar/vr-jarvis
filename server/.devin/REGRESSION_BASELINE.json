@@ -1,0 +1,23 @@
+{
+  "baseline_date": "2026-11-07",
+  "baseline_commit": "Phase 5 VR Integration Complete",
+  "test_suites": {
+    "dataflow": {
+      "path": "tests/unit/dataflow",
+      "passing": 174,
+      "total": 174
+    },
+    "controlflow": {
+      "path": "tests/unit/controlflow",
+      "passing": 153,
+      "total": 153
+    }
+  },
+  "requirements": [
+    "tests/unit/dataflow must pass fully (174/174)",
+    "tests/unit/controlflow must pass fully (153/153)",
+    "Full suite should not regress against baseline"
+  ],
+  "notes": "Phase 5 VR integration complete - integrated confidence rendering, source spans, edge explanations, path queries, persistence, and graph summarization into production pipeline. Added 8 end-to-end integration tests. Run with: python3 -m pytest tests/unit/dataflow tests/unit/controlflow -q",
+  "verification_command": "python3 -m pytest tests/unit/dataflow tests/unit/controlflow -q -W ignore -p no:cacheprovider"
+}

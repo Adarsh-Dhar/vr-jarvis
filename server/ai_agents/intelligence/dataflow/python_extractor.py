@@ -4,6 +4,7 @@ import symtable
 from typing import List, Dict, Any, Optional, Set
 from .models import Definition, VariableUse, DefUseFacts, BindingResolver
 from .recursive_expression_evaluator import RecursiveExpressionEvaluator, ExpressionEvaluationContext
+from .ids import IdAllocator
 
 
 class PythonDefUseExtractor:
@@ -263,24 +264,19 @@ class DefUseVisitor(ast.NodeVisitor):
         self.ast_index = ast_index
         self.facts = facts
         self.symbol_table = symbol_table
-        self._definition_counter = 0
-        self._use_counter = 0
-        self._operation_counter = 0
+        self.ids = IdAllocator(function_id)
 
     def _generate_def_id(self, variable: str) -> str:
         """Generate a unique definition ID."""
-        self._definition_counter += 1
-        return f"{self.function_id}_def_{variable}_{self._definition_counter}"
+        return self.ids.definition(variable)
 
     def _generate_use_id(self, variable: str) -> str:
         """Generate a unique use ID."""
-        self._use_counter += 1
-        return f"{self.function_id}_use_{variable}_{self._use_counter}"
+        return self.ids.use(variable)
 
     def _generate_operation_id(self) -> str:
         """Generate a unique operation ID."""
-        self._operation_counter += 1
-        return f"{self.function_id}_op_{self._operation_counter}"
+        return self.ids.operation()
 
     def _get_variable_name(self, node: ast.AST) -> str:
         """Extract variable name from an AST node."""
@@ -319,7 +315,8 @@ class DefUseVisitor(ast.NodeVisitor):
             cfg_node_map=self.cfg_node_map,
             ast_index=self.ast_index,
             facts=self.facts,
-            symbol_table=self.symbol_table
+            symbol_table=self.symbol_table,
+            ids=self.ids
         )
         evaluator = RecursiveExpressionEvaluator(ctx)
         result = evaluator.evaluate(node.value)
@@ -413,6 +410,7 @@ class DefUseVisitor(ast.NodeVisitor):
                 ast_index=self.ast_index,
                 facts=self.facts,
                 symbol_table=self.symbol_table,
+                ids=self.ids,
             )
             evaluator = RecursiveExpressionEvaluator(ctx)
             result = evaluator.evaluate(node.value)
@@ -468,13 +466,14 @@ class DefUseVisitor(ast.NodeVisitor):
             ast_index=self.ast_index,
             facts=self.facts,
             symbol_table=self.symbol_table,
+            ids=self.ids,
         )
         evaluator = RecursiveExpressionEvaluator(ctx)
         result = evaluator.evaluate(node.value)
         use_ids = result.direct_input_use_ids
         op_id = result.root_operation_id
         child_ops = result.descendant_operation_ids
-        
+
         # Link augmented operation with RHS child operations (Milestone 5.3 fix)
         if op_id and child_ops:
             for op in self.facts.operations:
@@ -494,6 +493,7 @@ class DefUseVisitor(ast.NodeVisitor):
             ast_index=self.ast_index,
             facts=self.facts,
             symbol_table=self.symbol_table,
+            ids=self.ids,
         )
         evaluator = RecursiveExpressionEvaluator(ctx)
         rhs_result = evaluator.evaluate(node.value)
@@ -569,7 +569,8 @@ class DefUseVisitor(ast.NodeVisitor):
             cfg_node_map=self.cfg_node_map,
             ast_index=self.ast_index,
             facts=self.facts,
-            symbol_table=self.symbol_table
+            symbol_table=self.symbol_table,
+            ids=self.ids
         )
         evaluator = RecursiveExpressionEvaluator(ctx)
         test_result = evaluator.evaluate(node.test)
@@ -596,7 +597,8 @@ class DefUseVisitor(ast.NodeVisitor):
             cfg_node_map=self.cfg_node_map,
             ast_index=self.ast_index,
             facts=self.facts,
-            symbol_table=self.symbol_table
+            symbol_table=self.symbol_table,
+            ids=self.ids
         )
         evaluator = RecursiveExpressionEvaluator(ctx)
         test_result = evaluator.evaluate(node.test)
@@ -622,7 +624,8 @@ class DefUseVisitor(ast.NodeVisitor):
             cfg_node_map=self.cfg_node_map,
             ast_index=self.ast_index,
             facts=self.facts,
-            symbol_table=self.symbol_table
+            symbol_table=self.symbol_table,
+            ids=self.ids
         )
         evaluator = RecursiveExpressionEvaluator(ctx)
 
@@ -652,7 +655,8 @@ class DefUseVisitor(ast.NodeVisitor):
             cfg_node_map=self.cfg_node_map,
             ast_index=self.ast_index,
             facts=self.facts,
-            symbol_table=self.symbol_table
+            symbol_table=self.symbol_table,
+            ids=self.ids
         )
         evaluator = RecursiveExpressionEvaluator(ctx)
         iter_result = evaluator.evaluate(node.iter)
@@ -688,7 +692,8 @@ class DefUseVisitor(ast.NodeVisitor):
             cfg_node_map=self.cfg_node_map,
             ast_index=self.ast_index,
             facts=self.facts,
-            symbol_table=self.symbol_table
+            symbol_table=self.symbol_table,
+            ids=self.ids
         )
         evaluator = RecursiveExpressionEvaluator(ctx)
 
@@ -720,7 +725,8 @@ class DefUseVisitor(ast.NodeVisitor):
             cfg_node_map=self.cfg_node_map,
             ast_index=self.ast_index,
             facts=self.facts,
-            symbol_table=self.symbol_table
+            symbol_table=self.symbol_table,
+            ids=self.ids
         )
         evaluator = RecursiveExpressionEvaluator(ctx)
         result = evaluator.evaluate(node.value)
@@ -752,7 +758,8 @@ class DefUseVisitor(ast.NodeVisitor):
                 local_vars=self.local_vars,
                 cfg_node_map=self.cfg_node_map,
                 ast_index=self.ast_index,
-                facts=self.facts
+                facts=self.facts,
+                ids=self.ids
             )
             evaluator = RecursiveExpressionEvaluator(ctx)
             result = evaluator.evaluate(node.value)
@@ -838,7 +845,8 @@ class DefUseVisitor(ast.NodeVisitor):
                 local_vars=self.local_vars,
                 cfg_node_map=self.cfg_node_map,
                 ast_index=self.ast_index,
-                facts=self.facts
+                facts=self.facts,
+                ids=self.ids
             )
             evaluator = RecursiveExpressionEvaluator(ctx)
             result = evaluator.evaluate(node.value)
@@ -928,7 +936,8 @@ class DefUseVisitor(ast.NodeVisitor):
             cfg_node_map=self.cfg_node_map,
             ast_index=self.ast_index,
             facts=self.facts,
-            symbol_table=self.symbol_table
+            symbol_table=self.symbol_table,
+            ids=self.ids
         )
         evaluator = RecursiveExpressionEvaluator(ctx)
 
@@ -961,7 +970,8 @@ class DefUseVisitor(ast.NodeVisitor):
             cfg_node_map=self.cfg_node_map,
             ast_index=self.ast_index,
             facts=self.facts,
-            symbol_table=self.symbol_table
+            symbol_table=self.symbol_table,
+            ids=self.ids
         )
         evaluator = RecursiveExpressionEvaluator(ctx)
 
@@ -994,7 +1004,8 @@ class DefUseVisitor(ast.NodeVisitor):
             cfg_node_map=self.cfg_node_map,
             ast_index=self.ast_index,
             facts=self.facts,
-            symbol_table=self.symbol_table
+            symbol_table=self.symbol_table,
+            ids=self.ids
         )
         evaluator = RecursiveExpressionEvaluator(ctx)
 
@@ -1030,7 +1041,8 @@ class DefUseVisitor(ast.NodeVisitor):
             cfg_node_map=self.cfg_node_map,
             ast_index=self.ast_index,
             facts=self.facts,
-            symbol_table=self.symbol_table
+            symbol_table=self.symbol_table,
+            ids=self.ids
         )
         evaluator = RecursiveExpressionEvaluator(ctx)
 
@@ -1064,7 +1076,8 @@ class DefUseVisitor(ast.NodeVisitor):
             cfg_node_map=self.cfg_node_map,
             ast_index=self.ast_index,
             facts=self.facts,
-            symbol_table=self.symbol_table
+            symbol_table=self.symbol_table,
+            ids=self.ids
         )
         evaluator = RecursiveExpressionEvaluator(ctx)
         subject_result = evaluator.evaluate(node.subject)

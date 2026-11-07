@@ -1,8 +1,9 @@
 """Data-flow graph builder from reaching definitions analysis."""
-from typing import Dict, List, Set, Any
+from typing import Dict, List, Set, Any, Optional
 import json
 from ..controlflow.models import ControlFlowGraph
 from .models import Definition, VariableUse, DefUseFacts, DataFlowGraph, DataFlowNode, DataFlowEdge, ExpressionFact
+from .path_sensitive import PathSensitiveAnalyzer, PathSensitiveResult
 
 
 class DataFlowGraphBuilder:
@@ -16,13 +17,33 @@ class DataFlowGraphBuilder:
         self,
         cfg: ControlFlowGraph,
         facts: DefUseFacts,
-        analysis_result: Dict[str, Any]
+        analysis_result: Dict[str, Any],
+        path_sensitive: bool = False
     ) -> DataFlowGraph:
-        """Build a data-flow graph from CFG and analysis results."""
+        """
+        Build a data-flow graph from CFG and analysis results.
+
+        Args:
+            cfg: Control-flow graph
+            facts: Definition-use facts
+            analysis_result: Reaching definitions analysis result
+            path_sensitive: If True, include phi nodes and must-reaching analysis
+        """
         graph = DataFlowGraph(
             function_id=facts.function_id,
             file=facts.file,
         )
+
+        # Optional path-sensitive analysis
+        path_sensitive_result: Optional[PathSensitiveResult] = None
+        if path_sensitive:
+            analyzer = PathSensitiveAnalyzer()
+            path_sensitive_result = analyzer.analyze(
+                cfg,
+                facts,
+                analysis_result.get('in_sets', {}),
+                analysis_result.get('out_sets', {})
+            )
 
         # Build node mappings
         def_nodes: Dict[str, str] = {}  # definition ID -> graph node ID
@@ -117,6 +138,30 @@ class DataFlowGraphBuilder:
             graph.add_node(node)
             operation_nodes[operation.id] = node_id
 
+        # Step 4.5: Add phi nodes if path-sensitive analysis is enabled
+        phi_nodes_map: Dict[str, str] = {}  # phi ID -> graph node ID
+        if path_sensitive_result:
+            for phi in path_sensitive_result.phi_nodes:
+                node_id = self._generate_node_id()
+                node = DataFlowNode(
+                    id=node_id,
+                    kind='phi',
+                    variable=None,  # Extract from binding_key
+                    expression=None,
+                    function_id=phi.function_id,
+                    file=phi.file,
+                    line=phi.line,
+                    column=0,
+                    cfg_node_ids=[phi.cfg_node_id],
+                    metadata={
+                        'phi_id': phi.id,
+                        'binding_key': phi.binding_key,
+                        'incoming_count': len(phi.incoming),
+                    },
+                )
+                graph.add_node(node)
+                phi_nodes_map[phi.id] = node_id
+
             # Connect input uses to operation (use nodes already created)
             for use_id in operation.input_use_ids:
                 use_node_id = use_nodes.get(use_id)
@@ -187,12 +232,27 @@ class DataFlowGraphBuilder:
                 if not use_node_id:
                     continue
 
+                # Determine if this is a must-reach or may-reach edge
+                resolution = 'may_reach'
+                condition = None
+
+                if path_sensitive_result:
+                    # Check if this definition must-reaches the use
+                    must_reaching = path_sensitive_result.must_in_sets.get(cfg_node_id, set())
+                    for def_id in reaching_def_ids:
+                        if def_id in must_reaching:
+                            resolution = 'must_reach'
+                            break
+
                 # Find all definitions with the same binding that reach this node
                 for def_id in reaching_def_ids:
                     def_node = self._find_definition(facts.definitions, def_id)
                     if def_node and def_node.binding_key == use.binding_key:
                         def_graph_node_id = def_nodes.get(def_id)
                         if def_graph_node_id:
+                            # Get edge condition from CFG if available
+                            condition = self._get_cfg_edge_condition(cfg, cfg_node_id, use.cfg_node_ids)
+
                             # Add edge from definition to use
                             edge_id = self._generate_edge_id()
                             edge = DataFlowEdge(
@@ -200,8 +260,8 @@ class DataFlowGraphBuilder:
                                 source=def_graph_node_id,
                                 target=use_node_id,
                                 kind='reaches',
-                                resolution='may_reach',
-                                condition=None,
+                                resolution=resolution,
+                                condition=condition,
                                 evidence={
                                     'file': facts.file,
                                     'cfg_node': cfg_node_id,
@@ -209,6 +269,30 @@ class DataFlowGraphBuilder:
                                 },
                             )
                             graph.add_edge(edge)
+
+        # Add phi edges if path-sensitive analysis is enabled
+        if path_sensitive_result:
+            for phi_edge in path_sensitive_result.phi_edges:
+                # Map definition/phi IDs to graph node IDs
+                source_id = phi_edge.source
+                target_id = phi_edge.target
+
+                # Check if source is a definition or phi node
+                source_graph_id = def_nodes.get(source_id) or phi_nodes_map.get(source_id)
+                target_graph_id = def_nodes.get(target_id) or use_nodes.get(target_id) or phi_nodes_map.get(target_id)
+
+                if source_graph_id and target_graph_id:
+                    edge_id = self._generate_edge_id()
+                    edge = DataFlowEdge(
+                        id=edge_id,
+                        source=source_graph_id,
+                        target=target_graph_id,
+                        kind=phi_edge.kind,
+                        resolution=phi_edge.resolution,
+                        condition=phi_edge.condition,
+                        evidence=phi_edge.evidence,
+                    )
+                    graph.add_edge(edge)
 
         # Add return edges using reaching definitions
         in_sets = analysis_result.get('in_sets', {})
@@ -227,6 +311,15 @@ class DataFlowGraphBuilder:
                 if not use_node_id:
                     continue
 
+                # Determine if this is a must-reach edge
+                resolution = 'may_reach'
+                if path_sensitive_result:
+                    must_reaching = path_sensitive_result.must_in_sets.get(cfg_node_id, set())
+                    for def_id in reaching_def_ids:
+                        if def_id in must_reaching:
+                            resolution = 'must_reach'
+                            break
+
                 # Find all definitions with the same binding that reach this return node
                 for def_id in reaching_def_ids:
                     def_node = self._find_definition(facts.definitions, def_id)
@@ -240,7 +333,7 @@ class DataFlowGraphBuilder:
                                 source=def_graph_node_id,
                                 target=use_node_id,
                                 kind='returns',
-                                resolution='may_reach',
+                                resolution=resolution,
                                 condition=None,
                                 evidence={
                                     'file': facts.file,
@@ -256,6 +349,8 @@ class DataFlowGraphBuilder:
             'definition_count': len(facts.definitions),
             'use_count': len(facts.uses),
             'operation_count': len(facts.operations),
+            'path_sensitive': path_sensitive,
+            'phi_node_count': len(path_sensitive_result.phi_nodes) if path_sensitive_result else 0,
         }
 
         return graph
@@ -327,6 +422,42 @@ class DataFlowGraphBuilder:
             'warnings': warnings,
         }
 
+    def _get_cfg_edge_condition(
+        self,
+        cfg: ControlFlowGraph,
+        cfg_node_id: str,
+        use_cfg_node_ids: List[str]
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Get the condition from CFG edges leading to a use.
+
+        Returns a standardized condition dict with 'predicate' and 'polarity'.
+        """
+        # Find edges from the definition's CFG node to the use's CFG nodes
+        for use_cfg_id in use_cfg_node_ids:
+            for edge in cfg.edges:
+                if edge.source == cfg_node_id and edge.target == use_cfg_id:
+                    if edge.condition:
+                        # Standardize the condition
+                        if isinstance(edge.condition, str):
+                            # Try to parse branch conditions
+                            if edge.kind == 'true':
+                                return {'predicate': edge.condition or 'condition', 'polarity': True}
+                            elif edge.kind == 'false':
+                                return {'predicate': edge.condition or 'condition', 'polarity': False}
+                            else:
+                                return {'predicate': edge.condition, 'polarity': True}
+                        elif isinstance(edge.condition, dict):
+                            # Already structured
+                            if 'predicate' in edge.condition and 'polarity' in edge.condition:
+                                return edge.condition
+                            else:
+                                return {
+                                    'predicate': edge.condition.get('predicate', 'unknown'),
+                                    'polarity': edge.condition.get('polarity', True)
+                                }
+        return None
+
     def _find_definition(self, definitions: List[Definition], def_id: str) -> Definition:
         """Find a definition by ID."""
         for definition in definitions:
@@ -346,9 +477,13 @@ class DataFlowGraphBuilder:
 
 
 def dfg_to_unity_format(dfg: DataFlowGraph) -> dict:
-    """Convert data-flow graph to Unity graph DTO format."""
+    """Convert data-flow graph to Unity graph DTO format with confidence rendering."""
     nodes = []
     edges = []
+
+    # Initialize confidence renderer
+    from .confidence_rendering import ConfidenceRenderer
+    renderer = ConfidenceRenderer()
 
     for node in dfg.nodes:
         nodes.append({
@@ -366,20 +501,42 @@ def dfg_to_unity_format(dfg: DataFlowGraph) -> dict:
             'line': node.line,
             'column': node.column,
             'metadata': node.metadata,
+            # Source span metadata
+            'start_line': node.line,
+            'start_col': node.column or 0,
+            'end_line': node.line,
+            'end_col': node.column or 0,
         })
 
     for edge in dfg.edges:
-        edges.append({
+        # Determine confidence level from edge resolution
+        confidence = 'may_reach'
+        if edge.resolution == 'must':
+            confidence = 'must_reach'
+        elif edge.resolution == 'static':
+            confidence = 'may_reach'
+        elif edge.resolution == 'dynamic':
+            confidence = 'possible'
+        elif edge.resolution == 'unknown':
+            confidence = 'unknown'
+
+        edge_dict = {
             'edge_id': edge.id,
             'src': edge.source,
             'dst': edge.target,
             'type': 'dataflow',
-            'kind': 'confirmed',
+            'kind': confidence,  # Use confidence instead of hardcoded 'confirmed'
             'edge_kind': edge.kind,
             'resolution': edge.resolution,
             'condition': edge.condition,
             'evidence': json.dumps(edge.evidence or {}),
-        })
+            'subkind': confidence,  # For confidence renderer
+        }
+
+        # Apply visual style from confidence renderer
+        edge_dict['visual_style'] = renderer.get_style(confidence).__dict__
+
+        edges.append(edge_dict)
 
     return {
         'graph_type': 'data_flow',

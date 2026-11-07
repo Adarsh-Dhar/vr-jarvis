@@ -21,6 +21,9 @@ class CFGNode:
     # M6.4: Evaluation/commit separation metadata
     is_evaluation: bool = False  # True for RHS evaluation nodes
     is_commit: bool = False  # True for assignment commit nodes
+    # Source span metadata for VR highlighting
+    start_col: int = 0
+    end_col: int = 0
 
 
 @dataclass
@@ -88,6 +91,8 @@ class ControlFlowGraph:
                     'ast_kind': n.ast_kind,
                     'condition': n.condition,
                     'metadata': n.metadata,
+                    'start_col': n.start_col,
+                    'end_col': n.end_col,
                 }
                 for n in self.nodes
             ],
