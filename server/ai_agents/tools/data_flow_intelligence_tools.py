@@ -15,8 +15,8 @@ def _is_python_file(file_path: str) -> bool:
 
 def _parse_python_ast(file_path: str) -> Optional[ast.AST]:
     try:
-        with open(file_path, 'r', encoding='utf-8') as f:
-            content = f.read()
+        from pathlib import Path
+        content = Path(file_path).read_text(encoding='utf-8')
         return ast.parse(content)
     except Exception:
         return None
@@ -294,6 +294,13 @@ SOURCE_CALLS = {
     'sys.argv',
 }
 
+# Taint sources that use subscript notation
+SOURCE_SUBSCRIPTS = {
+    'request.args',
+    'request.form',
+    'request.query_params',
+}
+
 # Taint sinks - exact normalized names
 SINK_CALLS = {
     'eval',
@@ -328,8 +335,8 @@ def analyze_python_taint_source(source_code: str, file_path: str) -> dict:
         tree = ast.parse(source_code)
 
         # Provenance tracking structures
-        tainted_variables = {}  # var_name -> [source_ids]
-        provenance_registry = {}  # source_id -> {source_metadata, steps}
+        tainted_variables = {}  # var_name -> {source_id: [steps]}
+        provenance_registry = {}  # source_id -> {source_metadata} (immutable)
         source_counter = 0
 
         def _create_source_id():
@@ -347,10 +354,13 @@ def analyze_python_taint_source(source_code: str, file_path: str) -> dict:
                 attr_name = get_ast_name(node)
                 return attr_name in SOURCE_CALLS
             if isinstance(node, ast.Subscript):
-                # Handle subscript sources like sys.argv[1]
-                if isinstance(node.value, ast.Name):
-                    base_name = node.value.id
-                    return base_name in SOURCE_CALLS
+                # Handle subscript sources like sys.argv[1] or request.args["id"]
+                base_name = get_ast_name(node.value)
+                if base_name in SOURCE_CALLS:
+                    return True
+                # Handle dictionary subscript forms like request.args["id"]
+                if base_name in SOURCE_SUBSCRIPTS:
+                    return True
             return False
 
         def _evaluate_tainted_expression(node, tainted_variables, provenance_registry):
@@ -360,7 +370,7 @@ def analyze_python_taint_source(source_code: str, file_path: str) -> dict:
             if isinstance(node, ast.Name):
                 # Simple variable lookup
                 if node.id in tainted_variables:
-                    source_ids = tainted_variables[node.id].copy()
+                    source_ids = list(tainted_variables[node.id].keys())
 
             elif isinstance(node, ast.Call):
                 # Check if this is a source
@@ -373,12 +383,7 @@ def analyze_python_taint_source(source_code: str, file_path: str) -> dict:
                             'call': call_name,
                             'file': file_path,
                             'line': node.lineno
-                        },
-                        'steps': [{
-                            'kind': 'source',
-                            'call': call_name,
-                            'line': node.lineno
-                        }]
+                        }
                     }
                     source_ids = [source_id]
 
@@ -390,14 +395,6 @@ def analyze_python_taint_source(source_code: str, file_path: str) -> dict:
                             node.func.value, tainted_variables, provenance_registry
                         )
                         if receiver_sources:
-                            # Add transformation step
-                            for sid in receiver_sources:
-                                if sid in provenance_registry:
-                                    provenance_registry[sid]['steps'].append({
-                                        'kind': 'transform',
-                                        'call': get_call_name(node),
-                                        'line': node.lineno
-                                    })
                             source_ids = receiver_sources
 
                     # Check arguments
@@ -416,12 +413,7 @@ def analyze_python_taint_source(source_code: str, file_path: str) -> dict:
                             'call': attr_name,
                             'file': file_path,
                             'line': node.lineno
-                        },
-                        'steps': [{
-                            'kind': 'source',
-                            'call': attr_name,
-                            'line': node.lineno
-                        }]
+                        }
                     }
                     source_ids = [source_id]
                 else:
@@ -431,21 +423,20 @@ def analyze_python_taint_source(source_code: str, file_path: str) -> dict:
                     )
 
             elif isinstance(node, ast.Subscript):
-                # Check if this is a source (e.g., sys.argv[1])
+                # Check if this is a source (e.g., sys.argv[1] or request.args["id"])
                 if _is_taint_source(node):
                     source_id = _create_source_id()
                     base_name = get_ast_name(node.value)
+                    # Include the subscript in the call name for dictionary forms
+                    call_name = base_name
+                    if base_name in SOURCE_SUBSCRIPTS:
+                        call_name = f"{base_name}[...]"
                     provenance_registry[source_id] = {
                         'source': {
-                            'call': base_name,
+                            'call': call_name,
                             'file': file_path,
                             'line': node.lineno
-                        },
-                        'steps': [{
-                            'kind': 'source',
-                            'call': base_name,
-                            'line': node.lineno
-                        }]
+                        }
                     }
                     source_ids = [source_id]
                 else:
@@ -507,18 +498,26 @@ def analyze_python_taint_source(source_code: str, file_path: str) -> dict:
                         var_name = target.id
 
                         if rhs_sources:
-                            # Copy provenance and add assignment step
-                            tainted_variables[var_name] = rhs_sources.copy()
+                            # Initialize flow snapshot for this variable
+                            var_flow = {}
                             for sid in rhs_sources:
-                                if sid in provenance_registry:
-                                    provenance_registry[sid]['steps'].append({
-                                        'kind': 'assignment',
-                                        'variable': var_name,
-                                        'line': node.lineno
-                                    })
-                                    # Also track the variable at the source level
-                                    if 'variable' not in provenance_registry[sid]['source']:
-                                        provenance_registry[sid]['source']['variable'] = var_name
+                                # Copy existing steps from any variable that had this source
+                                # or start fresh from the source metadata
+                                existing_steps = []
+                                for other_var, other_flow in tainted_variables.items():
+                                    if sid in other_flow:
+                                        existing_steps = other_flow[sid].copy()
+                                        break
+
+                                # Add assignment step to this variable's flow
+                                new_steps = existing_steps + [{
+                                    'kind': 'assignment',
+                                    'variable': var_name,
+                                    'line': node.lineno
+                                }]
+                                var_flow[sid] = new_steps
+
+                            tainted_variables[var_name] = var_flow
                         else:
                             # Clean assignment - remove taint
                             if var_name in tainted_variables:
@@ -536,18 +535,28 @@ def analyze_python_taint_source(source_code: str, file_path: str) -> dict:
                     )
 
                     # Combine existing sources with new ones
-                    existing_sources = tainted_variables.get(var_name, [])
-                    combined_sources = list(set(existing_sources + rhs_sources))
+                    existing_flow = tainted_variables.get(var_name, {})
+                    combined_sources = list(set(list(existing_flow.keys()) + rhs_sources))
 
                     if combined_sources:
-                        tainted_variables[var_name] = combined_sources
+                        var_flow = {}
                         for sid in combined_sources:
-                            if sid in provenance_registry:
-                                provenance_registry[sid]['steps'].append({
-                                    'kind': 'augmented_assignment',
-                                    'variable': var_name,
-                                    'line': node.lineno
-                                })
+                            # Copy existing steps or start fresh
+                            existing_steps = existing_flow.get(sid, [])
+                            for other_var, other_flow in tainted_variables.items():
+                                if sid in other_flow and sid not in existing_flow:
+                                    existing_steps = other_flow[sid].copy()
+                                    break
+
+                            # Add augmented assignment step
+                            new_steps = existing_steps + [{
+                                'kind': 'augmented_assignment',
+                                'variable': var_name,
+                                'line': node.lineno
+                            }]
+                            var_flow[sid] = new_steps
+
+                        tainted_variables[var_name] = var_flow
                     else:
                         if var_name in tainted_variables:
                             del tainted_variables[var_name]
@@ -601,7 +610,7 @@ def analyze_python_taint_source(source_code: str, file_path: str) -> dict:
         visitor = TaintVisitor()
         visitor.visit(tree)
 
-        # Build paths from provenance registry
+        # Build paths from provenance registry and variable flows
         paths = []
         path_counter = 0
 
@@ -610,7 +619,21 @@ def analyze_python_taint_source(source_code: str, file_path: str) -> dict:
                 if source_id in provenance_registry:
                     path_counter += 1
                     source_meta = provenance_registry[source_id]['source']
-                    steps = provenance_registry[source_id]['steps'].copy()
+
+                    # Find the steps for this source from any variable that has it
+                    steps = []
+                    for var_name, var_flow in tainted_variables.items():
+                        if source_id in var_flow:
+                            steps = var_flow[source_id].copy()
+                            break
+
+                    # If no variable steps found, use source metadata as base step
+                    if not steps:
+                        steps = [{
+                            'kind': 'source',
+                            'call': source_meta['call'],
+                            'line': source_meta['line']
+                        }]
 
                     # Add sink step
                     steps.append({
@@ -714,13 +737,27 @@ def trace_taint_flow(source_id: str, tool_context: ToolContext) -> dict:
                 'error': f'File not found in repository: {file_path}'
             }
 
+        # Security check: ensure resolved path is still inside REPO_ROOT
+        try:
+            full_file_path = full_file_path.resolve()
+            if not str(full_file_path).startswith(str(REPO_ROOT.resolve())):
+                return {
+                    'status': 'error',
+                    'error': f'File path outside repository: {file_path}'
+                }
+        except Exception:
+            return {
+                'status': 'error',
+                'error': f'Invalid file path: {file_path}'
+            }
+
         if not _is_python_file(file_path):
             return {
                 'status': 'unsupported',
                 'message': 'Taint analysis only implemented for Python'
             }
 
-        tree = _parse_python_ast(file_path)
+        tree = _parse_python_ast(str(full_file_path))
         if not tree:
             return {
                 'status': 'partial',
@@ -749,11 +786,11 @@ def trace_taint_flow(source_id: str, tool_context: ToolContext) -> dict:
 
         # Use the testable helper for analysis
         import ast as ast_module
-        source_code = ast_module.get_source_segment(open(file_path).read(), func_node)
+        source_code = ast_module.get_source_segment(full_file_path.read_text(encoding='utf-8'), func_node)
         if not source_code:
-            source_code = open(file_path).read()
+            source_code = full_file_path.read_text(encoding='utf-8')
 
-        analysis_result = analyze_python_taint_source(source_code, file_path)
+        analysis_result = analyze_python_taint_source(source_code, str(full_file_path))
 
         return {
             'status': analysis_result.get('status', 'ok'),

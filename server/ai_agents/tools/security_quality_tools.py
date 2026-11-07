@@ -590,20 +590,39 @@ def detect_sql_injection(
 
                 def is_dynamic_sql_expression(node, unsafe_sql_variables):
                     """Check if node represents dynamically constructed SQL (SQL-aware)."""
-                    # String concatenation - only if at least one operand looks like SQL
+                    # String concatenation - only if at least one operand is non-constant
                     if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
-                        return _contains_sql_keywords(node)
-                    # F-strings
+                        # Check if either operand contains a variable (non-constant)
+                        has_variable = False
+                        for child in ast.walk(node):
+                            if isinstance(child, ast.Name):
+                                has_variable = True
+                                break
+                        # Must have SQL keywords AND at least one variable to be truly dynamic
+                        return has_variable and _contains_sql_keywords(node)
+                    # F-strings - check if any formatted value is a variable
                     if isinstance(node, ast.JoinedStr):
-                        return _contains_sql_keywords(node)
-                    # .format() calls
+                        has_variable = False
+                        for value in node.values:
+                            if isinstance(value, ast.FormattedValue):
+                                if isinstance(value.value, ast.Name):
+                                    has_variable = True
+                                    break
+                        return has_variable and _contains_sql_keywords(node)
+                    # .format() calls - check if arguments contain variables
                     if isinstance(node, ast.Call):
                         if isinstance(node.func, ast.Attribute):
                             if node.func.attr == 'format':
-                                return _contains_sql_keywords(node)
-                    # % interpolation
+                                has_variable = False
+                                for arg in node.args:
+                                    if isinstance(arg, ast.Name):
+                                        has_variable = True
+                                        break
+                                return has_variable and _contains_sql_keywords(node)
+                    # % interpolation - check if right operand is a variable
                     if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Mod):
-                        return _contains_sql_keywords(node)
+                        has_variable = isinstance(node.right, ast.Name)
+                        return has_variable and _contains_sql_keywords(node)
                     # Previously constructed unsafe SQL variable
                     if isinstance(node, ast.Name):
                         return node.id in unsafe_sql_variables
@@ -643,6 +662,9 @@ def detect_sql_injection(
                             var_name = node.targets[0].id
                             if is_dynamic_sql_expression(node.value, self.unsafe_sql_variables):
                                 self.unsafe_sql_variables.add(var_name)
+                            else:
+                                # Clean reassignment - remove from unsafe set
+                                self.unsafe_sql_variables.discard(var_name)
                         self.generic_visit(node)
 
                     def visit_Call(self, node):

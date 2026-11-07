@@ -135,71 +135,83 @@ if __name__ == "__main__":
     pytest.main([__file__, "-v"])
 
 
-def test_change_impact_fixture_graph():
-    """Test change impact analysis against a real fixture graph."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        tmppath = Path(tmpdir)
+def test_change_impact_no_duplication():
+    """Test that direct possible, indirect, and import dependents are separate without duplication."""
+    from unittest.mock import Mock, patch
 
-        # Create a fixture graph with known structure:
-        # module_a
-        #   └── function_a
-        #          ↓ calls
-        #       function_b
-        #          ↓ may_call
-        #       function_c
-        # module_b
-        #   └── imports module_a
-        # test_function_a
-        #   └── calls function_a
+    # Mock the graph and tool context
+    mock_tool_context = Mock()
+    mock_graph = Mock()
 
-        fixture_graph = {
-            "nodes": [
-                {"id": "module_a", "name": "module_a", "level": "module", "file": "module_a.py"},
-                {"id": "function_a", "name": "function_a", "level": "function", "file": "module_a.py", "parent": "module_a"},
-                {"id": "function_b", "name": "function_b", "level": "function", "file": "module_a.py", "parent": "module_a"},
-                {"id": "function_c", "name": "function_c", "level": "function", "file": "module_a.py", "parent": "module_a"},
-                {"id": "module_b", "name": "module_b", "level": "module", "file": "module_b.py"},
-                {"id": "test_function_a", "name": "test_function_a", "level": "function", "file": "test_module_a.py", "kind": "test"},
-            ],
-            "edges": [
-                {"src": "function_a", "dst": "function_b", "type": "calls", "kind": "confirmed"},
-                {"src": "function_b", "dst": "function_c", "type": "may_call", "kind": "possible"},
-                {"src": "module_b", "dst": "module_a", "type": "imports", "kind": "confirmed"},
-                {"src": "test_function_a", "dst": "function_a", "type": "calls", "kind": "confirmed"},
+    # Create mock callers data
+    def mock_callers(symbol_id, depth, include_possible=False):
+        if depth == 1 and not include_possible:
+            return [
+                {'from': 'direct_caller_1', 'to': symbol_id, 'kind': 'confirmed'},
+                {'from': 'direct_caller_2', 'to': symbol_id, 'kind': 'confirmed'}
             ]
-        }
+        else:
+            return [
+                {'from': 'direct_caller_1', 'to': symbol_id, 'kind': 'confirmed'},
+                {'from': 'direct_caller_2', 'to': symbol_id, 'kind': 'confirmed'},
+                {'from': 'possible_caller_1', 'to': symbol_id, 'kind': 'possible'}
+            ]
 
-        # Write fixture graph
-        graph_file = tmppath / "graph.json"
-        graph_file.write_text(json.dumps(fixture_graph))
+    mock_graph.callers = mock_callers
 
-        # Temporarily set graph path for this test
-        # Note: This would require the graph engine to accept a custom path
-        # For now, we'll test the logic structure without full integration
+    # Mock get_dependents for call relationships
+    def mock_get_dependents(symbol_id, tool_context, max_depth, edge_types):
+        if 'calls' in edge_types or 'may_call' in edge_types:
+            return {
+                'status': 'ok',
+                'dependents': [
+                    {'id': 'direct_caller_1', 'edge_type': 'calls'},
+                    {'id': 'direct_caller_2', 'edge_type': 'calls'},
+                    {'id': 'possible_caller_1', 'edge_type': 'may_call'},
+                    {'id': 'indirect_caller_1', 'edge_type': 'calls'},
+                    {'id': 'indirect_caller_2', 'edge_type': 'may_call'}
+                ]
+            }
+        elif 'imports' in edge_types:
+            return {
+                'status': 'ok',
+                'dependents': [
+                    {'id': 'import_dep_1', 'edge_type': 'imports'},
+                    {'id': 'import_dep_2', 'edge_type': 'imports'}
+                ]
+            }
+        return {'status': 'error'}
 
-        # Test that when function_a changes:
-        # - function_b is a confirmed direct caller
-        # - function_c is an indirect dependent via may_call
-        # - module_b is an import dependent
-        # - test_function_a is an associated test
+    # Mock graph node
+    mock_graph.get = Mock(return_value={'id': 'test_function', 'name': 'test_function'})
+    mock_graph.covering_tests = Mock(return_value=[])
 
-        # Verify edge type filtering
-        # Calls and may_call should be included, containment edges excluded
-        assert any(e["type"] in ["calls", "may_call", "imports"] for e in fixture_graph["edges"])
+    # Patch the imports
+    with patch('ai_agents.tools.relationship_intelligence_tools.codegraph', mock_graph):
+        with patch('ai_agents.tools.relationship_intelligence_tools.get_dependents', side_effect=mock_get_dependents):
+            result = calculate_change_impact("test_function", mock_tool_context)
 
-        # Verify confirmed vs possible separation
-        confirmed_edges = [e for e in fixture_graph["edges"] if e["kind"] == "confirmed"]
-        possible_edges = [e for e in fixture_graph["edges"] if e["kind"] == "possible"]
-        assert len(confirmed_edges) == 3  # function_a->b, module_b->a, test->a
-        assert len(possible_edges) == 1  # function_b->c
+    # Verify the result structure
+    assert result['status'] == 'ok'
+    assert 'direct_callers' in result
+    assert 'possible_callers' in result
+    assert 'indirect_dependents' in result
+    assert 'import_dependents' in result
 
-        # Verify import relationships are separate
-        import_edges = [e for e in fixture_graph["edges"] if e["type"] == "imports"]
-        assert len(import_edges) == 1
-        assert import_edges[0]["src"] == "module_b"
-        assert import_edges[0]["dst"] == "module_a"
+    # Verify no duplication: direct and possible should be separate
+    direct_ids = {c['from'] for c in result['direct_callers']}
+    possible_ids = {c['from'] for c in result['possible_callers']}
+    assert len(direct_ids & possible_ids) == 0, "Direct and possible callers should not overlap"
 
-        # Verify test association is not mistaken for execution coverage
-        test_nodes = [n for n in fixture_graph["nodes"] if n.get("kind") == "test"]
-        assert len(test_nodes) == 1
-        assert test_nodes[0]["id"] == "test_function_a"
+    # Verify indirect excludes both direct and possible
+    indirect_ids = {d['id'] for d in result['indirect_dependents']}
+    assert indirect_ids.isdisjoint(direct_ids), "Indirect should not include direct callers"
+    assert indirect_ids.isdisjoint(possible_ids), "Indirect should not include possible callers"
+
+    # Verify import dependents are separate
+    import_ids = {d['id'] for d in result['import_dependents']}
+    assert all(d['edge_type'] == 'imports' for d in result['import_dependents'])
+
+    # Verify total affected uses deduplication
+    expected_total = len(direct_ids) + len(possible_ids) + len(indirect_ids) + len(import_ids)
+    assert result['total_affected'] == expected_total

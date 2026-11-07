@@ -952,11 +952,11 @@ namespace JarvisVR
       // Add navigation buttons at the bottom
       if (_historyPage > 0)
       {
-        _historyPrev = _historyPanel.AddButton("PREV", 20, 410, 80, 50, () => { _historyPage--; RefreshHistoryPanel(); });
+        _historyPrev = _historyPanel.AddButton("PREV", 20, 395, 80, 50, () => { _historyPage--; RefreshHistoryPanel(); });
       }
       if (_historyPage < totalPages - 1)
       {
-        _historyNext = _historyPanel.AddButton("NEXT", 110, 410, 80, 50, () => { _historyPage++; RefreshHistoryPanel(); });
+        _historyNext = _historyPanel.AddButton("NEXT", 110, 395, 80, 50, () => { _historyPage++; RefreshHistoryPanel(); });
       }
     }
 
