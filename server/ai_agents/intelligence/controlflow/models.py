@@ -18,6 +18,9 @@ class CFGNode:
     ast_kind: Optional[str] = None
     condition: Optional[str] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
+    # M6.4: Evaluation/commit separation metadata
+    is_evaluation: bool = False  # True for RHS evaluation nodes
+    is_commit: bool = False  # True for assignment commit nodes
 
 
 @dataclass

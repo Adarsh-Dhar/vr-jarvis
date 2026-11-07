@@ -1,5 +1,5 @@
 """Data-flow analysis service."""
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 import ast
 from ..parsers.python_ast import parse_python_module
 from ..parsers.python_symbol_locator import find_function_ast
@@ -8,6 +8,128 @@ from ..controlflow.validator import validate_cfg
 from .python_extractor import PythonDefUseExtractor
 from .reaching_definitions import ReachingDefinitionsAnalyzer
 from .dependency_builder import DataFlowGraphBuilder, dfg_to_unity_format
+from .validator import validate_dfg
+
+
+def _analyze_python_data_flow_core(
+    source: str,
+    file_path: str,
+    function_ast: ast.FunctionDef,
+    function_id: str,
+    cfg: Optional[object] = None
+) -> Dict[str, Any]:
+    """
+    Core DFG analysis pipeline shared by both public service methods.
+    
+    Args:
+        source: Source code containing the function
+        file_path: Path to the source file
+        function_ast: The function AST node
+        function_id: Unique function identifier
+        cfg: Optional pre-built CFG (if already available)
+    
+    Returns:
+        Analysis result with status, DFG, CFG, validation, and metadata
+    """
+    # Build CFG if not provided
+    if cfg is None:
+        cfg_builder = PythonCFGBuilder()
+        artifact = cfg_builder.build_function(
+            function_ast=function_ast,
+            function_id=function_id,
+            source=source,
+            file_path=file_path,
+        )
+        cfg = artifact.graph
+    else:
+        # If CFG provided, create minimal artifact for extractor
+        from .controlflow.models import CFGBuildArtifact, ASTCFGIndex
+        artifact = CFGBuildArtifact(
+            graph=cfg,
+            ast_index=ASTCFGIndex(),
+            function_ast=function_ast,
+        )
+    
+    # Validate CFG
+    cfg_validation = validate_cfg(cfg)
+    if not cfg_validation['valid']:
+        return {
+            'status': 'error',
+            'error': f'CFG validation failed: {cfg_validation["errors"]}',
+            'cfg': cfg,
+            'graph': None,
+            'validation': cfg_validation,
+            'diagnostics': cfg.metadata.get('diagnostics', []),
+            'metadata': {},
+        }
+    
+    # Extract definition/use facts
+    extractor = PythonDefUseExtractor()
+    facts = extractor.extract_function(
+        artifact=artifact,
+        source=source,
+        file_path=file_path,
+    )
+    
+    # Perform reaching-definitions analysis
+    analyzer = ReachingDefinitionsAnalyzer()
+    analysis_result = analyzer.analyze(cfg, facts)
+    
+    if 'error' in analysis_result:
+        return {
+            'status': 'error',
+            'error': analysis_result['error'],
+            'cfg': cfg,
+            'graph': None,
+            'validation': {'valid': False, 'errors': [analysis_result['error']], 'warnings': []},
+            'diagnostics': analysis_result.get('diagnostics', []),
+            'metadata': {},
+        }
+    
+    # Build data-flow graph
+    dfg_builder = DataFlowGraphBuilder()
+    dfg = dfg_builder.build(cfg, facts, analysis_result)
+    
+    # Validate DFG with strict validator
+    dfg_validation = validate_dfg(dfg=dfg, facts=facts, cfg=cfg)
+    
+    # Do not return invalid DFG as successful
+    if not dfg_validation['valid']:
+        return {
+            'status': 'error',
+            'error': f'DFG validation failed: {dfg_validation["errors"]}',
+            'cfg': cfg,
+            'graph': None,
+            'validation': dfg_validation,
+            'diagnostics': facts.diagnostics + analysis_result.get('diagnostics', []),
+            'metadata': {},
+        }
+    
+    # Determine status based on validation warnings
+    status = 'success'
+    if dfg_validation.get('warnings'):
+        status = 'success_with_warnings'
+    if cfg_validation.get('warnings'):
+        status = 'success_with_warnings'
+    
+    # M7: Verify service result consistency - preserve all required fields
+    return {
+        'status': status,
+        'cfg': cfg,
+        'graph': dfg,
+        'validation': dfg_validation,
+        'diagnostics': facts.diagnostics + analysis_result.get('diagnostics', []),
+        'metadata': {
+            'language': 'python',
+            'scope': 'intra_function',
+            'function_name': function_ast.name,
+            'function_id': function_id,
+            'file_path': file_path,
+            'definition_count': len(facts.definitions),
+            'use_count': len(facts.uses),
+            'operation_count': len(facts.operations),
+        },
+    }
 
 
 def analyze_python_data_flow_simple(
@@ -51,76 +173,36 @@ def analyze_python_data_flow_simple(
                 'error': f'Found symbol is not a function: {type(function_ast).__name__}'
             }
         
-        # Build CFG
+        # Build function ID
         function_id = f"{file_path}::{function_name}"
-        cfg_builder = PythonCFGBuilder()
-        artifact = cfg_builder.build_function(
+        
+        # Call the canonical core analysis
+        result = _analyze_python_data_flow_core(
+            source=source,
+            file_path=file_path,
             function_ast=function_ast,
             function_id=function_id,
-            source=source,
-            file_path=file_path,
-        )
-        cfg = artifact.graph
-        
-        # Validate CFG
-        cfg_validation = validate_cfg(cfg)
-        if not cfg_validation['valid']:
-            return {
-                'status': 'error',
-                'error': f'CFG validation failed: {cfg_validation["errors"]}'
-            }
-        
-        # Extract definition/use facts
-        extractor = PythonDefUseExtractor()
-        facts = extractor.extract_function(
-            artifact=artifact,
-            source=source,
-            file_path=file_path,
         )
         
-        # Perform reaching-definitions analysis
-        analyzer = ReachingDefinitionsAnalyzer()
-        analysis_result = analyzer.analyze(cfg, facts)
+        # If core analysis failed, return early
+        if result['status'] == 'error':
+            return result
         
-        if 'error' in analysis_result:
-            return {
-                'status': 'error',
-                'error': analysis_result['error']
-            }
+        # Convert to Unity format for simple interface
+        unity_format = dfg_to_unity_format(result['graph'])
         
-        # Build data-flow graph
-        dfg_builder = DataFlowGraphBuilder()
-        dfg = dfg_builder.build(cfg, facts, analysis_result)
-
-        # Validate DFG
-        from .validator import validate_dataflow
-        dfg_validation = validate_dataflow(facts)
-        if not dfg_validation['valid']:
-            return {
-                'status': 'error',
-                'error': f'DFG validation failed: {dfg_validation["errors"]}'
-            }
-
-        # Convert to Unity format
-        unity_format = dfg_to_unity_format(dfg)
-
-        return {
-            'status': 'ok',
-            'function_name': function_name,
-            'file_path': file_path,
-            'dfg_nodes': unity_format.get('nodes', []),
-            'dfg_edges': unity_format.get('edges', []),
-            'graph_type': unity_format.get('graph_type', 'data_flow'),
-            'definitions': [{'id': d.id, 'variable': d.variable, 'line': d.line} for d in facts.definitions],
-            'uses': [{'id': u.id, 'variable': u.variable, 'line': u.line} for u in facts.uses],
-            'operations': [{'id': o.id, 'expression': o.expression, 'line': o.line} for o in facts.operations],
-            'validation': dfg_validation,
-            'cfg_references': {
-                'function_id': function_id,
-                'entry_node_id': cfg.entry_node_id,
-                'exit_node_id': cfg.exit_node_id,
-            },
+        # Add Unity-format specific fields
+        result['dfg_nodes'] = unity_format.get('nodes', [])
+        result['dfg_edges'] = unity_format.get('edges', [])
+        result['graph_type'] = unity_format.get('graph_type', 'data_flow')
+        result['function_name'] = function_name
+        result['cfg_references'] = {
+            'function_id': function_id,
+            'entry_node_id': result['cfg'].entry_node_id,
+            'exit_node_id': result['cfg'].exit_node_id,
         }
+        
+        return result
         
     except Exception as e:
         return {
@@ -191,88 +273,21 @@ def analyze_python_data_flow(
                 'metadata': {},
             }
 
-        # Build CFG first (required for data-flow)
+        # Build function ID
         function_id = symbol.get('id') or f"{file_path}::{function_ast.name}"
-        cfg_builder = PythonCFGBuilder()
-        artifact = cfg_builder.build_function(
+        
+        # Call the canonical core analysis
+        result = _analyze_python_data_flow_core(
+            source=source,
+            file_path=file_path,
             function_ast=function_ast,
             function_id=function_id,
-            source=source,
-            file_path=file_path,
         )
-        cfg = artifact.graph
-
-        # Validate CFG
-        cfg_validation = validate_cfg(cfg)
-        if not cfg_validation['valid']:
-            return {
-                'status': 'error',
-                'error': f'CFG validation failed: {cfg_validation["errors"]}',
-                'graph': None,
-                'cfg': cfg,
-                'validation': cfg_validation,
-                'diagnostics': cfg.metadata.get('diagnostics', []),
-                'metadata': {},
-            }
-
-        # Extract definition/use facts using the CFG artifact
-        extractor = PythonDefUseExtractor()
-        facts = extractor.extract_function(
-            artifact=artifact,
-            source=source,
-            file_path=file_path,
-        )
-
-        # Perform reaching-definitions analysis
-        analyzer = ReachingDefinitionsAnalyzer()
-        analysis_result = analyzer.analyze(cfg, facts)
-
-        if 'error' in analysis_result:
-            return {
-                'status': 'error',
-                'error': analysis_result['error'],
-                'graph': None,
-                'cfg': cfg,
-                'validation': {'valid': False, 'errors': [analysis_result['error']], 'warnings': []},
-                'diagnostics': analysis_result.get('diagnostics', []),
-                'metadata': {},
-            }
-
-        # Build data-flow graph
-        dfg_builder = DataFlowGraphBuilder()
-        dfg = dfg_builder.build(cfg, facts, analysis_result)
-
-        # Validate DFG using the stronger validator
-        from .validator import validate_dataflow
-        dfg_validation = validate_dataflow(facts)
-
-        # Do not return invalid DFG as successful
-        if not dfg_validation['valid']:
-            return {
-                'status': 'error',
-                'error': f'DFG validation failed: {dfg_validation["errors"]}',
-                'graph': None,
-                'cfg': cfg,
-                'validation': dfg_validation,
-                'diagnostics': facts.diagnostics + analysis_result.get('diagnostics', []),
-                'metadata': {},
-            }
-
-        return {
-            'graph': dfg,
-            'cfg': cfg,
-            'validation': dfg_validation,
-            'diagnostics': facts.diagnostics + analysis_result.get('diagnostics', []),
-            'metadata': {
-                'language': 'python',
-                'scope': 'intra_function',
-                'function_name': function_ast.name,
-                'function_id': function_id,
-                'definition_count': len(facts.definitions),
-                'use_count': len(facts.uses),
-                'operation_count': len(facts.operations),
-            },
-        }
+        
+        # Add graph parameter back for compatibility (unused in core)
+        result['graph'] = result.pop('graph', None)
+        
+        return result
 
     except Exception as e:
         return {

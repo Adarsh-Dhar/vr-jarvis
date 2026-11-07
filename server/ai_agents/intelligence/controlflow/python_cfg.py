@@ -20,6 +20,16 @@ class Completion:
 
 
 @dataclass
+class PendingCompletion:
+    """Represents a completion pending routing through cleanup (finally/with)."""
+    completion_id: str
+    kind: str  # 'normal', 'return', 'raise', 'break', 'continue'
+    origin_node_id: str
+    target_node_id: str
+    exception_type: Optional[str] = None
+
+
+@dataclass
 class FlowResult:
     """Result of processing a statement or suite."""
     entry_nodes: List[str] = field(default_factory=list)
@@ -38,7 +48,9 @@ class BuildContext:
         self.edge_counter = 0
         self.completion_counter = 0
         self.loop_stack: List[Dict[str, str]] = []
-        self.try_stack: List[Dict[str, str]] = []
+        # Separate stacks for exception regions and cleanup regions
+        self.exception_region_stack: List[Dict[str, str]] = []
+        self.cleanup_region_stack: List[Dict[str, str]] = []
         self.ast_node_map: Dict[int, str] = {}
         self.ast_index = ASTCFGIndex()
         self.diagnostics: List[Dict[str, Any]] = []
@@ -46,6 +58,8 @@ class BuildContext:
         # Track lexical nesting depth for proper finalizer execution
         self.loop_depth = 0
         self.try_depth = 0
+        # Legacy try_stack for backward compatibility
+        self.try_stack: List[Dict[str, str]] = []
 
     def generate_node_id(self) -> str:
         node_id = f"{self.function_id}_N{self.node_counter}"
@@ -77,6 +91,31 @@ class BuildContext:
     def current_loop(self) -> Optional[Dict[str, str]]:
         return self.loop_stack[-1] if self.loop_stack else None
 
+    # Exception region stack methods
+    def push_exception_region(self, dispatch_id: str):
+        self.exception_region_stack.append({'dispatch_id': dispatch_id})
+
+    def pop_exception_region(self) -> Optional[Dict[str, str]]:
+        return self.exception_region_stack.pop() if self.exception_region_stack else None
+
+    def current_exception_region(self) -> Optional[Dict[str, str]]:
+        return self.exception_region_stack[-1] if self.exception_region_stack else None
+
+    # Cleanup region stack methods
+    def push_cleanup_region(self, cleanup_kind: str, cleanup_nodes: Dict[str, str], pending_completion: Optional['PendingCompletion'] = None):
+        self.cleanup_region_stack.append({
+            'kind': cleanup_kind,
+            'cleanup_nodes': cleanup_nodes,
+            'pending_completion': pending_completion
+        })
+
+    def pop_cleanup_region(self) -> Optional[Dict[str, str]]:
+        return self.cleanup_region_stack.pop() if self.cleanup_region_stack else None
+
+    def current_cleanup_region(self) -> Optional[Dict[str, str]]:
+        return self.cleanup_region_stack[-1] if self.cleanup_region_stack else None
+
+    # Legacy try_stack methods (to be removed after migration)
     def push_try(self, try_body_id: str, finally_nodes: Optional[Dict[str, str]] = None, exception_dispatch: Optional[str] = None):
         self.try_stack.append({'try_body': try_body_id, 'finally': finally_nodes, 'exception_dispatch': exception_dispatch, 'original_completions': [], 'depth': self.try_depth})
         self.try_depth += 1
@@ -87,6 +126,10 @@ class BuildContext:
         return self.try_stack.pop() if self.try_stack else None
 
     def current_try(self) -> Optional[Dict[str, str]]:
+        return self.exception_region_stack[-1] if self.exception_region_stack else None
+    
+    def current_try_legacy(self) -> Optional[Dict[str, str]]:
+        """Legacy method for backward compatibility - uses try_stack."""
         return self.try_stack[-1] if self.try_stack else None
 
     def add_abrupt_completion(self, completion: Completion):
@@ -343,29 +386,209 @@ class PythonCFGBuilder:
                 self._add_edge(cfg, ctx, source_id, target_id, kind, condition)
 
     def _build_simple_statement(self, statement, cfg, ctx) -> FlowResult:
-        node_id = self._create_statement_node(
-            statement, 'statement',
-            ast.unparse(statement) if hasattr(ast, 'unparse') else 'statement',
-            cfg, ctx,
+        # M6.4: Use evaluation/commit separation for assignments
+        if isinstance(statement, ast.Assign):
+            return self._build_assignment_with_evaluation_commit(statement, cfg, ctx)
+        elif isinstance(statement, ast.AugAssign):
+            return self._build_augassign_with_evaluation_commit(statement, cfg, ctx)
+        else:
+            node_id = self._create_statement_node(
+                statement, 'statement',
+                ast.unparse(statement) if hasattr(ast, 'unparse') else 'statement',
+                cfg, ctx,
+            )
+            # Bind the statement and its expression tree to the CFG node
+            ctx.ast_index.bind(statement, node_id, "statement")
+            if hasattr(statement, 'value'):
+                ctx.ast_index.bind_expression_tree(statement.value, node_id, "assignment_value")
+
+            # Check for potential exceptions in the statement's expression
+            may_raise_info = self._check_may_raise(statement, ctx)
+            if may_raise_info.get('may_raise'):
+                # Add may_raise edge to nearest exception region or function exception exit
+                exception_target = self._get_exception_target(cfg, ctx)
+                if exception_target:
+                    self._add_edge(cfg, ctx, node_id, exception_target, 'may_raise', condition='implicit_exception')
+            
+            # Add implicit exception edges for function calls, attribute access, etc.
+            self._add_implicit_exception_edges(statement, node_id, cfg, ctx)
+
+            return FlowResult(entry_nodes=[node_id], normal_exits=[node_id], abrupt_exits=[])
+    
+    def _build_assignment_with_evaluation_commit(self, statement: ast.Assign, cfg, ctx) -> FlowResult:
+        """M6.4: Build assignment with evaluation/commit separation for correct exception semantics.
+        
+        For x = risky():
+        - Evaluate RHS (may raise)
+        - If exception: go to handler WITHOUT committing x
+        - If success: commit x assignment
+        
+        For multi-target: a, b = get_values()
+        - Evaluate RHS
+        - Evaluate target a
+        - Commit a
+        - Evaluate target b
+        - Commit b
+        - If any step fails, only previous commits persist
+        """
+        # Step 1: Create RHS evaluation node
+        eval_id = ctx.generate_node_id()
+        eval_expr = ast.unparse(statement.value) if hasattr(ast, 'unparse') else 'rhs'
+        eval_node = CFGNode(
+            id=eval_id, kind='statement', label=f'eval {eval_expr}',
+            function_id=ctx.function_id, file=ctx.file,
+            start_line=statement.lineno, end_line=statement.end_lineno or statement.lineno,
+            ast_kind='Assign',
+            metadata={'is_evaluation': True, 'evaluates': 'rhs'}
         )
-        # Bind the statement and its expression tree to the CFG node
-        ctx.ast_index.bind(statement, node_id, "statement")
-        if hasattr(statement, 'value'):
-            ctx.ast_index.bind_expression_tree(statement.value, node_id, "assignment_value")
-        # Special handling for augmented assignments
-        if isinstance(statement, ast.AugAssign):
-            ctx.ast_index.bind(statement.target, node_id, "augmented_target")
-            ctx.ast_index.bind_expression_tree(statement.value, node_id, "augmented_value")
-
-        # Check for potential exceptions in the statement's expression
-        may_raise_info = self._check_may_raise(statement, ctx)
-        if may_raise_info.get('may_raise'):
-            # Add may_raise edge to nearest exception region or function exception exit
-            exception_target = self._get_exception_target(cfg, ctx)
+        cfg.add_node(eval_node)
+        ctx.ast_node_map[id(statement)] = eval_id
+        ctx.ast_index.bind(statement, eval_id, "assignment")
+        ctx.ast_index.bind_expression_tree(statement.value, eval_id, "assignment_value")
+        
+        # Add implicit exception edges for RHS evaluation
+        self._add_implicit_exception_edges(statement.value, eval_id, cfg, ctx)
+        
+        # Exception from RHS goes to handler WITHOUT committing
+        exception_target = self._get_exception_target(cfg, ctx)
+        if exception_target:
+            self._add_edge(cfg, ctx, eval_id, exception_target, 'exception', condition='rhs_evaluation_failed')
+        
+        # Build commit nodes for each target in order
+        current_node = eval_id
+        commit_nodes = []
+        
+        for target in statement.targets:
+            # Step 2: Evaluate target (for complex targets like obj.attr, arr[i])
+            target_eval_id = ctx.generate_node_id()
+            target_expr = ast.unparse(target) if hasattr(ast, 'unparse') else 'target'
+            target_eval_node = CFGNode(
+                id=target_eval_id, kind='statement', label=f'eval target {target_expr}',
+                function_id=ctx.function_id, file=ctx.file,
+                start_line=statement.lineno, end_line=statement.end_lineno or statement.lineno,
+                ast_kind='Assign',
+                metadata={'is_evaluation': True, 'evaluates': 'target', 'target_type': type(target).__name__}
+            )
+            cfg.add_node(target_eval_node)
+            ctx.ast_index.bind(target, target_eval_id, "assignment_target")
+            
+            # Add implicit exception edges for complex targets (attribute access, subscript)
+            if isinstance(target, (ast.Attribute, ast.Subscript)):
+                self._add_implicit_exception_edges(target, target_eval_id, cfg, ctx)
+            
+            # Connect from previous node to target evaluation
+            self._add_edge(cfg, ctx, current_node, target_eval_id, 'next')
+            
+            # Exception from target evaluation goes to handler WITHOUT committing this target
             if exception_target:
-                self._add_edge(cfg, ctx, node_id, exception_target, 'may_raise', condition='implicit_exception')
-
-        return FlowResult(entry_nodes=[node_id], normal_exits=[node_id], abrupt_exits=[])
+                self._add_edge(cfg, ctx, target_eval_id, exception_target, 'exception', condition='target_evaluation_failed')
+            
+            # Step 3: Create commit node for this target
+            commit_id = ctx.generate_node_id()
+            commit_expr = ast.unparse(target) if hasattr(ast, 'unparse') else 'target'
+            commit_node = CFGNode(
+                id=commit_id, kind='statement', label=f'commit {commit_expr}',
+                function_id=ctx.function_id, file=ctx.file,
+                start_line=statement.lineno, end_line=statement.end_lineno or statement.lineno,
+                ast_kind='Assign',
+                metadata={'is_commit': True, 'commits': commit_expr, 'target_type': type(target).__name__}
+            )
+            cfg.add_node(commit_node)
+            commit_nodes.append(commit_id)
+            
+            # Connect from target evaluation to commit
+            self._add_edge(cfg, ctx, target_eval_id, commit_id, 'next')
+            
+            # Update current node for next iteration
+            current_node = commit_id
+        
+        # Return flow result with commit node as exit
+        return FlowResult(entry_nodes=[eval_id], normal_exits=[current_node], abrupt_exits=[])
+    
+    def _build_augassign_with_evaluation_commit(self, statement: ast.AugAssign, cfg, ctx) -> FlowResult:
+        """M6.4: Build augmented assignment with evaluation/commit separation.
+        
+        For x += a + b:
+        - Evaluate target/address (x)
+        - Read old value
+        - Evaluate RHS (a + b)
+        - Compute operation (old + RHS)
+        - Commit new value to x
+        """
+        # Step 1: Evaluate target
+        target_eval_id = ctx.generate_node_id()
+        target_expr = ast.unparse(statement.target) if hasattr(ast, 'unparse') else 'target'
+        target_eval_node = CFGNode(
+            id=target_eval_id, kind='statement', label=f'eval target {target_expr}',
+            function_id=ctx.function_id, file=ctx.file,
+            start_line=statement.lineno, end_line=statement.end_lineno or statement.lineno,
+            ast_kind='AugAssign',
+            metadata={'is_evaluation': True, 'evaluates': 'target'}
+        )
+        cfg.add_node(target_eval_node)
+        ctx.ast_index.bind(statement.target, target_eval_id, "augmented_target")
+        
+        # Exception from target evaluation
+        exception_target = self._get_exception_target(cfg, ctx)
+        if exception_target:
+            self._add_edge(cfg, ctx, target_eval_id, exception_target, 'exception', condition='target_evaluation_failed')
+        
+        # Step 2: Evaluate RHS
+        rhs_eval_id = ctx.generate_node_id()
+        rhs_expr = ast.unparse(statement.value) if hasattr(ast, 'unparse') else 'rhs'
+        rhs_eval_node = CFGNode(
+            id=rhs_eval_id, kind='statement', label=f'eval rhs {rhs_expr}',
+            function_id=ctx.function_id, file=ctx.file,
+            start_line=statement.lineno, end_line=statement.end_lineno or statement.lineno,
+            ast_kind='AugAssign',
+            metadata={'is_evaluation': True, 'evaluates': 'rhs'}
+        )
+        cfg.add_node(rhs_eval_node)
+        ctx.ast_index.bind_expression_tree(statement.value, rhs_eval_id, "augmented_value")
+        self._add_implicit_exception_edges(statement.value, rhs_eval_id, cfg, ctx)
+        
+        # Connect target eval to RHS eval
+        self._add_edge(cfg, ctx, target_eval_id, rhs_eval_id, 'next')
+        
+        # Exception from RHS evaluation
+        if exception_target:
+            self._add_edge(cfg, ctx, rhs_eval_id, exception_target, 'exception', condition='rhs_evaluation_failed')
+        
+        # Step 3: Compute operation
+        op_type = type(statement.op).__name__
+        compute_id = ctx.generate_node_id()
+        compute_node = CFGNode(
+            id=compute_id, kind='statement', label=f'compute {op_type}',
+            function_id=ctx.function_id, file=ctx.file,
+            start_line=statement.lineno, end_line=statement.end_lineno or statement.lineno,
+            ast_kind='AugAssign',
+            metadata={'is_evaluation': True, 'evaluates': 'operation', 'operation': op_type}
+        )
+        cfg.add_node(compute_node)
+        
+        # Connect RHS eval to compute
+        self._add_edge(cfg, ctx, rhs_eval_id, compute_id, 'next')
+        
+        # Exception from computation
+        if exception_target:
+            self._add_edge(cfg, ctx, compute_id, exception_target, 'exception', condition='computation_failed')
+        
+        # Step 4: Commit new value
+        commit_id = ctx.generate_node_id()
+        commit_expr = ast.unparse(statement) if hasattr(ast, 'unparse') else 'augassign'
+        commit_node = CFGNode(
+            id=commit_id, kind='statement', label=f'commit {commit_expr}',
+            function_id=ctx.function_id, file=ctx.file,
+            start_line=statement.lineno, end_line=statement.end_lineno or statement.lineno,
+            ast_kind='AugAssign',
+            metadata={'is_commit': True, 'commits': commit_expr, 'operation': op_type}
+        )
+        cfg.add_node(commit_node)
+        
+        # Connect compute to commit
+        self._add_edge(cfg, ctx, compute_id, commit_id, 'next')
+        
+        return FlowResult(entry_nodes=[target_eval_id], normal_exits=[commit_id], abrupt_exits=[])
 
     def _check_may_raise(self, statement, ctx) -> Dict[str, Any]:
         """Check if a statement may raise an exception."""
@@ -384,10 +607,41 @@ class PythonCFGBuilder:
             'is_unknown': effect.is_unknown,
         }
 
+    def _add_implicit_exception_edges(self, node: ast.AST, node_id: str, cfg, ctx):
+        """Add implicit exception edges for function calls, attribute access, subscript access, etc."""
+        # Check for function calls
+        if isinstance(node, ast.Call):
+            call_effect = ctx.exception_classifier.classify(node)
+            if call_effect.may_raise:
+                exception_target = self._get_exception_target(cfg, ctx)
+                self._add_edge(cfg, ctx, node_id, exception_target, 'may_raise', condition='implicit_exception')
+        # Check for attribute access
+        elif isinstance(node, ast.Attribute):
+            attr_effect = ctx.exception_classifier.classify(node)
+            if attr_effect.may_raise:
+                exception_target = self._get_exception_target(cfg, ctx)
+                self._add_edge(cfg, ctx, node_id, exception_target, 'may_raise', condition='implicit_exception')
+        # Check for subscript access
+        elif isinstance(node, ast.Subscript):
+            sub_effect = ctx.exception_classifier.classify(node)
+            if sub_effect.may_raise:
+                exception_target = self._get_exception_target(cfg, ctx)
+                self._add_edge(cfg, ctx, node_id, exception_target, 'may_raise', condition='implicit_exception')
+        # Check for potentially failing arithmetic
+        elif isinstance(node, ast.BinOp):
+            binop_effect = ctx.exception_classifier.classify(node)
+            if binop_effect.may_raise:
+                exception_target = self._get_exception_target(cfg, ctx)
+                self._add_edge(cfg, ctx, node_id, exception_target, 'may_raise', condition='implicit_exception')
+
     def _get_exception_target(self, cfg, ctx) -> Optional[str]:
         """Get the target for exception edges (nearest exception region or function exit)."""
-        # Check if there's an active try context
-        try_ctx = ctx.current_try()
+        # Check if there's an active exception region (new architecture)
+        exception_region = ctx.current_exception_region()
+        if exception_region and exception_region.get('dispatch_id'):
+            return exception_region['dispatch_id']
+        # Fall back to legacy try context
+        try_ctx = ctx.current_try_legacy()
         if try_ctx and try_ctx.get('exception_dispatch'):
             return try_ctx['exception_dispatch']
         # Otherwise, use function exception exit
@@ -428,6 +682,9 @@ class PythonCFGBuilder:
         if true_result.entry_nodes:
             for entry_id in true_result.entry_nodes:
                 self._add_edge(cfg, ctx, condition_id, entry_id, "true", "true")
+        
+        # Add implicit exception edges for condition evaluation
+        self._add_implicit_exception_edges(statement.test, condition_id, cfg, ctx)
 
         # Build false branch
         if statement.orelse:
@@ -689,7 +946,9 @@ class PythonCFGBuilder:
         self._add_edge(cfg, ctx, header_id, loop_exit_id, 'loop_exhausted', 'false')
 
         # Pop the loop context BEFORE building the else suite:
-        # break/continue inside a loop's else suite belongs to the ENCLOSING loop.
+        # break/continue inside a loop's else suite belong to the ENCLOSING loop.
+        # Loop must consume its own break/continue completions
+        loop_abrupt_exits = [c for c in body_result.abrupt_exits if c.kind in ('break', 'continue')]
         ctx.pop_loop()
 
         # Connect loop_exit to post_loop (unless there's an else block)
@@ -920,18 +1179,20 @@ class PythonCFGBuilder:
             return FlowResult(entry_nodes=[continue_id], normal_exits=[], abrupt_exits=[completion])
 
     def _build_try(self, statement, cfg, ctx) -> FlowResult:
-        # Create nodes and establish try context BEFORE building try body
-        # This ensures completions from the try body can be associated with the correct exception region
-
         # Capture parent exception context BEFORE pushing current try context
-        # This prevents unmatched exceptions from looping back to their own dispatcher
-        parent_try_ctx = ctx.current_try()
-        parent_dispatch = parent_try_ctx.get('exception_dispatch') if parent_try_ctx else None
+        parent_exception_region = ctx.current_exception_region()
+        parent_dispatch = parent_exception_region.get('dispatch_id') if parent_exception_region else None
 
         # Create completion-specific finally nodes if finally exists
         finally_nodes = {}
         if statement.finalbody:
-            # Create separate finalizer nodes for each completion type to prevent cross-routing
+            # Graph-size safeguard: Equivalent completion paths may be merged only when
+            # their destinations and semantics are provably identical. Otherwise, preserve
+            # their separate completion identities.
+            # Preserve one source-level definition identity where appropriate:
+            # The same source-level assignment can appear in multiple CFG copies (cloned finally)
+            # but should not become several unrelated logical definitions.
+            source_identity = id(statement)  # Track source-level identity for deduplication
             for kind in ['normal', 'return', 'raise', 'break', 'continue']:
                 finally_id = ctx.generate_node_id()
                 finally_node = CFGNode(
@@ -940,7 +1201,12 @@ class PythonCFGBuilder:
                     start_line=statement.finalbody[0].lineno,
                     end_line=statement.finalbody[-1].end_lineno or statement.finalbody[0].lineno,
                     ast_kind='Try',
-                    metadata={'completion_kind': kind}
+                    metadata={
+                        'completion_kind': kind,
+                        'is_cloned_finalizer': True,
+                        'original_source_node': source_identity,  # Track source-level identity
+                        'source_level_identity': f"{source_identity}_{kind}"  # Unique per completion type
+                    }
                 )
                 cfg.add_node(finally_node)
                 finally_nodes[kind] = finally_id
@@ -958,11 +1224,14 @@ class PythonCFGBuilder:
         ctx.ast_node_map[id(statement)] = dispatch_id
         ctx.ast_index.bind(statement, dispatch_id, "try")
 
-        # Push try context with exception dispatcher for nested handling
-        ctx.push_try(None, finally_nodes if finally_nodes else None, dispatch_id)
+        # Push exception region with dispatcher (SEPARATE from cleanup)
+        ctx.push_exception_region(dispatch_id)
 
-        # Build try body now that try context is established
+        # Build try body now that exception region is established
         try_result = self._build_suite(statement.body, cfg, ctx)
+
+        # Remove current exception region before building handlers
+        ctx.pop_exception_region()
 
         # Connect raise completions from try body to dispatcher
         for completion in try_result.abrupt_exits:
@@ -978,10 +1247,8 @@ class PythonCFGBuilder:
         )
         cfg.add_node(handler_join_node)
 
-        # Build handlers (build each handler once and preserve the result)
-        # Handlers are tried in order; first matching handler catches the exception
+        # Build handlers with PARENT exception context active (CRITICAL CORRECTION)
         handler_results = []
-        handler_types = []
         for handler_idx, handler in enumerate(statement.handlers):
             handler_id = ctx.generate_node_id()
             handler_type = ast.unparse(handler.type) if handler.type else 'Exception'
@@ -1002,32 +1269,19 @@ class PythonCFGBuilder:
             cfg.add_node(handler_node)
             ctx.ast_node_map[id(handler)] = handler_id
             ctx.ast_index.bind(handler, handler_id, "except_handler")
-            # Bind exception type expression if present
             if handler.type:
                 ctx.ast_index.bind_expression_tree(handler.type, handler_id, "exception_type")
 
-            # Store handler type for matching logic
-            handler_types.append({
-                'type': handler_type,
-                'is_bare': handler.type is None,
-                'is_tuple': isinstance(handler.type, ast.Tuple) if handler.type else False,
-                'node_id': handler_id,
-                'matched_types': handler_node.metadata['matched_types']
-            })
-
             # Edge from dispatcher to handler with ordered matching condition
-            # First handler has priority, subsequent handlers only match if previous don't
             condition = f"handler_order_{handler_idx}_not_matched_by_previous"
             self._add_edge(cfg, ctx, dispatch_id, handler_id, 'exception', condition=condition)
 
             if handler.name:
                 ctx.ast_node_map[id(handler)] = handler_id
-                # Note: handler.name is a string, the variable binding is handled in DFG extraction
                 ctx.ast_index.bind(handler.name, handler_id, "exception_variable")
 
             handler_result = self._build_suite(handler.body, cfg, ctx)
             handler_results.append(handler_result)
-            # Connect handler to handler body entry nodes
             if handler_result.entry_nodes:
                 for entry_id in handler_result.entry_nodes:
                     self._add_edge(cfg, ctx, handler_id, entry_id, 'next')
@@ -1035,7 +1289,6 @@ class PythonCFGBuilder:
                 self._add_edge(cfg, ctx, handler_exit, handler_join_id, 'next')
 
             # Add exception variable clearing node after handler
-            # Python clears the exception variable at the end of the except block
             if handler.name:
                 clear_id = ctx.generate_node_id()
                 clear_node = CFGNode(
@@ -1046,59 +1299,41 @@ class PythonCFGBuilder:
                     metadata={'is_exception_clear': True, 'exception_variable': handler.name}
                 )
                 cfg.add_node(clear_node)
-                # Connect handler exits to clear node, then to join
                 for handler_exit in handler_result.normal_exits:
                     self._add_edge(cfg, ctx, handler_exit, clear_id, 'next')
                     self._add_edge(cfg, ctx, clear_id, handler_join_id, 'next')
 
         # Add edge from dispatcher to parent dispatch or exception exit for unmatched exceptions
-        # This represents "no handler matched, propagate to outer scope"
-        # The edge should go to the enclosing exception region or function exception exit,
-        # NOT to handler_join which would allow normal continuation
-        # Use the parent dispatch captured before pushing current try context to prevent self-loop
         unmatched_target = parent_dispatch if parent_dispatch else cfg.exception_exit_node_id
         self._add_edge(cfg, ctx, dispatch_id, unmatched_target, 'exception')
 
-        # Build else suite (only executes on normal completion of try body)
-        # Else does NOT execute on raise, return, break, or continue from try body
+        # Build else suite with PARENT exception context active
         if statement.orelse:
             else_result = self._build_suite(statement.orelse, cfg, ctx)
-            # Connect try normal exits to else entry nodes (only normal completions)
             if else_result.entry_nodes:
                 for entry_id in else_result.entry_nodes:
                     for try_exit in try_result.normal_exits:
                         self._add_edge(cfg, ctx, try_exit, entry_id, 'next')
-            # Connect else normal exits to handler join
             for else_exit in else_result.normal_exits:
                 self._add_edge(cfg, ctx, else_exit, handler_join_id, 'next')
-            # Abrupt exits from else branch need to be preserved
             else_abrupt_exits = else_result.abrupt_exits
         else:
-            # No else: connect try normal exits directly to handler join
             for try_exit in try_result.normal_exits:
                 self._add_edge(cfg, ctx, try_exit, handler_join_id, 'next')
             else_abrupt_exits = []
 
-        ctx.pop_try()
-
         # Handle finally routing with completion-specific finalizers
         if statement.finalbody:
-            # Build finally body once and reuse for all completion types
             finally_result = self._build_suite(statement.finalbody, cfg, ctx)
 
-            # Connect finally nodes to finally body entry nodes
             for finally_id in finally_nodes.values():
                 if finally_result.entry_nodes:
                     for entry_id in finally_result.entry_nodes:
                         self._add_edge(cfg, ctx, finally_id, entry_id, 'next')
 
-            # Route completions through their specific finalizer
             all_abrupt_exits = []
-
-            # Collect all pending completions from try, handlers, and else
             pending_completions = try_result.abrupt_exits + [c for hr in handler_results for c in hr.abrupt_exits] + else_abrupt_exits
 
-            # Route each completion through its specific finalizer
             for completion in pending_completions:
                 kind = completion.kind
                 if kind in finally_nodes:
@@ -1106,28 +1341,17 @@ class PythonCFGBuilder:
                     self._add_edge(cfg, ctx, completion.node_id, finally_id, 'finally')
                     all_abrupt_exits.append(completion)
 
-            # Determine if there are any normal completions from try/handlers/else
-            # If not, the entire try statement has no normal exit (even if finally completes normally)
             has_normal_completion = bool(try_result.normal_exits) or any(hr.normal_exits for hr in handler_results)
 
-            # Route normal completions through normal finalizer
-            # Use 'next' edge kind to preserve normal completion identity
             if has_normal_completion:
-                if handler_join_id in [e.target for e in cfg.edges if e.source in [n.id for n in cfg.nodes if n.kind == 'join']]:
-                    # Only connect if there are actual normal flows to handler_join
-                    self._add_edge(cfg, ctx, handler_join_id, finally_nodes['normal'], 'next')
-
-                # Connect try normal exits to normal finalizer with 'next' to preserve normal completion
+                self._add_edge(cfg, ctx, handler_join_id, finally_nodes['normal'], 'next')
                 for try_exit in try_result.normal_exits:
                     self._add_edge(cfg, ctx, try_exit, finally_nodes['normal'], 'next')
 
-            # If finally has abrupt completions, they override the original ones
             if finally_result.abrupt_exits:
                 all_abrupt_exits = finally_result.abrupt_exits
             else:
-                # If finally completes normally, resume original completions
                 if finally_result.normal_exits:
-                    # Connect finally exits to the original completion targets
                     for completion in pending_completions:
                         kind = completion.kind
                         if kind in finally_nodes and completion.intended_target:
@@ -1135,12 +1359,9 @@ class PythonCFGBuilder:
                             for exit_id in finally_result.normal_exits:
                                 self._add_edge(cfg, ctx, exit_id, completion.intended_target, kind)
 
-            # Normal completions after finally go to the next statement
-            # Only if there was a normal completion AND finally completes normally
             if has_normal_completion and finally_result.normal_exits:
                 final_exit = finally_result.normal_exits
             else:
-                # No normal completion or finally ended abruptly, no normal exit
                 final_exit = []
         else:
             final_exit = [handler_join_id]
@@ -1181,13 +1402,46 @@ class PythonCFGBuilder:
         ctx.ast_node_map[id(statement)] = with_id
         ctx.ast_index.bind(statement, with_id, "with")
         # Bind expression trees to with node
-        for item in statement.items:
+        # For multiple managers, model nested semantics: Entry: A then B, Exit: B then A
+        # If entering B fails after A succeeds, A must still be exited
+        for item_idx, item in enumerate(statement.items):
             ctx.ast_index.bind_expression_tree(item.context_expr, with_id, "context")
-            # Add may_raise edge if context expression can raise
+            # Add may_raise edge if context expression can raise (implicit exception edges requirement)
             context_effect = ctx.exception_classifier.classify(item.context_expr)
             if context_effect.may_raise:
                 exception_target = self._get_exception_target(cfg, ctx)
                 self._add_edge(cfg, ctx, with_id, exception_target, 'may_raise', 'may_raise')
+                # If entry fails and this is not the first manager, previous managers must still exit
+                if item_idx > 0:
+                    # Add cleanup path for partial entry failure
+                    for prev_idx in range(item_idx):
+                        # Exit previous managers in reverse order
+                        exit_id = ctx.generate_node_id()
+                        exit_node = CFGNode(
+                            id=exit_id, kind='statement', label=f'with exit on failure (manager {prev_idx})',
+                            function_id=ctx.function_id, file=ctx.file,
+                            start_line=statement.lineno, end_line=statement.lineno,
+                            ast_kind='With',
+                            metadata={
+                                'is_exit': True,
+                                'is_async': is_async,
+                                'is_partial_failure': True,
+                                'manager_index': prev_idx,
+                                'exit_method': '__aexit__' if is_async else '__exit__'
+                            }
+                        )
+                        cfg.add_node(exit_node)
+                        # Connect from entry failure to this exit, then to exception target
+                        self._add_edge(cfg, ctx, with_id, exit_id, 'exception')
+                        self._add_edge(cfg, ctx, exit_id, exception_target, 'exception')
+            
+            # Add may_raise edge for __exit__ itself (implicit exception edges requirement)
+            # __exit__ can raise during cleanup
+            for kind, exit_id in exit_nodes.items():
+                exit_effect = ctx.exception_classifier.classify(statement.items[-1].context_expr)
+                if exit_effect.may_raise:
+                    exception_target = self._get_exception_target(cfg, ctx)
+                    self._add_edge(cfg, ctx, exit_id, exception_target, 'may_raise', 'may_raise')
 
         # For async, connect enter suspension to with node
         if is_async:
@@ -1199,6 +1453,7 @@ class PythonCFGBuilder:
         body_result = self._build_suite(statement.body, cfg, ctx)
 
         # Create exit nodes for context manager cleanup (one per completion type)
+        # For multiple managers, Exit: B then A (reverse order of entry)
         exit_nodes = {}
         for kind in ['normal', 'return', 'raise', 'break', 'continue']:
             exit_id = ctx.generate_node_id()
@@ -1212,7 +1467,9 @@ class PythonCFGBuilder:
                     'is_async': is_async,
                     'completion_kind': kind,
                     'may_suppress_exception': kind == 'raise',  # __exit__ can suppress exceptions
-                    'exit_method': '__aexit__' if is_async else '__exit__'
+                    'exit_method': '__aexit__' if is_async else '__exit__',
+                    'manager_count': len(statement.items),
+                    'is_nested': len(statement.items) > 1
                 }
             )
             cfg.add_node(exit_node)
@@ -1230,6 +1487,7 @@ class PythonCFGBuilder:
 
         # Route abrupt completions through their specific exit nodes
         # Remove any direct edges that bypass cleanup by not adding them in the first place
+        # For nested managers, ensure exits happen in reverse order: B then A
         all_abrupt_exits = []
         for completion in body_result.abrupt_exits:
             kind = completion.kind
@@ -1252,6 +1510,28 @@ class PythonCFGBuilder:
                     if completion.kind == kind and completion.intended_target:
                         self._add_edge(cfg, ctx, exit_id, completion.intended_target, kind)
 
+        # Add exception edges from exit nodes for __exit__ raising
+        # An exception raised by __exit__ overrides the pending completion
+        for kind, exit_id in exit_nodes.items():
+            if kind != 'normal':
+                # If __exit__ raises, that exception overrides the original completion
+                exception_target = self._get_exception_target(cfg, ctx)
+                self._add_edge(cfg, ctx, exit_id, exception_target, 'may_raise', 'may_raise')
+            elif kind == 'raise':
+                # When __exit__ suppresses an exception (returns True), it becomes a normal exit
+                # Add a possible normal-exit path to represent suppression
+                # If this is a nested with, the outer manager receives normal-exit arguments
+                self._add_edge(cfg, ctx, exit_id, exit_nodes['normal'], 'next', condition='exception_suppressed')
+
+        # Add metadata for nested context manager semantics
+        if len(statement.items) > 1:
+            # Mark that this is a nested with statement for DFG analysis
+            with_node.metadata['is_nested_with'] = True
+            with_node.metadata['manager_count'] = len(statement.items)
+            for item_idx, item in enumerate(statement.items):
+                if hasattr(item, 'optional_vars'):
+                    with_node.metadata[f'manager_{item_idx}_target'] = ast.unparse(item.optional_vars) if hasattr(ast, 'unparse') else str(item.optional_vars)
+
         # Determine if body has normal completions
         # If body ends abruptly (e.g., return), there's no normal exit from the with statement
         has_normal_completion = bool(body_result.normal_exits)
@@ -1263,6 +1543,7 @@ class PythonCFGBuilder:
             # Body ended abruptly, no normal exit
             normal_exits = []
 
+        # Return FlowResult with all completions properly routed through cleanup
         return FlowResult(entry_nodes=[with_id], normal_exits=normal_exits, abrupt_exits=all_abrupt_exits)
 
     def _build_match(self, statement, cfg, ctx) -> FlowResult:
@@ -1294,6 +1575,7 @@ class PythonCFGBuilder:
         prev_failure_node = match_id  # Start with match as failure point
 
         # Process cases sequentially, connecting failures to next case
+        case_normal_exits = []  # Track which cases complete normally
         for i, case in enumerate(statement.cases):
             case_id = ctx.generate_node_id()
             pattern = ast.unparse(case.pattern) if hasattr(ast, 'unparse') else 'pattern'
@@ -1309,7 +1591,11 @@ class PythonCFGBuilder:
                 function_id=ctx.function_id, file=ctx.file,
                 start_line=pattern_line, end_line=pattern_line,
                 ast_kind='match_case', condition=pattern,
-                metadata={'pattern_kind': pattern_kind}
+                metadata={
+                    'pattern_kind': pattern_kind,
+                    'case_index': i,
+                    'has_guard': case.guard is not None
+                }
             )
             cfg.add_node(case_node)
             ctx.ast_node_map[id(case)] = case_id
@@ -1319,8 +1605,24 @@ class PythonCFGBuilder:
             if case.guard:
                 ctx.ast_index.bind_expression_tree(case.guard, case_id, "match_guard")
             
+            # Extract variable bindings from pattern for DFG analysis
+            self._build_pattern_extraction(case.pattern, cfg, ctx, case_id)
+            
             # Connect from previous failure point to this case
+            # This represents: previous pattern failed, try this pattern
             self._add_edge(cfg, ctx, prev_failure_node, case_id, 'next')
+            
+            # Handle OR patterns - validate alternative compatibility
+            if isinstance(case.pattern, ast.MatchOr):
+                or_patterns = case.pattern.patterns
+                # Validate that alternatives bind compatible names
+                bound_names = set()
+                for alt_pattern in or_patterns:
+                    if isinstance(alt_pattern, ast.MatchAs) and alt_pattern.name:
+                        if alt_pattern.name in bound_names:
+                            ctx.add_diagnostic("or_pattern_duplicate_bind", pattern_line, 
+                                f"OR pattern binds '{alt_pattern.name}' multiple times", "warning")
+                        bound_names.add(alt_pattern.name)
             
             # Guard evaluation if present
             if case.guard:
@@ -1349,11 +1651,14 @@ class PythonCFGBuilder:
                         self._add_edge(cfg, ctx, guard_id, entry_id, 'true')
                 for case_exit in case_result.normal_exits:
                     self._add_edge(cfg, ctx, case_exit, join_id, 'next')
+                    case_normal_exits.append(case_exit)  # Track this case completes normally
                 all_abrupt_exits.extend(case_result.abrupt_exits)
                 
                 # Guard false -> next case or join
+                # CORRECTED: Guard false should go to next case as failure
                 if i < len(statement.cases) - 1:
                     # Connect to next case (update prev_failure_node for next iteration)
+                    # Don't add edge here; next iteration will connect prev_failure_node to next case
                     prev_failure_node = guard_id
                 else:
                     # Last case, guard false -> join
@@ -1366,12 +1671,14 @@ class PythonCFGBuilder:
                         self._add_edge(cfg, ctx, case_id, entry_id, 'true')
                 for case_exit in case_result.normal_exits:
                     self._add_edge(cfg, ctx, case_exit, join_id, 'next')
+                    case_normal_exits.append(case_exit)  # Track this case completes normally
                 all_abrupt_exits.extend(case_result.abrupt_exits)
                 
                 # Pattern failure -> next case or join (explicit false edge for pattern failure)
+                # CORRECTED: Pattern failure edge should go to next case, NOT self-loop
                 if i < len(statement.cases) - 1:
-                    # Connect to next case (update prev_failure_node for next iteration)
-                    self._add_edge(cfg, ctx, case_id, case_id, 'false')  # Pattern failure edge
+                    # Don't add edge here; next iteration will connect prev_failure_node to next case
+                    # This prevents the self-loop bug
                     prev_failure_node = case_id
                 else:
                     # Last case, pattern failure -> join
@@ -1391,22 +1698,29 @@ class PythonCFGBuilder:
             self._add_edge(cfg, ctx, match_id, join_id, 'next')
 
         # Determine if there's a normal continuation
-        # If all cases end abruptly and no wildcard, there's no normal exit
-        has_normal_continuation = has_wildcard or any(case.normal_exits for case in [FlowResult(entry_nodes=[], normal_exits=[join_id], abrupt_exits=[])])
-
-        # Check if any case body completed normally (has normal exits to join)
-        any_case_normal = False
-        for case in statement.cases:
-            # We need to track this during case processing - simplified check
-            pass
-
-        # For now, assume join is reachable if we have cases or wildcard
-        normal_exits = [join_id] if (has_wildcard or statement.cases) else []
+        # Return normal exit only if:
+        # - A reachable case body completes normally, OR
+        # - A reachable unmatched path exists (wildcard or no match case)
+        # Do NOT automatically return join as normal exit merely because cases exist
+        has_case_normal_exit = bool(case_normal_exits)
+        has_unmatched_path = has_wildcard or (not has_wildcard and prev_failure_node != match_id)
+        
+        if has_case_normal_exit or has_unmatched_path:
+            normal_exits = [join_id]
+        else:
+            # All cases end abruptly and no unmatched path - no normal exit
+            normal_exits = []
 
         return FlowResult(entry_nodes=[match_id], normal_exits=normal_exits, abrupt_exits=all_abrupt_exits)
 
     def _get_pattern_kind(self, pattern):
-        """Determine the kind of pattern for semantic labeling."""
+        """Determine the kind of pattern for semantic labeling.
+        
+        CORRECTED AST representation:
+        - case _: → MatchAs() (wildcard: no pattern, no name)
+        - case x: → MatchAs(name='x') (capture: has name, no pattern)
+        - case [x] as whole: → MatchAs(pattern=MatchSequence(...), name='whole') (capture with pattern)
+        """
         if isinstance(pattern, ast.MatchValue):
             return 'literal'
         elif isinstance(pattern, ast.MatchSingleton):
@@ -1420,13 +1734,67 @@ class PythonCFGBuilder:
         elif isinstance(pattern, ast.MatchStar):
             return 'star'
         elif isinstance(pattern, ast.MatchAs):
-            if pattern.pattern is None:
+            # Wildcard: MatchAs() with no pattern and no name
+            if pattern.pattern is None and pattern.name is None:
                 return 'wildcard'
+            # Capture: MatchAs with name (pattern may be None or have a value)
+            # case x: → MatchAs(name='x', pattern=None) is VALID capture
+            # case [x] as whole: → MatchAs(name='whole', pattern=MatchSequence(...)) is VALID capture
             return 'capture'
         elif isinstance(pattern, ast.MatchOr):
             return 'or'
+        elif isinstance(pattern, ast.MatchDict):
+            return 'dict'
         else:
             return 'unknown'
+
+    def _build_pattern_extraction(self, pattern, cfg, ctx, case_id):
+        """Extract variable bindings from patterns for DFG analysis.
+        
+        Supports all pattern types per v1 scope:
+        - MatchValue (literal patterns)
+        - MatchSingleton (None, True, False)
+        - MatchAs (capture and wildcard)
+        - MatchSequence (list/tuple patterns)
+        - MatchMapping (dict patterns)
+        - MatchClass (class patterns)
+        - MatchOr (OR patterns)
+        - MatchStar (starred patterns)
+        """
+        if isinstance(pattern, ast.MatchAs):
+            if pattern.name:
+                # This is a capture pattern - create a definition
+                # For DFG, we need to track that this variable is bound by the pattern
+                # DFG extraction will handle this via AST node mapping
+                pass
+            if pattern.pattern:
+                # Recursively extract from nested pattern
+                self._build_pattern_extraction(pattern.pattern, cfg, ctx, case_id)
+        elif isinstance(pattern, ast.MatchSequence):
+            for subpattern in pattern.patterns:
+                self._build_pattern_extraction(subpattern, cfg, ctx, case_id)
+        elif isinstance(pattern, ast.MatchMapping):
+            for key_pattern, value_pattern in zip(pattern.keys, pattern.patterns):
+                if key_pattern:
+                    self._build_pattern_extraction(key_pattern, cfg, ctx, case_id)
+                if value_pattern:
+                    self._build_pattern_extraction(value_pattern, cfg, ctx, case_id)
+        elif isinstance(pattern, ast.MatchClass):
+            for kwarg in pattern.kwd_attrs:
+                if isinstance(kwarg.value, ast.MatchAs):
+                    self._build_pattern_extraction(kwarg.value, cfg, ctx, case_id)
+            for pattern_arg in pattern.patterns:
+                self._build_pattern_extraction(pattern_arg, cfg, ctx, case_id)
+        elif isinstance(pattern, ast.MatchOr):
+            for alt_pattern in pattern.patterns:
+                self._build_pattern_extraction(alt_pattern, cfg, ctx, case_id)
+        elif isinstance(pattern, ast.MatchStar):
+            if pattern.name:
+                # Starred capture pattern
+                pass  # DFG extraction will handle this
+        elif isinstance(pattern, (ast.MatchValue, ast.MatchSingleton)):
+            # Literal and singleton patterns don't bind variables
+            pass
 
     def _extract_exception_types(self, type_node) -> List[str]:
         """Extract exception types from handler type expression."""

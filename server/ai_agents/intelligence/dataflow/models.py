@@ -1,6 +1,194 @@
 """Data-flow graph models for Python analysis."""
 from dataclasses import dataclass, field
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Set
+import ast
+
+
+@dataclass
+class BindingResolution:
+    """Result of binding resolution for a name reference."""
+    binding_key: str
+    binding_category: str  # 'local', 'global', 'nonlocal', 'free', 'parameter'
+    defining_scope: str
+    is_external_boundary: bool
+    resolution_confidence: float
+    diagnostic: Optional[Dict[str, Any]] = None
+
+
+@dataclass
+class ExpressionResult:
+    """Result of expression evaluation with direct and transitive operation relationships."""
+    root_operation_id: Optional[str]
+    direct_input_use_ids: List[str]
+    direct_input_operation_ids: List[str]
+    descendant_operation_ids: List[str]
+    diagnostics: List[Dict[str, Any]]
+
+
+class BindingResolver:
+    """Unified binding resolution for Python variables across lexical scopes."""
+    
+    def __init__(self, function_id: str, file: str, local_vars: Set[str], free_vars: Set[str], global_vars: Set[str], nonlocal_vars: Set[str], symbol_table=None):
+        self.function_id = function_id
+        self.file = file
+        self.local_vars = local_vars
+        self.free_vars = free_vars or set()
+        self.global_vars = global_vars or set()
+        self.nonlocal_vars = nonlocal_vars or set()
+        self.symbol_table = symbol_table
+        # M4.6: Scope counter for unique comprehension and lambda scope IDs
+        self._scope_counter = 0
+    
+    def _generate_scope_id(self) -> str:
+        """Generate a unique scope ID for nested scopes (lambdas, comprehensions)."""
+        self._scope_counter += 1
+        return f"scope_{self._scope_counter}"
+    
+    def resolve_name(self, name: str, lexical_scope: str, ast_node: ast.AST) -> BindingResolution:
+        """Resolve a name to its binding key and category."""
+        # Check local scope first
+        if name in self.local_vars:
+            binding_key = f"{self.function_id}::{name}"
+            return BindingResolution(
+                binding_key=binding_key,
+                binding_category='local',
+                defining_scope=self.function_id,
+                is_external_boundary=False,
+                resolution_confidence=1.0,
+                diagnostic=None
+            )
+        
+        # Check global scope
+        if name in self.global_vars:
+            binding_key = f"{self.file}::{name}"
+            return BindingResolution(
+                binding_key=binding_key,
+                binding_category='global',
+                defining_scope=self.file,
+                is_external_boundary=True,
+                resolution_confidence=1.0,
+                diagnostic=None
+            )
+        
+        # Check nonlocal scope
+        if name in self.nonlocal_vars:
+            # For nonlocal, the defining scope is the enclosing function
+            # We don't have the exact enclosing function ID, so use a conservative approach
+            binding_key = f"{self.function_id}::nonlocal::{name}"
+            return BindingResolution(
+                binding_key=binding_key,
+                binding_category='nonlocal',
+                defining_scope=f"{self.function_id}::outer",
+                is_external_boundary=False,
+                resolution_confidence=0.8,
+                diagnostic=None
+            )
+    
+    def resolve_name(self, name: str, lexical_scope: str, ast_node: ast.AST) -> BindingResolution:
+        """Resolve a name to its binding key and category."""
+        # Check local scope first
+        if name in self.local_vars:
+            binding_key = f"{self.function_id}::{name}"
+            return BindingResolution(
+                binding_key=binding_key,
+                binding_category='local',
+                defining_scope=self.function_id,
+                is_external_boundary=False,
+                resolution_confidence=1.0,
+                diagnostic=None
+            )
+        
+        # Check global scope
+        if name in self.global_vars:
+            binding_key = f"{self.file}::{name}"
+            return BindingResolution(
+                binding_key=binding_key,
+                binding_category='global',
+                defining_scope=self.file,
+                is_external_boundary=True,
+                resolution_confidence=1.0,
+                diagnostic=None
+            )
+        
+        # Check nonlocal scope
+        if name in self.nonlocal_vars:
+            # For nonlocal, the defining scope is the enclosing function
+            # We don't have the exact enclosing function ID, so use a conservative approach
+            binding_key = f"{self.function_id}::nonlocal::{name}"
+            return BindingResolution(
+                binding_key=binding_key,
+                binding_category='nonlocal',
+                defining_scope=f"{self.function_id}::outer",
+                is_external_boundary=False,
+                resolution_confidence=0.8,
+                diagnostic=None
+            )
+        
+        # Check free variables (closure capture)
+        if name in self.free_vars:
+            # M4.4: Closure handling - inner use must reference outer binding
+            # For nonlocal writes, we need to read previous outer definition
+            # The binding key represents the outer defining scope
+            binding_key = f"{self.function_id}::free::{name}"
+            return BindingResolution(
+                binding_key=binding_key,
+                binding_category='free',
+                defining_scope=f"{self.function_id}::outer",
+                is_external_boundary=True,
+                resolution_confidence=0.7,
+                diagnostic=None
+            )
+        
+        # Default to local if unknown
+        binding_key = f"{self.function_id}::{name}"
+        return BindingResolution(
+            binding_key=binding_key,
+            binding_category='local',
+            defining_scope=self.function_id,
+            is_external_boundary=False,
+            resolution_confidence=0.5,
+            diagnostic={'code': 'unknown_binding', 'message': f'Could not determine binding for {name}'}
+        )
+    
+    def resolve_comprehension_binding(self, name: str, comprehension_id: str) -> BindingResolution:
+        """Resolve a name within a comprehension scope with unique scope ID."""
+        # M4.6: Comprehensions have their own scope with unique ID
+        binding_key = f"{self.function_id}::comprehension:{comprehension_id}::{name}"
+        return BindingResolution(
+            binding_key=binding_key,
+            binding_category='comprehension',
+            defining_scope=f"{self.function_id}::comprehension:{comprehension_id}",
+            is_external_boundary=False,
+            resolution_confidence=1.0,
+            diagnostic=None
+        )
+    
+    def resolve_lambda_binding(self, name: str, lambda_id: str) -> BindingResolution:
+        """Resolve a name within a lambda scope with unique scope ID."""
+        # M4.6: Lambdas have their own scope with unique ID
+        binding_key = f"{self.function_id}::lambda:{lambda_id}::{name}"
+        return BindingResolution(
+            binding_key=binding_key,
+            binding_category='lambda',
+            defining_scope=f"{self.function_id}::lambda:{lambda_id}",
+            is_external_boundary=False,
+            resolution_confidence=1.0,
+            diagnostic=None
+        )
+    
+    def resolve_nonlocal_write(self, name: str) -> BindingResolution:
+        """M4.4: Resolve a nonlocal write - must preserve outer binding identity."""
+        # For nonlocal writes, we preserve the outer binding identity
+        # The key still references the outer scope, not the inner function
+        binding_key = f"{self.function_id}::nonlocal::{name}"
+        return BindingResolution(
+            binding_key=binding_key,
+            binding_category='nonlocal',
+            defining_scope=f"{self.function_id}::outer",
+            is_external_boundary=False,
+            resolution_confidence=0.9,
+            diagnostic=None
+        )
 
 
 @dataclass

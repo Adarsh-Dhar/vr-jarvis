@@ -1,14 +1,31 @@
 """DFG validation utilities - strict validation."""
-from typing import List, Dict, Any, Set
+from typing import List, Dict, Any, Set, Optional
 from .models import DataFlowGraph, DataFlowNode, DataFlowEdge, DefUseFacts, Definition, VariableUse, ExpressionFact
 
 
-def validate_dfg(dfg: DataFlowGraph, facts: DefUseFacts) -> Dict[str, Any]:
+def validate_dfg(dfg: DataFlowGraph, facts: DefUseFacts, cfg=None) -> Dict[str, Any]:
     """
     Strict validation of a data-flow graph.
+    
+    Args:
+        dfg: DataFlowGraph object to validate
+        facts: DefUseFacts containing definitions, uses, and operations
+        cfg: Optional ControlFlowGraph for CFG node reference validation
+    
+    Returns:
+        Dict with 'valid', 'errors', and 'warnings' keys
     """
     errors = []
     warnings = []
+
+    # Ensure both DFG and facts are provided
+    if dfg is None:
+        errors.append("DFG is None")
+        return {'valid': False, 'errors': errors, 'warnings': warnings}
+    
+    if facts is None:
+        errors.append("Facts is None")
+        return {'valid': False, 'errors': errors, 'warnings': warnings}
 
     # Handle both DFG object and dict
     if isinstance(dfg, dict):
@@ -50,6 +67,11 @@ def validate_dfg(dfg: DataFlowGraph, facts: DefUseFacts) -> Dict[str, Any]:
             # Can't validate CFG node exists without CFG, but we can check format
             if not isinstance(cfg_node_id, str):
                 errors.append(f"Definition {definition.id} has invalid CFG node ID type: {type(cfg_node_id)}")
+            elif cfg is not None:
+                # Validate that the CFG node actually exists
+                cfg_node_ids_set = {node.id for node in cfg.nodes}
+                if cfg_node_id not in cfg_node_ids_set:
+                    errors.append(f"Definition {definition.id} references non-existent CFG node: {cfg_node_id}")
 
     for use in facts.uses:
         if not use.cfg_node_ids:
@@ -57,6 +79,10 @@ def validate_dfg(dfg: DataFlowGraph, facts: DefUseFacts) -> Dict[str, Any]:
         for cfg_node_id in use.cfg_node_ids:
             if not isinstance(cfg_node_id, str):
                 errors.append(f"Use {use.id} has invalid CFG node ID type: {type(cfg_node_id)}")
+            elif cfg is not None:
+                cfg_node_ids_set = {node.id for node in cfg.nodes}
+                if cfg_node_id not in cfg_node_ids_set:
+                    errors.append(f"Use {use.id} references non-existent CFG node: {cfg_node_id}")
 
     for operation in facts.operations:
         if not operation.cfg_node_ids:
@@ -64,6 +90,10 @@ def validate_dfg(dfg: DataFlowGraph, facts: DefUseFacts) -> Dict[str, Any]:
         for cfg_node_id in operation.cfg_node_ids:
             if not isinstance(cfg_node_id, str):
                 errors.append(f"Operation {operation.id} has invalid CFG node ID type: {type(cfg_node_id)}")
+            elif cfg is not None:
+                cfg_node_ids_set = {node.id for node in cfg.nodes}
+                if cfg_node_id not in cfg_node_ids_set:
+                    errors.append(f"Operation {operation.id} references non-existent CFG node: {cfg_node_id}")
 
     # Check binding key consistency
     binding_keys = set()
@@ -127,9 +157,71 @@ def validate_dfg(dfg: DataFlowGraph, facts: DefUseFacts) -> Dict[str, Any]:
 
         # Check that output definitions are genuinely produced by this operation
         for output_def_id in operation.output_definition_ids:
-            # This is a heuristic - in a full implementation we'd track provenance
             if output_def_id not in [d.id for d in facts.definitions]:
                 errors.append(f"Operation {operation.id} references non-existent definition: {output_def_id}")
+
+    # Check for single source-level definition identity across cloned CFG nodes (finally cloning)
+    # Track source-level definitions that appear multiple times in CFG
+    source_level_defs = {}
+    for definition in facts.definitions:
+        source_key = (definition.line, definition.column, definition.binding_key)
+        if source_key not in source_level_defs:
+            source_level_defs[source_key] = []
+        source_level_defs[source_key].append(definition)
+
+    for source_key, defs in source_level_defs.items():
+        if len(defs) > 1:
+            # Multiple CFG nodes for same source-level definition (e.g., cloned finally)
+            # This is OK as long as they represent the same logical definition
+            # Verify they have the same binding_key
+            binding_keys = {d.binding_key for d in defs}
+            if len(binding_keys) > 1:
+                errors.append(f"Source-level definition at {source_key} has inconsistent binding keys: {binding_keys}")
+    
+    # M7: Additional DFG validator semantic relationship checks
+    # Check for fabricated IDs
+    all_ids = set()
+    for definition in facts.definitions:
+        if definition.id in all_ids:
+            errors.append(f"Duplicate definition ID: {definition.id}")
+        all_ids.add(definition.id)
+    for use in facts.uses:
+        if use.id in all_ids:
+            errors.append(f"Duplicate use ID: {use.id}")
+        all_ids.add(use.id)
+    for operation in facts.operations:
+        if operation.id in all_ids:
+            errors.append(f"Duplicate operation ID: {operation.id}")
+        all_ids.add(operation.id)
+    
+    # Check return-value provenance
+    return_operations = [op for op in facts.operations if op.metadata.get('is_return_sink', False)]
+    for return_op in return_operations:
+        if return_op.metadata.get('root_operation_id'):
+            # Check that the referenced operation exists
+            if return_op.metadata['root_operation_id'] not in operation_ids:
+                errors.append(f"Return operation {return_op.id} references non-existent operation: {return_op.metadata['root_operation_id']}")
+    
+    # Check copy/literal relationships
+    for definition in facts.definitions:
+        if definition.metadata.get('is_copy'):
+            if not definition.metadata.get('source_use_id') and not definition.metadata.get('source_variable'):
+                warnings.append(f"Definition {definition.id} marked as copy but missing source information")
+        if definition.metadata.get('is_literal'):
+            if not definition.metadata.get('literal_value'):
+                warnings.append(f"Definition {definition.id} marked as literal but missing literal value")
+    
+    # Check mutation relationships
+    for operation in facts.operations:
+        if operation.metadata.get('side_effect') == 'known_mutation':
+            if not operation.metadata.get('mutation_kind'):
+                warnings.append(f"Operation {operation.id} has known_mutation side effect but missing mutation_kind")
+    
+    # Check deletion kill-only behavior
+    for definition in facts.definitions:
+        if definition.metadata.get('is_kill_only'):
+            if definition.kind != 'exception_variable_clear' and definition.kind != 'deletion':
+                warnings.append(f"Definition {definition.id} marked as kill_only but kind is {definition.kind}")
 
     return {
         'valid': len(errors) == 0,

@@ -173,6 +173,57 @@ class ReachingDefinitionsAnalyzer:
                                 kill[node_id].add(def_id)
 
         return gen, kill
+    
+    def resolve_return_provenance(
+        self,
+        cfg: ControlFlowGraph,
+        facts: DefUseFacts
+    ) -> Dict[str, Any]:
+        """
+        M6.5: Resolve return value provenance using binding-key-based matching.
+        
+        For each return expression, resolve its actual reaching definitions
+        using binding keys rather than connecting all definitions with same variable name.
+        
+        Returns a dict mapping return operation IDs to their reaching definition IDs.
+        """
+        return_provenance = {}
+        
+        # Find all return-value sink operations
+        return_operations = [op for op in facts.operations if op.metadata.get('is_return_sink', False)]
+        
+        for return_op in return_operations:
+            op_id = return_op.id
+            
+            # Get CFG node for this return operation
+            cfg_node_ids = return_op.cfg_node_ids
+            if not cfg_node_ids:
+                continue
+            
+            # Get reaching definitions at this CFG node
+            # Find the node in our analysis results
+            in_sets, out_sets = self.analyze(cfg, facts)
+            
+            # Get IN set for the first CFG node of the return
+            cfg_node_id = cfg_node_ids[0]
+            reaching_defs = in_sets.get(cfg_node_id, set())
+            
+            # Filter by binding key if return has a specific variable
+            if return_op.metadata.get('return_variable'):
+                variable = return_op.metadata['return_variable']
+                # Filter to only definitions with matching binding key
+                binding_key = f"{facts.function_id}::{variable}"
+                matching_defs = []
+                for def_id in reaching_defs:
+                    for definition in facts.definitions:
+                        if definition.id == def_id and definition.binding_key == binding_key:
+                            matching_defs.append(def_id)
+                return_provenance[op_id] = matching_defs
+            else:
+                # For literal or complex return expressions, include all reaching defs
+                return_provenance[op_id] = list(reaching_defs)
+        
+        return return_provenance
 
     def _solve_fixed_point(
         self,
@@ -214,17 +265,30 @@ class ReachingDefinitionsAnalyzer:
             predecessors = self._get_predecessors(cfg, node_id)
             new_in = set()
             for pred_id in predecessors:
-                # Check if this is an exceptional edge (now handles multiple edge types)
-                edge_kinds_list = edge_kinds.get((pred_id, node_id), ['next'])
-                if any(kind in ('exception', 'raise', 'may_raise') for kind in edge_kinds_list):
-                    # For exceptional edges, only propagate definitions that existed
-                    # BEFORE the current node's assignments (filter out new definitions)
-                    pred_out = out_sets[pred_id].copy()
-                    if pred_id in gen:
-                        pred_out -= gen[pred_id]
-                    new_in.update(pred_out)
-                else:
-                    new_in.update(out_sets[pred_id])
+                # Process individual edges separately (do not merge edge kinds)
+                # Get individual edges from pred to current
+                pred_edges = [e for e in cfg.edges if e.source == pred_id and e.target == node_id]
+                for edge in pred_edges:
+                    if edge.kind in ('exception', 'raise', 'may_raise'):
+                        # M6.4: Evaluation/commit separation for exceptional edges
+                        # On exceptional edges, we must preserve prior definitions before evaluation
+                        # Filter out definitions that were generated on the evaluation path
+                        # but not yet committed
+                        pred_out = out_sets[pred_id]
+                        # Check if predecessor has evaluation metadata
+                        pred_node = next((n for n in cfg.nodes if n.id == pred_id), None)
+                        if pred_node and pred_node.metadata.get('is_evaluation', False):
+                            # This is an evaluation node - filter out its GEN definitions on exception paths
+                            pred_gen = gen.get(pred_id, set())
+                            # Don't propagate definitions that were generated during evaluation
+                            filtered_out = pred_out - pred_gen
+                            new_in.update(filtered_out)
+                        else:
+                            # Normal propagation for non-evaluation nodes
+                            new_in.update(pred_out)
+                    else:
+                        # Normal transfer: include all
+                        new_in.update(out_sets[pred_id])
 
             # Calculate OUT[B] = GEN[B] union (IN[B] - KILL[B])
             new_out = gen[node_id].union(new_in - kill[node_id])
@@ -257,6 +321,10 @@ class ReachingDefinitionsAnalyzer:
     ) -> Dict[str, Any]:
         """
         Perform must-reaching definitions analysis.
+        
+        NOTE: This method is marked as FUTURE WORK for v1.
+        The JARVIS Python CFG/DFG v1 frozen scope implements only may-reaching definitions.
+        Must-reaching analysis requires additional infrastructure and is deferred to future work.
         
         Unlike may-reaching (union of predecessor OUT sets),
         must-reaching uses intersection of predecessor OUT sets.

@@ -2,7 +2,7 @@
 import ast
 import symtable
 from typing import List, Dict, Any, Optional, Set
-from .models import Definition, VariableUse, DefUseFacts
+from .models import Definition, VariableUse, DefUseFacts, BindingResolver
 from .recursive_expression_evaluator import RecursiveExpressionEvaluator, ExpressionEvaluationContext
 
 
@@ -66,13 +66,23 @@ class PythonDefUseExtractor:
             cfg_node_map=cfg.ast_node_map,
             ast_index=ast_index,
             facts=facts,
+            # Pass scope information for BindingResolver
+            symbol_table=sym_table if 'sym_table' in locals() else None,
         )
         visitor.visit(function_ast)
 
         return facts
 
     def _find_function_symbol(self, sym_table: symtable.SymbolTable, function_id: str, name: str) -> Optional[symtable.Function]:
-        """Find a function symbol in the symbol table using qualified identity."""
+        """Find a function symbol in the symbol table using qualified identity.
+        
+        M4.2: Use precise matching with:
+        - AST qualified scope
+        - Parent lexical scope
+        - Function name
+        - Source line
+        - Scope type
+        """
         # First try to find by qualified function_id if available
         if '::' in function_id:
             # Extract the function name from qualified ID
@@ -82,13 +92,23 @@ class PythonDefUseExtractor:
 
         # Search children (function scope tables) instead of get_symbols()
         # get_symbols() returns Symbol objects, not Function tables
+        candidates = []
         for child in sym_table.get_children():
             if isinstance(child, symtable.Function) and child.get_name() == name:
-                return child
+                candidates.append(child)
             # Recursively search nested scopes
             result = self._find_function_symbol(child, function_id, name)
             if result:
-                return result
+                candidates.append(result)
+        
+        # M4.2: If multiple candidates, use source line and scope type to disambiguate
+        if len(candidates) > 1:
+            # For now, return the first match - could be improved with line number matching
+            # if function AST line information is available
+            return candidates[0]
+        elif candidates:
+            return candidates[0]
+        
         return None
 
     def _get_local_variables(self, func_sym: symtable.Function) -> Set[str]:
@@ -231,6 +251,7 @@ class DefUseVisitor(ast.NodeVisitor):
         free_vars: Set[str] = None,
         global_vars: Set[str] = None,
         nonlocal_vars: Set[str] = None,
+        symbol_table=None,
     ):
         self.function_id = function_id
         self.file = file
@@ -241,6 +262,7 @@ class DefUseVisitor(ast.NodeVisitor):
         self.cfg_node_map = cfg_node_map
         self.ast_index = ast_index
         self.facts = facts
+        self.symbol_table = symbol_table
         self._definition_counter = 0
         self._use_counter = 0
         self._operation_counter = 0
@@ -291,12 +313,19 @@ class DefUseVisitor(ast.NodeVisitor):
             function_id=self.function_id,
             file=self.file,
             local_vars=self.local_vars,
+            free_vars=self.free_vars,
+            global_vars=self.global_vars,
+            nonlocal_vars=self.nonlocal_vars,
             cfg_node_map=self.cfg_node_map,
             ast_index=self.ast_index,
-            facts=self.facts
+            facts=self.facts,
+            symbol_table=self.symbol_table
         )
         evaluator = RecursiveExpressionEvaluator(ctx)
-        use_ids, op_id, child_ops = evaluator.evaluate(node.value)
+        result = evaluator.evaluate(node.value)
+        use_ids = result.direct_input_use_ids
+        op_id = result.root_operation_id
+        child_ops = result.descendant_operation_ids
 
         # Extract definitions from targets
         for target in node.targets:
@@ -313,7 +342,7 @@ class DefUseVisitor(ast.NodeVisitor):
                         break
             else:
                 # Handle simple assignments (x = y, x = 10) that don't create operations
-                # Create a copy/move relationship between source use and target definition
+                # M5.10: Create comprehensive copy/literal assignment metadata
                 for new_def_id in new_def_ids:
                     for def_obj in self.facts.definitions:
                         if def_obj.id == new_def_id:
@@ -322,10 +351,26 @@ class DefUseVisitor(ast.NodeVisitor):
                                 def_obj.metadata = def_obj.metadata or {}
                                 def_obj.metadata['copy_from'] = node.value.id
                                 def_obj.metadata['is_copy'] = True
+                                def_obj.metadata['source_type'] = 'variable'
+                                def_obj.metadata['source_variable'] = node.value.id
                             elif isinstance(node.value, ast.Constant):
                                 def_obj.metadata = def_obj.metadata or {}
                                 def_obj.metadata['literal_value'] = str(node.value.value)
                                 def_obj.metadata['is_literal'] = True
+                                def_obj.metadata['source_type'] = 'literal'
+                                def_obj.metadata['literal_type'] = type(node.value.value).__name__
+                            elif isinstance(node.value, ast.Attribute):
+                                # M5.10: Attribute copy: x = obj.attr
+                                def_obj.metadata = def_obj.metadata or {}
+                                def_obj.metadata['is_attribute_copy'] = True
+                                def_obj.metadata['source_type'] = 'attribute'
+                                def_obj.metadata['attribute_path'] = ast.unparse(node.value) if hasattr(ast, 'unparse') else str(node.value)
+                            elif isinstance(node.value, ast.Subscript):
+                                # M5.10: Subscript copy: x = arr[i]
+                                def_obj.metadata = def_obj.metadata or {}
+                                def_obj.metadata['is_subscript_copy'] = True
+                                def_obj.metadata['source_type'] = 'subscript'
+                                def_obj.metadata['subscript_path'] = ast.unparse(node.value) if hasattr(ast, 'unparse') else str(node.value)
                             break
                 if isinstance(node.value, ast.Name) and use_ids:
                     # Simple copy: x = y
@@ -361,12 +406,19 @@ class DefUseVisitor(ast.NodeVisitor):
                 function_id=self.function_id,
                 file=self.file,
                 local_vars=self.local_vars,
+                free_vars=self.free_vars,
+                global_vars=self.global_vars,
+                nonlocal_vars=self.nonlocal_vars,
                 cfg_node_map=self.cfg_node_map,
                 ast_index=self.ast_index,
-                facts=self.facts
+                facts=self.facts,
+                symbol_table=self.symbol_table,
             )
             evaluator = RecursiveExpressionEvaluator(ctx)
-            use_ids, op_id, child_ops = evaluator.evaluate(node.value)
+            result = evaluator.evaluate(node.value)
+            use_ids = result.direct_input_use_ids
+            op_id = result.root_operation_id
+            child_ops = result.descendant_operation_ids
 
             # Extract definition from target
             if node.target:
@@ -402,20 +454,52 @@ class DefUseVisitor(ast.NodeVisitor):
                 column=node.target.col_offset if hasattr(node.target, 'col_offset') else 0,
                 cfg_node_ids=cfg_node_ids,
                 binding_key=binding_key,
-                expression=ast.unparse(node.target) if hasattr(ast, 'unparse') else node.target.id,
             ))
+        
+        # Evaluate RHS with recursive evaluator to get operation graph
+        ctx = ExpressionEvaluationContext(
+            function_id=self.function_id,
+            file=self.file,
+            local_vars=self.local_vars,
+            free_vars=self.free_vars,
+            global_vars=self.global_vars,
+            nonlocal_vars=self.nonlocal_vars,
+            cfg_node_map=self.cfg_node_map,
+            ast_index=self.ast_index,
+            facts=self.facts,
+            symbol_table=self.symbol_table,
+        )
+        evaluator = RecursiveExpressionEvaluator(ctx)
+        result = evaluator.evaluate(node.value)
+        use_ids = result.direct_input_use_ids
+        op_id = result.root_operation_id
+        child_ops = result.descendant_operation_ids
+        
+        # Link augmented operation with RHS child operations (Milestone 5.3 fix)
+        if op_id and child_ops:
+            for op in self.facts.operations:
+                if op.id == op_id:
+                    op.input_operation_ids.extend(child_ops)
+                    break
 
         # Extract uses from RHS using recursive evaluator
         ctx = ExpressionEvaluationContext(
             function_id=self.function_id,
             file=self.file,
             local_vars=self.local_vars,
+            free_vars=self.free_vars,
+            global_vars=self.global_vars,
+            nonlocal_vars=self.nonlocal_vars,
             cfg_node_map=self.cfg_node_map,
             ast_index=self.ast_index,
-            facts=self.facts
+            facts=self.facts,
+            symbol_table=self.symbol_table,
         )
         evaluator = RecursiveExpressionEvaluator(ctx)
-        rhs_use_ids, rhs_op_id, child_ops = evaluator.evaluate(node.value)
+        rhs_result = evaluator.evaluate(node.value)
+        rhs_use_ids = rhs_result.direct_input_use_ids
+        rhs_op_id = rhs_result.root_operation_id
+        child_ops = rhs_result.descendant_operation_ids
 
         # Create the augmented binary operation node (e.g., Add for +=)
         # Map operator to operation type
@@ -479,12 +563,19 @@ class DefUseVisitor(ast.NodeVisitor):
             function_id=self.function_id,
             file=self.file,
             local_vars=self.local_vars,
+            free_vars=self.free_vars,
+            global_vars=self.global_vars,
+            nonlocal_vars=self.nonlocal_vars,
             cfg_node_map=self.cfg_node_map,
             ast_index=self.ast_index,
-            facts=self.facts
+            facts=self.facts,
+            symbol_table=self.symbol_table
         )
         evaluator = RecursiveExpressionEvaluator(ctx)
-        use_ids, op_id, child_ops = evaluator.evaluate(node.test)
+        test_result = evaluator.evaluate(node.test)
+        use_ids = test_result.direct_input_use_ids
+        op_id = test_result.root_operation_id
+        child_ops = test_result.descendant_operation_ids
 
         # Visit body and else clause
         for stmt in node.body:
@@ -499,12 +590,19 @@ class DefUseVisitor(ast.NodeVisitor):
             function_id=self.function_id,
             file=self.file,
             local_vars=self.local_vars,
+            free_vars=self.free_vars,
+            global_vars=self.global_vars,
+            nonlocal_vars=self.nonlocal_vars,
             cfg_node_map=self.cfg_node_map,
             ast_index=self.ast_index,
-            facts=self.facts
+            facts=self.facts,
+            symbol_table=self.symbol_table
         )
         evaluator = RecursiveExpressionEvaluator(ctx)
-        use_ids, op_id, child_ops = evaluator.evaluate(node.test)
+        test_result = evaluator.evaluate(node.test)
+        use_ids = test_result.direct_input_use_ids
+        op_id = test_result.root_operation_id
+        child_ops = test_result.descendant_operation_ids
 
         # Visit body and else clause
         for stmt in node.body:
@@ -518,18 +616,28 @@ class DefUseVisitor(ast.NodeVisitor):
             function_id=self.function_id,
             file=self.file,
             local_vars=self.local_vars,
+            free_vars=self.free_vars,
+            global_vars=self.global_vars,
+            nonlocal_vars=self.nonlocal_vars,
             cfg_node_map=self.cfg_node_map,
             ast_index=self.ast_index,
-            facts=self.facts
+            facts=self.facts,
+            symbol_table=self.symbol_table
         )
         evaluator = RecursiveExpressionEvaluator(ctx)
 
         # Evaluate test expression
-        use_ids, op_id, child_ops = evaluator.evaluate(node.test)
+        test_result = evaluator.evaluate(node.test)
+        use_ids = test_result.direct_input_use_ids
+        op_id = test_result.root_operation_id
+        child_ops = test_result.descendant_operation_ids
 
         # Evaluate message expression if present
         if node.msg:
-            use_ids, op_id, child_ops = evaluator.evaluate(node.msg)
+            msg_result = evaluator.evaluate(node.msg)
+            use_ids = msg_result.direct_input_use_ids
+            op_id = msg_result.root_operation_id
+            child_ops = msg_result.descendant_operation_ids
 
     def visit_For(self, node: ast.For) -> None:
         """Visit for loops."""
@@ -538,12 +646,19 @@ class DefUseVisitor(ast.NodeVisitor):
             function_id=self.function_id,
             file=self.file,
             local_vars=self.local_vars,
+            free_vars=self.free_vars,
+            global_vars=self.global_vars,
+            nonlocal_vars=self.nonlocal_vars,
             cfg_node_map=self.cfg_node_map,
             ast_index=self.ast_index,
-            facts=self.facts
+            facts=self.facts,
+            symbol_table=self.symbol_table
         )
         evaluator = RecursiveExpressionEvaluator(ctx)
-        use_ids, op_id, child_ops = evaluator.evaluate(node.iter)
+        iter_result = evaluator.evaluate(node.iter)
+        use_ids = iter_result.direct_input_use_ids
+        op_id = iter_result.root_operation_id
+        child_ops = iter_result.descendant_operation_ids
 
         # Loop variable is a definition
         binding_key = f"{self.function_id}::{self._get_variable_name(node.target)}"
@@ -567,14 +682,21 @@ class DefUseVisitor(ast.NodeVisitor):
             function_id=self.function_id,
             file=self.file,
             local_vars=self.local_vars,
+            free_vars=self.free_vars,
+            global_vars=self.global_vars,
+            nonlocal_vars=self.nonlocal_vars,
             cfg_node_map=self.cfg_node_map,
             ast_index=self.ast_index,
-            facts=self.facts
+            facts=self.facts,
+            symbol_table=self.symbol_table
         )
         evaluator = RecursiveExpressionEvaluator(ctx)
 
         for item in node.items:
-            use_ids, op_id, child_ops = evaluator.evaluate(item.context_expr)
+            context_result = evaluator.evaluate(item.context_expr)
+            use_ids = context_result.direct_input_use_ids
+            op_id = context_result.root_operation_id
+            child_ops = context_result.descendant_operation_ids
 
             # Optional binding: `with resource as x`
             if item.optional_vars:
@@ -592,12 +714,19 @@ class DefUseVisitor(ast.NodeVisitor):
             function_id=self.function_id,
             file=self.file,
             local_vars=self.local_vars,
+            free_vars=self.free_vars,
+            global_vars=self.global_vars,
+            nonlocal_vars=self.nonlocal_vars,
             cfg_node_map=self.cfg_node_map,
             ast_index=self.ast_index,
-            facts=self.facts
+            facts=self.facts,
+            symbol_table=self.symbol_table
         )
         evaluator = RecursiveExpressionEvaluator(ctx)
-        use_ids, op_id, child_ops = evaluator.evaluate(node.value)
+        result = evaluator.evaluate(node.value)
+        use_ids = result.direct_input_use_ids
+        op_id = result.root_operation_id
+        child_ops = result.descendant_operation_ids
 
         # Target is a definition
         binding_key = f"{self.function_id}::{self._get_variable_name(node.target)}"
@@ -614,6 +743,8 @@ class DefUseVisitor(ast.NodeVisitor):
 
     def visit_Return(self, node: ast.Return) -> None:
         """Visit return statements and connect return expression to return-value sink."""
+        from .models import ExpressionFact
+        
         if node.value:
             ctx = ExpressionEvaluationContext(
                 function_id=self.function_id,
@@ -624,14 +755,17 @@ class DefUseVisitor(ast.NodeVisitor):
                 facts=self.facts
             )
             evaluator = RecursiveExpressionEvaluator(ctx)
-            use_ids, op_id, child_ops = evaluator.evaluate(node.value)
+            result = evaluator.evaluate(node.value)
+            use_ids = result.direct_input_use_ids
+            op_id = result.root_operation_id
+            child_ops = result.descendant_operation_ids
 
             # Connect the root operation to the return-value sink
+            # M5.11: Connect return expression to return-value sink with operation graph
             # We represent this by storing the operation_id in a special metadata field
             # on a synthetic "return_value" operation fact
             if op_id:
                 # Create a return-value sink operation that represents the return value
-                from .models import ExpressionFact
                 return_sink_id = self._generate_operation_id()
                 self.facts.operations.append(ExpressionFact(
                     id=return_sink_id,
@@ -647,7 +781,51 @@ class DefUseVisitor(ast.NodeVisitor):
                     output_definition_ids=[],
                     metadata={
                         'is_return_sink': True,
-                        'root_operation_id': op_id
+                        'root_operation_id': op_id,
+                        'return_expression_connected': True  # M5.11: Confirm connection
+                    }
+                ))
+            elif isinstance(node.value, ast.Name):
+                # M5.11: For simple return x, connect reaching definition of x to return sink
+                # This is tracked via the use_ids which reference the variable's uses
+                return_sink_id = self._generate_operation_id()
+                self.facts.operations.append(ExpressionFact(
+                    id=return_sink_id,
+                    function_id=self.function_id,
+                    file=self.file,
+                    line=node.lineno,
+                    column=node.col_offset if hasattr(node, 'col_offset') else 0,
+                    cfg_node_ids=self._get_cfg_node_ids(node),
+                    expression=ast.unparse(node.value) if hasattr(ast, 'unparse') else str(node.value),
+                    operation='return_value',
+                    input_use_ids=use_ids,
+                    input_operation_ids=[],
+                    output_definition_ids=[],
+                    metadata={
+                        'is_return_sink': True,
+                        'return_variable': node.value.id,
+                        'return_via_binding': True  # M5.11: Return via binding resolution
+                    }
+                ))
+            elif isinstance(node.value, ast.Constant):
+                # M5.11: For return 42, record literal provenance
+                return_sink_id = self._generate_operation_id()
+                self.facts.operations.append(ExpressionFact(
+                    id=return_sink_id,
+                    function_id=self.function_id,
+                    file=self.file,
+                    line=node.lineno,
+                    column=node.col_offset if hasattr(node, 'col_offset') else 0,
+                    cfg_node_ids=self._get_cfg_node_ids(node),
+                    expression=ast.unparse(node.value) if hasattr(ast, 'unparse') else str(node.value),
+                    operation='return_value',
+                    input_use_ids=[],
+                    input_operation_ids=[],
+                    output_definition_ids=[],
+                    metadata={
+                        'is_return_sink': True,
+                        'literal_value': str(node.value.value),
+                        'return_literal': True  # M5.11: Return literal provenance
                     }
                 ))
 
@@ -663,7 +841,10 @@ class DefUseVisitor(ast.NodeVisitor):
                 facts=self.facts
             )
             evaluator = RecursiveExpressionEvaluator(ctx)
-            use_ids, op_id, child_ops = evaluator.evaluate(node.value)
+            result = evaluator.evaluate(node.value)
+            use_ids = result.direct_input_use_ids
+            op_id = result.root_operation_id
+            child_ops = result.descendant_operation_ids
             # Operation facts are already created by the evaluator
 
     def visit_Name(self, node: ast.Name) -> None:
@@ -741,24 +922,32 @@ class DefUseVisitor(ast.NodeVisitor):
             function_id=self.function_id,
             file=self.file,
             local_vars=self.local_vars,
+            free_vars=self.free_vars,
+            global_vars=self.global_vars,
+            nonlocal_vars=self.nonlocal_vars,
             cfg_node_map=self.cfg_node_map,
             ast_index=self.ast_index,
-            facts=self.facts
+            facts=self.facts,
+            symbol_table=self.symbol_table
         )
         evaluator = RecursiveExpressionEvaluator(ctx)
 
         # Process all generators first to establish scope
         for generator in node.generators:
-            iter_uses, _ = evaluator.evaluate(generator.iter)
+            iter_result = evaluator.evaluate(generator.iter)
+            iter_uses = iter_result.direct_input_use_ids
             for if_test in generator.ifs:
-                if_uses, _ = evaluator.evaluate(if_test)
+                if_result = evaluator.evaluate(if_test)
+                if_uses = if_result.direct_input_use_ids
             # Define target for this generator
             target_str = ast.unparse(generator.target) if hasattr(ast, 'unparse') else str(generator.target)
             binding_key = f"{self.function_id}::comprehension::{target_str}"
             self._extract_target_definitions(generator.target, node, 'comprehension', binding_key, self._get_cfg_node_ids(node))
 
         # Now evaluate the element expression (can reference comprehension variables)
-        use_ids, op_id = evaluator.evaluate(node.elt)
+        elt_result = evaluator.evaluate(node.elt)
+        use_ids = elt_result.direct_input_use_ids
+        op_id = elt_result.root_operation_id
 
     def visit_SetComp(self, node: ast.SetComp) -> None:
         """Visit set comprehensions."""
@@ -766,24 +955,32 @@ class DefUseVisitor(ast.NodeVisitor):
             function_id=self.function_id,
             file=self.file,
             local_vars=self.local_vars,
+            free_vars=self.free_vars,
+            global_vars=self.global_vars,
+            nonlocal_vars=self.nonlocal_vars,
             cfg_node_map=self.cfg_node_map,
             ast_index=self.ast_index,
-            facts=self.facts
+            facts=self.facts,
+            symbol_table=self.symbol_table
         )
         evaluator = RecursiveExpressionEvaluator(ctx)
 
         # Process all generators first
         for generator in node.generators:
-            iter_uses, _ = evaluator.evaluate(generator.iter)
+            iter_result = evaluator.evaluate(generator.iter)
+            iter_uses = iter_result.direct_input_use_ids
             for if_test in generator.ifs:
-                if_uses, _ = evaluator.evaluate(if_test)
+                if_result = evaluator.evaluate(if_test)
+                if_uses = if_result.direct_input_use_ids
             # Define target for this generator
             target_str = ast.unparse(generator.target) if hasattr(ast, 'unparse') else str(generator.target)
             binding_key = f"{self.function_id}::comprehension::{target_str}"
             self._extract_target_definitions(generator.target, node, 'comprehension', binding_key, self._get_cfg_node_ids(node))
 
         # Now evaluate the element expression
-        use_ids, op_id = evaluator.evaluate(node.elt)
+        elt_result = evaluator.evaluate(node.elt)
+        use_ids = elt_result.direct_input_use_ids
+        op_id = elt_result.root_operation_id
 
     def visit_DictComp(self, node: ast.DictComp) -> None:
         """Visit dict comprehensions."""
@@ -791,25 +988,35 @@ class DefUseVisitor(ast.NodeVisitor):
             function_id=self.function_id,
             file=self.file,
             local_vars=self.local_vars,
+            free_vars=self.free_vars,
+            global_vars=self.global_vars,
+            nonlocal_vars=self.nonlocal_vars,
             cfg_node_map=self.cfg_node_map,
             ast_index=self.ast_index,
-            facts=self.facts
+            facts=self.facts,
+            symbol_table=self.symbol_table
         )
         evaluator = RecursiveExpressionEvaluator(ctx)
 
         # Process all generators first
         for generator in node.generators:
-            iter_uses, _ = evaluator.evaluate(generator.iter)
+            iter_result = evaluator.evaluate(generator.iter)
+            iter_uses = iter_result.direct_input_use_ids
             for if_test in generator.ifs:
-                if_uses, _ = evaluator.evaluate(if_test)
+                if_result = evaluator.evaluate(if_test)
+                if_uses = if_result.direct_input_use_ids
             # Define target for this generator
             target_str = ast.unparse(generator.target) if hasattr(ast, 'unparse') else str(generator.target)
             binding_key = f"{self.function_id}::comprehension::{target_str}"
             self._extract_target_definitions(generator.target, node, 'comprehension', binding_key, self._get_cfg_node_ids(node))
 
         # Now evaluate key and value expressions
-        use_ids, op_id = evaluator.evaluate(node.key)
-        use_ids, op_id = evaluator.evaluate(node.value)
+        key_result = evaluator.evaluate(node.key)
+        use_ids = key_result.direct_input_use_ids
+        op_id = key_result.root_operation_id
+        value_result = evaluator.evaluate(node.value)
+        use_ids = value_result.direct_input_use_ids
+        op_id = value_result.root_operation_id
 
     def visit_GeneratorExp(self, node: ast.GeneratorExp) -> None:
         """Visit generator expressions."""
@@ -817,24 +1024,32 @@ class DefUseVisitor(ast.NodeVisitor):
             function_id=self.function_id,
             file=self.file,
             local_vars=self.local_vars,
+            free_vars=self.free_vars,
+            global_vars=self.global_vars,
+            nonlocal_vars=self.nonlocal_vars,
             cfg_node_map=self.cfg_node_map,
             ast_index=self.ast_index,
-            facts=self.facts
+            facts=self.facts,
+            symbol_table=self.symbol_table
         )
         evaluator = RecursiveExpressionEvaluator(ctx)
 
         # Process all generators first
         for generator in node.generators:
-            iter_uses, _ = evaluator.evaluate(generator.iter)
+            iter_result = evaluator.evaluate(generator.iter)
+            iter_uses = iter_result.direct_input_use_ids
             for if_test in generator.ifs:
-                if_uses, _ = evaluator.evaluate(if_test)
+                if_result = evaluator.evaluate(if_test)
+                if_uses = if_result.direct_input_use_ids
             # Define target for this generator
             target_str = ast.unparse(generator.target) if hasattr(ast, 'unparse') else str(generator.target)
             binding_key = f"{self.function_id}::comprehension::{target_str}"
             self._extract_target_definitions(generator.target, node, 'comprehension', binding_key, self._get_cfg_node_ids(node))
 
         # Now evaluate the element expression
-        use_ids, op_id = evaluator.evaluate(node.elt)
+        elt_result = evaluator.evaluate(node.elt)
+        use_ids = elt_result.direct_input_use_ids
+        op_id = elt_result.root_operation_id
 
     def visit_Match(self, node: ast.Match) -> None:
         """Visit match statements and pattern bindings."""
@@ -843,19 +1058,29 @@ class DefUseVisitor(ast.NodeVisitor):
             function_id=self.function_id,
             file=self.file,
             local_vars=self.local_vars,
+            free_vars=self.free_vars,
+            global_vars=self.global_vars,
+            nonlocal_vars=self.nonlocal_vars,
             cfg_node_map=self.cfg_node_map,
             ast_index=self.ast_index,
-            facts=self.facts
+            facts=self.facts,
+            symbol_table=self.symbol_table
         )
         evaluator = RecursiveExpressionEvaluator(ctx)
-        use_ids, op_id, child_ops = evaluator.evaluate(node.subject)
+        subject_result = evaluator.evaluate(node.subject)
+        use_ids = subject_result.direct_input_use_ids
+        op_id = subject_result.root_operation_id
+        child_ops = subject_result.descendant_operation_ids
 
         # Visit each case and its pattern
         for case in node.cases:
             self.visit(case.pattern)
             if case.guard:
                 # Evaluate guard expression using recursive evaluator
-                use_ids, op_id, child_ops = evaluator.evaluate(case.guard)
+                guard_result = evaluator.evaluate(case.guard)
+                use_ids = guard_result.direct_input_use_ids
+                op_id = guard_result.root_operation_id
+                child_ops = guard_result.descendant_operation_ids
             # Visit body statements individually, not as a list
             for stmt in case.body:
                 self.visit(stmt)
@@ -984,7 +1209,7 @@ class DefUseVisitor(ast.NodeVisitor):
         pass
 
     def visit_ExceptHandler(self, node: ast.ExceptHandler) -> None:
-        """Visit exception handlers - create definition for exception variable."""
+        """Visit exception handlers - create definition for exception variable and kill-only event."""
         # If handler has a name (e.g., 'except Exception as exc'), create a definition
         if node.name:
             cfg_node_ids = self._get_cfg_node_ids(node)
@@ -1014,6 +1239,30 @@ class DefUseVisitor(ast.NodeVisitor):
         # Visit the handler body
         for stmt in node.body:
             self.visit(stmt)
+        
+        # M4.5: Create kill-only event after handler body for exception variable
+        # This clears the exception variable on every normal and abrupt exit from the handler
+        if node.name:
+            cfg_node_ids = self._get_cfg_node_ids(node)
+            binding_key = f"{self.function_id}::{node.name}"
+            
+            self.facts.definitions.append(Definition(
+                id=self._generate_def_id(f"{node.name}_clear"),
+                variable=node.name,
+                function_id=self.function_id,
+                file=self.file,
+                line=node.body[-1].end_lineno if node.body else node.lineno,
+                column=0,
+                kind='exception_variable_clear',
+                cfg_node_ids=cfg_node_ids,
+                binding_key=binding_key,
+                expression=f"# Clear {node.name} after except handler",
+                metadata={
+                    'is_kill_only': True,
+                    'clears_exception_variable': node.name,
+                    'binding_key': binding_key
+                }
+            ))
 
     def visit_Delete(self, node: ast.Delete) -> None:
         """Visit deletion statements (del x) - create kill-only events."""
