@@ -328,6 +328,23 @@ def analyze_python_taint_source(source_code: str, file_path: str) -> dict:
                 self.sinks = []
                 self.safe_cases = []
 
+            def _is_taint_source(self, node):
+                """Check if node is a taint source using exact AST matching."""
+                if isinstance(node, ast.Call):
+                    call_name = _get_call_name(node)
+                    return call_name in TAINT_SOURCES
+                if isinstance(node, ast.Attribute):
+                    # Handle attribute sources like request.json
+                    attr_name = _get_call_name(node)
+                    return attr_name in TAINT_SOURCES
+                if isinstance(node, ast.Subscript):
+                    # Handle subscript sources like sys.argv[1]
+                    if isinstance(node.value, ast.Name):
+                        base_name = node.value.id
+                        # Check if base is a known source
+                        return base_name in ['sys.argv', 'os.environ']
+                return False
+
             def _is_string_building_expression(self, node):
                 """Check if node builds a string (concatenation, f-string, format, %)."""
                 if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
@@ -349,17 +366,16 @@ def analyze_python_taint_source(source_code: str, file_path: str) -> dict:
                         var_name = target.id
                         provenance = None
 
-                        # Check if RHS is a taint source
-                        if isinstance(node.value, ast.Call):
+                        # Check if RHS is a taint source (exact matching)
+                        if self._is_taint_source(node.value):
                             call_name = _get_call_name(node.value)
-                            if any(source in call_name for source in TAINT_SOURCES):
-                                provenance = {
-                                    'line': node.lineno,
-                                    'call': call_name,
-                                    'kind': 'source',
-                                    'variable': var_name
-                                }
-                                self.sources.append(provenance.copy())
+                            provenance = {
+                                'line': node.lineno,
+                                'call': call_name,
+                                'kind': 'source',
+                                'variable': var_name
+                            }
+                            self.sources.append(provenance.copy())
 
                         # Track if RHS is another tainted variable
                         elif isinstance(node.value, ast.Name):
@@ -367,6 +383,17 @@ def analyze_python_taint_source(source_code: str, file_path: str) -> dict:
                                 provenance = tainted_variables[node.value.id].copy()
                                 provenance['line'] = node.lineno
                                 provenance['kind'] = 'assignment'
+
+                        # Track method calls on tainted variables (e.g., var.strip())
+                        elif isinstance(node.value, ast.Call):
+                            if isinstance(node.value.func, ast.Attribute):
+                                # Check if the object being called is tainted
+                                obj = node.value.func.value
+                                if isinstance(obj, ast.Name) and obj.id in tainted_variables:
+                                    provenance = tainted_variables[obj.id].copy()
+                                    provenance['line'] = node.lineno
+                                    provenance['kind'] = 'assignment'
+                                    provenance['call'] = _get_call_name(node.value)
 
                         # Track string building operations (concatenation, f-strings, format, %)
                         elif self._is_string_building_expression(node.value):
@@ -417,6 +444,13 @@ def analyze_python_taint_source(source_code: str, file_path: str) -> dict:
                         tainted = self._find_tainted_operand(arg)
                         if tainted:
                             return tainted
+                if isinstance(node, ast.JoinedStr):
+                    # Handle f-strings: check each value
+                    for value in node.values:
+                        if isinstance(value, ast.FormattedValue):
+                            tainted = self._find_tainted_operand(value.value)
+                            if tainted:
+                                return tainted
                 return None
 
             def visit_Call(self, node):
@@ -466,42 +500,68 @@ def analyze_python_taint_source(source_code: str, file_path: str) -> dict:
         visitor = TaintVisitor()
         visitor.visit(tree)
 
-        # Build paths from sources to sinks through variable assignments
+        # Build paths from sources to sinks through variable assignments with provenance
         paths = []
         for i, source in enumerate(visitor.sources):
             for j, sink in enumerate(visitor.sinks):
+                # Only build path if the tainted variable actually reaches this sink
                 if source['line'] < sink['line']:
-                    # Build path steps
-                    path_steps = [{
-                        'kind': 'source',
-                        'variable': source['variable'],
-                        'call': source['call'],
-                        'line': source['line']
-                    }]
+                    tainted_var = source['variable']
 
-                    # Add sink step
-                    path_steps.append({
-                        'kind': 'sink',
-                        'call': sink['call'],
-                        'line': sink['line']
-                    })
-
-                    paths.append({
-                        'id': f'taint_path_{i}_{j}',
-                        'kind': 'heuristic',
-                        'source': {
+                    # Check if this tainted variable is used in the sink
+                    if tainted_var in sink.get('tainted_variables', []):
+                        # Build path steps with intermediate assignments
+                        path_steps = [{
+                            'kind': 'source',
+                            'variable': tainted_var,
                             'call': source['call'],
-                            'variable': source['variable'],
-                            'file': file_path,
                             'line': source['line']
-                        },
-                        'sink': {
+                        }]
+
+                        # Trace through intermediate assignments
+                        current_var = tainted_var
+                        current_line = source['line']
+
+                        # Look for assignments that propagate this taint
+                        for var_name, provenance in tainted_variables.items():
+                            if (provenance.get('kind') in ['assignment', 'augmented_assignment'] and
+                                provenance.get('line') > current_line and
+                                provenance.get('line') < sink['line']):
+                                # Check if this assignment derives from our tainted variable
+                                if (provenance.get('call') and tainted_var in provenance.get('call', '')) or \
+                                   (var_name == current_var):
+                                    path_steps.append({
+                                        'kind': provenance.get('kind', 'assignment'),
+                                        'variable': var_name,
+                                        'line': provenance['line'],
+                                        'call': provenance.get('call', '')
+                                    })
+                                    current_var = var_name
+                                    current_line = provenance['line']
+
+                        # Add sink step
+                        path_steps.append({
+                            'kind': 'sink',
                             'call': sink['call'],
-                            'file': file_path,
                             'line': sink['line']
-                        },
-                        'steps': path_steps
-                    })
+                        })
+
+                        paths.append({
+                            'id': f'taint_path_{i}_{j}',
+                            'kind': 'heuristic',
+                            'source': {
+                                'call': source['call'],
+                                'variable': source['variable'],
+                                'file': file_path,
+                                'line': source['line']
+                            },
+                            'sink': {
+                                'call': sink['call'],
+                                'file': file_path,
+                                'line': sink['line']
+                            },
+                            'steps': path_steps
+                        })
 
         return {
             'status': 'ok',

@@ -644,7 +644,7 @@ namespace JarvisVR
       string style;
       if (etype == "may_call" || kind == "possible" || resolution == "polymorphic") style = "dashed";
       else if (kind == "ambiguous" || resolution == "ambiguous") style = "dotted";
-      else style = kind == "inferred" || kind == "dashed" ? "dashed" : kind == "runtime" || kind == "dotted" ? "dotted" : "solid";
+      else style = kind == "inferred" || kind == "heuristic" || kind == "dashed" ? "dashed" : kind == "runtime" || kind == "dotted" ? "dotted" : "solid";
       ev.Style = style;
       ev.Base = style == "dashed" ? pal.Violet : style == "dotted" ? pal.Green : pal.Cyan;
       LineRenderer l = ev.Line;
@@ -912,40 +912,44 @@ namespace JarvisVR
         return;
       }
 
-      var sb = new System.Text.StringBuilder();
       int totalPages = (int)Math.Ceiling((double)_historyCommits.Length / HistoryPageSize);
       int startIdx = _historyPage * HistoryPageSize;
       int endIdx = Math.Min(startIdx + HistoryPageSize, _historyCommits.Length);
 
-      sb.AppendLine($"GIT HISTORY");
-      sb.AppendLine($"{_historyCommits.Length} RECENT COMMITS · PAGE {_historyPage + 1} OF {totalPages}");
-      sb.AppendLine();
-
-      // Destroy old row buttons
+      // Destroy old row buttons and navigation buttons
       foreach (var btn in _historyRowButtons)
         if (btn != null) Destroy(btn.gameObject);
       _historyRowButtons.Clear();
 
-      // Display commits for current page
-      for (int i = startIdx; i < endIdx; i++)
+      if (_historyPrev != null) { Destroy(_historyPrev.gameObject); _historyPrev = null; }
+      if (_historyNext != null) { Destroy(_historyNext.gameObject); _historyNext = null; }
+
+      // Set body text to page heading only
+      var sb = new System.Text.StringBuilder();
+      sb.AppendLine($"GIT HISTORY");
+      sb.AppendLine($"{_historyCommits.Length} RECENT COMMITS · PAGE {_historyPage + 1} OF {totalPages}");
+      _historyPanel.SetBody(sb.ToString());
+
+      // Display commits as labelled buttons for current page
+      for (int row = 0; row < (endIdx - startIdx); row++)
       {
+        int i = startIdx + row;
         var commit = _historyCommits[i];
         int idx = i;
 
         // Format commit message (truncate if too long)
-        string msg = commit.message.Length > 50 ? commit.message.Substring(0, 47) + "..." : commit.message;
+        string msg = commit.message.Length > 40 ? commit.message.Substring(0, 37) + "..." : commit.message;
         string shortHash = commit.hash.Length > 7 ? commit.hash.Substring(0, 7) : commit.hash;
 
-        sb.AppendLine($"{msg}");
-        sb.AppendLine($"  {shortHash}  {commit.author}  {FormatDate(commit.date)}");
-        sb.AppendLine();
+        // Button label: short hash + message
+        string buttonLabel = $"{shortHash} {msg}";
 
-        // Add button for this commit
-        var btn = _historyPanel.AddButton("SELECT", 20, 440 - (i - startIdx) * 70, 100, 60, () => SelectHistoryCommit(idx));
+        // Add button for this commit (width 500, height 50, vertical position 80 + row * 65)
+        var btn = _historyPanel.AddButton(buttonLabel, 20, 80 + row * 65, 500, 50, () => SelectHistoryCommit(idx));
         _historyRowButtons.Add(btn);
       }
 
-      // Add navigation buttons
+      // Add navigation buttons at the bottom
       if (_historyPage > 0)
       {
         _historyPrev = _historyPanel.AddButton("PREV", 20, 410, 80, 50, () => { _historyPage--; RefreshHistoryPanel(); });
@@ -954,8 +958,6 @@ namespace JarvisVR
       {
         _historyNext = _historyPanel.AddButton("NEXT", 110, 410, 80, 50, () => { _historyPage++; RefreshHistoryPanel(); });
       }
-
-      _historyPanel.SetBody(sb.ToString());
     }
 
     private string FormatDate(string isoDate)

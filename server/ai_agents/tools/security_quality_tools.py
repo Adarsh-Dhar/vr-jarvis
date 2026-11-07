@@ -589,24 +589,38 @@ def detect_sql_injection(
                 tree = ast.parse(content, filename=str(py_file))
 
                 def is_dynamic_sql_expression(node, unsafe_sql_variables):
-                    """Check if node represents dynamically constructed SQL."""
-                    # String concatenation
+                    """Check if node represents dynamically constructed SQL (SQL-aware)."""
+                    # String concatenation - only if at least one operand looks like SQL
                     if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
-                        return True
+                        return _contains_sql_keywords(node)
                     # F-strings
                     if isinstance(node, ast.JoinedStr):
-                        return True
+                        return _contains_sql_keywords(node)
                     # .format() calls
                     if isinstance(node, ast.Call):
                         if isinstance(node.func, ast.Attribute):
                             if node.func.attr == 'format':
-                                return True
+                                return _contains_sql_keywords(node)
                     # % interpolation
                     if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Mod):
-                        return True
+                        return _contains_sql_keywords(node)
                     # Previously constructed unsafe SQL variable
                     if isinstance(node, ast.Name):
                         return node.id in unsafe_sql_variables
+                    return False
+
+                def _contains_sql_keywords(node):
+                    """Check if an expression contains SQL keywords (to avoid flagging regular string concatenation)."""
+                    sql_keywords = ['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'FROM', 'WHERE', 'JOIN', 'AND', 'OR', 'ORDER BY', 'GROUP BY']
+                    try:
+                        # Extract string literals from the node
+                        for child in ast.walk(node):
+                            if isinstance(child, ast.Constant) and isinstance(child.value, str):
+                                upper_str = child.value.upper()
+                                if any(keyword in upper_str for keyword in sql_keywords):
+                                    return True
+                    except:
+                        pass
                     return False
 
                 class SQLInjectionVisitor(ast.NodeVisitor):
@@ -614,7 +628,14 @@ def detect_sql_injection(
                         self.file_path = file_path
                         self.line_source = line_source
                         self.findings = []
-                        self.unsafe_sql_variables = set()  # Track variables with unsafe SQL
+                        self.unsafe_sql_variables = set()  # Track variables with unsafe SQL (function-scoped)
+
+                    def visit_FunctionDef(self, node):
+                        # Reset unsafe_sql_variables for each function (function-scoped)
+                        old_vars = self.unsafe_sql_variables.copy()
+                        self.unsafe_sql_variables.clear()
+                        self.generic_visit(node)
+                        self.unsafe_sql_variables = old_vars  # Restore for outer scope
 
                     def visit_Assign(self, node):
                         # Track assignments with dynamic SQL construction - per function scope
