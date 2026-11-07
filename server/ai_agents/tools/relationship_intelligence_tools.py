@@ -932,9 +932,20 @@ def calculate_change_impact(
     element_id: str,
     tool_context: ToolContext
 ) -> dict:
-    """Estimate which components are affected by a change using CodeGraph."""
+    """Estimate which components are affected by a change using CodeGraph.
+
+    Returns direct and indirect dependents through calls and imports,
+    including possible call relationships and associated tests.
+
+    Relationship types:
+        - calls: Confirmed caller relationship
+        - may_call: Possible caller relationship (reported separately)
+        - imports: Module/file dependency
+        - Containment: Excluded from dependent traversal
+    """
     try:
         from .. import codegraph
+        from .graph_tools import get_dependents, find_tests_for_node
 
         graph = codegraph.load_current_graph()
 
@@ -949,38 +960,59 @@ def calculate_change_impact(
 
         symbol_id = node['id']
 
-        # Get direct callers (depth=1)
-        direct_callers = graph.callers(symbol_id, depth=1)
+        # Get direct callers (confirmed calls only, depth=1)
+        direct_callers = graph.callers(symbol_id, depth=1, include_possible=False)
 
-        # Get indirect callers (depth up to 6)
-        indirect_callers = graph.callers(symbol_id, depth=6)
+        # Get indirect dependents through calls and imports (depth up to 6)
+        # This uses the updated get_dependents with edge type filtering
+        dependents_result = get_dependents(symbol_id, tool_context, max_depth=6, edge_types=['calls', 'imports'])
+        if dependents_result.get('status') != 'ok':
+            return dependents_result
 
-        # Filter out direct callers from indirect list
+        # Separate direct from indirect dependents
         direct_caller_ids = {c['from'] for c in direct_callers}
-        indirect_only = [c for c in indirect_callers if c['from'] not in direct_caller_ids]
+        indirect_dependents = [d for d in dependents_result['dependents']
+                             if d['id'] not in direct_caller_ids and d['id'] != symbol_id]
 
-        # Get covering tests
-        all_affected_ids = {symbol_id} | {c['from'] for c in direct_callers} | {c['from'] for c in indirect_only}
+        # Get possible (may_call) relationships separately
+        possible_callers = graph.callers(symbol_id, depth=1, include_possible=True)
+        possible_only = [c for c in possible_callers
+                        if c['from'] not in direct_caller_ids]
+
+        # Get import-dependent modules/files separately
+        import_dependents_result = get_dependents(symbol_id, tool_context, max_depth=6, edge_types=['imports'])
+        import_dependents = []
+        if import_dependents_result.get('status') == 'ok':
+            import_dependents = [d for d in import_dependents_result['dependents']
+                                if d['edge_type'] == 'imports' and d['id'] != symbol_id]
+
+        # Get covering tests for all affected nodes
+        # Priority: 1) existing graph relationships, 2) explicit metadata, 3) import/call, 4) name-based (inferred)
+        all_affected_ids = {symbol_id} | direct_caller_ids | {d['id'] for d in indirect_dependents}
         covering_tests = graph.covering_tests(list(all_affected_ids))
 
         # Check if the element itself is tested
         element_tested = any(symbol_id in test.get('covers', []) for test in covering_tests)
 
-        # Calculate risk level based on indirect caller count and test coverage
+        # Calculate risk level based on indirect dependent count and test coverage
         risk_level = 'low'
-        if len(indirect_only) > 10 or not element_tested:
+        if len(indirect_dependents) > 10 or not element_tested:
             risk_level = 'high'
-        elif len(indirect_only) > 3:
+        elif len(indirect_dependents) > 3:
             risk_level = 'medium'
 
         return {
             'status': 'ok',
             'element_id': element_id,
             'direct_callers': direct_callers,
-            'indirect_callers': indirect_only,
+            'indirect_dependents': indirect_dependents,
+            'possible_callers': possible_only,
+            'import_dependents': import_dependents,
             'direct_count': len(direct_callers),
-            'indirect_count': len(indirect_only),
-            'total_affected': len(direct_callers) + len(indirect_only),
+            'indirect_count': len(indirect_dependents),
+            'possible_count': len(possible_only),
+            'import_count': len(import_dependents),
+            'total_affected': len(direct_callers) + len(indirect_dependents),
             'covering_tests': covering_tests,
             'untested': not element_tested,
             'risk_level': risk_level

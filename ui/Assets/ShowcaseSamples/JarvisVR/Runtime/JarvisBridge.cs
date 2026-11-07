@@ -21,6 +21,7 @@ namespace JarvisVR
     public GraphNodeDto[] nodes;
     public GraphEdgeDto[] edges;
     public string graph_type;
+    public string title;
   }
   [Serializable] public class AskResponse
   {

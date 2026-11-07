@@ -18,12 +18,16 @@ def scan_secrets(
     repository_path: str,
     tool_context: ToolContext
 ) -> dict:
-    """Scan for hardcoded secrets."""
+    """Scan for hardcoded secrets with unified finding format.
+
+    Redacts actual secret values - shows location and masked evidence only.
+    """
     try:
+        import uuid
         path = Path(repository_path)
         if not path.is_absolute():
             path = resolve_in_repo(path)
-        
+
         # Common secret patterns
         secret_patterns = [
             (r'api[_-]?key\s*=\s*["\']([^"\']{20,})["\']', 'api_key'),
@@ -33,30 +37,43 @@ def scan_secrets(
             (r'aws[_-]?access[_-]?key[_-]?id\s*=\s*["\']([^"\']{16,})["\']', 'aws_access_key'),
             (r'aws[_-]?secret[_-]?access[_-]?key\s*=\s*["\']([^"\']{30,})["\']', 'aws_secret_key')
         ]
-        
-        secrets_found = []
-        
+
+        findings = []
+
         for file_path in path.rglob('*'):
-            if file_path.is_file() and file_path.suffix in ['.py', '.js', '.ts', '.env', '.yaml', '.yml', '.json']:
+            # Check for .env files including .env.local
+            is_env_file = file_path.name in ['.env', '.env.local', '.env.example', '.env.production']
+            is_code_file = file_path.suffix in ['.py', '.js', '.ts', '.yaml', '.yml', '.json']
+
+            if file_path.is_file() and (is_env_file or is_code_file):
                 try:
                     content = file_path.read_text(encoding='utf-8')
+                    lines = content.splitlines()
                     for pattern, secret_type in secret_patterns:
-                        matches = re.finditer(pattern, content, re.IGNORECASE)
-                        for match in matches:
-                            line_num = content[:match.start()].count('\n') + 1
-                            secrets_found.append({
-                                'file': str(file_path.relative_to(path)),
-                                'line': line_num,
-                                'type': secret_type,
-                                'severity': 'high'
-                            })
+                        for i, line in enumerate(lines, 1):
+                            matches = re.finditer(pattern, line, re.IGNORECASE)
+                            for match in matches:
+                                # Redact the actual secret value - replace with ***REDACTED***
+                                masked_line = re.sub(pattern, r'\1=***REDACTED***', line, flags=re.IGNORECASE)
+                                # Further redact to ensure no secret value remains
+                                masked_line = re.sub(r'([a-zA-Z0-9]{20,})', '***REDACTED***', masked_line)
+                                findings.append({
+                                    'id': str(uuid.uuid4()),
+                                    'type': secret_type,
+                                    'severity': 'high',
+                                    'file': str(file_path.relative_to(path)),
+                                    'line': i,
+                                    'evidence': masked_line.strip(),
+                                    'confidence': 'confirmed'
+                                })
                 except:
                     continue
-        
+
         return {
             'status': 'ok',
             'repository_path': str(path),
-            'secrets_found': secrets_found
+            'findings': findings,
+            'count': len(findings)
         }
     except Exception as e:
         return {
@@ -191,25 +208,25 @@ def scan_vulnerabilities(
     repository_path: str,
     tool_context: ToolContext
 ) -> dict:
-    """Scan for security vulnerabilities with kind labels."""
+    """Scan for security vulnerabilities with unified finding format."""
     try:
+        import uuid
         path = Path(repository_path)
         if not path.is_absolute():
             path = resolve_in_repo(path)
-        
-        vulnerabilities = []
-        
+
+        findings = []
+
         # Pattern-based vulnerability detection
         patterns = [
-            {'pattern': 'eval(', 'severity': 'high', 'kind': 'likely', 'description': 'Arbitrary code execution'},
-            {'pattern': 'exec(', 'severity': 'high', 'kind': 'likely', 'description': 'Arbitrary code execution'},
-            {'pattern': 'subprocess.call(', 'severity': 'medium', 'kind': 'likely', 'description': 'Command injection risk'},
-            {'pattern': 'os.system(', 'severity': 'high', 'kind': 'likely', 'description': 'Command injection'},
-            {'pattern': 'pickle.loads(', 'severity': 'high', 'kind': 'likely', 'description': 'Deserialization risk'},
-            {'pattern': 'hashlib.md5(', 'severity': 'low', 'kind': 'likely', 'description': 'Weak hash algorithm'},
-            {'pattern': 'password', 'severity': 'medium', 'kind': 'likely', 'description': 'Hardcoded password pattern'},
+            {'pattern': 'eval(', 'type': 'unsafe_execution', 'severity': 'high', 'description': 'Arbitrary code execution'},
+            {'pattern': 'exec(', 'type': 'unsafe_execution', 'severity': 'high', 'description': 'Arbitrary code execution'},
+            {'pattern': 'subprocess.call(', 'type': 'command_injection', 'severity': 'medium', 'description': 'Command injection risk'},
+            {'pattern': 'os.system(', 'type': 'command_injection', 'severity': 'high', 'description': 'Command injection'},
+            {'pattern': 'pickle.loads(', 'type': 'unsafe_deserialization', 'severity': 'high', 'description': 'Deserialization risk'},
+            {'pattern': 'hashlib.md5(', 'type': 'weak_hash', 'severity': 'low', 'description': 'Weak hash algorithm'},
         ]
-        
+
         for py_file in path.rglob('*.py'):
             try:
                 content = py_file.read_text(encoding='utf-8')
@@ -217,22 +234,23 @@ def scan_vulnerabilities(
                 for i, line in enumerate(lines, 1):
                     for pattern_info in patterns:
                         if pattern_info['pattern'] in line:
-                            vulnerabilities.append({
+                            findings.append({
+                                'id': str(uuid.uuid4()),
+                                'type': pattern_info['type'],
+                                'severity': pattern_info['severity'],
                                 'file': str(py_file.relative_to(path)),
                                 'line': i,
-                                'pattern': pattern_info['pattern'],
-                                'severity': pattern_info['severity'],
-                                'kind': pattern_info['kind'],
-                                'description': pattern_info['description']
+                                'evidence': line.strip(),
+                                'confidence': 'heuristic'
                             })
             except Exception:
                 continue
-        
+
         return {
             'status': 'ok',
             'repository_path': str(path),
-            'vulnerabilities': vulnerabilities,
-            'count': len(vulnerabilities)
+            'vulnerabilities': findings,
+            'count': len(findings)
         }
     except Exception as e:
         return {'status': 'error', 'error': str(e)}

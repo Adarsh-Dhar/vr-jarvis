@@ -22,26 +22,26 @@ def find_introducing_commit(
         path = Path(repository_path)
         if not path.is_absolute():
             path = resolve_in_repo(path)
-        
+
         result = subprocess.run(
-            ['git', 'log', '-S', '--format=%H', '--', symbol_id],
+            ['git', 'log', '-S', symbol_id, '--format=%H', '--'],
             cwd=str(path),
             capture_output=True,
             text=True
         )
-        
+
         if result.returncode == 0 and result.stdout.strip():
             commit_hash = result.stdout.strip().splitlines()[0]
-            
+
             detail_result = subprocess.run(
-                ['git', 'show', '--format=%H|%s|%an|%ad', commit_hash],
+                ['git', 'show', '--format=%H%x00%s%x00%an%x00%ad', commit_hash],
                 cwd=str(path),
                 capture_output=True,
                 text=True
             )
-            
+
             if detail_result.returncode == 0:
-                parts = detail_result.stdout.strip().split('|')
+                parts = detail_result.stdout.strip().split('\x00')
                 return {
                     'status': 'ok',
                     'symbol_id': symbol_id,
@@ -50,7 +50,7 @@ def find_introducing_commit(
                     'author': parts[2] if len(parts) > 2 else '',
                     'date': parts[3] if len(parts) > 3 else ''
                 }
-        
+
         return {
             'status': 'not_found',
             'symbol_id': symbol_id,
@@ -167,51 +167,106 @@ def visualize_git_history(
     repository_path: str,
     tool_context: ToolContext
 ) -> dict:
-    """Visualize git history with churn and author overlays."""
+    """Visualize git history with recent commits and file changes.
+
+    Uses robust Git record parsing to avoid delimiter issues.
+    Retrieves commit metadata and file changes separately.
+    """
     try:
         from .visualization_spatial_tools import _emit_command
         from ..intelligence.graph_engine.codegraph import codegraph
-        
+
         path = Path(repository_path)
         if not path.is_absolute():
             path = resolve_in_repo(path)
-        
+
         graph = codegraph.load_current_graph()
-        
-        # Get git log for churn calculation
+
+        # Get last 20 commits with metadata (robust parsing - avoid delimiter issues)
         result = subprocess.run(
-            ['git', 'log', '--numstat', '--format='],
+            ['git', 'log', '-20', '--format=%H%x00%s%x00%an%x00%ad%x00'],
             cwd=str(path),
             capture_output=True,
             text=True
         )
-        
-        file_churn = {}
+
+        commits = []
         if result.returncode == 0:
-            for line in result.stdout.strip().splitlines():
-                if line:
-                    parts = line.split()
-                    if len(parts) >= 3 and parts[0] != '-':
-                        file_path = parts[2]
-                        additions = int(parts[0]) if parts[0].isdigit() else 0
-                        deletions = int(parts[1]) if parts[1].isdigit() else 0
-                        file_churn[file_path] = additions + deletions
-        
-        # Add churn to graph nodes
-        node_ids_with_churn = []
-        for node_id, node in graph._nodes.items():
-            file_path = node.get('file', '')
-            if file_path in file_churn:
-                node_ids_with_churn.append(node_id)
-        
-        # Highlight high-churn files
-        _emit_command(tool_context, 'highlight_path', node_ids=node_ids_with_churn)
-        
+            for commit_block in result.stdout.strip().split('\x00\x00'):
+                if not commit_block:
+                    continue
+                parts = commit_block.split('\x00')
+                if len(parts) >= 4:
+                    commit_hash = parts[0]
+                    message = parts[1]
+                    author = parts[2]
+                    date = parts[3]
+
+                    # Get file changes for this commit separately
+                    files_result = subprocess.run(
+                        ['git', 'show', '--numstat', '--format=', commit_hash],
+                        cwd=str(path),
+                        capture_output=True,
+                        text=True
+                    )
+
+                    changed_files = []
+                    additions = 0
+                    deletions = 0
+
+                    if files_result.returncode == 0:
+                        for line in files_result.stdout.strip().splitlines():
+                            if line:
+                                file_parts = line.split()
+                                if len(file_parts) >= 3:
+                                    file_path = file_parts[2]
+                                    adds = int(file_parts[0]) if file_parts[0].isdigit() else 0
+                                    dels = int(file_parts[1]) if file_parts[1].isdigit() else 0
+                                    changed_files.append({
+                                        'path': file_path,
+                                        'additions': adds,
+                                        'deletions': dels
+                                    })
+                                    additions += adds
+                                    deletions += dels
+
+                    commits.append({
+                        'hash': commit_hash,
+                        'message': message,
+                        'author': author,
+                        'date': date,
+                        'files': changed_files,
+                        'additions': additions,
+                        'deletions': deletions,
+                        'file_count': len(changed_files)
+                    })
+
+        # Map commits to current graph nodes (best-effort)
+        for commit in commits:
+            commit['mapped_nodes'] = []
+            commit['mapped_files'] = []
+            for file_info in commit['files']:
+                file_path = file_info['path']
+                # Try to find matching graph nodes
+                for node_id, node in graph._nodes.items():
+                    if node.get('file') == file_path:
+                        commit['mapped_nodes'].append(node_id)
+                        break
+                if file_path not in commit['mapped_files']:
+                    commit['mapped_files'].append(file_path)
+
+        # Emit history panel command
+        from .visualization_spatial_tools import _emit_command
+        _emit_command(tool_context, 'show_history_panel',
+                     summary=commits[0]['message'] if commits else "No commits",
+                     node_ids=[c['hash'] for c in commits],
+                     keep_ids=[f for c in commits for f in c.get('mapped_files', [])])
+
         return {
             'status': 'ok',
             'repository_path': str(path),
-            'file_churn': file_churn,
-            'high_churn_files': len(node_ids_with_churn)
+            'commits': commits,
+            'commit_count': len(commits)
         }
     except Exception as e:
         return {'status': 'error', 'error': str(e)}
@@ -223,25 +278,48 @@ def analyze_commit_impact(
     repository_path: str,
     tool_context: ToolContext
 ) -> dict:
-    """Analyze the impact of a commit."""
+    """Analyze the impact of a commit with structured data."""
     try:
         path = Path(repository_path)
         if not path.is_absolute():
             path = resolve_in_repo(path)
-        
-        # Get commit diff
+
+        # Get commit diff with structured data
         result = subprocess.run(
-            ['git', 'show', '--stat', commit_hash],
+            ['git', 'show', '--numstat', '--format=', commit_hash],
             cwd=str(path),
             capture_output=True,
             text=True
         )
-        
+
+        files_changed = []
+        additions = 0
+        deletions = 0
+
+        if result.returncode == 0:
+            for line in result.stdout.strip().splitlines():
+                if line:
+                    parts = line.split()
+                    if len(parts) >= 3:
+                        file_path = parts[2]
+                        adds = int(parts[0]) if parts[0].isdigit() else 0
+                        dels = int(parts[1]) if parts[1].isdigit() else 0
+                        files_changed.append({
+                            'path': file_path,
+                            'additions': adds,
+                            'deletions': dels
+                        })
+                        additions += adds
+                        deletions += dels
+
         return {
             'status': 'ok',
             'commit_hash': commit_hash,
             'repository_path': str(path),
-            'impact': result.stdout[-500:] if result.stdout else ''
+            'files_changed': files_changed,
+            'file_count': len(files_changed),
+            'total_additions': additions,
+            'total_deletions': deletions
         }
     except Exception as e:
         return {

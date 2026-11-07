@@ -1232,15 +1232,19 @@ def visualize_security_flow(
     component_id: str,
     tool_context: ToolContext
 ) -> dict:
-    """Visualize security flow with taint paths."""
+    """Visualize security flow with taint paths.
+
+    Handles all taint analysis statuses: ok, partial, unsupported, error.
+    """
     try:
         from .security_quality_tools import scan_vulnerabilities
         from .data_flow_intelligence_tools import trace_taint_flow
         from ..intelligence.graph_engine.codegraph import codegraph
+        from ..config import REPO_ROOT
 
         graph = codegraph.load_current_graph()
         node = graph.get(component_id)
-        
+
         if not node:
             return {
                 'status': 'not_found',
@@ -1248,16 +1252,33 @@ def visualize_security_flow(
                 'message': 'Component not found'
             }
 
-        # Get vulnerabilities
-        vuln_result = scan_vulnerabilities(component_id, tool_context)
-        
-        # Get taint analysis
+        # Resolve component to repository path through graph
+        file_path = node.get('file', '')
+        if not file_path:
+            return {
+                'status': 'error',
+                'error': 'Component has no file path'
+            }
+
+        # Validate resolved path against repository root
+        repository_path = str(REPO_ROOT)
+        full_file_path = REPO_ROOT / file_path
+        if not full_file_path.exists():
+            return {
+                'status': 'error',
+                'error': f'File not found in repository: {file_path}'
+            }
+
+        # Get vulnerabilities (uses repository path, not component_id)
+        vuln_result = scan_vulnerabilities(repository_path, tool_context)
+
+        # Get taint analysis (uses component_id)
         taint_result = trace_taint_flow(component_id, tool_context)
 
         # Build visualization nodes
         nodes = []
         edges = []
-        
+
         # Add the component node
         nodes.append({
             'id': component_id,
@@ -1285,8 +1306,8 @@ def visualize_security_flow(
                     'kind': 'confirmed'
                 })
 
-        # Add taint path nodes
-        if taint_result.get('status') == 'ok':
+        # Add taint path nodes (handle ok and partial status only)
+        if taint_result.get('status') in ('ok', 'partial'):
             for i, path in enumerate(taint_result.get('paths', [])):
                 path_id = f'{component_id}_taint_{i}'
                 nodes.append({
@@ -1308,13 +1329,21 @@ def visualize_security_flow(
         _emit_command(tool_context, 'show_graph',
                      nodes=nodes,
                      edges=edges,
+                     graph_type='security',
                      title=f'Security Flow: {component_id}')
+
+        # Emit security panel
+        _emit_command(tool_context, 'show_security_panel',
+                     summary=f"{len(vuln_result.get('vulnerabilities', []))} findings",
+                     node_ids=[v['id'] for v in vuln_result.get('vulnerabilities', [])] if vuln_result.get('status') == 'ok' else [],
+                     keep_ids=[p['id'] for p in taint_result.get('paths', [])] if taint_result.get('status') in ('ok', 'partial') else [])
 
         return {
             'status': 'ok',
             'component_id': component_id,
             'vulnerability_count': len(vuln_result.get('vulnerabilities', [])) if vuln_result.get('status') == 'ok' else 0,
-            'taint_path_count': len(taint_result.get('paths', [])) if taint_result.get('status') == 'ok' else 0
+            'taint_path_count': len(taint_result.get('paths', [])) if taint_result.get('status') in ('ok', 'partial') else 0,
+            'taint_status': taint_result.get('status', 'unknown')
         }
     except Exception as e:
         return {
@@ -1389,7 +1418,13 @@ def visualize_change_impact(
     element_id: str,
     tool_context: ToolContext
 ) -> dict:
-    """Visualize change impact using scene commands."""
+    """Visualize change impact using scene commands.
+
+    Three test states are separate:
+        - Associated: Test appears related to this function
+        - Execution status: Passed, failed or not run
+        - Code coverage: Measured coverage percentage or unknown
+    """
     try:
         from .relationship_intelligence_tools import calculate_change_impact
 
@@ -1399,19 +1434,25 @@ def visualize_change_impact(
         if impact_result.get('status') != 'ok':
             return impact_result
 
-        # Build the list of affected node IDs
+        # Build the list of affected node IDs (changed function + dependents)
         affected_ids = [element_id]
         for caller in impact_result.get('direct_callers', []):
             affected_ids.append(caller['from'])
-        for caller in impact_result.get('indirect_callers', []):
-            affected_ids.append(caller['from'])
+        for dep in impact_result.get('indirect_dependents', []):
+            affected_ids.append(dep['id'])
+        for imp in impact_result.get('import_dependents', []):
+            affected_ids.append(imp['id'])
 
-        # Get covering test IDs
+        # Extract actual test IDs from covering tests
+        # Each test object should have an 'id' field and a 'covers' field (list of function IDs)
         test_ids = []
         for test in impact_result.get('covering_tests', []):
-            test_ids.extend(test.get('covers', []))
+            if 'id' in test:
+                test_ids.append(test['id'])
 
-        # Separate tests by status (simplified - all as not_run for now)
+        # Separate tests by execution status
+        # For now, all tests are marked as not_run since we don't have actual test results
+        # TODO: Integrate with actual test runner to get passed/failed status
         passed = []
         failed = []
         not_run = test_ids
@@ -1421,15 +1462,23 @@ def visualize_change_impact(
         _emit_command(tool_context, 'highlight_path', node_ids=affected_ids)
         _emit_command(tool_context, 'show_test_badges', passed=passed, failed=failed, not_run=not_run)
         _emit_command(tool_context, 'focus_camera', node_id=element_id)
+        _emit_command(tool_context, 'show_impact_panel',
+                     summary=impact_result.get('risk_level', 'unknown'),
+                     depth=impact_result.get('direct_count', 0),
+                     node_ids=affected_ids,
+                     keep_ids=test_ids)
 
         return {
             'status': 'ok',
             'element_id': element_id,
             'direct_count': impact_result.get('direct_count', 0),
             'indirect_count': impact_result.get('indirect_count', 0),
+            'possible_count': impact_result.get('possible_count', 0),
+            'import_count': impact_result.get('import_count', 0),
             'total_affected': impact_result.get('total_affected', 0),
             'risk_level': impact_result.get('risk_level', 'unknown'),
-            'untested': impact_result.get('untested', False)
+            'untested': impact_result.get('untested', False),
+            'test_count': len(test_ids)
         }
     except Exception as e:
         return {

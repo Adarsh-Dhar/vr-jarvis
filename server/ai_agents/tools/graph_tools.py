@@ -112,13 +112,29 @@ def get_callees(node_id: str, tool_context: ToolContext, depth: int = 1) -> dict
 
 
 @safe
-def get_dependents(node_id: str, tool_context: ToolContext, max_depth: int = 4) -> dict:
+def get_dependents(node_id: str, tool_context: ToolContext, max_depth: int = 4, edge_types: list = None) -> dict:
     '''Return everything that transitively depends on node_id through calls or imports.
     Use for change-impact questions. Items include depth, the node they were reached via,
-    and edge_kind (confirmed or inferred) of the last hop.'''
+    and edge_kind (confirmed or inferred) of the last hop.
+
+    Args:
+        node_id: The node to find dependents for
+        tool_context: Tool context
+        max_depth: Maximum traversal depth (default 4)
+        edge_types: List of edge types to follow (default ['calls', 'may_call', 'imports'])
+
+    Edge type treatment:
+        - calls: Confirmed caller relationship
+        - may_call: Possible caller relationship
+        - imports: Module/file dependency
+        - Containment: Excluded from dependent traversal
+    '''
     if (err := _missing(node_id)):
         return err
-    found, total, cut = _cap(_walk(node_id, _graph()['in'], 'src', max_depth))
+    # Filter to calls, may_call, and imports by default to avoid containment relationships
+    if edge_types is None:
+        edge_types = ['calls', 'may_call', 'imports']
+    found, total, cut = _cap(_walk(node_id, _graph()['in'], 'src', max_depth, edge_types))
     record_evidence(tool_context, [node_id] + [f['id'] for f in found])
     return {'status': 'ok', 'node': node_id, 'dependents': found, 'total': total, 'truncated': cut}
 

@@ -150,9 +150,9 @@ namespace JarvisVR
       { "MAP",    new[] { "repo", "code", "evidence", "legend" } },
       { "CODE",   new[] { "repo", "code", "evidence", "legend" } },
       { "FLOW",   new[] { "activity", "evidence" } },
-      { "ISSUES", new[] { "repo", "evidence" } },
+      { "ISSUES", new[] { "repo", "security", "evidence" } },
       { "TESTS",  new[] { "tests", "code", "legend" } },
-      { "GIT",    new[] { "ghost", "approval" } },
+      { "GIT",    new[] { "history", "approval" } },
       { "AGENT",  new[] { "activity", "ghost" } },
     };
 
@@ -175,6 +175,9 @@ namespace JarvisVR
       { "activity", new Vector3(-125f,   0f, 2.0f) },
       { "tests",    new Vector3( 125f,   0f, 2.0f) },
       { "legend",   new Vector3( -30f,  58f, 1.7f) },
+      { "impact",   new Vector3(  65f, -28f, 1.8f) },
+      { "security", new Vector3(  65f, -28f, 1.8f) },
+      { "history",  new Vector3(  65f,   6f, 1.9f) },
     };
 
     /// <summary>Where the user's head is, in the workspace root's local space (see Recenter).</summary>
@@ -245,6 +248,21 @@ namespace JarvisVR
       approval.AddButton("HOLD 2s TO APPROVE", 20, 150, 330, 80, OnApprove, 2f, pal.Green);
       approval.AddButton("REJECT", 370, 150, 170, 80, OnReject, 0f, pal.Red);
 
+      // Impact panel for change impact visualization
+      _impactPanel = AddPanel("impact", "Change Impact", 560, 400, 1.18f, -0.46f, pal.Violet);
+      _impactPanel.SetBodyBox(60, 340); _impactPanel.Body.fontSize = 20;
+      _impactPanel.SetBody("No impact analysis yet. Select a function and ask about change impact.");
+
+      // Security panel for security findings
+      _securityPanel = AddPanel("security", "Security Findings", 560, 400, 1.18f, -0.46f, pal.Red);
+      _securityPanel.SetBodyBox(60, 340); _securityPanel.Body.fontSize = 18;
+      _securityPanel.SetBody("No security analysis yet. Select a component and scan for vulnerabilities.");
+
+      // History panel for Git commit history
+      _historyPanel = AddPanel("history", "Git History", 560, 400, 1.18f, -0.46f, pal.Cyan);
+      _historyPanel.SetBodyBox(60, 340); _historyPanel.Body.fontSize = 18;
+      _historyPanel.SetBody("No commit history loaded yet.");
+
       JarvisSpatialPanel caption = AddPanel("caption", "JARVIS", 820, 190, 0.15f, -0.52f, pal.Cyan);
       caption.SetBodyBox(54, 70); caption.Body.fontSize = 26;
       _quickChange = caption.AddButton("What breaks if I change this?", 20, 128, 400, 50, () => Ask(QuickChangeQuestion()));   // label follows the selection
@@ -273,7 +291,7 @@ namespace JarvisVR
       if (_graphRoot != null) _graphRoot.gameObject.SetActive(mode != "REPOS" && mode != "CODE");
       string[] visible = ModePanels.ContainsKey(mode) ? ModePanels[mode] : ModePanels["MAP"];
       int shown = 0;
-      foreach (string key in new[] { "repo", "code", "evidence", "tests", "activity", "legend", "ghost", "approval" })
+      foreach (string key in new[] { "repo", "code", "evidence", "tests", "activity", "legend", "ghost", "approval", "security", "history", "impact" })
       {
         bool on = visible.Contains(key);
         // approval shares its slot with evidence and tests: while something is pending, approval wins
@@ -878,10 +896,10 @@ namespace JarvisVR
             {
               foreach (var edge in c.edges) newGraph.edges.Add(edge);
             }
-            // Preserve graph_type from command metadata
-            if (c.metadata != null && c.metadata.ContainsKey("graph_type"))
+            // Preserve graph_type from command
+            if (!string.IsNullOrEmpty(c.graph_type))
             {
-              newGraph.graph_type = c.metadata["graph_type"];
+              newGraph.graph_type = c.graph_type;
             }
             LoadGraph(newGraph);
             Log("show_graph: loaded " + newGraph.nodes.Count + " nodes, " + newGraph.edges.Count + " edges" +
@@ -926,6 +944,40 @@ namespace JarvisVR
           Badge(c.passed, " [ok]"); Badge(c.failed, " [x]"); Badge(c.not_run, " [-]");
           _testSummary = Summarize("PASSED", c.passed) + Summarize("FAILED", c.failed) + Summarize("NOT RUN", c.not_run);
           return false;
+        case "show_impact_panel":
+          if (_impactPanel != null)
+          {
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine($"CHANGE IMPACT");
+            sb.AppendLine($"Risk: {c.summary ?? "Unknown"}");
+            sb.AppendLine($"Direct dependents: {c.depth}");
+            sb.AppendLine($"Total affected: {c.node_ids?.Length ?? 0}");
+            sb.AppendLine($"Associated tests: {c.keep_ids?.Length ?? 0}");
+            _impactPanel.SetBody(sb.ToString());
+          }
+          return true;
+        case "show_security_panel":
+          if (_securityPanel != null)
+          {
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine($"SECURITY FINDINGS");
+            sb.AppendLine($"Findings: {c.node_ids?.Length ?? 0}");
+            sb.AppendLine($"Severity: {c.summary ?? "Unknown"}");
+            sb.AppendLine($"Taint paths: {c.keep_ids?.Length ?? 0}");
+            _securityPanel.SetBody(sb.ToString());
+          }
+          return true;
+        case "show_history_panel":
+          if (_historyPanel != null)
+          {
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine($"GIT HISTORY");
+            sb.AppendLine($"Commits: {c.node_ids?.Length ?? 0}");
+            sb.AppendLine($"Changed files: {c.keep_ids?.Length ?? 0}");
+            sb.AppendLine($"Latest: {c.summary ?? "No data"}");
+            _historyPanel.SetBody(sb.ToString());
+          }
+          return true;
         case "show_approval_prompt":
           _pending = c.summary;
           return false;

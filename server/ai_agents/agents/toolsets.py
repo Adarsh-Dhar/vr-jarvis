@@ -718,6 +718,7 @@ TOOLSETS: Dict[str, List[str]] = {
         "trace_function_history",
         "find_regression_commit",
         "trace_file_history",
+        "analyze_commit_impact",
     ],
 
     # Agent 4: Code Understanding
@@ -835,6 +836,7 @@ TOOLSETS: Dict[str, List[str]] = {
         "analyze_injection_risks",
         "analyze_cryptography",
         "trace_sensitive_data",
+        "trace_taint_flow",
         "analyze_attack_surface",
         "calculate_complexity",
         "calculate_cognitive_complexity",
@@ -897,6 +899,8 @@ TOOLSETS: Dict[str, List[str]] = {
         "visualize_call_graph",
         "visualize_change_impact",
         "visualize_data_flow",
+        "visualize_security_flow",
+        "visualize_git_history",
         "visualize_test_coverage",
         "visualize_architecture",
         "visualize_dependency_graph",
