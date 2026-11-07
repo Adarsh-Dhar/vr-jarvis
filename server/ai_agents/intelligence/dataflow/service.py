@@ -33,6 +33,7 @@ def analyze_python_data_flow_simple(
         # Find function AST using the proper locator
         symbol = {
             'name': function_name,
+            'qualname': function_name,  # Use the same as name for simple interface
             'file': file_path,
         }
         function_ast = find_function_ast(tree, symbol)
@@ -41,6 +42,13 @@ def analyze_python_data_flow_simple(
             return {
                 'status': 'error',
                 'error': f'Function not found: {function_name}'
+            }
+        
+        # Handle both FunctionDef and AsyncFunctionDef
+        if not isinstance(function_ast, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            return {
+                'status': 'error',
+                'error': f'Found symbol is not a function: {type(function_ast).__name__}'
             }
         
         # Build CFG
@@ -168,6 +176,17 @@ def analyze_python_data_flow(
                 'graph': None,
                 'cfg': None,
                 'validation': {'valid': False, 'errors': ['Function not found'], 'warnings': []},
+                'diagnostics': [],
+                'metadata': {},
+            }
+        
+        # Handle both FunctionDef and AsyncFunctionDef
+        if not isinstance(function_ast, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            return {
+                'error': f'Found symbol is not a function: {type(function_ast).__name__}',
+                'graph': None,
+                'cfg': None,
+                'validation': {'valid': False, 'errors': ['Not a function'], 'warnings': []},
                 'diagnostics': [],
                 'metadata': {},
             }

@@ -189,14 +189,20 @@ class ReachingDefinitionsAnalyzer:
         Edge-specific transfer: For exceptional edges, filter out definitions
         that shouldn't propagate (e.g., assignment RHS evaluation vs commit).
         """
-        # Initialize all sets to empty
+        # Initialize all sets to empty (must-analysis is deferred due to complexity)
+        # For must-analysis, we would initialize IN with all definitions and use intersection
+        # This is deferred to avoid incorrect results
         in_sets: Dict[str, Set[str]] = {node.id: set() for node in cfg.nodes}
         out_sets: Dict[str, Set[str]] = {node.id: set() for node in cfg.nodes}
 
-        # Build edge-specific transfer info: map (source, target) -> edge kind
+        # Build edge-specific transfer info: map (source, target) -> list of edge kinds
+        # Changed to list to handle multiple edge types between same nodes
         edge_kinds = {}
         for edge in cfg.edges:
-            edge_kinds[(edge.source, edge.target)] = edge.kind
+            key = (edge.source, edge.target)
+            if key not in edge_kinds:
+                edge_kinds[key] = []
+            edge_kinds[key].append(edge.kind)
 
         # Worklist of nodes to process
         worklist = list(node.id for node in cfg.nodes)
@@ -208,14 +214,12 @@ class ReachingDefinitionsAnalyzer:
             predecessors = self._get_predecessors(cfg, node_id)
             new_in = set()
             for pred_id in predecessors:
-                # Check if this is an exceptional edge
-                edge_kind = edge_kinds.get((pred_id, node_id), 'next')
-                if edge_kind in ('exception', 'raise', 'may_raise'):
+                # Check if this is an exceptional edge (now handles multiple edge types)
+                edge_kinds_list = edge_kinds.get((pred_id, node_id), ['next'])
+                if any(kind in ('exception', 'raise', 'may_raise') for kind in edge_kinds_list):
                     # For exceptional edges, only propagate definitions that existed
                     # BEFORE the current node's assignments (filter out new definitions)
-                    # This prevents x = risky() from propagating x's new def to handlers
                     pred_out = out_sets[pred_id].copy()
-                    # Remove definitions created at the predecessor node itself
                     if pred_id in gen:
                         pred_out -= gen[pred_id]
                     new_in.update(pred_out)

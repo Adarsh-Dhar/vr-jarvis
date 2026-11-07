@@ -9,10 +9,31 @@ def _compute_qualname(node: Union[ast.FunctionDef, ast.AsyncFunctionDef], tree: 
 
     This walks up the AST to find enclosing classes and functions.
     """
-    # For now, return the simple name - computing full qualified names
-    # requires walking the AST to find parent relationships
-    # TODO: Implement full qualified name computation
-    return node.name
+    # First pass: build parent map to walk up the tree
+    parent_map: Dict[ast.AST, ast.AST] = {}
+    
+    class ParentBuilder(ast.NodeVisitor):
+        def generic_visit(self, node):
+            for child in ast.iter_child_nodes(node):
+                parent_map[child] = node
+            super().generic_visit(node)
+    
+    ParentBuilder().visit(tree)
+    
+    # Walk up from the function to build qualified name
+    parts = [node.name]
+    current = parent_map.get(node)
+    
+    while current:
+        if isinstance(current, ast.ClassDef):
+            parts.insert(0, current.name)
+        elif isinstance(current, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            parts.insert(0, current.name)
+        elif isinstance(current, ast.Module):
+            break
+        current = parent_map.get(current)
+    
+    return '.'.join(parts)
 
 
 def find_function_ast(
@@ -91,11 +112,16 @@ def find_function_ast(
 
     # If we have multiple matches, try to disambiguate by qualified name
     if len(candidates) > 1:
-        # Prefer exact qualified name match
+        # Prefer exact qualified name match (handles nested functions with identical short names)
         for func, qualname in candidates:
             if qualname == target_name:
                 return func
-        # Fallback to first match (this should be improved)
+        # If no exact qualified name match, use line number to disambiguate
+        if target_start is not None:
+            for func, qualname in candidates:
+                if func.lineno == target_start:
+                    return func
+        # Fallback to first match
         return candidates[0][0]
 
     # No match found

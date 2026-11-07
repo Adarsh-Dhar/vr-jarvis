@@ -314,6 +314,19 @@ class DefUseVisitor(ast.NodeVisitor):
             else:
                 # Handle simple assignments (x = y, x = 10) that don't create operations
                 # Create a copy/move relationship between source use and target definition
+                for new_def_id in new_def_ids:
+                    for def_obj in self.facts.definitions:
+                        if def_obj.id == new_def_id:
+                            # Add metadata about the source
+                            if isinstance(node.value, ast.Name):
+                                def_obj.metadata = def_obj.metadata or {}
+                                def_obj.metadata['copy_from'] = node.value.id
+                                def_obj.metadata['is_copy'] = True
+                            elif isinstance(node.value, ast.Constant):
+                                def_obj.metadata = def_obj.metadata or {}
+                                def_obj.metadata['literal_value'] = str(node.value.value)
+                                def_obj.metadata['is_literal'] = True
+                            break
                 if isinstance(node.value, ast.Name) and use_ids:
                     # Simple copy: x = y
                     for use_id in use_ids:
@@ -600,7 +613,7 @@ class DefUseVisitor(ast.NodeVisitor):
                     break
 
     def visit_Return(self, node: ast.Return) -> None:
-        """Visit return statements."""
+        """Visit return statements and connect return expression to return-value sink."""
         if node.value:
             ctx = ExpressionEvaluationContext(
                 function_id=self.function_id,
@@ -612,6 +625,46 @@ class DefUseVisitor(ast.NodeVisitor):
             )
             evaluator = RecursiveExpressionEvaluator(ctx)
             use_ids, op_id, child_ops = evaluator.evaluate(node.value)
+
+            # Connect the root operation to the return-value sink
+            # We represent this by storing the operation_id in a special metadata field
+            # on a synthetic "return_value" operation fact
+            if op_id:
+                # Create a return-value sink operation that represents the return value
+                from .models import ExpressionFact
+                return_sink_id = self._generate_operation_id()
+                self.facts.operations.append(ExpressionFact(
+                    id=return_sink_id,
+                    function_id=self.function_id,
+                    file=self.file,
+                    line=node.lineno,
+                    column=node.col_offset if hasattr(node, 'col_offset') else 0,
+                    cfg_node_ids=self._get_cfg_node_ids(node),
+                    expression=ast.unparse(node.value) if hasattr(ast, 'unparse') else str(node.value),
+                    operation='return_value',
+                    input_use_ids=use_ids,
+                    input_operation_ids=[op_id] if op_id else [],
+                    output_definition_ids=[],
+                    metadata={
+                        'is_return_sink': True,
+                        'root_operation_id': op_id
+                    }
+                ))
+
+    def visit_Expr(self, node: ast.Expr) -> None:
+        """Visit expression statements (standalone function calls, etc.)."""
+        if node.value:
+            ctx = ExpressionEvaluationContext(
+                function_id=self.function_id,
+                file=self.file,
+                local_vars=self.local_vars,
+                cfg_node_map=self.cfg_node_map,
+                ast_index=self.ast_index,
+                facts=self.facts
+            )
+            evaluator = RecursiveExpressionEvaluator(ctx)
+            use_ids, op_id, child_ops = evaluator.evaluate(node.value)
+            # Operation facts are already created by the evaluator
 
     def visit_Name(self, node: ast.Name) -> None:
         """Visit name nodes."""
@@ -1027,7 +1080,27 @@ class DefUseVisitor(ast.NodeVisitor):
                 self._extract_target_definitions(elt, source_node, f"{kind}_unpack", elt_binding_key, cfg_node_ids)
         elif isinstance(target, ast.Starred):
             # Starred unpacking: `*rest = value`
-            self._extract_target_definitions(target.value, source_node, f"{kind}_starred", binding_key, cfg_node_ids)
+            # Use the underlying Starred.value name, not the Starred node itself
+            if isinstance(target.value, ast.Name):
+                # Create definition for the actual variable name (e.g., 'rest' in '*rest')
+                actual_name = target.value.id
+                actual_binding_key = f"{self.function_id}::{actual_name}"
+                self.facts.definitions.append(Definition(
+                    id=self._generate_def_id(actual_name),
+                    variable=actual_name,
+                    function_id=self.function_id,
+                    file=self.file,
+                    line=source_node.lineno,
+                    column=target.value.col_offset if hasattr(target.value, 'col_offset') else 0,
+                    kind=f"{kind}_starred",
+                    cfg_node_ids=cfg_node_ids,
+                    binding_key=actual_binding_key,
+                    expression=ast.unparse(target) if hasattr(ast, 'unparse') else actual_name,
+                    metadata={'is_starred': True}
+                ))
+            else:
+                # For complex starred expressions, recurse
+                self._extract_target_definitions(target.value, source_node, f"{kind}_starred", binding_key, cfg_node_ids)
         elif isinstance(target, ast.Attribute):
             # Attribute assignment: `self.x = value`
             # Track as attribute definition with receiver identity

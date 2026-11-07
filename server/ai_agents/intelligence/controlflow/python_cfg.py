@@ -565,6 +565,17 @@ class PythonCFGBuilder:
         for exit_id in body_result.normal_exits:
             self._add_edge(cfg, ctx, exit_id, header_id, 'loop_back')
 
+        # Consume break/continue completions owned by this for-loop (like while-loop does)
+        filtered_abrupt_exits = []
+        for completion in body_result.abrupt_exits:
+            if completion.kind in ('break', 'continue'):
+                # Check if this completion belongs to the current loop
+                if completion.target_loop_id == header_id:
+                    # Consumed by this loop, don't propagate
+                    continue
+            filtered_abrupt_exits.append(completion)
+        body_result.abrupt_exits = filtered_abrupt_exits
+
         # Add loop_exhausted edge from header to loop_exit (natural exhaustion)
         self._add_edge(cfg, ctx, header_id, loop_exit_id, 'loop_exhausted')
 

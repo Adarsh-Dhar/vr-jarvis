@@ -519,7 +519,29 @@ class RecursiveExpressionEvaluator:
         return all_uses, op_id, child_ops
     
     def _evaluate_lambda(self, node: ast.Lambda) -> Tuple[List[str], Optional[str], List[str]]:
-        """Evaluate lambda expression."""
+        """Evaluate lambda expression with proper scope handling."""
+        # Create parameter definitions for lambda
+        from .models import Definition
+        param_defs = []
+        param_uses = []
+        for arg in node.args.args:
+            param_id = f"{self.ctx.function_id}_lambda_param_{arg.arg}"
+            binding_key = f"{self.ctx.function_id}::lambda::{arg.arg}"
+            self.ctx.facts.definitions.append(Definition(
+                id=param_id,
+                variable=arg.arg,
+                function_id=self.ctx.function_id,
+                file=self.ctx.file,
+                line=node.lineno,
+                column=arg.col_offset if hasattr(arg, 'col_offset') else 0,
+                kind='lambda_parameter',
+                cfg_node_ids=self.ctx.get_cfg_node_ids(node),
+                binding_key=binding_key,
+                expression=ast.unparse(node) if hasattr(ast, 'unparse') else arg.arg,
+                metadata={'is_lambda_param': True}
+            ))
+            param_defs.append(param_id)
+
         # Evaluate body (usually an expression)
         body_uses, body_op_id, body_child_ops = self.evaluate(node.body)
         child_ops = [body_op_id] if body_op_id else []
@@ -540,8 +562,12 @@ class RecursiveExpressionEvaluator:
             operation='Lambda',
             input_use_ids=body_uses,
             input_operation_ids=child_ops,
-            output_definition_ids=[],
-            metadata={'param_count': len(node.args.args)},
+            output_definition_ids=param_defs,  # Lambda produces parameter definitions
+            metadata={
+                'param_count': len(node.args.args),
+                'param_definition_ids': param_defs,
+                'is_lambda': True
+            },
         ))
 
         return body_uses, op_id, child_ops
