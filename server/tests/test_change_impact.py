@@ -138,6 +138,7 @@ if __name__ == "__main__":
 def test_change_impact_no_duplication():
     """Test that direct possible, indirect, and import dependents are separate without duplication."""
     from unittest.mock import Mock, patch
+    import sys
 
     # Mock the graph and tool context
     mock_tool_context = Mock()
@@ -186,9 +187,9 @@ def test_change_impact_no_duplication():
     mock_graph.get = Mock(return_value={'id': 'test_function', 'name': 'test_function'})
     mock_graph.covering_tests = Mock(return_value=[])
 
-    # Patch the imports
-    with patch('ai_agents.tools.relationship_intelligence_tools.codegraph', mock_graph):
-        with patch('ai_agents.tools.relationship_intelligence_tools.get_dependents', side_effect=mock_get_dependents):
+    # Patch the imports at the actual import locations inside the function
+    with patch('ai_agents.intelligence.graph_engine.codegraph.codegraph', mock_graph):
+        with patch('ai_agents.tools.graph_tools.get_dependents', side_effect=mock_get_dependents):
             result = calculate_change_impact("test_function", mock_tool_context)
 
     # Verify the result structure

@@ -965,8 +965,21 @@ def calculate_change_impact(
         direct_caller_ids = {c['from'] for c in direct_callers}
 
         # Get direct possible callers (may_call edges at depth=1)
+        # A caller is "possible" if:
+        # - kind is explicitly 'possible', OR
+        # - resolution is not 'static_resolved' AND kind is not explicitly 'confirmed'
         all_depth1 = graph.callers(symbol_id, depth=1, include_possible=True)
-        possible_callers = [c for c in all_depth1 if c.get('kind') == 'possible' or c.get('resolution') != 'static_resolved']
+        possible_callers = []
+        for c in all_depth1:
+            kind = c.get('kind', '')
+            resolution = c.get('resolution', '')
+            # Exclude already-confirmed callers
+            if c['from'] in direct_caller_ids:
+                continue
+            # Classify as possible if kind is 'possible' or resolution is not static_resolved
+            # but only if kind is not explicitly 'confirmed'
+            if kind == 'possible' or (resolution != 'static_resolved' and kind != 'confirmed'):
+                possible_callers.append(c)
         possible_caller_ids = {c['from'] for c in possible_callers}
 
         # Get indirect call dependents (calls and may_call, depth up to 6, excluding both direct groups)
