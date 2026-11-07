@@ -151,13 +151,17 @@ class ReachingDefinitionsAnalyzer:
         for node in cfg.nodes:
             node_id = node.id
 
-            # GEN: definitions created at this node
+            # GEN: definitions created at this node (excluding deletions)
             gen[node_id] = set()
             if node_id in node_defs:
                 for definition in node_defs[node_id]:
+                    # Exclude deletion events from GEN - they are kill-only
+                    if definition.metadata.get('is_kill_only', False):
+                        continue
                     gen[node_id].add(definition.id)
 
             # KILL: earlier definitions of the same binding identity
+            # Deletions also kill definitions of the same binding
             kill[node_id] = set()
             if node_id in node_defs:
                 for definition in node_defs[node_id]:
@@ -231,6 +235,14 @@ class ReachingDefinitionsAnalyzer:
                 for succ_id in successors:
                     if succ_id not in worklist:
                         worklist.append(succ_id)
+
+        # Filter out unreachable subgraphs before returning
+        # Calculate reachability from entry node
+        reachable = self._calculate_reachability(cfg)
+        for node_id in list(in_sets.keys()):
+            if node_id not in reachable:
+                in_sets[node_id] = set()
+                out_sets[node_id] = set()
 
         return in_sets, out_sets
 
@@ -336,6 +348,30 @@ class ReachingDefinitionsAnalyzer:
             if edge.source == node_id:
                 successors.append(edge.target)
         return successors
+
+    def _calculate_reachability(self, cfg: ControlFlowGraph) -> Set[str]:
+        """Calculate which nodes are reachable from the entry node."""
+        if not cfg.entry_node_id:
+            return set()
+
+        reachable = set()
+        worklist = [cfg.entry_node_id]
+        visited = set()
+
+        while worklist:
+            node_id = worklist.pop(0)
+            if node_id in visited:
+                continue
+            visited.add(node_id)
+            reachable.add(node_id)
+
+            # Add successors
+            successors = self._get_successors(cfg, node_id)
+            for succ_id in successors:
+                if succ_id not in visited:
+                    worklist.append(succ_id)
+
+        return reachable
 
     def resolve_use(
         self,

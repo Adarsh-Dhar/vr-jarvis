@@ -231,3 +231,90 @@ def check_age(age):
     # Check for any operations that might represent the comparison
     all_ops = [op for op in facts.operations]
     assert len(all_ops) >= 1, f"Should have at least one operation, got {len(all_ops)}"
+
+
+def test_break_inside_try_inside_loop():
+    """Test that break inside try inside loop executes finally before exiting loop."""
+    source = """
+def process(items):
+    try:
+        for item in items:
+            if item == 5:
+                break
+        after_loop()  # Should execute after loop but before cleanup
+    finally:
+        cleanup()  # Should execute before loop exit
+"""
+    tree = ast.parse(source)
+    func = tree.body[0]
+    builder = PythonCFGBuilder()
+    artifact = builder.build_function(func, "test.py::process", source, "test.py")
+    cfg = artifact.graph
+
+    validation = validate_cfg(cfg)
+    assert validation['valid'], f"CFG validation failed: {validation['errors']}"
+
+    # Find break, finally, after_loop, and loop exit nodes
+    break_nodes = [n for n in cfg.nodes if n.kind == 'statement' and n.label == 'break']
+    finally_nodes = [n for n in cfg.nodes if n.kind == 'finally']
+    after_loop_nodes = [n for n in cfg.nodes if 'after_loop' in n.label]
+
+    assert len(break_nodes) == 1, "Should have one break node"
+    assert len(finally_nodes) >= 1, "Should have finally nodes"
+    assert len(after_loop_nodes) == 1, "Should have after_loop() node"
+
+    # Break should route through finally before reaching after_loop
+    # The path should be: break -> finally -> after_loop (since try wraps the loop)
+    # NOT: break -> after_loop directly (bypassing finally)
+    break_node = break_nodes[0]
+    after_loop_node = after_loop_nodes[0]
+
+    # Check that there's no direct edge from break to after_loop
+    edges_from_break = cfg.get_edges_from(break_node.id)
+    direct_to_after = [e for e in edges_from_break if e.target == after_loop_node.id]
+    assert len(direct_to_after) == 0, "Break should not have direct edge to after_loop (bypassing finally)"
+
+
+def test_break_inside_loop_inside_try():
+    """Test that break inside loop inside try executes finally before exiting try."""
+    source = """
+def process(items):
+    for item in items:
+        try:
+            if item == 5:
+                break
+        finally:
+            cleanup()  # Should execute before break takes effect
+    after_loop()
+"""
+    tree = ast.parse(source)
+    func = tree.body[0]
+    builder = PythonCFGBuilder()
+    artifact = builder.build_function(func, "test.py::process", source, "test.py")
+    cfg = artifact.graph
+
+    validation = validate_cfg(cfg)
+    assert validation['valid'], f"CFG validation failed: {validation['errors']}"
+
+    # Find break, finally, and after_loop nodes
+    break_nodes = [n for n in cfg.nodes if n.kind == 'statement' and n.label == 'break']
+    finally_nodes = [n for n in cfg.nodes if n.kind == 'finally']
+    after_loop_nodes = [n for n in cfg.nodes if 'after_loop' in n.label]
+
+    assert len(break_nodes) == 1, "Should have one break node"
+    assert len(finally_nodes) >= 1, "Should have finally nodes"
+    assert len(after_loop_nodes) == 1, "Should have after_loop() node"
+
+    # Break should route through finally before reaching loop exit
+    break_node = break_nodes[0]
+    edges_from_break = cfg.get_edges_from(break_node.id)
+
+    # Break should have edge to finally
+    finally_edges = [e for e in edges_from_break if e.kind == 'finally']
+    assert len(finally_edges) > 0, "Break should route through finally"
+
+    # Break should NOT have direct edge to after_loop (bypassing finally)
+    if after_loop_nodes:
+        after_loop_node = after_loop_nodes[0]
+        direct_to_after = [e for e in edges_from_break if e.target == after_loop_node.id]
+        assert len(direct_to_after) == 0, "Break should not bypass finally"

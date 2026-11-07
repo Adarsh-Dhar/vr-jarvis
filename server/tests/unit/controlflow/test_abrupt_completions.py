@@ -33,9 +33,9 @@ def process(value):
     return_node = return_nodes[0]
     edges_from_return = cfg.get_edges_from(return_node.id)
     
-    # Return should only have 'return' edge to exit, not 'next' to the assignment
+    # Return should only have 'return' edge to exit, or 'may_raise' for expressions that can raise
     for edge in edges_from_return:
-        assert edge.kind in ('return', 'raise'), f"Return node should not have normal edge to assignment, got {edge.kind}"
+        assert edge.kind in ('return', 'raise', 'may_raise'), f"Return node should not have normal edge to assignment, got {edge.kind}"
 
 
 def test_conditional_return_with_reachable_statement():

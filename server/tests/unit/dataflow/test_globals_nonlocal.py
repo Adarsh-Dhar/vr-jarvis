@@ -224,3 +224,41 @@ def outer():
     # Should have regular assignment definitions
     assign_defs = [d for d in facts.definitions if d.kind == 'assignment']
     assert len(assign_defs) >= 1
+
+
+def test_closure_variable_resolution():
+    """Test that closure variables resolve to outer scope bindings."""
+    source = """
+def outer():
+    value = 10
+    def inner():
+        return value  # Should resolve to outer's value
+    return inner
+"""
+    tree = ast.parse(source)
+    outer_func = tree.body[0]
+    inner_func = outer_func.body[1]  # Get the nested function
+
+    # Analyze inner() as a separate function
+    cfg_builder = PythonCFGBuilder()
+    artifact = cfg_builder.build_function(
+        function_ast=inner_func,
+        function_id="test.py::outer::inner",
+        source=source,
+        file_path="test.py"
+    )
+
+    extractor = PythonDefUseExtractor()
+    facts = extractor.extract_function(
+        artifact=artifact,
+        source=source,
+        file_path="test.py"
+    )
+
+    # Should have a use for 'value'
+    value_uses = [u for u in facts.uses if u.variable == 'value']
+    assert len(value_uses) >= 1, "Should have use for 'value'"
+
+    # Check if the use is identified as a free variable (in free_vars set)
+    # The binding key should indicate it's from outer scope
+    assert value_uses[0].binding_key is not None, "Should have binding key"

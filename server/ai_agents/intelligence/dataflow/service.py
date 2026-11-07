@@ -83,10 +83,19 @@ def analyze_python_data_flow_simple(
         # Build data-flow graph
         dfg_builder = DataFlowGraphBuilder()
         dfg = dfg_builder.build(cfg, facts, analysis_result)
-        
+
+        # Validate DFG
+        from .validator import validate_dataflow
+        dfg_validation = validate_dataflow(facts)
+        if not dfg_validation['valid']:
+            return {
+                'status': 'error',
+                'error': f'DFG validation failed: {dfg_validation["errors"]}'
+            }
+
         # Convert to Unity format
         unity_format = dfg_to_unity_format(dfg)
-        
+
         return {
             'status': 'ok',
             'function_name': function_name,
@@ -97,7 +106,7 @@ def analyze_python_data_flow_simple(
             'definitions': [{'id': d.id, 'variable': d.variable, 'line': d.line} for d in facts.definitions],
             'uses': [{'id': u.id, 'variable': u.variable, 'line': u.line} for u in facts.uses],
             'operations': [{'id': o.id, 'expression': o.expression, 'line': o.line} for o in facts.operations],
-            'validation': dfg_builder.validate_dataflow_graph(cfg, facts, dfg),
+            'validation': dfg_validation,
             'cfg_references': {
                 'function_id': function_id,
                 'entry_node_id': cfg.entry_node_id,
@@ -214,9 +223,10 @@ def analyze_python_data_flow(
         dfg_builder = DataFlowGraphBuilder()
         dfg = dfg_builder.build(cfg, facts, analysis_result)
 
-        # Validate DFG
-        dfg_validation = dfg_builder.validate_dataflow_graph(cfg, facts, dfg)
-        
+        # Validate DFG using the stronger validator
+        from .validator import validate_dataflow
+        dfg_validation = validate_dataflow(facts)
+
         # Do not return invalid DFG as successful
         if not dfg_validation['valid']:
             return {

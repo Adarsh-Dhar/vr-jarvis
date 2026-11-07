@@ -220,14 +220,56 @@ def process(items):
     # Find continue and finally nodes
     continue_nodes = [n for n in cfg.nodes if n.kind == 'statement' and n.label == 'continue']
     finally_nodes = [n for n in cfg.nodes if 'finally' in n.label.lower() or n.kind == 'statement' and 'cleanup' in n.label]
-    
+
     assert len(continue_nodes) >= 1, "Should have continue node"
     assert len(finally_nodes) >= 1, "Should have finally body node"
-    
+
     # Continue should route to finally before loop header
     continue_node = continue_nodes[0]
     edges_from_continue = cfg.get_edges_from(continue_node.id)
-    
+
     # Continue should have 'finally' edge or route through finally
     finally_edges = [e for e in edges_from_continue if e.kind == 'finally']
     assert len(finally_edges) > 0, "Continue should route through finally"
+
+
+def test_return_finally_blocks_after():
+    """Test that return in try/finally blocks execution of statements after the try."""
+    code = """
+def process():
+    try:
+        return 1
+    finally:
+        cleanup()
+    after()  # Should be unreachable after return
+"""
+    tree = ast.parse(code)
+    func_node = tree.body[0]
+
+    cfg_builder = PythonCFGBuilder()
+    artifact = cfg_builder.build_function(
+        function_ast=func_node,
+        function_id="test::process",
+        source=code,
+        file_path="test.py"
+    )
+    cfg = artifact.graph
+
+    # Find return, finally, and after nodes
+    return_nodes = [n for n in cfg.nodes if n.kind == 'return']
+    finally_nodes = [n for n in cfg.nodes if n.kind == 'finally']
+    after_nodes = [n for n in cfg.nodes if 'after' in n.label]
+
+    assert len(return_nodes) == 1, "Should have one return node"
+    assert len(finally_nodes) >= 1, "Should have finally nodes"
+    assert len(after_nodes) == 1, "Should have after() node"
+
+    # after() should not be reachable from return through finally
+    # The return should route through finally to exit, not to after()
+    return_node = return_nodes[0]
+    after_node = after_nodes[0]
+
+    # Check that there's no path from return to after
+    # by checking if after has any incoming edges from finally or return
+    edges_to_after = cfg.get_edges_to(after_node.id)
+    assert len(edges_to_after) == 0, "after() should have no incoming edges (unreachable)"

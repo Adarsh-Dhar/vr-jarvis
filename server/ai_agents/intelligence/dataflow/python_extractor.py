@@ -80,11 +80,12 @@ class PythonDefUseExtractor:
             if parts:
                 name = parts[-1]
 
-        for sym in sym_table.get_symbols():
-            if sym.get_name() == name and isinstance(sym, symtable.Function):
-                return sym
-        # Search nested scopes
+        # Search children (function scope tables) instead of get_symbols()
+        # get_symbols() returns Symbol objects, not Function tables
         for child in sym_table.get_children():
+            if isinstance(child, symtable.Function) and child.get_name() == name:
+                return child
+            # Recursively search nested scopes
             result = self._find_function_symbol(child, function_id, name)
             if result:
                 return result
@@ -374,11 +375,13 @@ class DefUseVisitor(ast.NodeVisitor):
         """Visit augmented assignment statements (+=, -=, etc.)."""
         # Target is both used and defined
         cfg_node_ids = self._get_cfg_node_ids(node)
+        target_use_id = None
         if isinstance(node.target, ast.Name):
             binding_key = f"{self.function_id}::{node.target.id}"
-            # Use
+            # Use of old target value
+            target_use_id = self._generate_use_id(node.target.id)
             self.facts.uses.append(VariableUse(
-                id=self._generate_use_id(node.target.id),
+                id=target_use_id,
                 variable=node.target.id,
                 function_id=self.function_id,
                 file=self.file,
@@ -399,7 +402,48 @@ class DefUseVisitor(ast.NodeVisitor):
             facts=self.facts
         )
         evaluator = RecursiveExpressionEvaluator(ctx)
-        use_ids, op_id, child_ops = evaluator.evaluate(node.value)
+        rhs_use_ids, rhs_op_id, child_ops = evaluator.evaluate(node.value)
+
+        # Create the augmented binary operation node (e.g., Add for +=)
+        # Map operator to operation type
+        op_map = {
+            ast.Add: 'Add',
+            ast.Sub: 'Sub',
+            ast.Mult: 'Mult',
+            ast.Div: 'Div',
+            ast.FloorDiv: 'FloorDiv',
+            ast.Mod: 'Mod',
+            ast.Pow: 'Pow',
+            ast.LShift: 'LShift',
+            ast.RShift: 'RShift',
+            ast.BitOr: 'BitOr',
+            ast.BitXor: 'BitXor',
+            ast.BitAnd: 'BitAnd',
+            ast.MatMult: 'MatMult',
+        }
+        op_type = op_map.get(type(node.op), 'AugmentedOp')
+
+        # Collect input use IDs (old target + RHS uses)
+        input_use_ids = []
+        if target_use_id:
+            input_use_ids.append(target_use_id)
+        input_use_ids.extend(rhs_use_ids)
+
+        # Create the augmented operation
+        from .models import ExpressionFact
+        aug_op_id = self._generate_operation_id()
+        self.facts.operations.append(ExpressionFact(
+            id=aug_op_id,
+            operation=op_type,
+            function_id=self.function_id,
+            file=self.file,
+            line=node.lineno,
+            column=node.col_offset if hasattr(node, 'col_offset') else 0,
+            cfg_node_ids=cfg_node_ids,
+            input_use_ids=input_use_ids,
+            output_definition_ids=[],  # Will be filled after creating definition
+            expression=ast.unparse(node) if hasattr(ast, 'unparse') else str(type(node.op).__name__),
+        ))
 
         # Extract definition from target
         binding_key = f"{self.function_id}::{self._get_variable_name(node.target)}"
@@ -407,12 +451,11 @@ class DefUseVisitor(ast.NodeVisitor):
         self._extract_target_definitions(node.target, node, 'augmented_assignment', binding_key, cfg_node_ids)
         new_def_ids = [d.id for d in self.facts.definitions if d.id not in def_ids_before]
 
-        # Link operation to definition
-        if op_id:
-            for op in self.facts.operations:
-                if op.id == op_id:
-                    op.output_definition_ids.extend(new_def_ids)
-                    break
+        # Link augmented operation to the new definition
+        for op in self.facts.operations:
+            if op.id == aug_op_id:
+                op.output_definition_ids.extend(new_def_ids)
+                break
 
         # Do NOT call generic_visit(node)
 
@@ -892,7 +935,9 @@ class DefUseVisitor(ast.NodeVisitor):
         # If handler has a name (e.g., 'except Exception as exc'), create a definition
         if node.name:
             cfg_node_ids = self._get_cfg_node_ids(node)
-            binding_key = f"{self.function_id}::exception::{node.name}"
+            # Use the same binding key format as regular variables for consistency
+            # This ensures exception variables can be connected to their uses
+            binding_key = f"{self.function_id}::{node.name}"
 
             # Create definition for the exception variable
             self.facts.definitions.append(Definition(
@@ -988,6 +1033,24 @@ class DefUseVisitor(ast.NodeVisitor):
             # Track as attribute definition with receiver identity
             attr_name = ast.unparse(target) if hasattr(ast, 'unparse') else f"{ast.unparse(target.value)}.{target.attr}"
             attr_binding_key = f"{self.function_id}::attribute::{attr_name}"
+
+            # Generate use for the receiver (e.g., `self` in `self.x = value`)
+            if isinstance(target.value, ast.Name) and target.value.id in self.local_vars:
+                receiver_use_id = self._generate_use_id(target.value.id)
+                receiver_binding_key = f"{self.function_id}::{target.value.id}"
+                self.facts.uses.append(VariableUse(
+                    id=receiver_use_id,
+                    variable=target.value.id,
+                    function_id=self.function_id,
+                    file=self.file,
+                    line=target.value.lineno if hasattr(target.value, 'lineno') else source_node.lineno,
+                    column=target.value.col_offset if hasattr(target.value, 'col_offset') else 0,
+                    cfg_node_ids=cfg_node_ids,
+                    binding_key=receiver_binding_key,
+                    expression=ast.unparse(target.value) if hasattr(ast, 'unparse') else target.value.id,
+                    metadata={'is_attribute_receiver': True, 'target_attribute': target.attr}
+                ))
+
             self.facts.definitions.append(Definition(
                 id=self._generate_def_id(attr_name),
                 variable=attr_name,
@@ -1002,7 +1065,8 @@ class DefUseVisitor(ast.NodeVisitor):
                 metadata={
                     'is_attribute': True,
                     'receiver': ast.unparse(target.value) if hasattr(ast, 'unparse') else str(target.value),
-                    'attribute': target.attr
+                    'attribute': target.attr,
+                    'is_mutation': kind in ('assignment', 'augmented_assignment')
                 }
             ))
         elif isinstance(target, ast.Subscript):
@@ -1010,6 +1074,24 @@ class DefUseVisitor(ast.NodeVisitor):
             # Track as subscript definition with collection and key identity
             subscript_name = ast.unparse(target) if hasattr(ast, 'unparse') else "subscript"
             subscript_binding_key = f"{self.function_id}::subscript::{subscript_name}"
+
+            # Generate use for the collection (e.g., `arr` in `arr[i] = value`)
+            if isinstance(target.value, ast.Name) and target.value.id in self.local_vars:
+                collection_use_id = self._generate_use_id(target.value.id)
+                collection_binding_key = f"{self.function_id}::{target.value.id}"
+                self.facts.uses.append(VariableUse(
+                    id=collection_use_id,
+                    variable=target.value.id,
+                    function_id=self.function_id,
+                    file=self.file,
+                    line=target.value.lineno if hasattr(target.value, 'lineno') else source_node.lineno,
+                    column=target.value.col_offset if hasattr(target.value, 'col_offset') else 0,
+                    cfg_node_ids=cfg_node_ids,
+                    binding_key=collection_binding_key,
+                    expression=ast.unparse(target.value) if hasattr(ast, 'unparse') else target.value.id,
+                    metadata={'is_subscript_collection': True}
+                ))
+
             self.facts.definitions.append(Definition(
                 id=self._generate_def_id(subscript_name),
                 variable=subscript_name,
@@ -1024,6 +1106,7 @@ class DefUseVisitor(ast.NodeVisitor):
                 metadata={
                     'is_subscript': True,
                     'collection': ast.unparse(target.value) if hasattr(ast, 'unparse') else str(target.value),
-                    'key': ast.unparse(target.slice) if hasattr(ast, 'unparse') else str(target.slice)
+                    'key': ast.unparse(target.slice) if hasattr(ast, 'unparse') else str(target.slice),
+                    'is_mutation': kind in ('assignment', 'augmented_assignment')
                 }
             ))

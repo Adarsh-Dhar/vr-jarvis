@@ -179,3 +179,44 @@ def process():
     # Should have three definitions of x (initial + handler + reassignment)
     x_defs = [d for d in facts.definitions if d.variable == 'x']
     assert len(x_defs) >= 3
+
+
+def test_exception_variable_binding_consistency():
+    """Test that exception variable definition and use have consistent binding keys."""
+    source = """
+def process():
+    try:
+        operation()
+    except ValueError as exc:
+        return exc  # Should use the same binding as the definition
+"""
+    tree = ast.parse(source)
+    func = tree.body[0]
+
+    cfg_builder = PythonCFGBuilder()
+    artifact = cfg_builder.build_function(
+        function_ast=func,
+        function_id="test::process",
+        source=source,
+        file_path="test.py"
+    )
+
+    extractor = PythonDefUseExtractor()
+    facts = extractor.extract_function(
+        artifact=artifact,
+        source=source,
+        file_path="test.py"
+    )
+
+    # Should have a definition for 'exc'
+    exc_defs = [d for d in facts.definitions if d.variable == 'exc']
+    assert len(exc_defs) >= 1, "Should have definition for 'exc'"
+
+    # Should have a use for 'exc'
+    exc_uses = [u for u in facts.uses if u.variable == 'exc']
+    assert len(exc_uses) >= 1, "Should have use for 'exc'"
+
+    # Check that definition and use have the same binding key
+    def_binding = exc_defs[0].binding_key
+    use_binding = exc_uses[0].binding_key
+    assert def_binding == use_binding, f"Binding keys should match: def={def_binding}, use={use_binding}"

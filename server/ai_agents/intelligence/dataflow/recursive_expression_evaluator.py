@@ -139,7 +139,24 @@ class RecursiveExpressionEvaluator:
         left_uses, left_op_id, left_child_ops = self.evaluate(node.left)
         right_uses, right_op_id, right_child_ops = self.evaluate(node.right)
 
-        all_uses = left_uses + right_uses
+        # Distinguish direct inputs from transitive descendant inputs
+        # Direct inputs: use IDs if leaf node, operation IDs if inner operation
+        direct_input_use_ids = []
+        direct_input_operation_ids = []
+
+        # Left side: either operation ID or use IDs (not both)
+        if left_op_id:
+            direct_input_operation_ids.append(left_op_id)
+        else:
+            direct_input_use_ids.extend(left_uses)
+
+        # Right side: either operation ID or use IDs (not both)
+        if right_op_id:
+            direct_input_operation_ids.append(right_op_id)
+        else:
+            direct_input_use_ids.extend(right_uses)
+
+        # Child operations for tracking (transitive descendants)
         child_ops = [op_id for op_id in [left_op_id, right_op_id] if op_id] + left_child_ops + right_child_ops
 
         # Create operation fact
@@ -157,12 +174,15 @@ class RecursiveExpressionEvaluator:
             cfg_node_ids=cfg_node_ids,
             expression=expression,
             operation=op_type,
-            input_use_ids=all_uses,
-            input_operation_ids=child_ops,
+            input_use_ids=direct_input_use_ids,
+            input_operation_ids=direct_input_operation_ids,
             output_definition_ids=[],
             metadata={'op_type': op_type},
         ))
 
+        # Return all uses for parent operations (to maintain backward compatibility for now)
+        # But the operation itself only has direct inputs
+        all_uses = left_uses + right_uses
         return all_uses, op_id, child_ops
     
     def _evaluate_unaryop(self, node: ast.UnaryOp) -> Tuple[List[str], Optional[str], List[str]]:
@@ -194,27 +214,43 @@ class RecursiveExpressionEvaluator:
         return operand_uses, op_id, child_ops
     
     def _evaluate_compare(self, node: ast.Compare) -> Tuple[List[str], Optional[str], List[str]]:
-        """Evaluate a comparison operation."""
+        """Evaluate a comparison operation, avoiding duplicate uses in chained comparisons."""
         # Evaluate left and comparators
         left_uses, left_op_id, left_child_ops = self.evaluate(node.left)
         all_uses = left_uses[:]
         child_ops = [left_op_id] if left_op_id else []
         child_ops.extend(left_child_ops)
 
+        # Track all operand uses without duplication
+        comparator_uses_list = []
         for comparator in node.comparators:
             comp_uses, comp_op_id, comp_child_ops = self.evaluate(comparator)
-            all_uses.extend(comp_uses)
+            # Add comparator uses without duplicating
+            for use in comp_uses:
+                if use not in all_uses:
+                    all_uses.append(use)
+            comparator_uses_list.append(comp_uses)
             if comp_op_id:
                 child_ops.append(comp_op_id)
             child_ops.extend(comp_child_ops)
 
-        # Create operation for each comparison
+        # Create operation for each comparison with proper operand linking
         op_ids = []
         for i, op in enumerate(node.ops):
             op_type = type(op).__name__
             op_id = self.ctx.generate_operation_id()
             expression = ast.unparse(node) if hasattr(ast, 'unparse') else str(op_type)
             cfg_node_ids = self.ctx.get_cfg_node_ids(node)
+
+            # For chained comparisons (a < b < c), each comparison uses its specific operands
+            # Comparison i uses left operand and comparator i
+            # For a < b < c: Compare(a, b, [Lt]), Compare(b, c, [Lt])
+            if i == 0:
+                # First comparison: left + first comparator
+                direct_uses = left_uses + comparator_uses_list[0]
+            else:
+                # Subsequent comparisons: previous comparator + current comparator
+                direct_uses = comparator_uses_list[i-1] + comparator_uses_list[i]
 
             self.ctx.facts.operations.append(ExpressionFact(
                 id=op_id,
@@ -225,17 +261,17 @@ class RecursiveExpressionEvaluator:
                 cfg_node_ids=cfg_node_ids,
                 expression=expression,
                 operation=op_type,
-                input_use_ids=all_uses,
+                input_use_ids=direct_uses,
                 input_operation_ids=child_ops,
                 output_definition_ids=[],
-                metadata={'op_type': op_type, 'comparison_index': i},
+                metadata={'op_type': op_type, 'comparison_index': i, 'is_chained': len(node.ops) > 1},
             ))
             op_ids.append(op_id)
 
         return all_uses, None, child_ops  # Multiple operations, no single ID
     
     def _evaluate_boolop(self, node: ast.BoolOp) -> Tuple[List[str], Optional[str], List[str]]:
-        """Evaluate a boolean operation (and/or)."""
+        """Evaluate a boolean operation (and/or) with short-circuit semantics."""
         all_uses = []
         child_ops = []
 
@@ -251,6 +287,13 @@ class RecursiveExpressionEvaluator:
         expression = ast.unparse(node) if hasattr(ast, 'unparse') else str(op_type)
         cfg_node_ids = self.ctx.get_cfg_node_ids(node)
 
+        # Metadata to capture short-circuit semantics
+        metadata = {
+            'op_type': op_type,
+            'is_short_circuit': True,
+            'operator': 'and' if isinstance(node.op, ast.And) else 'or'
+        }
+
         self.ctx.facts.operations.append(ExpressionFact(
             id=op_id,
             function_id=self.ctx.function_id,
@@ -263,7 +306,7 @@ class RecursiveExpressionEvaluator:
             input_use_ids=all_uses,
             input_operation_ids=child_ops,
             output_definition_ids=[],
-            metadata={'op_type': op_type},
+            metadata=metadata,
         ))
 
         return all_uses, op_id, child_ops
@@ -438,7 +481,7 @@ class RecursiveExpressionEvaluator:
         return all_uses, op_id, child_ops
     
     def _evaluate_ifexp(self, node: ast.IfExp) -> Tuple[List[str], Optional[str], List[str]]:
-        """Evaluate conditional expression (a if cond else b)."""
+        """Evaluate conditional expression (a if cond else b) with branch awareness."""
         test_uses, test_op_id, test_child_ops = self.evaluate(node.test)
         body_uses, body_op_id, body_child_ops = self.evaluate(node.body)
         orelse_uses, orelse_op_id, orelse_child_ops = self.evaluate(node.orelse)
@@ -449,6 +492,14 @@ class RecursiveExpressionEvaluator:
         op_id = self.ctx.generate_operation_id()
         expression = ast.unparse(node) if hasattr(ast, 'unparse') else "ifexp"
         cfg_node_ids = self.ctx.get_cfg_node_ids(node)
+
+        # Metadata to capture branch relationships
+        metadata = {
+            'is_conditional': True,
+            'test_operation_id': test_op_id,
+            'true_branch_operation_id': body_op_id,
+            'false_branch_operation_id': orelse_op_id,
+        }
 
         self.ctx.facts.operations.append(ExpressionFact(
             id=op_id,
@@ -462,7 +513,7 @@ class RecursiveExpressionEvaluator:
             input_use_ids=all_uses,
             input_operation_ids=child_ops,
             output_definition_ids=[],
-            metadata={},
+            metadata=metadata,
         ))
 
         return all_uses, op_id, child_ops
@@ -557,12 +608,37 @@ class RecursiveExpressionEvaluator:
         child_ops = []
 
         for generator in node.generators:
+            # Evaluate the iterable
             iter_uses, iter_op_id, iter_child_ops = self.evaluate(generator.iter)
             all_uses.extend(iter_uses)
             if iter_op_id:
                 child_ops.append(iter_op_id)
             child_ops.extend(iter_child_ops)
 
+            # Create target definition for the loop variable
+            if isinstance(generator.target, ast.Name):
+                target_name = generator.target.id
+                cfg_node_ids = self.ctx.get_cfg_node_ids(node)
+                binding_key = f"{self.ctx.function_id}::{target_name}"
+                
+                # Create a definition for the comprehension target
+                from .models import Definition
+                target_def_id = f"{self.ctx.function_id}_def_{target_name}_comp"
+                self.ctx.facts.definitions.append(Definition(
+                    id=target_def_id,
+                    variable=target_name,
+                    function_id=self.ctx.function_id,
+                    file=self.ctx.file,
+                    line=node.lineno,
+                    column=generator.target.col_offset if hasattr(generator.target, 'col_offset') else 0,
+                    kind='comprehension_target',
+                    cfg_node_ids=cfg_node_ids,
+                    binding_key=binding_key,
+                    expression=ast.unparse(generator.target) if hasattr(ast, 'unparse') else target_name,
+                    metadata={'is_comprehension_target': True}
+                ))
+
+            # Evaluate filter conditions
             for if_test in generator.ifs:
                 if_uses, if_op_id, if_child_ops = self.evaluate(if_test)
                 all_uses.extend(if_uses)

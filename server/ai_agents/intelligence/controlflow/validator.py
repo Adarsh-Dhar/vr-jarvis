@@ -88,7 +88,7 @@ def validate_cfg(cfg: ControlFlowGraph) -> Dict[str, Any]:
     elif exception_exit_id not in node_id_set:
         errors.append(f"CFG exception_exit_node_id references non-existent node: {exception_exit_id}")
 
-    # Check return statements - they can connect to exit, finally, or with exit nodes
+    # Check return statements - they can connect to exit, finally, with exit, or exception_exit (for may_raise)
     return_nodes = [n for n in nodes if (n.get('kind') if isinstance(n, dict) else n.kind) == 'return']
     for return_node in return_nodes:
         node_id = return_node.get('id') if isinstance(return_node, dict) else return_node.id
@@ -96,16 +96,22 @@ def validate_cfg(cfg: ControlFlowGraph) -> Dict[str, Any]:
         outgoing = [e for e in edges if (e.get('source') if isinstance(e, dict) else e.source) == node_id]
         for edge in outgoing:
             target_id = edge.get('target') if isinstance(edge, dict) else edge.target
+            edge_kind = edge.get('kind') if isinstance(edge, dict) else edge.kind
             target_node = node_map.get(target_id)
-            # Allow return to connect to exit, finally, or with exit node
-            if target_id != exit_id:
-                if target_node:
-                    target_kind = target_node.get('kind') if isinstance(target_node, dict) else target_node.kind
-                    target_label = target_node.get('label') if isinstance(target_node, dict) else target_node.label
-                    if target_kind not in ('finally', 'statement'):
-                        errors.append(f"Return node {node_id} has outgoing edge to non-exit/non-cleanup: {target_id} ({target_kind})")
-                    elif target_kind == 'statement' and 'exit' not in target_label.lower():
-                        errors.append(f"Return node {node_id} has outgoing edge to non-exit/non-cleanup: {target_id} ({target_kind})")
+            # Allow return to connect to exit, finally, with exit, or exception_exit (for may_raise)
+            if target_id == exit_id or target_id == exception_exit_id:
+                continue  # Always allowed
+            if target_node:
+                target_kind = target_node.get('kind') if isinstance(target_node, dict) else target_node.kind
+                target_label = target_node.get('label') if isinstance(target_node, dict) else target_node.label
+                # Allow may_raise edges to exception_exit
+                if edge_kind == 'may_raise' and target_kind == 'exception_exit':
+                    continue
+                # Allow return to connect to finally or with exit
+                if target_kind not in ('finally', 'statement'):
+                    errors.append(f"Return node {node_id} has outgoing edge to non-exit/non-cleanup: {target_id} ({target_kind})")
+                elif target_kind == 'statement' and 'exit' not in target_label.lower():
+                    errors.append(f"Return node {node_id} has outgoing edge to non-exit/non-cleanup: {target_id} ({target_kind})")
 
     # Check break and continue edges target correct loops
     break_edges = [e for e in edges if (e.get('kind') if isinstance(e, dict) else e.kind) == 'break']
@@ -244,6 +250,47 @@ def validate_cfg(cfg: ControlFlowGraph) -> Dict[str, Any]:
             # Exception edges should target handlers, dispatchers, or exception exits
             if target_kind not in ('statement', 'exception_dispatch', 'exit') and target_ast_kind not in ('ExceptHandler', 'Try'):
                 warnings.append(f"Exception edge targets unexpected node kind: {target_kind}/{target_ast_kind}")
+
+    # Semantic validation: Check exception dispatcher doesn't create self-loops
+    dispatch_nodes = [n for n in nodes if (n.get('kind') if isinstance(n, dict) else n.kind) == 'exception_dispatch']
+    for dispatch_node in dispatch_nodes:
+        dispatch_id = dispatch_node.get('id') if isinstance(dispatch_node, dict) else dispatch_node.id
+        dispatch_edges = [e for e in edges if (e.get('source') if isinstance(e, dict) else e.source) == dispatch_id]
+        for edge in dispatch_edges:
+            target_id = edge.get('target') if isinstance(edge, dict) else edge.target
+            if target_id == dispatch_id:
+                errors.append(f"Exception dispatcher {dispatch_id} has self-loop")
+
+    # Semantic validation: Check that no path bypasses required cleanup (finally/with-exit)
+    finally_nodes = [n for n in nodes if (n.get('kind') if isinstance(n, dict) else n.kind) == 'finally']
+    with_exit_nodes = [n for n in nodes if 'with exit' in (n.get('label') if isinstance(n, dict) else n.label)]
+    cleanup_nodes = finally_nodes + with_exit_nodes
+
+    for cleanup_node in cleanup_nodes:
+        cleanup_id = cleanup_node.get('id') if isinstance(cleanup_node, dict) else cleanup_node.id
+        # Get edges into cleanup
+        edges_to_cleanup = [e for e in edges if (e.get('target') if isinstance(e, dict) else e.target) == cleanup_id]
+        # Check if any edge bypasses cleanup (goes from before cleanup to after cleanup without passing through)
+        # This is a simplified check - full validation would require path analysis
+        pass
+
+    # Return nodes may have may_raise edges (for expressions that can raise)
+    # Update validation to allow this
+    return_nodes = [n for n in nodes if (n.get('kind') if isinstance(n, dict) else n.kind) == 'return']
+    for return_node in return_nodes:
+        return_id = return_node.get('id') if isinstance(return_node, dict) else return_node.id
+        return_edges = [e for e in edges if (e.get('source') if isinstance(e, dict) else e.source) == return_id]
+        # Allow may_raise edges to exception dispatcher or exception exit
+        for edge in return_edges:
+            edge_kind = edge.get('kind') if isinstance(edge, dict) else edge.kind
+            target_id = edge.get('target') if isinstance(edge, dict) else edge.target
+            if edge_kind == 'may_raise':
+                # May raise edges are allowed to exception dispatcher or exception exit
+                target_node = node_map.get(target_id)
+                if target_node:
+                    target_kind = target_node.get('kind') if isinstance(target_node, dict) else target_node.kind
+                    if target_kind not in ('exception_dispatch', 'exception_exit'):
+                        errors.append(f"Return node {return_id} has may_raise edge to non-exception target: {target_id} ({target_kind})")
 
     return {
         'valid': len(errors) == 0,

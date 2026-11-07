@@ -189,7 +189,7 @@ def test_edges():
     standard_kinds = {
         'next', 'true', 'false', 'loop_back', 'loop_exhausted',
         'break', 'continue', 'return', 'raise', 'exception',
-        'finally', 'resume', 'exception_group'
+        'finally', 'resume', 'exception_group', 'may_raise'
     }
 
     # Check all edges use standard kinds

@@ -306,3 +306,80 @@ def bare_except():
 
     validation = validate_cfg(cfg)
     assert validation['valid'], f"CFG validation failed: {validation['errors']}"
+
+
+def test_raise_routes_through_dispatcher():
+    """Test that explicit raise routes through exception dispatcher, not directly to exception exit."""
+    source = """
+def process():
+    try:
+        raise ValueError()
+    except ValueError:
+        handled()
+    after()
+"""
+    tree = ast.parse(source)
+    func = tree.body[0]
+    builder = PythonCFGBuilder()
+    artifact = builder.build_function(func, "test.py::process", source, "test.py")
+    cfg = artifact.graph
+
+    validation = validate_cfg(cfg)
+    assert validation['valid'], f"CFG validation failed: {validation['errors']}"
+
+    # Find raise node and dispatcher
+    raise_nodes = [n for n in cfg.nodes if n.kind == 'raise']
+    assert len(raise_nodes) == 1, "Should have one raise node"
+    raise_node = raise_nodes[0]
+
+    dispatch_nodes = [n for n in cfg.nodes if n.kind == 'exception_dispatch']
+    assert len(dispatch_nodes) == 1, "Should have one exception dispatcher"
+    dispatch_node = dispatch_nodes[0]
+
+    # Raise should route to dispatcher, not directly to exception exit
+    edges_from_raise = cfg.get_edges_from(raise_node.id)
+    dispatch_edges = [e for e in edges_from_raise if e.target == dispatch_node.id]
+    assert len(dispatch_edges) > 0, "Raise should route to exception dispatcher"
+
+    # Raise should NOT have direct edge to exception exit
+    exception_exit_edges = [e for e in edges_from_raise if e.target == cfg.exception_exit_node_id]
+    assert len(exception_exit_edges) == 0, "Raise should not bypass dispatcher to exception exit"
+
+
+def test_unmatched_exception_to_parent():
+    """Test that unmatched exception routes to parent dispatcher, not self-loop."""
+    source = """
+def process():
+    try:
+        try:
+            raise ValueError()
+        except TypeError:
+            handled()
+    except ValueError:
+        outer_handled()
+"""
+    tree = ast.parse(source)
+    func = tree.body[0]
+    builder = PythonCFGBuilder()
+    artifact = builder.build_function(func, "test.py::process", source, "test.py")
+    cfg = artifact.graph
+
+    validation = validate_cfg(cfg)
+    assert validation['valid'], f"CFG validation failed: {validation['errors']}"
+
+    # Find both dispatchers
+    dispatch_nodes = [n for n in cfg.nodes if n.kind == 'exception_dispatch']
+    assert len(dispatch_nodes) == 2, "Should have two exception dispatchers (inner and outer)"
+
+    # Inner dispatcher should route to outer dispatcher, not to itself
+    inner_dispatch = dispatch_nodes[0]
+    outer_dispatch = dispatch_nodes[1]
+
+    edges_from_inner = cfg.get_edges_from(inner_dispatch.id)
+    self_loop_edges = [e for e in edges_from_inner if e.target == inner_dispatch.id]
+    assert len(self_loop_edges) == 0, "Inner dispatcher should not have self-loop"
+
+    # Should have edge to outer dispatcher or exception exit
+    to_outer = [e for e in edges_from_inner if e.target == outer_dispatch.id]
+    to_exit = [e for e in edges_from_inner if e.target == cfg.exception_exit_node_id]
+    assert len(to_outer) > 0 or len(to_exit) > 0, "Inner dispatcher should route to outer dispatcher or exception exit"

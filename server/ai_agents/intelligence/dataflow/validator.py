@@ -113,10 +113,23 @@ def validate_dfg(dfg: DataFlowGraph, facts: DefUseFacts) -> Dict[str, Any]:
         if loc_key not in location_defs:
             location_defs[loc_key] = []
         location_defs[loc_key].append(definition)
-    
+
     for loc_key, defs in location_defs.items():
         if len(defs) > 1:
             warnings.append(f"Multiple definitions at same location {loc_key}: {[d.id for d in defs]}")
+
+    # Validate operation input/output direction
+    for operation in facts.operations:
+        # Check that input_operation_ids are valid
+        for input_op_id in operation.input_operation_ids:
+            if input_op_id not in [op.id for op in facts.operations]:
+                errors.append(f"Operation {operation.id} references non-existent operation: {input_op_id}")
+
+        # Check that output definitions are genuinely produced by this operation
+        for output_def_id in operation.output_definition_ids:
+            # This is a heuristic - in a full implementation we'd track provenance
+            if output_def_id not in [d.id for d in facts.definitions]:
+                errors.append(f"Operation {operation.id} references non-existent definition: {output_def_id}")
 
     return {
         'valid': len(errors) == 0,

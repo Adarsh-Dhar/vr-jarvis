@@ -1,4 +1,54 @@
-"""Test with statement semantics."""
+"""Test with statement semantics and cleanup."""
+import ast
+import pytest
+from ai_agents.intelligence.controlflow import PythonCFGBuilder
+from ai_agents.intelligence.controlflow.validator import validate_cfg
+
+
+def test_return_inside_with_blocks_exit():
+    """Test that return inside with routes through cleanup and after() is unreachable."""
+    code = """
+def process():
+    with open("file.txt") as handle:
+        return handle.read()
+    after()  # Should be unreachable
+"""
+    tree = ast.parse(code)
+    func_node = tree.body[0]
+
+    cfg_builder = PythonCFGBuilder()
+    artifact = cfg_builder.build_function(
+        function_ast=func_node,
+        function_id="test::process",
+        source=code,
+        file_path="test.py"
+    )
+    cfg = artifact.graph
+
+    validation = validate_cfg(cfg)
+    assert validation['valid'], f"CFG validation failed: {validation['errors']}"
+
+    # Find return, with exit, and after nodes
+    return_nodes = [n for n in cfg.nodes if n.kind == 'return']
+    with_exit_nodes = [n for n in cfg.nodes if n.kind == 'statement' and 'with exit' in n.label]
+    after_nodes = [n for n in cfg.nodes if 'after' in n.label]
+
+    assert len(return_nodes) == 1, "Should have one return node"
+    assert len(with_exit_nodes) >= 1, "Should have with exit nodes"
+    assert len(after_nodes) == 1, "Should have after() node"
+
+    # Return should route through with exit (cleanup)
+    return_node = return_nodes[0]
+    edges_from_return = cfg.get_edges_from(return_node.id)
+
+    # Return should have edge to with exit (cleanup)
+    to_exit = [e for e in edges_from_return if e.target in [n.id for n in with_exit_nodes]]
+    assert len(to_exit) > 0, "Return should route through with exit"
+
+    # after() should be unreachable (no incoming edges)
+    after_node = after_nodes[0]
+    edges_to_after = cfg.get_edges_to(after_node.id)
+    assert len(edges_to_after) == 0, "after() should be unreachable"
 
 import ast
 from ai_agents.intelligence.controlflow import PythonCFGBuilder

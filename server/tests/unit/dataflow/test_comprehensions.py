@@ -34,6 +34,10 @@ def process(items):
     # Check that we have definitions (comprehension targets are tracked)
     assert len(facts.definitions) > 0
 
+    # Check that comprehension target 'x' has a definition
+    x_defs = [d for d in facts.definitions if d.variable == 'x']
+    assert len(x_defs) >= 1, "Comprehension target 'x' should have a definition"
+
 
 def test_set_comprehension():
     """Test set comprehension variable tracking."""
