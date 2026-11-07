@@ -11,6 +11,9 @@ Tests for:
 """
 
 import pytest
+import tempfile
+from pathlib import Path
+import json
 from ai_agents.tools.graph_tools import get_dependents
 from ai_agents.tools.relationship_intelligence_tools import calculate_change_impact
 

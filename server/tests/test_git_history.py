@@ -183,7 +183,10 @@ def test_visualize_git_history_commit_hashes(repo_path, mock_tool_context):
 
     for commit in result['commits']:
         assert len(commit['hash']) == 40  # SHA-1 hash length
-        assert commit['parent_hash'] is not None or commit['parent_hash'] == ''
+        # Root commits have no parent hash (None is valid)
+        # Non-root commits should have a parent hash
+        if commit['parent_hash'] is not None:
+            assert len(commit['parent_hash']) == 40 or commit['parent_hash'] == ''
 
 
 def test_visualize_git_history_show_history_panel(repo_path, mock_tool_context):

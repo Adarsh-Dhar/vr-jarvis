@@ -900,17 +900,8 @@ def visualize_control_flow(
 ) -> dict:
     """Visualize control flow using graph emission."""
     try:
-        from .analysis_tools import analyze_control_flow
         from ..intelligence.controlflow import cfg_to_unity_format
-
-        # Get control flow analysis
-        cf_result = analyze_control_flow(function_id, tool_context)
-
-        if cf_result.get('status') != 'ok':
-            return cf_result
-
-        # Build CFG and convert to Unity format
-        from ..intelligence.controlflow import PythonCFGBuilder
+        from ..intelligence.controlflow.service import analyze_python_control_flow
         from ..intelligence.graph_engine.codegraph import codegraph
 
         graph = codegraph.load_current_graph()
@@ -923,39 +914,46 @@ def visualize_control_flow(
                 'message': 'Function not found in graph'
             }
 
+        # Resolve file path against repo root
         file_path = node.get('file', '')
+        from pathlib import Path
+        if not Path(file_path).is_absolute():
+            from ai_agents import config
+            repo_root = getattr(config, 'REPOSITORY_DIR', None)
+            if repo_root:
+                file_path = str(repo_root / file_path)
+
+        # Read source
         with open(file_path, 'r', encoding='utf-8') as f:
             source = f.read()
 
-        import ast
-        tree = ast.parse(source)
-        simple_name = node.get('name', '')
-        if not simple_name and '.' in node.get('id', ''):
-            simple_name = node['id'].split('.')[-1]
+        # Build CFG using the service (qualname-aware lookup)
+        symbol = {
+            'id': node.get('id', function_id),
+            'name': node.get('name', ''),
+            'file': file_path,
+            'source': source,
+            'qualname': node.get('qualname', node.get('id', function_id))
+        }
+        result = analyze_python_control_flow(graph, symbol, use_cache=False)
 
-        func_node = None
-        for node_ast in ast.walk(tree):
-            if isinstance(node_ast, ast.FunctionDef) and node_ast.name == simple_name:
-                func_node = node_ast
-                break
-
-        if not func_node:
+        if result.get('error'):
             return {
-                'status': 'not_found',
+                'status': 'error',
                 'function_id': function_id,
-                'message': f'Function {simple_name} not found in AST'
+                'error': result['error']
             }
 
-        builder = PythonCFGBuilder()
-        cfg_artifact = builder.build_function(
-            function_ast=func_node,
-            function_id=node.get('id', function_id),
-            source=source,
-            file_path=file_path
-        )
+        cfg = result['graph']
+        if not cfg:
+            return {
+                'status': 'error',
+                'function_id': function_id,
+                'error': 'CFG build failed'
+            }
 
-        # Convert to Unity format (use the graph from the artifact)
-        unity_graph = cfg_to_unity_format(cfg_artifact.graph)
+        # Convert to Unity format
+        unity_graph = cfg_to_unity_format(cfg)
 
         # Emit the graph to Unity
         _emit_command(tool_context, 'show_graph',
@@ -991,14 +989,14 @@ def visualize_unified_graph(
 ) -> dict:
     """Visualize unified CFG and DFG graph with optional summarization."""
     try:
-        from .analysis_tools import analyze_control_flow
         from ..intelligence.controlflow import cfg_to_unity_format
         from ..intelligence.dataflow import dfg_to_unity_format
         from ..intelligence.dataflow.unified_graph import UnifiedGraphBuilder
         from ..intelligence.dataflow.graph_summarizer import GraphSummarizer
+        from ..intelligence.controlflow.service import analyze_python_control_flow
+        from ..intelligence.graph_engine.codegraph import codegraph
 
         # Get the graph
-        from ..intelligence.graph_engine.codegraph import codegraph
         graph = codegraph.load_current_graph()
         node = graph.get(function_id)
 
@@ -1009,43 +1007,56 @@ def visualize_unified_graph(
                 'message': 'Function not found in graph'
             }
 
+        # Resolve file path against repo root
         file_path = node.get('file', '')
+        from pathlib import Path
+        if not Path(file_path).is_absolute():
+            from ai_agents import config
+            repo_root = getattr(config, 'REPOSITORY_DIR', None)
+            if repo_root:
+                file_path = str(repo_root / file_path)
+
+        # Read source
         with open(file_path, 'r', encoding='utf-8') as f:
             source = f.read()
 
-        # Build CFG
-        import ast
-        tree = ast.parse(source)
-        simple_name = node.get('name', '')
-        if not simple_name and '.' in node.get('id', ''):
-            simple_name = node['id'].split('.')[-1]
+        # Build CFG using the service (qualname-aware lookup)
+        symbol = {
+            'id': node.get('id', function_id),
+            'name': node.get('name', ''),
+            'file': file_path,
+            'source': source,
+            'qualname': node.get('qualname', node.get('id', function_id))
+        }
+        result = analyze_python_control_flow(graph, symbol, use_cache=False)
 
-        func_node = None
-        for node_ast in ast.walk(tree):
-            if isinstance(node_ast, ast.FunctionDef) and node_ast.name == simple_name:
-                func_node = node_ast
-                break
-
-        if not func_node:
+        if result.get('error'):
             return {
-                'status': 'not_found',
+                'status': 'error',
                 'function_id': function_id,
-                'message': f'Function {simple_name} not found in AST'
+                'error': result['error']
             }
 
-        from ..intelligence.controlflow import PythonCFGBuilder
-        builder = PythonCFGBuilder()
-        cfg_artifact = builder.build_function(
-            function_ast=func_node,
-            function_id=node.get('id', function_id),
-            source=source,
-            file_path=file_path
-        )
+        cfg = result['graph']
+        if not cfg:
+            return {
+                'status': 'error',
+                'function_id': function_id,
+                'error': 'CFG build failed'
+            }
 
         # Build DFG
         from ..intelligence.dataflow import PythonDefUseExtractor
         from ..intelligence.dataflow.dependency_builder import DataFlowGraphBuilder
         extractor = PythonDefUseExtractor()
+        
+        # Create a mock artifact for the extractor
+        from ..intelligence.controlflow.models import CFGArtifact
+        cfg_artifact = CFGArtifact(
+            graph=cfg,
+            metadata=result.get('metadata', {})
+        )
+        
         facts = extractor.extract_function(
             artifact=cfg_artifact,
             source=source,
@@ -1054,12 +1065,12 @@ def visualize_unified_graph(
 
         # Build actual DFG from facts
         dfg_builder = DataFlowGraphBuilder()
-        dfg = dfg_builder.build_graph(facts)
+        dfg = dfg_builder.build(cfg, facts)
 
         # Build unified graph
         unified_builder = UnifiedGraphBuilder()
         unified_graph = unified_builder.build_unified(
-            cfg_artifact.graph,
+            cfg,
             dfg
         )
 
@@ -1068,7 +1079,7 @@ def visualize_unified_graph(
         unity_edges = []
 
         # Add CFG nodes
-        for node_dict in cfg_to_unity_format(cfg_artifact.graph)['nodes']:
+        for node_dict in cfg_to_unity_format(cfg)['nodes']:
             node_dict['layer'] = 'cfg'
             unity_nodes.append(node_dict)
 
@@ -1078,7 +1089,7 @@ def visualize_unified_graph(
             unity_nodes.append(node_dict)
 
         # Add CFG edges
-        for edge_dict in cfg_to_unity_format(cfg_artifact.graph)['edges']:
+        for edge_dict in cfg_to_unity_format(cfg)['edges']:
             edge_dict['layer'] = 'cfg'
             unity_edges.append(edge_dict)
 

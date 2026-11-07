@@ -7,6 +7,11 @@ from .validator import validate_cfg
 from .graph_builder import cfg_to_unity_format
 from ..dataflow.graph_persistence import GraphPersistenceManager
 
+# Feature flags for optional analysis modules
+ENABLE_CONSTANT_PROPAGATION = False
+ENABLE_PATH_FEASIBILITY = False
+ENABLE_DYNAMIC_DATA_TRACKING = False
+
 
 # Global persistence manager instance
 _persistence_manager = GraphPersistenceManager()
@@ -116,6 +121,34 @@ def analyze_python_control_flow(
                 },
                 'cached': False,
             }
+
+        # Optional: Constant propagation and dead branch pruning
+        if ENABLE_CONSTANT_PROPAGATION:
+            from ..dataflow.constant_propagation import ConstantPropagator
+            from ..dataflow.python_extractor import PythonDefUseExtractor
+            extractor = PythonDefUseExtractor()
+            facts = extractor.extract_function(
+                artifact=CFGArtifact(graph=cfg, metadata={}),
+                source=source,
+                file_path=file_path
+            )
+            propagator = ConstantPropagator()
+            constants = propagator.propagate_constants(facts)
+            # Could use constants to mark dead branches in cfg.metadata
+
+        # Optional: Path feasibility analysis
+        if ENABLE_PATH_FEASIBILITY:
+            from ..dataflow.path_feasibility import PathFeasibilityAnalyzer
+            analyzer = PathFeasibilityAnalyzer()
+            feasibility = analyzer.analyze_feasibility(cfg)
+            # Could annotate cfg edges with feasibility info
+
+        # Optional: Dynamic data tracking
+        if ENABLE_DYNAMIC_DATA_TRACKING:
+            from ..dataflow.dynamic_data import DynamicDataTracker
+            tracker = DynamicDataTracker()
+            dynamic_nodes = tracker.track_dynamic_constructs(tree, cfg)
+            # Could add explicit dynamic nodes to the DFG
 
         # Cache the result
         cfg_dict = cfg.to_dict()

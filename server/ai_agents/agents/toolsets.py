@@ -619,6 +619,11 @@ TOOL_LEVELS = {
     "visualize_memory_usage": "read",
     "visualize_performance": "read",
     "visualize_security_flow": "read",
+    "visualize_unified_graph": "read",
+    # Phase 5 tools
+    "explain_graph_edge": "read",
+    "query_graph_path": "read",
+    "expand_graph_neighborhood": "read",
     # Knowledge tools
     "update_knowledge": "write",
     "retrieve_knowledge": "read",
@@ -907,6 +912,10 @@ TOOLSETS: Dict[str, List[str]] = {
         "visualize_architecture",
         "visualize_dependency_graph",
         "visualize_control_flow",
+        "visualize_unified_graph",
+        "explain_graph_edge",
+        "query_graph_path",
+        "expand_graph_neighborhood",
         "expand_graph_node",
         "collapse_graph_node",
         "isolate_subgraph",

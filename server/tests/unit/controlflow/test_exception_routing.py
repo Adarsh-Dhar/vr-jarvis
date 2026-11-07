@@ -212,10 +212,16 @@ def nested_finally():
     assert validation['valid'], f"CFG validation failed: {validation['errors']}"
 
     # Should have finally nodes for each try (completion-specific finalizers)
-    # Each try creates 5 finally nodes (normal, return, raise, break, continue)
-    # Two nested tries = 10 finally nodes total
+    # Only create finally nodes for completion kinds that actually occur
+    # Inner try: return completion -> finally (return)
+    # Outer try: only gets return completion from inner try (no normal path)
+    # So both tries only need return clones
     finally_nodes = [n for n in cfg.nodes if n.kind == 'finally']
-    assert len(finally_nodes) == 10, "Should have 10 finally nodes (5 per try for completion-specific routing)"
+    assert len(finally_nodes) == 2, f"Should have 2 finally nodes (return for each try), got {len(finally_nodes)}: {[n.label for n in finally_nodes]}"
+    
+    # Verify both are return clones
+    labels = [n.label for n in finally_nodes]
+    assert all(label == 'finally (return)' for label in labels), f"Both should be return clones, got {labels}"
 
 
 def test_exception_in_handler():

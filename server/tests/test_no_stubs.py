@@ -20,7 +20,7 @@ def test_control_flow_dotted_id_works():
     if node:
         result = analyze_control_flow('eutro.train.train', None)
         # Should return ok with actual blocks
-        assert result.get('status') in ['ok', 'not_applicable', 'error'], f"Got {result.get('status')}: {result.get('message', '')}"
+        assert result.get('status') in ['ok', 'not_applicable'], f"Expected ok or not_applicable, got {result.get('status')}: {result.get('message', '')}"
         if result.get('status') == 'ok':
             assert 'blocks' in result, "Should have blocks"
             assert len(result['blocks']) > 0, "Should have at least one block"
