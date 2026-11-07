@@ -1158,9 +1158,34 @@ class PythonCFGBuilder:
         parent_exception_region = ctx.current_exception_region()
         parent_dispatch = parent_exception_region.get('dispatch_id') if parent_exception_region else None
 
-        # Push finalizer to cover body, handlers, and else (without specific nodes yet)
+        # Create completion-specific finally nodes if finally exists
+        finally_nodes = {}
         if statement.finalbody:
-            ctx.push_finalizer('try_finally', None)  # No specific nodes yet
+            # Create all 5 completion kinds initially (normal, return, raise, break, continue)
+            # We'll only route to the ones that actually occur
+            source_identity = id(statement)
+            for kind in ['normal', 'return', 'raise', 'break', 'continue']:
+                finally_id = ctx.generate_node_id()
+                finally_node = CFGNode(
+                    id=finally_id, kind='finally', label=f'finally ({kind})',
+                    function_id=ctx.function_id, file=ctx.file,
+                    start_line=statement.finalbody[0].lineno,
+                    end_line=statement.finalbody[-1].end_lineno or statement.finalbody[0].lineno,
+                    ast_kind='Try',
+                    metadata={
+                        'completion_kind': kind,
+                        'is_cloned_finalizer': True,
+                        'original_source_node': source_identity,
+                        'source_level_identity': f"{source_identity}_{kind}"
+                    }
+                )
+                cfg.add_node(finally_node)
+                finally_nodes[kind] = finally_id
+            ctx.ast_index.bind(statement, finally_nodes['normal'], "finally")
+
+        # Push finalizer to cover body, handlers, and else
+        if statement.finalbody:
+            ctx.push_finalizer('try_finally', finally_nodes)
 
         # Push exception region with dispatcher (SEPARATE from cleanup)
         dispatch_id = ctx.generate_node_id()
@@ -1270,103 +1295,64 @@ class PythonCFGBuilder:
         if statement.finalbody:
             ctx.pop_finalizer()
 
-        # Collect all completion kinds that actually occur
-        completion_kinds = set()
-        for completion in try_result.abrupt_exits:
-            completion_kinds.add(completion.kind)
-        for hr in handler_results:
-            for completion in hr.abrupt_exits:
-                completion_kinds.add(completion.kind)
-        for completion in else_abrupt_exits:
-            completion_kinds.add(completion.kind)
-        if try_result.normal_exits or any(hr.normal_exits for hr in handler_results):
-            completion_kinds.add('normal')
-        
-        # If there's a finally and exception handlers, the dispatcher path needs raise clone
-        # (unmatched exceptions go through finally before propagating)
-        if statement.finalbody and statement.handlers:
-            completion_kinds.add('raise')
-
-        # Create completion-specific finally nodes only for kinds that actually occur
-        finally_nodes = {}
-        if statement.finalbody and completion_kinds:
-            source_identity = id(statement)
-            for kind in completion_kinds:
-                finally_id = ctx.generate_node_id()
-                finally_node = CFGNode(
-                    id=finally_id, kind='finally', label=f'finally ({kind})',
-                    function_id=ctx.function_id, file=ctx.file,
-                    start_line=statement.finalbody[0].lineno,
-                    end_line=statement.finalbody[-1].end_lineno or statement.finalbody[0].lineno,
-                    ast_kind='Try',
-                    metadata={
-                        'completion_kind': kind,
-                        'is_cloned_finalizer': True,
-                        'original_source_node': source_identity,
-                        'source_level_identity': f"{source_identity}_{kind}"
-                    }
-                )
-                cfg.add_node(finally_node)
-                finally_nodes[kind] = finally_id
-            ctx.ast_index.bind(statement, finally_nodes.get('normal', finally_nodes[list(finally_nodes.keys())[0]]), "finally")
-
-        # Add edge from dispatcher to finally (raise) if finally exists, else to parent/exception exit
-        if statement.finalbody and 'raise' in finally_nodes:
-            # Unmatched exceptions must run finally
-            self._add_edge(cfg, ctx, dispatch_id, finally_nodes['raise'], 'exception')
-        else:
-            unmatched_target = parent_dispatch if parent_dispatch else cfg.exception_exit_node_id
-            self._add_edge(cfg, ctx, dispatch_id, unmatched_target, 'exception')
-
         # Handle finally routing with completion-specific finalizers
-        if statement.finalbody and finally_nodes:
-            # Build separate finally body for each completion kind
-            for kind, finally_id in finally_nodes.items():
-                finally_result = self._build_suite(statement.finalbody, cfg, ctx)
+        if statement.finalbody:
+            finally_result = self._build_suite(statement.finalbody, cfg, ctx)
 
-                # Connect finally clone to its body
+            # Connect all finally clones to the finally body entry
+            for finally_id in finally_nodes.values():
                 if finally_result.entry_nodes:
                     for entry_id in finally_result.entry_nodes:
                         self._add_edge(cfg, ctx, finally_id, entry_id, 'next')
 
-                # Connect finally exits to appropriate destinations based on completion kind
-                for exit_id in finally_result.normal_exits:
-                    if kind == 'normal':
-                        self._add_edge(cfg, ctx, exit_id, handler_join_id, 'next')
-                    elif kind == 'return':
-                        return_target = parent_dispatch if parent_dispatch else cfg.exit_node_id
-                        self._add_edge(cfg, ctx, exit_id, return_target, 'return')
-                    elif kind == 'raise':
-                        raise_target = parent_dispatch if parent_dispatch else cfg.exception_exit_node_id
-                        self._add_edge(cfg, ctx, exit_id, raise_target, 'exception')
-                    elif kind == 'break':
-                        # Find the loop target
-                        loop_ctx = ctx.current_loop()
-                        if loop_ctx:
-                            self._add_edge(cfg, ctx, exit_id, loop_ctx['break_target'], 'break')
-                    elif kind == 'continue':
-                        loop_ctx = ctx.current_loop()
-                        if loop_ctx:
-                            self._add_edge(cfg, ctx, exit_id, loop_ctx['continue_target'], 'continue')
-
-                # Handle abrupt completions within finally body
-                if finally_result.abrupt_exits:
-                    for completion in finally_result.abrupt_exits:
-                        if completion.kind == 'raise':
-                            raise_target = parent_dispatch if parent_dispatch else cfg.exception_exit_node_id
-                            self._add_edge(cfg, ctx, completion.node_id, raise_target, 'exception')
-                        # Other abrupt completions within finally bypass outer finally (Python semantics)
+            # Track which completion kinds actually have incoming edges
+            used_completion_kinds = set()
 
             # Connect abrupt completions to their specific finally clones
-            all_abrupt_exits = try_result.abrupt_exits + [c for hr in handler_results for c in hr.abrupt_exits] + else_abrupt_exits
-            for completion in all_abrupt_exits:
+            pending_completions = try_result.abrupt_exits + [c for hr in handler_results for c in hr.abrupt_exits] + else_abrupt_exits
+
+            for completion in pending_completions:
                 kind = completion.kind
                 if kind in finally_nodes:
-                    self._add_edge(cfg, ctx, completion.node_id, finally_nodes[kind], 'finally')
+                    finally_id = finally_nodes[kind]
+                    self._add_edge(cfg, ctx, completion.node_id, finally_id, 'finally')
+                    used_completion_kinds.add(kind)
 
-            # Connect normal completion to normal finally clone
-            if 'normal' in finally_nodes:
+            has_normal_completion = bool(try_result.normal_exits) or any(hr.normal_exits for hr in handler_results)
+
+            if has_normal_completion:
                 self._add_edge(cfg, ctx, handler_join_id, finally_nodes['normal'], 'next')
+                for try_exit in try_result.normal_exits:
+                    self._add_edge(cfg, ctx, try_exit, finally_nodes['normal'], 'next')
+                used_completion_kinds.add('normal')
+
+            # Connect finally body exits to appropriate destinations based on completion kind
+            if finally_result.normal_exits:
+                for completion in pending_completions:
+                    kind = completion.kind
+                    if kind in finally_nodes and completion.intended_target:
+                        finally_id = finally_nodes[kind]
+                        for exit_id in finally_result.normal_exits:
+                            self._add_edge(cfg, ctx, exit_id, completion.intended_target, kind)
+
+            # Handle abrupt completions within finally body
+            if finally_result.abrupt_exits:
+                all_abrupt_exits = finally_result.abrupt_exits
+            else:
+                if finally_result.normal_exits:
+                    for completion in pending_completions:
+                        kind = completion.kind
+                        if kind in finally_nodes and completion.intended_target:
+                            finally_id = finally_nodes[kind]
+                            for exit_id in finally_result.normal_exits:
+                                self._add_edge(cfg, ctx, exit_id, completion.intended_target, kind)
+
+            # Connect dispatcher to finally (raise) if finally exists
+            self._add_edge(cfg, ctx, dispatch_id, finally_nodes['raise'], 'exception')
+        else:
+            # No finally: unmatched exceptions go to parent
+            unmatched_target = parent_dispatch if parent_dispatch else cfg.exception_exit_node_id
+            self._add_edge(cfg, ctx, dispatch_id, unmatched_target, 'exception')
 
         return FlowResult(entry_nodes=try_result.entry_nodes, normal_exits=try_result.normal_exits, abrupt_exits=try_result.abrupt_exits)
 

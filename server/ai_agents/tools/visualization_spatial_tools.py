@@ -12,6 +12,8 @@ from ._safe import safe
 # Helper to emit scene commands
 def _emit_command(tool_context: ToolContext, command: str, **kwargs):
     """Queue a scene command to state['scene_commands']."""
+    if tool_context is None:
+        return  # No-op if no context (e.g., in tests)
     commands = tool_context.state.get('scene_commands', [])
     cmd_entry = {'type': command, **kwargs}
     commands.append(cmd_entry)
@@ -21,6 +23,8 @@ def _emit_command(tool_context: ToolContext, command: str, **kwargs):
 # Helper functions for session-scoped state
 def _get_session_state(tool_context: ToolContext, state_key: str, default=None):
     """Get session-scoped state for a given key using session_id."""
+    if tool_context is None:
+        return default
     # Try to get session_id from state or use a session-specific key
     session_id = tool_context.state.get('session_id', 'default')
     session_states = tool_context.state.get('session_states', {})
@@ -30,6 +34,8 @@ def _get_session_state(tool_context: ToolContext, state_key: str, default=None):
 
 def _set_session_state(tool_context: ToolContext, state_key: str, value):
     """Set session-scoped state for a given key using session_id."""
+    if tool_context is None:
+        return  # No-op if no context
     session_id = tool_context.state.get('session_id', 'default')
     session_states = tool_context.state.get('session_states', {})
     if session_id not in session_states:
