@@ -79,6 +79,12 @@ namespace JarvisVR
     private readonly List<JarvisPathDot> _pulses = new List<JarvisPathDot>();
     private JarvisSpatialPanel _menu;
     private string _menuNode;
+    private GitCommitDto[] _historyCommits = Array.Empty<GitCommitDto>();
+    private readonly List<JarvisSpatialButton> _historyRowButtons = new List<JarvisSpatialButton>();
+    private int _historyPage = 0;
+    private const int HistoryPageSize = 5;
+    private JarvisSpatialPanel _historyDetailPanel;
+    private JarvisSpatialButton _historyPrev, _historyNext;
 
     public void Initialize(Camera cam)
     {
@@ -152,7 +158,7 @@ namespace JarvisVR
       { "FLOW",   new[] { "activity", "evidence" } },
       { "ISSUES", new[] { "repo", "security", "evidence" } },
       { "TESTS",  new[] { "tests", "code", "legend" } },
-      { "GIT",    new[] { "history", "approval" } },
+      { "GIT",    new[] { "history", "history_detail" } },
       { "IMPACT", new[] { "repo", "impact", "evidence", "legend" } },
       { "AGENT",  new[] { "activity", "ghost" } },
     };
@@ -179,6 +185,7 @@ namespace JarvisVR
       { "impact",   new Vector3(  65f, -28f, 1.8f) },
       { "security", new Vector3(  65f, -28f, 1.8f) },
       { "history",  new Vector3(  65f,   6f, 1.9f) },
+      { "history_detail", new Vector3( -65f, -28f, 1.8f) },
     };
 
     /// <summary>Where the user's head is, in the workspace root's local space (see Recenter).</summary>
@@ -260,9 +267,15 @@ namespace JarvisVR
       _securityPanel.SetBody("No security analysis yet. Select a component and scan for vulnerabilities.");
 
       // History panel for Git commit history
-      _historyPanel = AddPanel("history", "Git History", 560, 400, 1.18f, -0.46f, pal.Cyan);
-      _historyPanel.SetBodyBox(60, 340); _historyPanel.Body.fontSize = 18;
+      _historyPanel = AddPanel("history", "Git History", 560, 450, 1.18f, -0.46f, pal.Cyan);
+      _historyPanel.SetBodyBox(60, 390); _historyPanel.Body.fontSize = 16;
       _historyPanel.SetBody("No commit history loaded yet.");
+
+      // History detail panel for selected commit details
+      _historyDetailPanel = AddPanel("history_detail", "Commit Details", 560, 400, -1.12f, -0.46f, pal.Cyan);
+      _historyDetailPanel.SetBodyBox(60, 340); _historyDetailPanel.Body.fontSize = 18;
+      _historyDetailPanel.SetBody("Select a commit to view details.");
+      _historyDetailPanel.Show(false);  // Hidden by default
 
       JarvisSpatialPanel caption = AddPanel("caption", "JARVIS", 820, 190, 0.15f, -0.52f, pal.Cyan);
       caption.SetBodyBox(54, 70); caption.Body.fontSize = 26;
@@ -292,7 +305,7 @@ namespace JarvisVR
       if (_graphRoot != null) _graphRoot.gameObject.SetActive(mode != "REPOS" && mode != "CODE");
       string[] visible = ModePanels.ContainsKey(mode) ? ModePanels[mode] : ModePanels["MAP"];
       int shown = 0;
-      foreach (string key in new[] { "repo", "code", "evidence", "tests", "activity", "legend", "ghost", "approval", "security", "history", "impact" })
+      foreach (string key in new[] { "repo", "code", "evidence", "tests", "activity", "legend", "ghost", "approval", "security", "history", "history_detail", "impact" })
       {
         bool on = visible.Contains(key);
         // approval shares its slot with evidence and tests: while something is pending, approval wins
@@ -890,6 +903,143 @@ namespace JarvisVR
       _quickChange.Label.text = t != null ? "What breaks if I change " + t + "?" : "What does this repository do?";
     }
 
+    private void RefreshHistoryPanel()
+    {
+      if (_historyPanel == null || _historyCommits == null || _historyCommits.Length == 0)
+      {
+        if (_historyPanel != null)
+          _historyPanel.SetBody("No commit history loaded yet.");
+        return;
+      }
+
+      var sb = new System.Text.StringBuilder();
+      int totalPages = (int)Math.Ceiling((double)_historyCommits.Length / HistoryPageSize);
+      int startIdx = _historyPage * HistoryPageSize;
+      int endIdx = Math.Min(startIdx + HistoryPageSize, _historyCommits.Length);
+
+      sb.AppendLine($"GIT HISTORY");
+      sb.AppendLine($"{_historyCommits.Length} RECENT COMMITS · PAGE {_historyPage + 1} OF {totalPages}");
+      sb.AppendLine();
+
+      // Destroy old row buttons
+      foreach (var btn in _historyRowButtons)
+        if (btn != null) Destroy(btn.gameObject);
+      _historyRowButtons.Clear();
+
+      // Display commits for current page
+      for (int i = startIdx; i < endIdx; i++)
+      {
+        var commit = _historyCommits[i];
+        int idx = i;
+
+        // Format commit message (truncate if too long)
+        string msg = commit.message.Length > 50 ? commit.message.Substring(0, 47) + "..." : commit.message;
+        string shortHash = commit.hash.Length > 7 ? commit.hash.Substring(0, 7) : commit.hash;
+
+        sb.AppendLine($"{msg}");
+        sb.AppendLine($"  {shortHash}  {commit.author}  {FormatDate(commit.date)}");
+        sb.AppendLine();
+
+        // Add button for this commit
+        var btn = _historyPanel.AddButton("SELECT", 20, 440 - (i - startIdx) * 70, 100, 60, () => SelectHistoryCommit(idx));
+        _historyRowButtons.Add(btn);
+      }
+
+      // Add navigation buttons
+      if (_historyPage > 0)
+      {
+        _historyPrev = _historyPanel.AddButton("PREV", 20, 410, 80, 50, () => { _historyPage--; RefreshHistoryPanel(); });
+      }
+      if (_historyPage < totalPages - 1)
+      {
+        _historyNext = _historyPanel.AddButton("NEXT", 110, 410, 80, 50, () => { _historyPage++; RefreshHistoryPanel(); });
+      }
+
+      _historyPanel.SetBody(sb.ToString());
+    }
+
+    private string FormatDate(string isoDate)
+    {
+      try
+      {
+        System.DateTime dt = System.DateTime.Parse(isoDate);
+        TimeSpan diff = System.DateTime.Now - dt;
+        if (diff.TotalDays < 1) return "Today";
+        if (diff.TotalDays < 2) return "Yesterday";
+        if (diff.TotalDays < 7) return $"{(int)diff.TotalDays} days ago";
+        return dt.ToString("d MMM");
+      }
+      catch
+      {
+        return isoDate.Split('T')[0];
+      }
+    }
+
+    private void SelectHistoryCommit(int index)
+    {
+      if (index < 0 || index >= _historyCommits.Length) return;
+
+      var commit = _historyCommits[index];
+      if (_historyDetailPanel == null) return;
+
+      var sb = new System.Text.StringBuilder();
+      sb.AppendLine($"COMMIT DETAILS");
+      sb.AppendLine();
+      sb.AppendLine(commit.message);
+      sb.AppendLine();
+      sb.AppendLine($"Hash: {commit.hash}");
+      sb.AppendLine($"Author: {commit.author}");
+      sb.AppendLine($"Date: {FormatDate(commit.date)}");
+      if (!string.IsNullOrEmpty(commit.parent_hash))
+        sb.AppendLine($"Parent: {commit.parent_hash.Substring(0, 7)}");
+      sb.AppendLine();
+      sb.AppendLine($"CHANGED FILES");
+      sb.AppendLine();
+
+      foreach (var file in commit.files)
+      {
+        string statusChar = file.status == "added" ? "A" : file.status == "deleted" ? "D" : file.status == "renamed" ? "R" : "M";
+        sb.AppendLine($"{statusChar}  {file.path}   +{file.additions} / -{file.deletions}");
+      }
+
+      sb.AppendLine();
+      sb.AppendLine($"TOTAL");
+      sb.AppendLine($"{commit.additions} additions");
+      sb.AppendLine($"{commit.deletions} deletions");
+      sb.AppendLine($"{commit.file_count} files changed");
+
+      _historyDetailPanel.SetBody(sb.ToString());
+      _historyDetailPanel.Show(true);
+
+      // Highlight corresponding graph nodes
+      _hot.Clear();
+      if (commit.mapped_node_ids != null)
+      {
+        foreach (string id in commit.mapped_node_ids)
+        {
+          if (_nodes.ContainsKey(id))
+            _hot.Add(id);
+        }
+      }
+
+      // Use file-level matching as fallback
+      if (_hot.Count == 0 && commit.files != null)
+      {
+        foreach (var file in commit.files)
+        {
+          foreach (var kvp in _nodes)
+          {
+            if (kvp.Value.Dto.file != null && kvp.Value.Dto.file.Contains(file.path))
+              _hot.Add(kvp.Key);
+          }
+        }
+      }
+
+      // Update _keep to fade unrelated nodes
+      _keep = new HashSet<string>(_hot);
+      RefreshStyles();
+    }
+
     /// <returns>true when the command changes what the graph shows.</returns>
     private bool ApplyCommand(SceneCommand c)
     {
@@ -1049,8 +1199,12 @@ namespace JarvisVR
               {
                 sb.AppendLine($"[{finding.severity.ToUpper()}] {finding.type}");
                 sb.AppendLine($"  File: {finding.file}:{finding.line}");
-                if (!string.IsNullOrEmpty(finding.evidence))
+                // Only show masked evidence for secrets
+                if (finding.type == "secret" && !string.IsNullOrEmpty(finding.evidence))
                   sb.AppendLine($"  Evidence: {finding.evidence}");
+                else if (!string.IsNullOrEmpty(finding.evidence))
+                  sb.AppendLine($"  Evidence: {finding.evidence}");
+                sb.AppendLine($"  Confidence: {finding.confidence}");
                 sb.AppendLine();
               }
 
@@ -1062,14 +1216,34 @@ namespace JarvisVR
               sb.AppendLine("No findings detected.");
             }
 
-            // Display taint paths
+            // Display taint paths with intermediate steps
             if (c.taint_paths != null && c.taint_paths.Length > 0)
             {
               sb.AppendLine();
-              sb.AppendLine($"Taint paths: {c.taint_paths.Length}");
+              sb.AppendLine($"TAINT PATHS: {c.taint_paths.Length}");
               foreach (var path in c.taint_paths.Take(3))
               {
-                sb.AppendLine($"  [{path.kind}] {path.source?.call} → {path.sink?.call}");
+                sb.AppendLine();
+                sb.AppendLine($"[{path.kind.ToUpper()}] {path.source?.call} → {path.sink?.call}");
+
+                // Display intermediate steps
+                if (path.steps != null && path.steps.Length > 0)
+                {
+                  foreach (var step in path.steps)
+                  {
+                    string step_label = "";
+                    if (step.kind == "source")
+                      step_label = $"{step.call}";
+                    else if (step.kind == "sink")
+                      step_label = $"{step.call}";
+                    else
+                      step_label = step.variable ?? "unknown";
+
+                    sb.AppendLine($"  {step_label}   Line {step.line}");
+                    if (step.kind != "source" && step.kind != "sink")
+                      sb.AppendLine($"       ↓");
+                  }
+                }
               }
             }
 
@@ -1077,14 +1251,11 @@ namespace JarvisVR
           }
           return true;
         case "show_history_panel":
-          if (_historyPanel != null)
+          if (_historyPanel != null && c.commits != null)
           {
-            var sb = new System.Text.StringBuilder();
-            sb.AppendLine($"GIT HISTORY");
-            sb.AppendLine($"Commits: {c.node_ids?.Length ?? 0}");
-            sb.AppendLine($"Changed files: {c.keep_ids?.Length ?? 0}");
-            sb.AppendLine($"Latest: {c.summary ?? "No data"}");
-            _historyPanel.SetBody(sb.ToString());
+            _historyCommits = c.commits;
+            _historyPage = 0;
+            RefreshHistoryPanel();
           }
           return true;
         case "show_approval_prompt":

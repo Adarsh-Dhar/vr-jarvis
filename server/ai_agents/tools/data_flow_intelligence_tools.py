@@ -261,21 +261,274 @@ def trace_variable_usage(variable_id: str, tool_context: ToolContext) -> dict:
         }
 
 
-# Taint sources and sinks
+# Helper to normalize AST call names
+def _get_call_name(node):
+    """Convert an AST expression to its dotted name."""
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        parent = _get_call_name(node.value)
+        return f"{parent}.{node.attr}" if parent else node.attr
+    if isinstance(node, ast.Call):
+        return _get_call_name(node.func)
+    return ""
+
+
+# Taint sources - normalized names without parentheses
 TAINT_SOURCES = [
-    'request.json', 'request.args', 'request.form', 'request.data',
-    'request.get', 'request.post', 'input()', 'sys.argv', 'os.environ',
-    'open(', 'getattr(', '__dict__', '__getattribute__',
-    'flask.request', 'django.http', 'http.request'
+    'request.args.get',
+    'request.query_params.get',
+    'request.form.get',
+    'request.json',
+    'request.data',
+    'request.get_json',
+    'input',
+    'sys.argv',
+    'os.getenv',
+    'os.environ.get',
 ]
 
 TAINT_SINKS = [
-    'execute(', 'exec(', 'eval(', 'compile(',
-    'subprocess.', 'os.system(', 'os.popen(',
-    'open(', 'file.write(', 'logging.', 'print(',
-    'cursor.execute(', 'cursor.executemany(',
-    'requests.', 'urllib.', 'http.'
+    'cursor.execute',
+    'cursor.executemany',
+    'connection.execute',
+    'eval',
+    'exec',
+    'compile',
+    'os.system',
+    'os.popen',
+    'subprocess.run',
+    'subprocess.call',
+    'subprocess.Popen',
 ]
+
+
+def analyze_python_taint_source(source_code: str, file_path: str) -> dict:
+    """Analyze Python source code for taint flows.
+
+    This is a testable, pure Python helper that analyzes source code directly
+    without requiring graph resolution. Returns sources, sinks, and paths.
+
+    Args:
+        source_code: The Python source code to analyze
+        file_path: The file path for context (used in results)
+
+    Returns:
+        dict with 'sources', 'sinks', 'paths', 'safe_cases', 'status'
+    """
+    try:
+        tree = ast.parse(source_code)
+
+        # Track variable assignments within the function with provenance
+        tainted_variables = {}  # var_name -> {line, provenance}
+
+        class TaintVisitor(ast.NodeVisitor):
+            def __init__(self):
+                self.sources = []
+                self.sinks = []
+                self.safe_cases = []
+
+            def _is_string_building_expression(self, node):
+                """Check if node builds a string (concatenation, f-string, format, %)."""
+                if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+                    return True
+                if isinstance(node, ast.JoinedStr):
+                    return True
+                if isinstance(node, ast.Call):
+                    call_name = _get_call_name(node)
+                    if call_name in ('str.format', 'format'):
+                        return True
+                if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Mod):
+                    return True
+                return False
+
+            def visit_Assign(self, node):
+                # Track variable assignments with proper propagation
+                for target in node.targets:
+                    if isinstance(target, ast.Name):
+                        var_name = target.id
+                        provenance = None
+
+                        # Check if RHS is a taint source
+                        if isinstance(node.value, ast.Call):
+                            call_name = _get_call_name(node.value)
+                            if any(source in call_name for source in TAINT_SOURCES):
+                                provenance = {
+                                    'line': node.lineno,
+                                    'call': call_name,
+                                    'kind': 'source',
+                                    'variable': var_name
+                                }
+                                self.sources.append(provenance.copy())
+
+                        # Track if RHS is another tainted variable
+                        elif isinstance(node.value, ast.Name):
+                            if node.value.id in tainted_variables:
+                                provenance = tainted_variables[node.value.id].copy()
+                                provenance['line'] = node.lineno
+                                provenance['kind'] = 'assignment'
+
+                        # Track string building operations (concatenation, f-strings, format, %)
+                        elif self._is_string_building_expression(node.value):
+                            # Check if any operand is tainted
+                            tainted_operand = self._find_tainted_operand(node.value)
+                            if tainted_operand:
+                                provenance = tainted_variables.get(tainted_operand)
+                                if provenance:
+                                    provenance = provenance.copy()
+                                    provenance['line'] = node.lineno
+                                    provenance['kind'] = 'assignment'
+
+                        # Update taint state (clear if new clean assignment)
+                        if provenance:
+                            tainted_variables[var_name] = provenance
+                        elif var_name in tainted_variables:
+                            # Reassignment with clean value
+                            del tainted_variables[var_name]
+
+                self.generic_visit(node)
+
+            def visit_AugAssign(self, node):
+                # Handle augmented assignments (+=, -=, etc.)
+                if isinstance(node.target, ast.Name):
+                    var_name = node.target.id
+
+                    # Check if the operation involves tainted data
+                    if isinstance(node.value, ast.Name):
+                        if node.value.id in tainted_variables:
+                            # Propagate taint
+                            tainted_variables[var_name] = tainted_variables[node.value.id].copy()
+                            tainted_variables[var_name]['line'] = node.lineno
+                            tainted_variables[var_name]['kind'] = 'augmented_assignment'
+
+                self.generic_visit(node)
+
+            def _find_tainted_operand(self, node):
+                """Find if any operand in an expression is tainted."""
+                if isinstance(node, ast.Name):
+                    return node.id if node.id in tainted_variables else None
+                if isinstance(node, ast.BinOp):
+                    left = self._find_tainted_operand(node.left)
+                    if left:
+                        return left
+                    return self._find_tainted_operand(node.right)
+                if isinstance(node, ast.Call):
+                    for arg in node.args:
+                        tainted = self._find_tainted_operand(arg)
+                        if tainted:
+                            return tainted
+                return None
+
+            def visit_Call(self, node):
+                # Check for sinks
+                call_name = _get_call_name(node)
+                is_sink = any(sink in call_name for sink in TAINT_SINKS)
+
+                if is_sink:
+                    # Check for safe cases (e.g., parameterized SQL)
+                    is_safe = False
+                    if 'execute' in call_name and len(node.args) > 1:
+                        # Check if the first argument is a literal string with placeholders
+                        if isinstance(node.args[0], ast.Constant):
+                            sql_str = node.args[0].value
+                            if isinstance(sql_str, str):
+                                # Check for common placeholder patterns
+                                if any(marker in sql_str for marker in ['%s', '?', ':param', '@param', '$1']):
+                                    is_safe = True
+                                    self.safe_cases.append({
+                                        'line': node.lineno,
+                                        'call': call_name,
+                                        'reason': 'parameterized_query'
+                                    })
+
+                    if not is_safe:
+                        # Check if any argument is a tainted variable
+                        tainted_args = []
+                        for arg in node.args:
+                            if isinstance(arg, ast.Name):
+                                if arg.id in tainted_variables:
+                                    tainted_args.append(arg.id)
+                            elif isinstance(arg, ast.BinOp) or isinstance(arg, ast.JoinedStr):
+                                # Check string building expressions
+                                tainted = self._find_tainted_operand(arg)
+                                if tainted:
+                                    tainted_args.append(tainted)
+
+                        if tainted_args:
+                            self.sinks.append({
+                                'line': node.lineno,
+                                'call': call_name,
+                                'kind': 'sink',
+                                'tainted_variables': tainted_args
+                            })
+                self.generic_visit(node)
+
+        visitor = TaintVisitor()
+        visitor.visit(tree)
+
+        # Build paths from sources to sinks through variable assignments
+        paths = []
+        for i, source in enumerate(visitor.sources):
+            for j, sink in enumerate(visitor.sinks):
+                if source['line'] < sink['line']:
+                    # Build path steps
+                    path_steps = [{
+                        'kind': 'source',
+                        'variable': source['variable'],
+                        'call': source['call'],
+                        'line': source['line']
+                    }]
+
+                    # Add sink step
+                    path_steps.append({
+                        'kind': 'sink',
+                        'call': sink['call'],
+                        'line': sink['line']
+                    })
+
+                    paths.append({
+                        'id': f'taint_path_{i}_{j}',
+                        'kind': 'heuristic',
+                        'source': {
+                            'call': source['call'],
+                            'variable': source['variable'],
+                            'file': file_path,
+                            'line': source['line']
+                        },
+                        'sink': {
+                            'call': sink['call'],
+                            'file': file_path,
+                            'line': sink['line']
+                        },
+                        'steps': path_steps
+                    })
+
+        return {
+            'status': 'ok',
+            'sources': visitor.sources,
+            'sinks': visitor.sinks,
+            'paths': paths,
+            'safe_cases': visitor.safe_cases,
+            'path_count': len(paths)
+        }
+    except SyntaxError as e:
+        return {
+            'status': 'partial',
+            'error': f'Syntax error: {e}',
+            'sources': [],
+            'sinks': [],
+            'paths': [],
+            'safe_cases': []
+        }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e),
+            'sources': [],
+            'sinks': [],
+            'paths': [],
+            'safe_cases': []
+        }
 
 
 @safe
@@ -296,13 +549,34 @@ def trace_taint_flow(source_id: str, tool_context: ToolContext) -> dict:
         - error: Analysis failed
     """
     try:
-        from .navigation_tools import get_symbol_definition
+        from ..intelligence.graph_engine.codegraph import codegraph
+        from ..config import REPO_ROOT
 
-        def_result = get_symbol_definition(source_id, tool_context)
-        if def_result.get('status') != 'ok':
-            return def_result
+        # Resolve component directly through CodeGraph
+        graph = codegraph.load_current_graph()
+        node = graph.get(source_id)
 
-        file_path = def_result['definition']['file']
+        if not node:
+            return {
+                'status': 'not_found',
+                'source_id': source_id,
+                'message': 'Component not found in graph'
+            }
+
+        file_path = node.get('file', '')
+        if not file_path:
+            return {
+                'status': 'error',
+                'error': 'Component has no file path'
+            }
+
+        # Validate file is inside REPO_ROOT
+        full_file_path = REPO_ROOT / file_path
+        if not full_file_path.exists():
+            return {
+                'status': 'error',
+                'error': f'File not found in repository: {file_path}'
+            }
 
         if not _is_python_file(file_path):
             return {
@@ -317,142 +591,42 @@ def trace_taint_flow(source_id: str, tool_context: ToolContext) -> dict:
                 'message': 'Could not parse file completely'
             }
 
-        # Track variable assignments within the function
-        variable_definitions = {}  # var_name -> {line, source_tainted}
-        sources = []
-        sinks = []
-        paths = []
-        safe_cases = []
+        # Find the target function in the AST
+        func_name = node.get('name', '')
+        if not func_name and '.' in node.get('id', ''):
+            func_name = node['id'].split('.')[-1]
 
-        class TaintVisitor(ast.NodeVisitor):
-            def __init__(self):
-                self.sources = []
-                self.sinks = []
-                self.variable_definitions = {}
-                self.paths = []
-                self.safe_cases = []
+        func_node = None
+        for node_ast in ast.walk(tree):
+            if isinstance(node_ast, ast.FunctionDef) and node_ast.name == func_name:
+                # Match by source location if available
+                node_start = node.get('start', 0)
+                if node_start == 0 or node_ast.lineno == node_start:
+                    func_node = node_ast
+                    break
 
-            def visit_Assign(self, node):
-                # Track variable assignments
-                for target in node.targets:
-                    if isinstance(target, ast.Name):
-                        var_name = target.id
-                        # Check if RHS is a taint source
-                        is_tainted = False
-                        if isinstance(node.value, ast.Call):
-                            if isinstance(node.value.func, ast.Attribute):
-                                call_str = f'{node.value.func.value.id}.{node.value.func.attr}' if isinstance(node.value.func.value, ast.Name) else ''
-                                if any(s in call_str for s in TAINT_SOURCES):
-                                    is_tainted = True
-                                    self.sources.append({
-                                        'line': node.lineno,
-                                        'call': call_str,
-                                        'kind': 'source',
-                                        'variable': var_name
-                                    })
-                            elif isinstance(node.value.func, ast.Name):
-                                if node.value.func.id in TAINT_SOURCES:
-                                    is_tainted = True
-                                    self.sources.append({
-                                        'line': node.lineno,
-                                        'call': node.value.func.id,
-                                        'kind': 'source',
-                                        'variable': var_name
-                                    })
-                        # Track if RHS is another tainted variable
-                        elif isinstance(node.value, ast.Name):
-                            if node.value.id in self.variable_definitions and self.variable_definitions[node.value.id]['tainted']:
-                                is_tainted = True
+        if not func_node:
+            return {
+                'status': 'not_found',
+                'message': f'Function {func_name} not found in AST'
+            }
 
-                        self.variable_definitions[var_name] = {
-                            'line': node.lineno,
-                            'tainted': is_tainted
-                        }
-                self.generic_visit(node)
+        # Use the testable helper for analysis
+        import ast as ast_module
+        source_code = ast_module.get_source_segment(open(file_path).read(), func_node)
+        if not source_code:
+            source_code = open(file_path).read()
 
-            def visit_Call(self, node):
-                # Check for sinks
-                if isinstance(node.func, ast.Attribute):
-                    call_str = f'{node.func.value.id}.{node.func.attr}' if isinstance(node.func.value, ast.Name) else ''
-                    if any(s in call_str for s in TAINT_SINKS):
-                        # Check for safe cases (e.g., parameterized SQL)
-                        is_safe = False
-                        if 'execute' in call_str and len(node.args) > 1:
-                            # Likely parameterized query (cursor.execute(sql, params))
-                            is_safe = True
-                            self.safe_cases.append({
-                                'line': node.lineno,
-                                'call': call_str,
-                                'reason': 'parameterized_query'
-                            })
-
-                        if not is_safe:
-                            # Check if any argument is a tainted variable
-                            tainted_args = []
-                            for arg in node.args:
-                                if isinstance(arg, ast.Name):
-                                    if arg.id in self.variable_definitions and self.variable_definitions[arg.id]['tainted']:
-                                        tainted_args.append(arg.id)
-
-                            if tainted_args:
-                                self.sinks.append({
-                                    'line': node.lineno,
-                                    'call': call_str,
-                                    'kind': 'sink',
-                                    'tainted_variables': tainted_args
-                                })
-                elif isinstance(node.func, ast.Name):
-                    if node.func.id in TAINT_SINKS:
-                        tainted_args = []
-                        for arg in node.args:
-                            if isinstance(arg, ast.Name):
-                                if arg.id in self.variable_definitions and self.variable_definitions[arg.id]['tainted']:
-                                    tainted_args.append(arg.id)
-
-                        if tainted_args:
-                            self.sinks.append({
-                                'line': node.lineno,
-                                'call': node.func.id,
-                                'kind': 'sink',
-                                'tainted_variables': tainted_args
-                            })
-                self.generic_visit(node)
-
-        visitor = TaintVisitor()
-        visitor.visit(tree)
-
-        # Build paths from sources to sinks through variable assignments
-        # Make paths consistent with visualization contract: id, source, sink, steps, kind
-        paths = []
-        for i, source in enumerate(visitor.sources):
-            for j, sink in enumerate(visitor.sinks):
-                if source['line'] < sink['line']:
-                    # Check if there's a variable assignment chain
-                    path_steps = [source]
-                    if source.get('variable') in sink.get('tainted_variables', []):
-                        path_steps.append({
-                            'line': sink['line'],
-                            'variable': source['variable'],
-                            'kind': 'assignment'
-                        })
-                    path_steps.append(sink)
-
-                    paths.append({
-                        'id': f'path_{i}_{j}',
-                        'source': source,
-                        'sink': sink,
-                        'steps': path_steps,
-                        'kind': 'confirmed' if len(path_steps) > 2 else 'likely'
-                    })
+        analysis_result = analyze_python_taint_source(source_code, file_path)
 
         return {
-            'status': 'ok',
+            'status': analysis_result.get('status', 'ok'),
             'source_id': source_id,
-            'sources': visitor.sources,
-            'sinks': visitor.sinks,
-            'paths': paths,
-            'safe_cases': visitor.safe_cases,
-            'path_count': len(paths)
+            'sources': analysis_result.get('sources', []),
+            'sinks': analysis_result.get('sinks', []),
+            'paths': analysis_result.get('paths', []),
+            'safe_cases': analysis_result.get('safe_cases', []),
+            'path_count': len(analysis_result.get('paths', []))
         }
     except Exception as e:
         return {

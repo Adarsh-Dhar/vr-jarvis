@@ -28,6 +28,8 @@ namespace JarvisVR
     // Security panel fields
     public SecurityFindingDto[] findings;
     public TaintPathDto[] taint_paths;
+    // Git history fields
+    public GitCommitDto[] commits;
   }
 
   [Serializable] public class SecurityFindingDto
@@ -41,19 +43,29 @@ namespace JarvisVR
     public string id, kind;
     public TaintSourceDto source;
     public TaintSinkDto sink;
+    public TaintStepDto[] steps;
   }
 
   [Serializable] public class TaintSourceDto
   {
     public int line;
-    public string call, kind, variable;
+    public string call, kind, variable, file;
   }
 
   [Serializable] public class TaintSinkDto
   {
     public int line;
-    public string call, kind;
+    public string call, kind, file;
     public string[] tainted_variables;
+  }
+
+  [Serializable] public class TaintStepDto
+  {
+    public string kind;
+    public string variable;
+    public string call;
+    public string file;
+    public int line;
   }
   [Serializable] public class AskResponse
   {
@@ -84,6 +96,9 @@ namespace JarvisVR
     // Control-flow and data-flow metadata (optional)
     public string node_kind, variable, expression, ast_kind, function_id;
     public int column;
+    // Security metadata (optional)
+    public string severity, confidence, evidence;
+    public int line;
   }
   [Serializable] public class GraphEdgeDto
   {
@@ -119,6 +134,31 @@ namespace JarvisVR
     public long size;
     public int total_lines;
     public bool truncated;
+  }
+
+  [Serializable] public class GitCommitDto
+  {
+    public string hash;
+    public string parent_hash;
+    public string message;
+    public string author;
+    public string date;
+    public int additions;
+    public int deletions;
+    public int file_count;
+    public GitFileChangeDto[] files;
+    public string[] mapped_node_ids;
+    public string mapping_status;
+  }
+
+  [Serializable] public class GitFileChangeDto
+  {
+    public string path;
+    public string old_path;
+    public string status;
+    public int additions;
+    public int deletions;
+    public string[] mapped_node_ids;
   }
   [Serializable] internal class RepoSelectRequest { public string name; }
   [Serializable] public class HealthDto { public bool ok, cached_tests; public string repo, branch; public int changed; }

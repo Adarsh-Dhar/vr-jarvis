@@ -1237,7 +1237,11 @@ def visualize_security_flow(
     Handles all taint analysis statuses: ok, partial, unsupported, error.
     """
     try:
-        from .security_quality_tools import scan_vulnerabilities
+        from .security_quality_tools import (
+            scan_vulnerabilities,
+            scan_secrets,
+            detect_sql_injection
+        )
         from .data_flow_intelligence_tools import trace_taint_flow
         from ..intelligence.graph_engine.codegraph import codegraph
         from ..config import REPO_ROOT
@@ -1273,8 +1277,10 @@ def visualize_security_flow(
         vuln_result = scan_vulnerabilities(repository_path, tool_context)
 
         # Get secrets (uses repository path)
-        from .security_quality_tools import scan_secrets
         secrets_result = scan_secrets(repository_path, tool_context)
+
+        # Get SQL injection findings (uses repository path)
+        sql_result = detect_sql_injection(repository_path, tool_context)
 
         # Get taint analysis (uses component_id)
         taint_result = trace_taint_flow(component_id, tool_context)
@@ -1301,7 +1307,11 @@ def visualize_security_flow(
                     'name': vuln.get('type', 'unknown'),
                     'level': 'vulnerability',
                     'type': 'vulnerability',
-                    'severity': vuln.get('severity', 'medium')
+                    'severity': vuln.get('severity', 'medium'),
+                    'file': vuln.get('file', ''),
+                    'line': vuln.get('line', 0),
+                    'evidence': vuln.get('evidence', ''),
+                    'confidence': vuln.get('confidence', 'heuristic')
                 })
                 edges.append({
                     'src': component_id,
@@ -1322,7 +1332,8 @@ def visualize_security_flow(
                     'severity': secret.get('severity', 'high'),
                     'file': secret.get('file', ''),
                     'line': secret.get('line', 0),
-                    'evidence': secret.get('evidence', '')
+                    'evidence': secret.get('evidence', ''),
+                    'confidence': secret.get('confidence', 'confirmed')
                 })
                 edges.append({
                     'src': component_id,
@@ -1331,7 +1342,29 @@ def visualize_security_flow(
                     'kind': 'confirmed'
                 })
 
-        # Add taint path nodes (handle ok and partial status only)
+        # Add SQL injection findings
+        if sql_result.get('status') == 'ok':
+            for i, sql in enumerate(sql_result.get('findings', [])):
+                sql_id = f'{component_id}_sql_{i}'
+                nodes.append({
+                    'id': sql_id,
+                    'name': sql.get('type', 'sql_injection'),
+                    'level': 'vulnerability',
+                    'type': 'vulnerability',
+                    'severity': sql.get('severity', 'high'),
+                    'file': sql.get('file', ''),
+                    'line': sql.get('line', 0),
+                    'evidence': sql.get('evidence', ''),
+                    'confidence': sql.get('confidence', 'confirmed')
+                })
+                edges.append({
+                    'src': component_id,
+                    'dst': sql_id,
+                    'type': 'has_vulnerability',
+                    'kind': 'confirmed'
+                })
+
+        # Add taint path nodes with intermediate steps (handle ok and partial status only)
         # Each path has: id, source, sink, steps, kind
         if taint_result.get('status') in ('ok', 'partial'):
             for path in taint_result.get('paths', []):
@@ -1339,22 +1372,46 @@ def visualize_security_flow(
                 source_info = path.get('source', {})
                 sink_info = path.get('sink', {})
                 path_kind = path.get('kind', 'likely')
+                steps = path.get('steps', [])
 
-                nodes.append({
-                    'id': path_id,
-                    'name': f'taint_path_{path_id.split("_")[-1]}',
-                    'level': 'taint',
-                    'type': 'taint_path',
-                    'source': source_info,
-                    'sink': sink_info,
-                    'kind': path_kind
-                })
-                edges.append({
-                    'src': component_id,
-                    'dst': path_id,
-                    'type': 'taint_flow',
-                    'kind': path_kind
-                })
+                # Generate nodes for each step in the path
+                prev_node_id = component_id
+                for step_idx, step in enumerate(steps):
+                    step_id = f'{path_id}_step_{step_idx}'
+                    step_kind = step.get('kind', 'unknown')
+                    step_var = step.get('variable', '')
+                    step_call = step.get('call', '')
+                    step_line = step.get('line', 0)
+
+                    if step_kind == 'source':
+                        step_name = f'Source: {step_call}'
+                        step_type = 'taint_source'
+                    elif step_kind == 'sink':
+                        step_name = f'Sink: {step_call}'
+                        step_type = 'taint_sink'
+                    else:
+                        step_name = f'Variable: {step_var}'
+                        step_type = 'taint_variable'
+
+                    nodes.append({
+                        'id': step_id,
+                        'name': step_name,
+                        'level': 'taint',
+                        'type': step_type,
+                        'file': source_info.get('file', ''),
+                        'line': step_line,
+                        'severity': 'high' if step_kind == 'sink' else 'medium'
+                    })
+
+                    # Create edge from previous step to this step
+                    edges.append({
+                        'src': prev_node_id,
+                        'dst': step_id,
+                        'type': 'taint_flow',
+                        'kind': path_kind
+                    })
+
+                    prev_node_id = step_id
 
         # Emit graph
         _emit_command(tool_context, 'show_graph',
@@ -1363,21 +1420,86 @@ def visualize_security_flow(
                      graph_type='security',
                      title=f'Security Flow: {component_id}')
 
-        # Emit security panel with actual findings
-        all_findings = vuln_result.get('vulnerabilities', []) if vuln_result.get('status') == 'ok' else []
-        all_findings.extend(secrets_result.get('findings', []) if secrets_result.get('status') == 'ok' else [])
+        # Emit security panel with normalized findings
+        all_findings = []
+
+        # Normalize vulnerability findings
+        if vuln_result.get('status') == 'ok':
+            for vuln in vuln_result.get('vulnerabilities', []):
+                all_findings.append({
+                    'id': vuln.get('id', ''),
+                    'type': vuln.get('type', 'unknown'),
+                    'severity': vuln.get('severity', 'medium'),
+                    'file': vuln.get('file', ''),
+                    'line': vuln.get('line', 0),
+                    'evidence': vuln.get('evidence', ''),
+                    'confidence': vuln.get('confidence', 'heuristic')
+                })
+
+        # Normalize secret findings
+        if secrets_result.get('status') == 'ok':
+            for secret in secrets_result.get('findings', []):
+                all_findings.append({
+                    'id': secret.get('id', ''),
+                    'type': secret.get('type', 'secret'),
+                    'severity': secret.get('severity', 'high'),
+                    'file': secret.get('file', ''),
+                    'line': secret.get('line', 0),
+                    'evidence': secret.get('evidence', ''),
+                    'confidence': secret.get('confidence', 'confirmed')
+                })
+
+        # Normalize SQL injection findings
+        if sql_result.get('status') == 'ok':
+            for sql in sql_result.get('findings', []):
+                all_findings.append({
+                    'id': sql.get('id', ''),
+                    'type': sql.get('type', 'sql_injection'),
+                    'severity': sql.get('severity', 'high'),
+                    'file': sql.get('file', ''),
+                    'line': sql.get('line', 0),
+                    'evidence': sql.get('evidence', ''),
+                    'confidence': sql.get('confidence', 'confirmed')
+                })
+
+        # Deduplicate findings by type, file, and line
+        seen = set()
+        deduplicated_findings = []
+        for finding in all_findings:
+            key = (finding['type'], finding['file'], finding['line'])
+            if key not in seen:
+                seen.add(key)
+                deduplicated_findings.append(finding)
 
         _emit_command(tool_context, 'show_security_panel',
-                     summary=f"{len(all_findings)} findings",
-                     node_ids=[f['id'] for f in all_findings],
+                     summary=f"{len(deduplicated_findings)} findings",
+                     node_ids=[f['id'] for f in deduplicated_findings],
                      keep_ids=[p['id'] for p in taint_result.get('paths', [])] if taint_result.get('status') in ('ok', 'partial') else [],
-                     findings=all_findings,
+                     findings=deduplicated_findings,
                      taint_paths=taint_result.get('paths', []) if taint_result.get('status') in ('ok', 'partial') else [])
 
+        # Determine overall status based on individual scanner results
+        statuses = [
+            vuln_result.get('status'),
+            secrets_result.get('status'),
+            sql_result.get('status'),
+            taint_result.get('status')
+        ]
+
+        overall_status = 'ok'
+        if any(s == 'error' for s in statuses):
+            overall_status = 'error'
+        elif any(s == 'partial' for s in statuses):
+            overall_status = 'partial'
+        elif any(s == 'unsupported' for s in statuses):
+            overall_status = 'partial'
+
         return {
-            'status': 'ok',
+            'status': overall_status,
             'component_id': component_id,
             'vulnerability_count': len(vuln_result.get('vulnerabilities', [])) if vuln_result.get('status') == 'ok' else 0,
+            'secret_count': len(secrets_result.get('findings', [])) if secrets_result.get('status') == 'ok' else 0,
+            'sql_injection_count': len(sql_result.get('findings', [])) if sql_result.get('status') == 'ok' else 0,
             'taint_path_count': len(taint_result.get('paths', [])) if taint_result.get('status') in ('ok', 'partial') else 0,
             'taint_status': taint_result.get('status', 'unknown')
         }

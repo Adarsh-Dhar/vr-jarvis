@@ -162,6 +162,214 @@ def find_regression_commit(
         return {'status': 'error', 'error': str(e)}
 
 
+def _load_recent_commit_hashes(path: Path, limit: int = 20) -> list:
+    """Load the last N commit hashes from git log."""
+    result = subprocess.run(
+        ['git', 'log', f'-{limit}', '--format=%H'],
+        cwd=str(path),
+        capture_output=True,
+        text=True,
+        check=False
+    )
+
+    if result.returncode != 0:
+        return []
+
+    return [
+        line.strip()
+        for line in result.stdout.splitlines()
+        if line.strip()
+    ]
+
+
+def _load_commit_metadata(path: Path, commit_hash: str) -> dict:
+    """Load metadata for a single commit."""
+    result = subprocess.run(
+        [
+            'git', 'show', '-s',
+            '--format=%H%x00%P%x00%an%x00%aI%x00%s',
+            commit_hash
+        ],
+        cwd=str(path),
+        capture_output=True,
+        text=True,
+        check=False
+    )
+
+    if result.returncode != 0:
+        return {}
+
+    parts = result.stdout.strip().split('\x00', 4)
+    if len(parts) < 5:
+        return {}
+
+    return {
+        'hash': parts[0],
+        'parent_hashes': parts[1],
+        'author': parts[2],
+        'date': parts[3],
+        'message': parts[4]
+    }
+
+
+def _load_commit_files(path: Path, commit_hash: str) -> dict:
+    """Load file changes and stats for a single commit."""
+    # Get name-status
+    files_result = subprocess.run(
+        ['git', 'diff-tree', '--root', '--no-commit-id', '--name-status', '-r', '-M', '-z', commit_hash],
+        cwd=str(path),
+        capture_output=True,
+        text=False,
+        check=False
+    )
+
+    changed_files = {}
+    if files_result.returncode == 0:
+        tokens = files_result.stdout.decode('utf-8', errors='replace').split('\x00')
+        i = 0
+        while i < len(tokens):
+            status = tokens[i]
+            i += 1
+
+            if not status:
+                continue
+
+            if status.startswith(('R', 'C')):
+                if i + 1 < len(tokens):
+                    old_path = tokens[i]
+                    new_path = tokens[i + 1]
+                    i += 2
+                    changed_files[new_path] = {
+                        'status': 'renamed' if status.startswith('R') else 'copied',
+                        'old_path': old_path,
+                        'additions': 0,
+                        'deletions': 0
+                    }
+            else:
+                if i < len(tokens):
+                    file_path = tokens[i]
+                    i += 1
+                    status_map = {
+                        'A': 'added',
+                        'M': 'modified',
+                        'D': 'deleted',
+                        'T': 'type_changed'
+                    }
+                    changed_files[file_path] = {
+                        'status': status_map.get(status, 'unknown'),
+                        'old_path': None,
+                        'additions': 0,
+                        'deletions': 0
+                    }
+
+    # Get numstat
+    numstat_result = subprocess.run(
+        ['git', 'diff-tree', '--root', '--no-commit-id', '--numstat', '-r', '-M', '-z', commit_hash],
+        cwd=str(path),
+        capture_output=True,
+        text=False,
+        check=False
+    )
+
+    if numstat_result.returncode == 0:
+        tokens = numstat_result.stdout.decode('utf-8', errors='replace').split('\x00')
+        i = 0
+        while i < len(tokens):
+            record = tokens[i]
+            i += 1
+
+            if not record:
+                continue
+
+            parts_record = record.split('\t', 2)
+            if len(parts_record) < 3:
+                continue
+
+            additions_str, deletions_str, file_path = parts_record
+
+            if file_path == '':
+                if i + 1 < len(tokens):
+                    old_path = tokens[i]
+                    new_path = tokens[i + 1]
+                    i += 2
+                    file_path = new_path
+            else:
+                new_path = file_path
+
+            additions = 0 if additions_str == '-' else int(additions_str)
+            deletions = 0 if deletions_str == '-' else int(deletions_str)
+
+            if new_path in changed_files:
+                changed_files[new_path]['additions'] = additions
+                changed_files[new_path]['deletions'] = deletions
+
+    return changed_files
+
+
+def _load_recent_commits(path: Path, graph, limit: int = 20) -> list:
+    """Load recent commits with full structure."""
+    commit_hashes = _load_recent_commit_hashes(path, limit)
+    commits = []
+
+    for commit_hash in commit_hashes:
+        metadata = _load_commit_metadata(path, commit_hash)
+        if not metadata:
+            continue
+
+        # Store first parent hash for ordinary history navigation
+        parent_hashes = metadata['parent_hashes'].split()
+        first_parent = parent_hashes[0] if parent_hashes else None
+
+        changed_files = _load_commit_files(path, commit_hash)
+
+        # Convert to list format
+        files_list = []
+        total_additions = 0
+        total_deletions = 0
+
+        for file_path, file_info in changed_files.items():
+            files_list.append({
+                'path': file_path,
+                'old_path': file_info['old_path'],
+                'status': file_info['status'],
+                'additions': file_info['additions'],
+                'deletions': file_info['deletions'],
+                'mapped_node_ids': []
+            })
+            total_additions += file_info['additions']
+            total_deletions += file_info['deletions']
+
+        # Map to graph nodes - include ALL matching nodes
+        mapped_node_ids = []
+        for file_info in files_list:
+            file_path = file_info['path']
+            norm_commit_path = file_path
+            for node_id, node in graph._nodes.items():
+                node_file = node.get('file', '')
+                if node_file:
+                    if norm_commit_path in node_file or node_file in norm_commit_path:
+                        if node_id not in mapped_node_ids:
+                            mapped_node_ids.append(node_id)
+                        if node_id not in file_info['mapped_node_ids']:
+                            file_info['mapped_node_ids'].append(node_id)
+
+        commits.append({
+            'hash': metadata['hash'],
+            'parent_hash': first_parent,
+            'message': metadata['message'],
+            'author': metadata['author'],
+            'date': metadata['date'],
+            'additions': total_additions,
+            'deletions': total_deletions,
+            'file_count': len(files_list),
+            'files': files_list,
+            'mapped_node_ids': mapped_node_ids,
+            'mapping_status': 'partial' if mapped_node_ids else 'file_level'
+        })
+
+    return commits
+
+
 @safe
 def visualize_git_history(
     repository_path: str,
@@ -182,99 +390,13 @@ def visualize_git_history(
 
         graph = codegraph.load_current_graph()
 
-        # Get last 20 commits with metadata (robust parsing - avoid delimiter issues)
-        result = subprocess.run(
-            ['git', 'log', '-20', '--format=%H%x00%s%x00%an%x00%ad%x00'],
-            cwd=str(path),
-            capture_output=True,
-            text=True
-        )
+        # Use the testable helpers
+        commits = _load_recent_commits(path, graph, limit=20)
 
-        commits = []
-        if result.returncode == 0:
-            for commit_block in result.stdout.strip().split('\x00\x00'):
-                if not commit_block:
-                    continue
-                parts = commit_block.split('\x00')
-                if len(parts) >= 4:
-                    commit_hash = parts[0]
-                    message = parts[1]
-                    author = parts[2]
-                    date = parts[3]
-
-                    # Get file changes for this commit separately with status
-                    files_result = subprocess.run(
-                        ['git', 'show', '--numstat', '--name-status', '--format=', commit_hash],
-                        cwd=str(path),
-                        capture_output=True,
-                        text=True
-                    )
-
-                    changed_files = []
-                    additions = 0
-                    deletions = 0
-
-                    if files_result.returncode == 0:
-                        for line in files_result.stdout.strip().splitlines():
-                            if line:
-                                # Parse numstat line: additions deletions filename
-                                # Parse name-status line: status filename
-                                file_parts = line.split()
-                                if len(file_parts) >= 3:
-                                    file_path = file_parts[2]
-                                    adds = int(file_parts[0]) if file_parts[0].isdigit() else 0
-                                    dels = int(file_parts[1]) if file_parts[1].isdigit() else 0
-                                    
-                                    # Determine status from git name-status
-                                    # We'll use a separate call to get accurate status
-                                    status = 'modified'  # default
-                                    if adds > 0 and dels > 0:
-                                        status = 'modified'
-                                    elif adds > 0 and dels == 0:
-                                        status = 'added'
-                                    elif adds == 0 and dels > 0:
-                                        status = 'deleted'
-                                    
-                                    changed_files.append({
-                                        'path': file_path,
-                                        'additions': adds,
-                                        'deletions': dels,
-                                        'status': status
-                                    })
-                                    additions += adds
-                                    deletions += dels
-
-                    commits.append({
-                        'hash': commit_hash,
-                        'message': message,
-                        'author': author,
-                        'date': date,
-                        'files': changed_files,
-                        'additions': additions,
-                        'deletions': deletions,
-                        'file_count': len(changed_files)
-                    })
-
-        # Map commits to current graph nodes (best-effort)
-        for commit in commits:
-            commit['mapped_nodes'] = []
-            commit['mapped_files'] = []
-            for file_info in commit['files']:
-                file_path = file_info['path']
-                # Try to find matching graph nodes
-                for node_id, node in graph._nodes.items():
-                    if node.get('file') == file_path:
-                        commit['mapped_nodes'].append(node_id)
-                        break
-                if file_path not in commit['mapped_files']:
-                    commit['mapped_files'].append(file_path)
-
-        # Emit history panel command
-        from .visualization_spatial_tools import _emit_command
+        # Emit history panel command with full structured commits
         _emit_command(tool_context, 'show_history_panel',
-                     summary=commits[0]['message'] if commits else "No commits",
-                     node_ids=[c['hash'] for c in commits],
-                     keep_ids=[f for c in commits for f in c.get('mapped_files', [])])
+                     summary=f"{len(commits)} recent commits",
+                     commits=commits)
 
         return {
             'status': 'ok',

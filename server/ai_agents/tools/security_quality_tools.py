@@ -588,21 +588,40 @@ def detect_sql_injection(
                 # Use AST to find cursor.execute calls
                 tree = ast.parse(content, filename=str(py_file))
 
+                def is_dynamic_sql_expression(node, unsafe_sql_variables):
+                    """Check if node represents dynamically constructed SQL."""
+                    # String concatenation
+                    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+                        return True
+                    # F-strings
+                    if isinstance(node, ast.JoinedStr):
+                        return True
+                    # .format() calls
+                    if isinstance(node, ast.Call):
+                        if isinstance(node.func, ast.Attribute):
+                            if node.func.attr == 'format':
+                                return True
+                    # % interpolation
+                    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Mod):
+                        return True
+                    # Previously constructed unsafe SQL variable
+                    if isinstance(node, ast.Name):
+                        return node.id in unsafe_sql_variables
+                    return False
+
                 class SQLInjectionVisitor(ast.NodeVisitor):
                     def __init__(self, file_path, line_source):
                         self.file_path = file_path
                         self.line_source = line_source
                         self.findings = []
-                        self.unsafe_vars = set()  # Track variables with unsafe SQL
+                        self.unsafe_sql_variables = set()  # Track variables with unsafe SQL
 
                     def visit_Assign(self, node):
-                        # Track assignments with string concatenation
+                        # Track assignments with dynamic SQL construction - per function scope
                         if node.targets and isinstance(node.targets[0], ast.Name):
                             var_name = node.targets[0].id
-                            if isinstance(node.value, ast.BinOp):
-                                if isinstance(node.value.op, ast.Add):
-                                    # Check if it involves string concatenation
-                                    self.unsafe_vars.add(var_name)
+                            if is_dynamic_sql_expression(node.value, self.unsafe_sql_variables):
+                                self.unsafe_sql_variables.add(var_name)
                         self.generic_visit(node)
 
                     def visit_Call(self, node):
@@ -615,44 +634,33 @@ def detect_sql_injection(
                                     is_unsafe = False
                                     is_parameterized = False
 
-                                    # Check if the argument is an unsafe variable
-                                    if isinstance(sql_arg, ast.Name):
-                                        if sql_arg.id in self.unsafe_vars:
-                                            is_unsafe = True
-
-                                    # Check for string concatenation
-                                    elif isinstance(sql_arg, ast.BinOp):
-                                        if isinstance(sql_arg.op, ast.Add):
-                                            is_unsafe = True
-
-                                    # Check for f-strings
-                                    elif isinstance(sql_arg, ast.JoinedStr):
+                                    # Check if the SQL expression itself is dynamically interpolated
+                                    if is_dynamic_sql_expression(sql_arg, self.unsafe_sql_variables):
                                         is_unsafe = True
 
-                                    # Check for format() calls
-                                    elif isinstance(sql_arg, ast.Call):
-                                        if isinstance(sql_arg.func, ast.Attribute):
-                                            if sql_arg.func.attr == 'format':
-                                                is_unsafe = True
-
                                     # Check for parameterized queries
-                                    # If there's a second argument, it's likely parameterized
-                                    if len(node.args) > 1:
-                                        is_parameterized = True
-
-                                    # Check for %s, ?, or :param in string
-                                    if isinstance(sql_arg, ast.Constant):
-                                        if any(marker in sql_arg.value for marker in ['%s', '?', ':param', '@param']):
-                                            is_parameterized = True
+                                    # Only classify as parameterized when:
+                                    # 1. SQL expression is not dynamically interpolated
+                                    # 2. A parameter argument is actually supplied
+                                    # 3. SQL uses appropriate placeholders
+                                    if not is_unsafe and len(node.args) > 1:
+                                        # Check if SQL string has placeholders
+                                        if isinstance(sql_arg, ast.Constant):
+                                            sql_str = sql_arg.value
+                                            if isinstance(sql_str, str):
+                                                if any(marker in sql_str for marker in ['%s', '?', ':param', '@param', '$1']):
+                                                    is_parameterized = True
 
                                     if is_unsafe and not is_parameterized:
                                         line_num = node.lineno
                                         if line_num <= len(self.line_source):
+                                            # Normalize filename to be relative to repository root
+                                            rel_file = str(self.file_path.relative_to(path))
                                             self.findings.append({
                                                 'id': f'sql_inj_{len(self.findings)}',
                                                 'type': 'sql_injection',
                                                 'severity': 'high',
-                                                'file': str(self.file_path),
+                                                'file': rel_file,
                                                 'line': line_num,
                                                 'evidence': self.line_source[line_num - 1].strip(),
                                                 'confidence': 'confirmed'
