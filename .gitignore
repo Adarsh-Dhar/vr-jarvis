@@ -37,9 +37,22 @@ venv/
 env/
 ENV/
 .venv
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+.coverage
+coverage.xml
+coverage.json
+htmlcov/
+*.cover
+!jarvis-tests/fixtures/**/.coverage
 
 # ADK
 .env
+.env.*
+!.env.example
 .adk/
 
 # IDE
@@ -64,12 +77,22 @@ Thumbs.db
 *.pid
 *.seed
 *.pid.lock
+*.tmp
+*.tsbuildinfo
+*.orig
+*.rej
+node_modules/
 
 logs
 ai_agents/demo_repo/
 ai_agents/work/
-ai_agents/data/project_memory.json
 .env
-jarvis-tests/test-reports/
+**/test-reports/
+jarvis-agent-evaluation/reports/
+jarvis-tests/tool_completion_status.json
+.devin/release_gate_report.json
 server/ai_agents/work/
+server/ai_agents/data/*
+!server/ai_agents/data/demo_change.json
+!server/ai_agents/data/cached_test_results.json
 fixtures/test-git-repo/
