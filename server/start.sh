@@ -42,7 +42,7 @@ else
 fi
 
 # Set bind address and environment variable for security validation
-export JARVIS_HOST="${JARVIS_HOST:-127.0.0.0}"
+export JARVIS_HOST="${JARVIS_HOST:-127.0.0.1}"
 
 # If binding to 0.0.0.0 (network-exposed), require secure configuration
 if [ "$JARVIS_HOST" = "0.0.0.0" ]; then

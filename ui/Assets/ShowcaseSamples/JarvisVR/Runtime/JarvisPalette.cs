@@ -14,6 +14,8 @@ namespace JarvisVR
     public Color Red = new Color32(0xFF, 0x6B, 0x6B, 0xFF);    // risk
     public Color Green = new Color32(0x4A, 0xDE, 0x80, 0xFF);  // verified
     public Color Violet = new Color32(0xB7, 0x9C, 0xFF, 0xFF); // AI guessed
+    public Color Orange = new Color32(0xFF, 0x9F, 0x40, 0xFF); // warning/break
+    public Color Gray = new Color32(0x88, 0x88, 0x88, 0xFF);  // external/deprecated
     public Color Text = new Color32(0xE6, 0xEE, 0xF8, 0xFF);
     public Color TextMuted = new Color32(0x9F, 0xB0, 0xC6, 0xFF);
 

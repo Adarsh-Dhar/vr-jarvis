@@ -57,7 +57,7 @@ namespace JarvisVR
     private ReposDto _repos;
     private RepoTreeDto _repoTree;
     private RepoFileDto _openFile;
-    private JarvisSpatialPanel _repoPanel, _codePanel, _runtimePanel;
+    private JarvisSpatialPanel _repoPanel, _codePanel, _runtimePanel, _impactPanel, _securityPanel, _historyPanel;
     private JarvisSpatialButton _repoBack, _repoHome, _repoPrev, _repoNext;
     private JarvisSpatialButton _codePrev, _codeClose, _codeNext;
     private readonly List<GameObject> _repoRows = new List<GameObject>();
@@ -153,7 +153,7 @@ namespace JarvisVR
     private static readonly Dictionary<string, string[]> ModePanels = new Dictionary<string, string[]>
     {
       { "REPOS",  new[] { "repo" } },
-      { "MAP",    new[] { "repo", "code", "evidence", "legend" } },
+      { "MAP",    new[] { "repo", "evidence", "legend" } },
       { "CODE",   new[] { "repo", "code", "evidence", "legend" } },
       { "FLOW",   new[] { "activity", "evidence" } },
       { "ISSUES", new[] { "repo", "security", "evidence" } },
@@ -322,6 +322,7 @@ namespace JarvisVR
         _panels[key].Show(on, on ? 0.05f * shown++ : 0f);
       }
       RefreshStatus();
+      RefreshCode();
     }
 
     // =========================================================== graph
@@ -345,7 +346,7 @@ namespace JarvisVR
       foreach (GraphNodeDto dto in _graph.nodes)
       {
         string cname = string.IsNullOrEmpty(dto.cluster) ? "other" : dto.cluster;
-        if (!_clusters.TryGetValue(cname, out ClusterView cv)) _clusters[cname] = cv = new ClusterView { Name = cname };
+        if (!_clusters.TryGetValue(cname, out ClusterView cv)) _clusters[cname] = cv = new ClusterView { Name = cname, Collapsed = true };
 
         var nv = new NodeView { Dto = dto, Cluster = cv };
         var rootGo = new GameObject("Node " + dto.id);
@@ -389,6 +390,10 @@ namespace JarvisVR
         nv.Body = body.GetComponent<Renderer>();
         nv.Body.sharedMaterial = JarvisSpatialGfx.Neon(Color.white, 1.5f, true);
         JarvisSpatialGfx.Flat(nv.Body);
+        
+        // Ensure the node collider is not a trigger so it can be raycast against
+        Collider nodeCollider = body.GetComponent<Collider>();
+        if (nodeCollider != null) nodeCollider.isTrigger = false;
 
         // Color based on level, with severity override for security nodes
         Color baseColor = dto.level == "module" ? pal.Amber
@@ -403,7 +408,7 @@ namespace JarvisVR
         if (dto.type == "vulnerability" || dto.type == "secret" || dto.type == "taint_path")
         {
           string severity = dto.severity ?? "medium";
-          baseColor = severity == "high" ? JarvisPalette.Red
+          baseColor = severity == "high" ? pal.Red
             : severity == "medium" ? pal.Amber
             : pal.Green;
         }
@@ -450,6 +455,18 @@ namespace JarvisVR
       UpdateClusters();
       RefreshStyles();
       _edgesDirty = true;
+      
+      // Collapse all clusters by default
+      foreach (ClusterView cv in _clusters.Values)
+      {
+        cv.Collapsed = true;
+        for (int i = 1; i < cv.Members.Count; i++)   // member 0 stays as the cluster anchor
+        {
+          cv.Members[i].Fx.SetShown(false);
+          cv.Members[i].Label.gameObject.SetActive(false);
+        }
+      }
+      RefreshEdgeVisibility();
     }
 
     // ---- edges: solid = static, dashed = inferred, dotted = runtime
@@ -555,7 +572,7 @@ namespace JarvisVR
             return;
           case "false":
             ev.Style = "solid";
-            ev.Base = JarvisPalette.Red;
+            ev.Base = pal.Red;
             return;
           case "next":
             ev.Style = "solid";
@@ -571,7 +588,7 @@ namespace JarvisVR
             return;
           case "break":
             ev.Style = "solid";
-            ev.Base = JarvisPalette.Orange;
+            ev.Base = pal.Orange;
             return;
           case "continue":
             ev.Style = "dashed";
@@ -579,7 +596,7 @@ namespace JarvisVR
             return;
           case "exception":
             ev.Style = "dotted";
-            ev.Base = JarvisPalette.Red;
+            ev.Base = pal.Red;
             return;
           case "return":
             ev.Style = "solid";
@@ -595,11 +612,11 @@ namespace JarvisVR
             return;
           case "raise":
             ev.Style = "dotted";
-            ev.Base = JarvisPalette.Red;
+            ev.Base = pal.Red;
             return;
           case "may_raise":
             ev.Style = "dashed";
-            ev.Base = JarvisPalette.Orange;
+            ev.Base = pal.Orange;
             return;
           case "resume":
             ev.Style = "dashed";
@@ -623,8 +640,8 @@ namespace JarvisVR
             return;
           case "reaches":
             // Check resolution field: may_reach should be dashed, must_reach solid
-            string resolution = ev.Dto != null ? ev.Dto.resolution : null;
-            if (resolution == "may_reach")
+            string reachResolution = ev.Dto != null ? ev.Dto.resolution : null;
+            if (reachResolution == "may_reach")
             {
               ev.Style = "dashed";
               ev.Base = pal.Violet;
@@ -1865,12 +1882,33 @@ namespace JarvisVR
     {
       if (_openFile != null) { RefreshOpenFile(); return; }
       if (_codePrev != null) { _codePrev.gameObject.SetActive(false); _codeClose.gameObject.SetActive(false); _codeNext.gameObject.SetActive(false); }
-      if (!_panels.ContainsKey("code") || string.IsNullOrEmpty(_selected) || !_nodes.TryGetValue(_selected, out NodeView n)) return;
+      if (!_panels.ContainsKey("code")) return;
+      
       JarvisPalette pal = JarvisPalette.Current;
+      if (string.IsNullOrEmpty(_selected) || !_nodes.TryGetValue(_selected, out NodeView n))
+      {
+        _panels["code"].SetTitle("Code inspector");
+        _panels["code"].SetBody("Select a node in the graph to view its source code.");
+        return;
+      }
+      
       if (!_source.TryGetValue(_selected, out SourceResponse s))
       {
         _panels["code"].SetTitle("Code inspector");
         _panels["code"].SetBody(n.Dto.file + "  L" + n.Dto.start + "-" + n.Dto.end + "\n\n" + (_serverOnline ? "loading source…" : "Start the JARVIS server to see live source."));
+        // Trigger source fetch if not already cached
+        if (_bridge != null && !_source.ContainsKey(_selected))
+        {
+          string selectedId = _selected; // Capture for async callback
+          UnityEngine.Debug.Log("JARVIS: Fetching source for " + selectedId);
+          _bridge.GetSource(selectedId, src => {
+            UnityEngine.Debug.Log("JARVIS: Source callback for " + selectedId + " status=" + (src?.status ?? "null"));
+            if (src != null && src.status == "ok") {
+              _source[selectedId] = src;
+              if (_selected == selectedId) RefreshCode();
+            }
+          });
+        }
         return;
       }
       _panels["code"].SetTitle(s.file);

@@ -65,6 +65,11 @@ namespace JarvisVR
             _reticle.sprite = JarvisGfx.Ring(64, 7);
             _reticle.raycastTarget = false;
             _reticle.enabled = false;
+            // Create unique material instance to avoid shared material issues
+            if (_reticle.material != null)
+            {
+                _reticle.material = new Material(_reticle.material);
+            }
         }
 
         private void Start()

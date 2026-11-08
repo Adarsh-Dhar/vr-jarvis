@@ -41,7 +41,7 @@ namespace JarvisVR
     public void Initialize(Camera cam, Transform graphRoot, Action toggleVoice)
     {
       _cam = cam; _graphRoot = graphRoot; _toggleVoice = toggleVoice;
-      _hands = FindObjectsByType<OVRHand>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+      _hands = FindObjectsByType<OVRHand>(FindObjectsInactive.Include);
       foreach (OVRHand h in _hands) { int side = SideOf(h.transform); if (side >= 0) _bySide[side].Add(h); }
       if (_bySide[0].Count == 0 && _bySide[1].Count == 0 && _hands.Length > 0)
       {
@@ -56,7 +56,7 @@ namespace JarvisVR
         r.name = "JARVIS pointer";
         Destroy(r.GetComponent<Collider>());
         r.transform.localScale = Vector3.one * 0.016f;
-        r.GetComponent<Renderer>().sharedMaterial = JarvisSpatialGfx.Unlit(new Color(0.24f, 0.84f, 0.91f));
+        r.GetComponent<Renderer>().material = JarvisSpatialGfx.Unlit(new Color(0.24f, 0.84f, 0.91f));
         r.SetActive(false);
         s.Reticle = r.transform;
       }
@@ -211,7 +211,7 @@ namespace JarvisVR
       }
       s.Reticle.position = s.Ray.GetPoint(hasHit ? dist - 0.01f : 1.5f);
       Color restColor = s == _slots[5] ? Color.white : new Color(0.24f, 0.84f, 0.91f);
-      s.Reticle.GetComponent<Renderer>().sharedMaterial.color = s.Down ? new Color(0.96f, 0.65f, 0.14f) : restColor;
+      s.Reticle.GetComponent<Renderer>().material.color = s.Down ? new Color(0.96f, 0.65f, 0.14f) : restColor;
 
       if (s.Hover != hoverBtn)
       {
