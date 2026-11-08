@@ -256,24 +256,24 @@ def test_runtime_tracer_duration_limit():
         tool_context=tool_context
     )
 
-    # Should be partial due to timeout
-    assert collect_result['status'] in ['partial', 'error'], f"Expected partial status, got {collect_result['status']}"
+    # Must be partial due to timeout (not error)
+    assert collect_result['status'] == 'partial', f"Expected partial status, got {collect_result['status']}"
     assert collect_result.get('timeout_hit', False) == True, "Should have hit timeout"
     assert collect_result.get('interrupted', False) == True, "Should have been interrupted"
+    assert collect_result['trace_available'] == True, "Trace should be available"
 
     # Verify partial trace was preserved and has correct timeout reason
-    if collect_result['trace_available']:
-        from ai_agents.runtime_trace_store import get_trace_store
-        trace_store = get_trace_store()
-        trace = trace_store.get_trace(collect_result['trace_id'], tool_context.state.get('session_id', 'default'))
-        
-        assert trace is not None, "Trace should be available in store"
-        assert trace.get('status') == 'partial', "Trace status should be partial"
-        
-        # Verify correct truncation reason (duration limit, not event limit)
-        limitations = trace.get('limitations', [])
-        assert any('duration limit' in limit.lower() or 'timeout' in limit.lower() for limit in limitations), \
-            f"Should mention duration/timeout limitation, got: {limitations}"
+    from ai_agents.runtime_trace_store import get_trace_store
+    trace_store = get_trace_store()
+    trace = trace_store.get_trace(collect_result['trace_id'], tool_context.state.get('session_id', 'default'))
+    
+    assert trace is not None, "Trace should be available in store"
+    assert trace.get('status') == 'partial', "Trace status should be partial"
+    
+    # Verify correct truncation reason (duration limit, not event limit)
+    limitations = trace.get('limitations', [])
+    assert any('duration limit' in limit.lower() or 'timeout' in limit.lower() for limit in limitations), \
+        f"Should mention duration/timeout limitation, got: {limitations}"
 
 
 def test_trace_store_basic():
@@ -607,6 +607,7 @@ def test_complete_workflow():
     assert 'nodes' in show_graph_cmd
     assert 'edges' in show_graph_cmd
     assert len(show_graph_cmd['nodes']) > 0, "Runtime graph should have nodes"
+    assert len(show_graph_cmd['edges']) > 0, "Runtime graph should have at least one edge"
     
     # Verify edges represent meaningful parent-child relationships
     # Each edge should have src and dst node IDs that exist in nodes
@@ -694,6 +695,14 @@ def test_cli_arguments_forwarding():
     # Wait for execution
     time.sleep(2)
 
+    # Capture application logs to verify exact arguments
+    logs_result = runtime_intelligence_tools.capture_application_logs(
+        application_id='test_args_app',
+        tool_context=tool_context
+    )
+
+    assert logs_result['status'] == 'ok', f"Failed to capture logs: {logs_result.get('reason', 'unknown')}"
+
     # Collect trace
     collect_result = runtime_intelligence_tools.collect_execution_trace(
         application_id='test_args_app',
@@ -711,7 +720,13 @@ def test_cli_arguments_forwarding():
     
     assert trace is not None, "Trace should be available"
     
-    # The fixture prints received arguments - check that it executed successfully
+    # The fixture prints received arguments - verify exact arguments in logs
+    stdout = logs_result.get('stdout_excerpt', '')
+    assert 'positional_arg' in stdout, "Expected positional_arg in stdout"
+    assert '--config' in stdout, "Expected --config in stdout"
+    assert 'test.json' in stdout, "Expected test.json in stdout"
+    
+    # Verify the function calls exist
     assert collect_result['function_calls'] > 0, "Expected function calls in trace"
 
 
@@ -788,7 +803,7 @@ def test_multiple_unsupported_reported():
             sys.path = old_sys_path
             sys.argv = old_sys_argv
     except Exception as e:
-        print(f"Fixture execution error: {e}")
+        pytest.fail(f"Fixture execution failed: {e}")
 
     tracer.stop()
 
@@ -811,9 +826,9 @@ def test_manual_stop_application():
     """Test manually stopping an application and preserving its trace."""
     tool_context = MockToolContext()
 
-    fixture_path = tool_context.state['worktree'] / 'sample_app.py'
+    fixture_path = tool_context.state['worktree'] / 'test_long_running_fixture.py'
 
-    # Start application
+    # Start long-running application
     start_result = runtime_intelligence_tools.start_application(
         application_id='test_stop_app',
         environment='dev',
@@ -825,7 +840,7 @@ def test_manual_stop_application():
     assert start_result['status'] == 'ok', f"Application failed to start: {start_result.get('reason', 'unknown')}"
 
     # Wait briefly for some execution
-    time.sleep(1)
+    time.sleep(2)
 
     # Manually stop the application
     stop_result = runtime_intelligence_tools.stop_application(
@@ -836,13 +851,15 @@ def test_manual_stop_application():
     assert stop_result['status'] in ['ok', 'partial'], f"Stop failed: {stop_result.get('error', 'unknown')}"
 
     # Verify trace was saved to trace store
-    if stop_result.get('trace_id'):
-        from ai_agents.runtime_trace_store import get_trace_store
-        trace_store = get_trace_store()
-        trace = trace_store.get_trace(stop_result['trace_id'], tool_context.state.get('session_id', 'default'))
-        
-        assert trace is not None, "Trace should be available in store after manual stop"
-        assert trace.get('provenance') == 'runtime_observed', "Trace should have correct provenance"
+    assert stop_result.get('trace_id') is not None, "Trace ID should be available after manual stop"
+    
+    from ai_agents.runtime_trace_store import get_trace_store
+    trace_store = get_trace_store()
+    trace = trace_store.get_trace(stop_result['trace_id'], tool_context.state.get('session_id', 'default'))
+    
+    assert trace is not None, "Trace should be available in store after manual stop"
+    assert trace.get('provenance') == 'runtime_observed', "Trace should have correct provenance"
+    assert trace.get('status') == 'partial', "Trace should be partial after manual stop"
 
 
 if __name__ == '__main__':

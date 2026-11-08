@@ -1,0 +1,132 @@
+{
+  "schema_version": 1,
+  "trace_id": "92b16cb4-975b-4757-8125-20f3f4dc4f96",
+  "application_id": "test_import_app",
+  "language": "python",
+  "provenance": "runtime_observed",
+  "status": "completed",
+  "started_at": "2026-11-08T10:52:22",
+  "ended_at": "2026-11-08T10:52:22",
+  "duration_ms": 28.01203727722168,
+  "exit_code": 0,
+  "events": [
+    {
+      "event_type": "function_call",
+      "call_id": "call_000001",
+      "parent_call_id": null,
+      "function_name": "<module>",
+      "qualified_name": "<module>",
+      "file": "/Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/integration-test-infrastructure/runtime/test_import_fixture.py",
+      "line": 0,
+      "timestamp_ns": 26040917,
+      "elapsed_ms": 26.041709,
+      "duration_ms": 1.8909579999999977,
+      "thread_id": 8667955072,
+      "depth": 0
+    },
+    {
+      "event_type": "function_call",
+      "call_id": "call_000002",
+      "parent_call_id": "call_000001",
+      "function_name": "<module>",
+      "qualified_name": "<module>",
+      "file": "/Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/integration-test-infrastructure/runtime/test_import_helper.py",
+      "line": 0,
+      "timestamp_ns": 27078625,
+      "elapsed_ms": 27.079,
+      "duration_ms": 0.058958999999997985,
+      "thread_id": 8667955072,
+      "depth": 1
+    },
+    {
+      "event_type": "function_return",
+      "call_id": "call_000002",
+      "timestamp_ns": 27137959,
+      "elapsed_ms": 27.137959,
+      "duration_ms": 0.058958999999997985,
+      "thread_id": 8667955072
+    },
+    {
+      "event_type": "function_call",
+      "call_id": "call_000003",
+      "parent_call_id": "call_000001",
+      "function_name": "main",
+      "qualified_name": "main",
+      "file": "/Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/integration-test-infrastructure/runtime/test_import_fixture.py",
+      "line": 11,
+      "timestamp_ns": 27235875,
+      "elapsed_ms": 27.236167,
+      "duration_ms": 0.645583000000002,
+      "thread_id": 8667955072,
+      "depth": 1
+    },
+    {
+      "event_type": "function_call",
+      "call_id": "call_000004",
+      "parent_call_id": "call_000003",
+      "function_name": "helper_function",
+      "qualified_name": "helper_function",
+      "file": "/Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/integration-test-infrastructure/runtime/test_import_helper.py",
+      "line": 7,
+      "timestamp_ns": 27388000,
+      "elapsed_ms": 27.388167,
+      "duration_ms": 0.05100000000000193,
+      "thread_id": 8667955072,
+      "depth": 2
+    },
+    {
+      "event_type": "function_return",
+      "call_id": "call_000004",
+      "timestamp_ns": 27439167,
+      "elapsed_ms": 27.439167,
+      "duration_ms": 0.05100000000000193,
+      "thread_id": 8667955072
+    },
+    {
+      "event_type": "function_call",
+      "call_id": "call_000005",
+      "parent_call_id": "call_000003",
+      "function_name": "another_helper",
+      "qualified_name": "another_helper",
+      "file": "/Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/integration-test-infrastructure/runtime/test_import_helper.py",
+      "line": 12,
+      "timestamp_ns": 27591500,
+      "elapsed_ms": 27.591667,
+      "duration_ms": 0.04929199999999767,
+      "thread_id": 8667955072,
+      "depth": 2
+    },
+    {
+      "event_type": "function_return",
+      "call_id": "call_000005",
+      "timestamp_ns": 27640959,
+      "elapsed_ms": 27.640959,
+      "duration_ms": 0.04929199999999767,
+      "thread_id": 8667955072
+    },
+    {
+      "event_type": "function_return",
+      "call_id": "call_000003",
+      "timestamp_ns": 27881750,
+      "elapsed_ms": 27.88175,
+      "duration_ms": 0.645583000000002,
+      "thread_id": 8667955072
+    },
+    {
+      "event_type": "function_return",
+      "call_id": "call_000001",
+      "timestamp_ns": 27932667,
+      "elapsed_ms": 27.932667,
+      "duration_ms": 1.8909579999999977,
+      "thread_id": 8667955072
+    }
+  ],
+  "truncated": false,
+  "limitations": [],
+  "statistics": {
+    "function_calls": 5,
+    "function_returns": 5,
+    "exceptions": 0,
+    "total_events": 10
+  }
+}

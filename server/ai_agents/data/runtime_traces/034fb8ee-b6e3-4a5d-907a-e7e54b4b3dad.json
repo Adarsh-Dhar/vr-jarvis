@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "trace_id": "034fb8ee-b6e3-4a5d-907a-e7e54b4b3dad",
+  "application_id": "test_duration_app",
+  "language": "python",
+  "provenance": "runtime_observed",
+  "status": "partial",
+  "started_at": "2026-11-08T10:52:02",
+  "ended_at": "2026-11-08T10:52:03",
+  "duration_ms": 948.9250183105469,
+  "exit_code": 130,
+  "events": [
+    {
+      "event_type": "function_call",
+      "call_id": "call_000001",
+      "parent_call_id": null,
+      "function_name": "<module>",
+      "qualified_name": "<module>",
+      "file": "/Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/integration-test-infrastructure/runtime/test_limits_fixture.py",
+      "line": 0,
+      "timestamp_ns": 26169250,
+      "elapsed_ms": 26.170625,
+      "duration_ms": 0.0,
+      "thread_id": 8667955072,
+      "depth": 0
+    },
+    {
+      "event_type": "function_call",
+      "call_id": "call_000002",
+      "parent_call_id": "call_000001",
+      "function_name": "main",
+      "qualified_name": "main",
+      "file": "/Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/integration-test-infrastructure/runtime/test_limits_fixture.py",
+      "line": 29,
+      "timestamp_ns": 26253208,
+      "elapsed_ms": 26.253708,
+      "duration_ms": 0.0,
+      "thread_id": 8667955072,
+      "depth": 1
+    },
+    {
+      "event_type": "function_call",
+      "call_id": "call_000003",
+      "parent_call_id": "call_000002",
+      "function_name": "long_running_task",
+      "qualified_name": "long_running_task",
+      "file": "/Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/integration-test-infrastructure/runtime/test_limits_fixture.py",
+      "line": 22,
+      "timestamp_ns": 26711041,
+      "elapsed_ms": 26.711333,
+      "duration_ms": 0.0,
+      "thread_id": 8667955072,
+      "depth": 2
+    }
+  ],
+  "truncated": false,
+  "limitations": [
+    "Execution interrupted by SIGTERM",
+    "Execution near 1s timeout limit"
+  ],
+  "statistics": {
+    "function_calls": 3,
+    "function_returns": 0,
+    "exceptions": 0,
+    "total_events": 3
+  }
+}

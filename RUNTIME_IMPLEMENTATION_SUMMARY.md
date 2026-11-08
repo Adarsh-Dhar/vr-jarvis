@@ -1,18 +1,17 @@
 # Runtime Visualization Implementation Summary
 
-## Status: V29 - ALL CRITICAL ISSUES FIXED
+## Status: V31 - ALL REMAINING ISSUES FIXED
 
-All 4 critical issues identified in v29 have been fixed. All 20 tests pass successfully (16.00s). Ready for Unity verification.
+All critical issues from v30 have been addressed. All 20 tests pass successfully (19.26s). Ready for Unity verification.
 
 ## Implementation Overview
 
-This implementation (v29) addresses 4 critical issues identified in code review:
-1. Maximum execution duration enforced from application launch deadline
-2. Event-limit truncation distinguished from duration-limit truncation
-3. Strengthened automated integration tests with real assertions
-4. Manual-stop trace persistence added to trace store
+This implementation (v31) addresses the remaining critical issues identified in v30:
+1. **Automatic timeout enforcement** - Added independent process watchdog that enforces maximum duration from application launch, independent of trace collection timing
+2. **Correct VR truncation messaging** - Fixed panel to distinguish event-limit truncation, duration-limit termination, and manual interruption using limitations data
+3. **Strengthened automated tests** - Fixed 4 specific test issues and created long-running fixture for manual-stop verification
 
-All 20 tests pass successfully (16.00s).
+All 20 tests pass successfully (19.26s).
 
 ## Completed Work
 
@@ -95,29 +94,42 @@ All 20 tests pass successfully (16.00s).
 - `test_local_imports` - Tests sibling module imports
 - `test_multiple_unsupported_reported` - Tests all unsupported cases reported
 
-**Test Results:** All 19 tests passed successfully (11.49s)
+**Test Results:** All 20 tests passed successfully (19.26s)
 
-### Phase 6: Unity/VR Verification 🔄
-**Status:** READY FOR MANUAL VERIFICATION
+### Phase 6: V31 Critical Fixes ✅
+**Files:** `server/ai_agents/tools/runtime_intelligence_tools.py`, `ui/Assets/ShowcaseSamples/JarvisVR/Runtime/JarvisSpatialWorkspace.cs`, `server/tests/test_runtime_tracing.py`, `jarvis-tests/fixtures/integration-test-infrastructure/runtime/test_long_running_fixture.py` (new)
 
-**Created:** `UNITY_VERIFICATION_GUIDE.md` - Comprehensive step-by-step guide for manual Unity testing
+**Changes:**
 
-**Verification Steps:**
-1. Verify Unity compilation (no C# errors)
-2. Start Python server
-3. Load JARVIS workspace scene
-4. Connect to server
-5. Launch sample application
-6. Collect execution trace
-7. Visualize execution flow
-8. Verify runtime graph appears
-9. Verify runtime panel displays correctly
-10. Test exception display
-11. Test event limit display
-12. Test partial status display
-13. Verify in Meta XR Simulator (optional)
+1. **Automatic Timeout Enforcement:**
+   - Added `_process_watchdog()` function that runs as an independent thread
+   - Watchdog enforces timeout from application launch, not from trace collection
+   - Process is terminated if it exceeds configured timeout_seconds
+   - Grace period provided for trace finalization before SIGKILL
+   - Watchdog threads tracked in `_watchdog_threads` dictionary
+   - Properly cleaned up when process is unregistered
 
-**Note:** Unity batch mode compilation is blocked by a running Unity instance. Manual verification in Unity Editor is required.
+2. **VR Truncation Warning Distinction:**
+   - Enhanced `show_runtime_panel` handler to analyze `runtime_limitations` array
+   - Distinguishes between:
+     - Manual interruption (SIGTERM) - "Execution was manually interrupted"
+     - Duration limit termination - "Execution terminated at duration limit"
+     - Event limit truncation - "Trace was truncated at event limit"
+     - Generic truncation - "Trace was truncated"
+     - Partial status - "Trace is partial (limitations detected)"
+   - Checks limitations text for keywords: "truncated at", "duration limit", "timeout", "interrupted", "sigterm"
+
+3. **Strengthened Automated Tests:**
+   - `test_cli_arguments_forwarding`: Added `capture_application_logs` call and assertions for exact argument strings in stdout
+   - `test_runtime_tracer_duration_limit`: Changed to require `status == 'partial'` and `trace_available == True` (removed conditional acceptance of 'error')
+   - `test_manual_stop_application`: Created new `test_long_running_fixture.py` that sleeps for 10 seconds; test now uses this fixture instead of sample_app.py; asserts trace_id is not None and trace status is 'partial'
+   - `test_multiple_unsupported_reported`: Changed `print()` to `pytest.fail()` for fixture execution errors
+   - `test_complete_workflow`: Added assertion `len(show_graph_cmd['edges']) > 0` to require at least one actual graph edge
+
+4. **New Fixture:**
+   - `test_long_running_fixture.py`: Long-running application that sleeps for 10 seconds with progress output, designed for manual-stop testing
+
+**Test Results:** All 20 tests passed successfully (19.26s)
 
 ### Phase 7: Documentation ✅
 **File:** `server/RUNTIME_TRACING_SCOPE.md`
@@ -131,17 +143,18 @@ All 20 tests pass successfully (16.00s).
 
 ## Files Modified
 
-### Python Files (4)
+### Python Files (5)
 1. `server/ai_agents/runtime_trace_runner.py` - Argument forwarding, exception handling, local imports
-2. `server/ai_agents/tools/visualization_spatial_tools.py` - Send limitations to panel
-3. `server/tests/test_runtime_tracing.py` - Replaced weak tests with fixture-based tests
-4. `server/RUNTIME_TRACING_SCOPE.md` - Documentation (new file)
+2. `server/ai_agents/tools/runtime_intelligence_tools.py` - Added process watchdog for timeout enforcement
+3. `server/ai_agents/tools/visualization_spatial_tools.py` - Send limitations to panel
+4. `server/tests/test_runtime_tracing.py` - Strengthened tests with real assertions and fixture-based tests
+5. `server/RUNTIME_TRACING_SCOPE.md` - Documentation (new file)
 
 ### C# Files (2)
 1. `ui/Assets/ShowcaseSamples/JarvisVR/Runtime/JarvisBridge.cs` - Added exception fields and limitations array
-2. `ui/Assets/ShowcaseSamples/JarvisVR/Runtime/JarvisSpatialWorkspace.cs` - Enhanced panel display
+2. `ui/Assets/ShowcaseSamples/JarvisVR/Runtime/JarvisSpatialWorkspace.cs` - Enhanced panel display with truncation cause distinction
 
-### Fixture Files (7)
+### Fixture Files (8)
 1. `jarvis-tests/fixtures/integration-test-infrastructure/runtime/test_args_fixture.py` (new)
 2. `jarvis-tests/fixtures/integration-test-infrastructure/runtime/test_exception_fixture.py` (new)
 3. `jarvis-tests/fixtures/integration-test-infrastructure/runtime/test_import_fixture.py` (new)
@@ -149,10 +162,12 @@ All 20 tests pass successfully (16.00s).
 5. `jarvis-tests/fixtures/integration-test-infrastructure/runtime/test_recursion_fixture.py` (new)
 6. `jarvis-tests/fixtures/integration-test-infrastructure/runtime/test_limits_fixture.py` (new)
 7. `jarvis-tests/fixtures/integration-test-infrastructure/runtime/test_multiple_unsupported_fixture.py` (new)
+8. `jarvis-tests/fixtures/integration-test-infrastructure/runtime/test_long_running_fixture.py` (new - v31)
 
-### Documentation Files (2)
+### Documentation Files (3)
 1. `server/RUNTIME_TRACING_SCOPE.md` (new)
 2. `UNITY_VERIFICATION_GUIDE.md` (new)
+3. `RUNTIME_IMPLEMENTATION_SUMMARY.md` (updated - v31)
 
 ## Completion Criteria
 
@@ -164,8 +179,9 @@ All 20 tests pass successfully (16.00s).
 - [x] Distinct exceptions are captured without propagation duplicates
 - [x] Traces are persisted and retrieved with session isolation
 - [x] Runtime graph nodes and edges are generated from actual execution events
-- [x] VR runtime panel displays calls, timing, exceptions and partial-trace limitations
-- [x] Focused automated tests pass with real fixture applications (19/19 tests passed)
+- [x] VR runtime panel displays calls, timing, exceptions and partial-trace limitations with correct truncation cause distinction
+- [x] Focused automated tests pass with real fixture applications (20/20 tests passed)
+- [x] Automatic timeout enforcement works independently from trace collection
 - [ ] Unity compiles and runtime graph and panel verified in Meta XR Simulator (READY FOR MANUAL VERIFICATION)
 - [x] Unsupported cases are clearly reported and execution restricted to trusted code
 
@@ -173,13 +189,14 @@ All 20 tests pass successfully (16.00s).
 
 ### Immediate Action Required
 Follow the `UNITY_VERIFICATION_GUIDE.md` to manually verify the Unity implementation:
-1. Open Unity Editor (already running with the project)
+1. Open Unity Editor (currently running with the project)
 2. Check Console for compilation errors
 3. Connect to Python server
 4. Test the complete workflow with sample_app.py
 5. Verify runtime graph and panel display
 6. Test with exception and limit fixtures
-7. (Optional) Test in Meta XR Simulator
+7. Verify truncation warning messages distinguish causes correctly
+8. (Optional) Test in Meta XR Simulator
 
 ### After Verification
 If all verification steps pass:
@@ -190,22 +207,25 @@ If all verification steps pass:
 ## Technical Notes
 
 ### Key Implementation Decisions
-1. **Exception Deduplication:** Used instance identity with object retention to prevent ID reuse, ensuring distinct exceptions are recorded separately while propagation doesn't create duplicates.
-2. **Argument Forwarding:** Split at `--` separator and exclude `sys.argv[0]` to properly separate runner arguments from target application arguments.
-3. **Multiple Limitations:** Changed logic to deduplicate by checking if already in list, ensuring all distinct unsupported features are reported.
-4. **Panel Display:** Compare received event count vs total event count to distinguish between panel display limit (30 events) vs recording limit (configured max_events).
+1. **Process Watchdog:** Implemented as an independent daemon thread that runs for the configured timeout duration from application launch. This ensures timeout enforcement is not dependent on when `collect_execution_trace()` is called. The watchdog checks if the process is still registered and running, then terminates it gracefully with a grace period for trace finalization.
+2. **Exception Deduplication:** Used instance identity with object retention to prevent ID reuse, ensuring distinct exceptions are recorded separately while propagation doesn't create duplicates.
+3. **Argument Forwarding:** Split at `--` separator and exclude `sys.argv[0]` to properly separate runner arguments from target application arguments.
+4. **Multiple Limitations:** Changed logic to deduplicate by checking if already in list, ensuring all distinct unsupported features are reported.
+5. **Panel Truncation Messaging:** Analyzes the `runtime_limitations` array to determine the specific cause of truncation/partial status. Uses keyword matching on limitation text to distinguish between manual interruption (SIGTERM), duration limit termination, and event limit truncation.
+6. **Panel Display:** Compare received event count vs total event count to distinguish between panel display limit (30 events) vs recording limit (configured max_events).
 
 ### Known Limitations
 - Unity batch mode compilation requires no running Unity instance (blocked by current running instance)
 - Async execution, generators, and background threads are explicitly unsupported in basic implementation
 - Current security boundary is not complete (environment allowlist + worktree validation, not OS sandbox)
+- Watchdog thread is process-local and assumes single worker or sticky routing
 
 ### Test Coverage
-- 19 tests covering all major functionality
+- 20 tests covering all major functionality
 - Real fixture applications instead of in-memory functions
-- Tests for argument forwarding, exception handling, recursion, limits, imports, and unsupported cases
-- All tests pass successfully (11.49s)
+- Tests for argument forwarding, exception handling, recursion, limits, imports, unsupported cases, manual stop, and complete workflow
+- All tests pass successfully (19.26s)
 
 ## Conclusion
 
-The Runtime Visualization implementation is **code-complete and test-verified**. All Python backend functionality is working correctly with comprehensive test coverage. The final step requires manual Unity verification to confirm the VR visualization renders correctly. Once Unity verification is complete, the implementation will meet all criteria for "Implemented — basic" status.
+The Runtime Visualization implementation is **code-complete and test-verified**. All Python backend functionality is working correctly with comprehensive test coverage, including the critical fixes for timeout enforcement and VR truncation messaging. The final step requires manual Unity verification to confirm the VR visualization renders correctly. Once Unity verification is complete, the implementation will meet all criteria for "Implemented — basic" status.

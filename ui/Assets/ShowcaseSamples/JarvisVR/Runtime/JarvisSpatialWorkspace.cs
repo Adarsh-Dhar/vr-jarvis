@@ -1397,17 +1397,40 @@ namespace JarvisVR
               }
             }
 
-            // Show warning if truncated or partial
-            if (c.runtime_truncated)
+            // Show warning if truncated or partial - distinguish causes
+            if (c.runtime_truncated || c.runtime_status == "partial")
             {
               sb.AppendLine();
-              sb.AppendLine($"WARNING: Trace was truncated at event limit");
-            }
-
-            if (c.runtime_status == "partial" && !c.runtime_truncated)
-            {
-              sb.AppendLine();
-              sb.AppendLine($"WARNING: Trace is partial (limitations detected)");
+              
+              // Check limitations to determine specific cause
+              bool eventLimitTruncated = false;
+              bool durationLimitTerminated = false;
+              bool manuallyInterrupted = false;
+              
+              if (c.runtime_limitations != null)
+              {
+                foreach (var limit in c.runtime_limitations)
+                {
+                  string lowerLimit = limit.ToLower();
+                  if (lowerLimit.Contains("truncated at") && lowerLimit.Contains("events"))
+                    eventLimitTruncated = true;
+                  if (lowerLimit.Contains("duration limit") || lowerLimit.Contains("timeout"))
+                    durationLimitTerminated = true;
+                  if (lowerLimit.Contains("interrupted") || lowerLimit.Contains("sigterm"))
+                    manuallyInterrupted = true;
+                }
+              }
+              
+              if (manuallyInterrupted)
+                sb.AppendLine($"WARNING: Execution was manually interrupted");
+              else if (durationLimitTerminated)
+                sb.AppendLine($"WARNING: Execution terminated at duration limit");
+              else if (eventLimitTruncated)
+                sb.AppendLine($"WARNING: Trace was truncated at event limit");
+              else if (c.runtime_truncated)
+                sb.AppendLine($"WARNING: Trace was truncated");
+              else
+                sb.AppendLine($"WARNING: Trace is partial (limitations detected)");
             }
 
             // Display limitations

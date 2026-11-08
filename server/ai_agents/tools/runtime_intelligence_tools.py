@@ -36,6 +36,7 @@ from ..runtime_trace_store import get_trace_store
 # Assumes single worker or sticky routing for initial implementation
 _process_registry: Dict[str, Dict[str, Any]] = {}
 _process_registry_lock = threading.Lock()
+_watchdog_threads: Dict[str, threading.Thread] = {}
 
 
 def _get_session_id(tool_context: ToolContext) -> str:
@@ -76,6 +77,48 @@ def _unregister_process(application_id: str, session_id: str):
         registry_key = f"{session_id}:{application_id}"
         if registry_key in _process_registry:
             del _process_registry[registry_key]
+        # Stop watchdog thread if exists
+        watchdog_key = f"{session_id}:{application_id}"
+        if watchdog_key in _watchdog_threads:
+            # Watchdog will self-terminate when it sees the process is unregistered
+            del _watchdog_threads[watchdog_key]
+
+
+def _process_watchdog(application_id: str, session_id: str, timeout_seconds: int):
+    """
+    Independent watchdog thread that enforces timeout from application launch.
+    This runs independently of trace collection and will terminate the process
+    if it exceeds the configured maximum duration.
+    """
+    watchdog_key = f"{session_id}:{application_id}"
+    
+    # Wait for the timeout duration
+    time.sleep(timeout_seconds)
+    
+    # Check if process is still registered and running
+    with _process_registry_lock:
+        proc_info = _process_registry.get(watchdog_key)
+        if not proc_info:
+            # Process was already unregistered (completed or stopped)
+            return
+        
+        process = proc_info['process']
+        
+        # Check if process is still running
+        if process.poll() is None:
+            # Process exceeded timeout - terminate it
+            try:
+                process.terminate()
+                # Give grace period for trace finalization
+                time.sleep(2)
+                if process.poll() is None:
+                    # Force kill if still running
+                    try:
+                        os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+            except Exception:
+                pass
 
 
 @safe
@@ -231,6 +274,17 @@ def start_application(
             stderr_path=stderr_path,
             timeout_seconds=timeout_seconds
         )
+
+        # Start independent watchdog thread for timeout enforcement
+        watchdog_key = f"{session_id}:{application_id}"
+        watchdog_thread = threading.Thread(
+            target=_process_watchdog,
+            args=(application_id, session_id, timeout_seconds),
+            daemon=True
+        )
+        watchdog_thread.start()
+        with _process_registry_lock:
+            _watchdog_threads[watchdog_key] = watchdog_thread
 
         return {
             'status': 'ok',
@@ -415,7 +469,8 @@ def collect_execution_trace(
             'reason': 'Trace file not generated',
             'application_id': application_id,
             'interrupted': interrupted,
-            'timeout_hit': timeout_hit
+            'timeout_hit': timeout_hit,
+            'trace_available': False
         }
 
     try:
