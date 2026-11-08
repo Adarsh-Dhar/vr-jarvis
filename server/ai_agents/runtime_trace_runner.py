@@ -44,7 +44,7 @@ class RuntimeTracer:
         self.truncated = False
         self.lock = threading.Lock()
         self.exception_count = 0
-        self.exception_ids: Set[str] = set()  # Track unique exceptions to avoid counting propagation
+        self.exception_instances: Dict[int, Any] = {}  # Retain exception objects to prevent ID reuse
         self.unsupported_detected = False
         self.unsupported_reasons: List[str] = []
 
@@ -125,9 +125,9 @@ class RuntimeTracer:
 
             # Mark worker threads as unsupported
             if thread_id != threading.main_thread().ident:
-                if not self.unsupported_detected:
-                    self.unsupported_detected = True
+                if "background_thread_execution" not in self.unsupported_reasons:
                     self.unsupported_reasons.append("background_thread_execution")
+                    self.unsupported_detected = True
                 return
 
             call_id = None
@@ -135,10 +135,9 @@ class RuntimeTracer:
             if event == 'call':
                 # Detect unsupported execution types
                 unsupported = self._detect_unsupported_execution(frame)
-                if unsupported:
-                    if not self.unsupported_detected:
-                        self.unsupported_detected = True
-                        self.unsupported_reasons.append(unsupported)
+                if unsupported and unsupported not in self.unsupported_reasons:
+                    self.unsupported_reasons.append(unsupported)
+                    self.unsupported_detected = True
                     return
 
                 # Generate unique call ID (supports recursion)
@@ -222,17 +221,18 @@ class RuntimeTracer:
                 thread_id = threading.get_ident()
                 exc_type, exc_value, exc_tb = arg
 
-                # Generate unique exception ID to avoid counting propagation
-                exc_id = f"{exc_type.__name__}:{frame.f_lineno}:{thread_id}"
+                # Use exception instance identity with object retention
+                exc_id = id(exc_value)
 
-                # Only record the original exception, not propagation
-                if exc_id not in self.exception_ids:
-                    self.exception_ids.add(exc_id)
+                # Check if this is a new exception instance (not propagation)
+                if self.exception_instances.get(exc_id) is not exc_value:
+                    self.exception_instances[exc_id] = exc_value
                     self.exception_count += 1
 
                     event_data = {
                         "event_type": "exception",
                         "exception_type": str(exc_type.__name__) if exc_type else "Unknown",
+                        "exception_id": str(exc_id),  # Expose as string in event
                         "file": filepath,
                         "line": frame.f_lineno,
                         "function_name": frame.f_code.co_name,
@@ -253,10 +253,11 @@ class RuntimeTracer:
         threading.setprofile(self._profile_callback)
 
     def stop(self):
-        """Stop profiling."""
+        """Stop profiling and clear retained references."""
         sys.setprofile(None)
         sys.settrace(None)
         threading.setprofile(None)
+        self.exception_instances.clear()  # Clear retained exception objects
 
     def get_trace(self, application_id: str, exit_code: int) -> Dict[str, Any]:
         """Generate the final trace structure."""
@@ -323,6 +324,17 @@ def main():
     """Main entry point for the trace runner."""
     global _tracer_instance
 
+    # Split arguments at -- separator (exclude sys.argv[0] - the runner's own filename)
+    argv = sys.argv[1:]
+
+    if "--" in argv:
+        separator_index = argv.index("--")
+        runner_args = argv[:separator_index]
+        target_args = argv[separator_index + 1:]
+    else:
+        runner_args = argv
+        target_args = []
+
     parser = argparse.ArgumentParser(description="Python runtime trace runner")
     parser.add_argument("--target", required=True, help="Path to target Python application")
     parser.add_argument("--trace-out", required=True, help="Path to output trace JSON file")
@@ -332,7 +344,7 @@ def main():
     parser.add_argument("--trace-id", required=True, help="Trace ID to use")
     parser.add_argument("--application-id", required=True, help="Application ID to use")
 
-    args = parser.parse_args()
+    args = parser.parse_args(runner_args)
 
     target_path = Path(args.target).resolve()
     trace_out_path = Path(args.trace_out).resolve()
@@ -378,13 +390,28 @@ def main():
     exit_code = 0
     try:
         import runpy
-        # Change to target directory for proper relative imports
+
+        # Save original state
         old_cwd = os.getcwd()
-        os.chdir(target_path.parent)
+        old_sys_path = sys.path.copy()
+        old_sys_argv = sys.argv.copy()
+
         try:
+            # Set up target environment
+            target_dir = target_path.parent
+            if str(target_dir) not in sys.path:
+                sys.path.insert(0, str(target_dir))
+
+            os.chdir(target_dir)
+            sys.argv = [str(target_path)] + target_args
+
+            # Execute
             runpy.run_path(str(target_path), run_name="__main__")
         finally:
+            # Restore original state
             os.chdir(old_cwd)
+            sys.path = old_sys_path
+            sys.argv = old_sys_argv
     except SystemExit as e:
         exit_code = e.code if e.code is not None else 0
     except Exception as e:

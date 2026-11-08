@@ -1219,6 +1219,7 @@ def visualize_execution_flow(
             runtime_duration_ms=float(trace.get('duration_ms', 0)),
             runtime_event_count=len(events),
             runtime_truncated=bool(trace.get('truncated', False)),
+            runtime_limitations=trace.get('limitations', []),
             runtime_events=events[:30]  # First 30 events for panel
         )
 

@@ -1345,13 +1345,11 @@ namespace JarvisVR
             var sb = new System.Text.StringBuilder();
             sb.AppendLine($"RUNTIME EXECUTION");
 
-            // Display application and trace details
+            // Application and trace details
             if (!string.IsNullOrEmpty(c.application_id))
               sb.AppendLine($"Application: {c.application_id}");
-
             if (!string.IsNullOrEmpty(c.trace_id))
               sb.AppendLine($"Trace ID: {c.trace_id.Substring(0, 8)}...");
-
             if (!string.IsNullOrEmpty(c.runtime_status))
               sb.AppendLine($"Status: {c.runtime_status.ToUpper()}");
 
@@ -1366,7 +1364,7 @@ namespace JarvisVR
 
             sb.AppendLine();
 
-            // Display execution timeline (first 20-30 events)
+            // Display execution timeline (first 30 events)
             if (c.runtime_events != null && c.runtime_events.Length > 0)
             {
               sb.AppendLine($"EXECUTION TIMELINE");
@@ -1379,20 +1377,48 @@ namespace JarvisVR
                 if (evt.event_type == "function_call")
                 {
                   float elapsed = evt.elapsed_ms;
+                  float duration = evt.duration_ms;
                   string indent = new string(' ', evt.depth * 2);
-                  sb.AppendLine($"{elapsed:F3} ms  {indent}{evt.function_name}()");
+                  sb.AppendLine($"{elapsed:F3} ms  {indent}{evt.function_name}() ({duration:F2}ms)");
+                }
+                else if (evt.event_type == "exception")
+                {
+                  string indent = new string(' ', evt.depth * 2);
+                  sb.AppendLine($"{indent}EXCEPTION: {evt.exception_type} at {evt.file}:{evt.line} in {evt.function_name}");
                 }
               }
 
-              if (c.runtime_events.Length > 30)
-                sb.AppendLine($"... and {c.runtime_events.Length - 30} more events");
+              // Omitted events indicator - distinguish panel limit vs recording limit
+              int receivedCount = c.runtime_events.Length;
+              if (c.runtime_event_count > receivedCount)
+              {
+                sb.AppendLine();
+                sb.AppendLine($"Showing {receivedCount} of {c.runtime_event_count} events");
+              }
             }
 
             // Show warning if truncated or partial
             if (c.runtime_truncated)
             {
               sb.AppendLine();
-              sb.AppendLine($"WARNING: Trace was truncated");
+              sb.AppendLine($"WARNING: Trace was truncated at event limit");
+            }
+
+            if (c.runtime_status == "partial" && !c.runtime_truncated)
+            {
+              sb.AppendLine();
+              sb.AppendLine($"WARNING: Trace is partial (limitations detected)");
+            }
+
+            // Display limitations
+            if (c.runtime_limitations != null && c.runtime_limitations.Length > 0)
+            {
+              sb.AppendLine();
+              sb.AppendLine($"LIMITATIONS:");
+              foreach (var limit in c.runtime_limitations)
+              {
+                sb.AppendLine($"  - {limit}");
+              }
             }
 
             sb.AppendLine();

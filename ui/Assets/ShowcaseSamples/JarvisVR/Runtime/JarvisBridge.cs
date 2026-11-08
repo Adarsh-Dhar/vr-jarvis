@@ -38,6 +38,7 @@ namespace JarvisVR
     public int runtime_event_count;
     public bool runtime_truncated;
     public RuntimeEventDto[] runtime_events;
+    public string[] runtime_limitations;
   }
 
   [Serializable] public class SecurityFindingDto
@@ -183,6 +184,8 @@ namespace JarvisVR
     public float duration_ms;
     public long thread_id;     // Use long, not string
     public int depth;
+    public string exception_type;
+    public string exception_id;
   }
 
   [Serializable] internal class RepoSelectRequest { public string name; }
