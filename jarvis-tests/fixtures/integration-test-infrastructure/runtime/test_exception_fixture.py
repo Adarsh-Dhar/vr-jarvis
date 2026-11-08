@@ -6,19 +6,18 @@ and that propagation of one exception doesn't create duplicates.
 """
 
 
-def raise_separate_exceptions():
-    """Raise two separate ValueError instances on the same line."""
-    # First exception
-    try:
-        raise ValueError("First error")
-    except ValueError:
-        pass
+def raise_at_same_line(message):
+    """Helper to raise exceptions on the same source line."""
+    raise ValueError(message)
 
-    # Second exception (same type, same line, different instance)
-    try:
-        raise ValueError("Second error")
-    except ValueError:
-        pass
+
+def test_same_line_exceptions():
+    """Test two different exceptions raised from the same source line."""
+    for message in ["First error", "Second error"]:
+        try:
+            raise_at_same_line(message)
+        except ValueError:
+            pass
 
 
 def propagate_exception():
@@ -39,7 +38,7 @@ def main():
     print("Testing exception deduplication...")
 
     # Test 1: Two separate exceptions on same line
-    raise_separate_exceptions()
+    test_same_line_exceptions()
 
     # Test 2: Exception propagation
     propagate_exception()

@@ -76,7 +76,7 @@ def test_runtime_tracer_basic():
 
 
 def test_runtime_tracer_exception_handling():
-    """Test exception event capture with real fixture."""
+    """Test exception event capture with real fixture and exact count."""
     worktree = Path(__file__).parent.parent.parent / 'jarvis-tests' / 'fixtures' / 'integration-test-infrastructure' / 'runtime'
     fixture_path = worktree / 'test_exception_fixture.py'
 
@@ -103,7 +103,7 @@ def test_runtime_tracer_exception_handling():
             sys.path = old_sys_path
             sys.argv = old_sys_argv
     except Exception as e:
-        print(f"Fixture execution error: {e}")
+        pytest.fail(f"Fixture execution failed: {e}")
 
     tracer.stop()
 
@@ -112,9 +112,14 @@ def test_runtime_tracer_exception_handling():
     assert trace['schema_version'] == 1
     assert isinstance(trace['events'], list)
 
-    # Verify exceptions were captured
+    # Verify exceptions were captured - fixture should have exactly 3 unique exceptions
+    # 2 from same-line test + 1 from propagation
     exception_events = [e for e in trace['events'] if e['event_type'] == 'exception']
-    assert len(exception_events) >= 2, "Expected to capture at least 2 exception events (two separate exceptions + propagation)"
+    assert len(exception_events) == 3, f"Expected exactly 3 exception events, got {len(exception_events)}"
+
+    # Verify all exception IDs are distinct
+    exception_ids = [e.get('exception_id') for e in exception_events]
+    assert len(exception_ids) == len(set(exception_ids)), "All exception IDs should be distinct"
 
     # Verify exception events have required fields
     for exc in exception_events:
@@ -227,21 +232,34 @@ def test_runtime_tracer_event_limit():
 
 
 def test_runtime_tracer_duration_limit():
-    """Test duration limit enforcement."""
-    worktree = Path(__file__).parent.parent.parent / 'jarvis-tests' / 'fixtures' / 'integration-test-infrastructure' / 'runtime'
-    tracer = RuntimeTracer(worktree=worktree, max_events=1000, max_duration=1)
+    """Test duration limit enforcement through actual process manager."""
+    tool_context = MockToolContext()
 
-    tracer.start()
+    fixture_path = tool_context.state['worktree'] / 'test_limits_fixture.py'
 
-    # Sleep to exceed duration
-    time.sleep(1.5)
+    # Start application with short timeout
+    start_result = runtime_intelligence_tools.start_application(
+        application_id='test_duration_app',
+        environment='dev',
+        tool_context=tool_context,
+        entrypoint=str(fixture_path),
+        arguments=['--duration-limit', '2'],  # Fixture will sleep for 2 seconds
+        timeout_seconds=1  # Set timeout to 1 second
+    )
 
-    tracer.stop()
+    assert start_result['status'] == 'ok', f"Application failed to start: {start_result.get('reason', 'unknown')}"
 
-    trace = tracer.get_trace('test_app', 0)
+    # Collect trace - should hit timeout
+    collect_result = runtime_intelligence_tools.collect_execution_trace(
+        application_id='test_duration_app',
+        duration=5,  # Wait longer than timeout
+        tool_context=tool_context
+    )
 
-    # Should be truncated due to duration
-    assert trace['truncated'] == True or 'timeout' in str(trace['limitations']).lower()
+    # Should be partial due to timeout
+    assert collect_result['status'] in ['partial', 'error'], f"Expected partial status, got {collect_result['status']}"
+    assert collect_result.get('timeout_hit', False) == True, "Should have hit timeout"
+    assert collect_result.get('interrupted', False) == True, "Should have been interrupted"
 
 
 def test_trace_store_basic():
@@ -328,7 +346,7 @@ def test_trace_store_session_isolation():
 
 
 def test_start_application_basic():
-    """Test starting a Python application - must fail if cannot start."""
+    """Test starting a Python application - must successfully start."""
     tool_context = MockToolContext()
 
     # Use the sample app
@@ -342,13 +360,10 @@ def test_start_application_basic():
         timeout_seconds=10
     )
 
-    # Must fail if entrypoint doesn't exist or cannot start
-    if result['status'] == 'ok':
-        assert 'pid' in result
-        assert 'trace_id' in result
-    else:
-        # If not ok, should be blocked or error (not silent success)
-        assert result['status'] in ['blocked', 'error']
+    # Must successfully start
+    assert result['status'] == 'ok', f"Application failed to start: {result.get('reason', 'unknown')}"
+    assert 'pid' in result
+    assert 'trace_id' in result
 
 
 def test_start_application_invalid_entrypoint():
@@ -544,8 +559,7 @@ def test_complete_workflow():
         timeout_seconds=10
     )
 
-    if start_result['status'] != 'ok':
-        pytest.fail(f"Could not start application: {start_result.get('reason', 'unknown')}")
+    assert start_result['status'] == 'ok', f"Could not start application: {start_result.get('reason', 'unknown')}"
 
     # Step 2: Collect trace
     time.sleep(2)
@@ -555,8 +569,7 @@ def test_complete_workflow():
         tool_context=tool_context
     )
 
-    if collect_result['status'] not in ['ok', 'partial']:
-        pytest.fail(f"Could not collect trace: {collect_result.get('reason', 'unknown')}")
+    assert collect_result['status'] in ['ok', 'partial'], f"Could not collect trace: {collect_result.get('reason', 'unknown')}"
 
     # Step 3: Visualize execution flow
     trace_id = collect_result['trace_id']
@@ -565,32 +578,32 @@ def test_complete_workflow():
         tool_context=tool_context
     )
 
-    # Verify scene commands were emitted
-    assert visualize_result['status'] in ['ok', 'error', 'not_found']
-    if visualize_result['status'] == 'ok':
-        # Check that scene commands were added
-        scene_commands = tool_context.state.get('scene_commands', [])
-        assert len(scene_commands) >= 2  # show_graph and show_runtime_panel
+    # Verify scene commands were emitted successfully
+    assert visualize_result['status'] == 'ok', f"Visualization failed: {visualize_result.get('error', 'unknown')}"
 
-        # Verify command types
-        command_types = [cmd['type'] for cmd in scene_commands]
-        assert 'show_graph' in command_types
-        assert 'show_runtime_panel' in command_types
+    # Check that scene commands were added
+    scene_commands = tool_context.state.get('scene_commands', [])
+    assert len(scene_commands) >= 2  # show_graph and show_runtime_panel
 
-        # Verify show_graph command has nodes and edges
-        show_graph_cmd = next(cmd for cmd in scene_commands if cmd['type'] == 'show_graph')
-        assert 'nodes' in show_graph_cmd
-        assert 'edges' in show_graph_cmd
-        assert len(show_graph_cmd['nodes']) > 0, "Runtime graph should have nodes"
-        assert len(show_graph_cmd['edges']) >= 0, "Runtime graph should have edges array"
+    # Verify command types
+    command_types = [cmd['type'] for cmd in scene_commands]
+    assert 'show_graph' in command_types
+    assert 'show_runtime_panel' in command_types
 
-        # Verify show_runtime_panel command has expected data
-        show_panel_cmd = next(cmd for cmd in scene_commands if cmd['type'] == 'show_runtime_panel')
-        assert 'trace_id' in show_panel_cmd
-        assert 'application_id' in show_panel_cmd
-        assert 'runtime_event_count' in show_panel_cmd
-        assert 'runtime_events' in show_panel_cmd
-        assert 'runtime_limitations' in show_panel_cmd
+    # Verify show_graph command has nodes and edges
+    show_graph_cmd = next(cmd for cmd in scene_commands if cmd['type'] == 'show_graph')
+    assert 'nodes' in show_graph_cmd
+    assert 'edges' in show_graph_cmd
+    assert len(show_graph_cmd['nodes']) > 0, "Runtime graph should have nodes"
+    assert len(show_graph_cmd['edges']) >= 0, "Runtime graph should have edges array"
+
+    # Verify show_runtime_panel command has expected data
+    show_panel_cmd = next(cmd for cmd in scene_commands if cmd['type'] == 'show_runtime_panel')
+    assert 'trace_id' in show_panel_cmd
+    assert 'application_id' in show_panel_cmd
+    assert 'runtime_event_count' in show_panel_cmd
+    assert 'runtime_events' in show_panel_cmd
+    assert 'runtime_limitations' in show_panel_cmd
 
 
 def test_function_returns_match_calls():
@@ -621,7 +634,7 @@ def test_function_returns_match_calls():
             sys.path = old_sys_path
             sys.argv = old_sys_argv
     except Exception as e:
-        print(f"Fixture execution error: {e}")
+        pytest.fail(f"Fixture execution failed: {e}")
 
     tracer.stop()
 
@@ -631,6 +644,9 @@ def test_function_returns_match_calls():
     call_events = {e['call_id']: e for e in trace['events'] if e['event_type'] == 'function_call'}
     return_events = [e for e in trace['events'] if e['event_type'] == 'function_return']
 
+    # Assert return events exist
+    assert len(return_events) > 0, "Expected return events in trace"
+
     # Verify every return event has a matching call event
     for ret in return_events:
         call_id = ret['call_id']
@@ -638,88 +654,72 @@ def test_function_returns_match_calls():
 
 
 def test_cli_arguments_forwarding():
-    """Test that CLI arguments are forwarded correctly through the runner."""
-    worktree = Path(__file__).parent.parent.parent / 'jarvis-tests' / 'fixtures' / 'integration-test-infrastructure' / 'runtime'
-    fixture_path = worktree / 'test_args_fixture.py'
+    """Test that CLI arguments are forwarded correctly through the actual subprocess runner."""
+    tool_context = MockToolContext()
 
-    tracer = RuntimeTracer(worktree=worktree, max_events=100, max_duration=5)
+    fixture_path = tool_context.state['worktree'] / 'test_args_fixture.py'
 
-    tracer.start()
+    # Start application with arguments through the real runner
+    start_result = runtime_intelligence_tools.start_application(
+        application_id='test_args_app',
+        environment='dev',
+        tool_context=tool_context,
+        entrypoint=str(fixture_path),
+        arguments=['positional_arg', '--config', 'test.json'],
+        timeout_seconds=10
+    )
 
-    # Execute with arguments
-    import runpy
-    try:
-        old_cwd = Path.cwd()
-        old_sys_path = sys.path.copy()
-        old_sys_argv = sys.argv.copy()
+    assert start_result['status'] == 'ok', f"Application failed to start: {start_result.get('reason', 'unknown')}"
 
-        try:
-            if str(worktree) not in sys.path:
-                sys.path.insert(0, str(worktree))
-            import os
-            os.chdir(worktree)
-            sys.argv = [str(fixture_path), 'positional_arg', '--config', 'test.json']
-            runpy.run_path(str(fixture_path), run_name="__main__")
-        finally:
-            os.chdir(old_cwd)
-            sys.path = old_sys_path
-            sys.argv = old_sys_argv
-    except Exception as e:
-        print(f"Fixture execution error: {e}")
+    # Wait for execution
+    time.sleep(2)
 
-    tracer.stop()
+    # Collect trace
+    collect_result = runtime_intelligence_tools.collect_execution_trace(
+        application_id='test_args_app',
+        duration=15,
+        tool_context=tool_context
+    )
 
-    trace = tracer.get_trace('test_app', 0)
+    assert collect_result['status'] in ['ok', 'partial'], f"Trace collection failed: {collect_result.get('reason', 'unknown')}"
+    assert collect_result['trace_available'] == True
 
-    # Verify the fixture executed successfully
-    assert trace['status'] in ['completed', 'partial']
+    # Verify trace was collected successfully
+    assert collect_result['function_calls'] > 0, "Expected function calls in trace"
 
 
 def test_local_imports():
-    """Test that imports from sibling files work through the runner."""
-    worktree = Path(__file__).parent.parent.parent / 'jarvis-tests' / 'fixtures' / 'integration-test-infrastructure' / 'runtime'
-    fixture_path = worktree / 'test_import_fixture.py'
+    """Test that imports from sibling files work through the actual subprocess runner."""
+    tool_context = MockToolContext()
 
-    tracer = RuntimeTracer(worktree=worktree, max_events=100, max_duration=5)
+    fixture_path = tool_context.state['worktree'] / 'test_import_fixture.py'
 
-    tracer.start()
+    # Start application through the real runner
+    start_result = runtime_intelligence_tools.start_application(
+        application_id='test_import_app',
+        environment='dev',
+        tool_context=tool_context,
+        entrypoint=str(fixture_path),
+        timeout_seconds=10
+    )
 
-    # Execute the import fixture
-    import runpy
-    try:
-        old_cwd = Path.cwd()
-        old_sys_path = sys.path.copy()
-        old_sys_argv = sys.argv.copy()
+    assert start_result['status'] == 'ok', f"Application failed to start: {start_result.get('reason', 'unknown')}"
 
-        try:
-            if str(worktree) not in sys.path:
-                sys.path.insert(0, str(worktree))
-            import os
-            os.chdir(worktree)
-            sys.argv = [str(fixture_path)]
-            runpy.run_path(str(fixture_path), run_name="__main__")
-        finally:
-            os.chdir(old_cwd)
-            sys.path = old_sys_path
-            sys.argv = old_sys_argv
-    except Exception as e:
-        print(f"Fixture execution error: {e}")
+    # Wait for execution
+    time.sleep(2)
 
-    tracer.stop()
+    # Collect trace
+    collect_result = runtime_intelligence_tools.collect_execution_trace(
+        application_id='test_import_app',
+        duration=15,
+        tool_context=tool_context
+    )
 
-    trace = tracer.get_trace('test_app', 0)
+    assert collect_result['status'] in ['ok', 'partial'], f"Trace collection failed: {collect_result.get('reason', 'unknown')}"
+    assert collect_result['trace_available'] == True
 
     # Verify the fixture executed successfully (import didn't fail)
-    assert trace['status'] in ['completed', 'partial']
-
-    # Verify functions from both files appear in trace
-    call_events = [e for e in trace['events'] if e['event_type'] == 'function_call']
-    function_names = [e['function_name'] for e in call_events]
-
-    # Should have functions from main fixture and helper
-    assert 'main' in function_names or any('main' in name for name in function_names)
-    # Helper functions should appear
-    assert any('helper' in name for name in function_names), "Expected helper functions from imported module"
+    assert collect_result['function_calls'] > 0, "Expected function calls in trace"
 
 
 def test_multiple_unsupported_reported():

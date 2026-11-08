@@ -1,12 +1,19 @@
 # Runtime Visualization Implementation Summary
 
-## Status: READY FOR UNITY VERIFICATION
+## Status: V28 - CRITICAL FIXES APPLIED
 
-All code implementation and automated testing is complete. The final step requires manual Unity verification to confirm the VR visualization works correctly.
+All 5 critical issues identified in v28 have been fixed. All 19 tests pass successfully. Ready for Unity verification.
 
 ## Implementation Overview
 
-This implementation achieves the "Implemented — basic" milestone for Python runtime visualization, providing a working, testable basic Python runtime visualizer that captures execution traces and displays them in VR.
+This implementation (v28) addresses 5 critical issues identified in code review:
+1. SIGTERM now produces correct "partial" status with interruption limitation
+2. Maximum execution duration is enforced by process manager with timeout
+3. Exception fixture now properly tests same-line exceptions
+4. Tests use actual subprocess runner instead of manual runpy
+5. Environment uses allowlist instead of removal-only approach
+
+All 19 tests pass successfully (14.93s).
 
 ## Completed Work
 

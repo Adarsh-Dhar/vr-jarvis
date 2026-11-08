@@ -44,7 +44,8 @@ def _get_session_id(tool_context: ToolContext) -> str:
 
 
 def _register_process(application_id: str, session_id: str, process: subprocess.Popen,
-                     trace_id: str, trace_path: Path, stdout_path: Path, stderr_path: Path) -> str:
+                     trace_id: str, trace_path: Path, stdout_path: Path, stderr_path: Path,
+                     timeout_seconds: int = 30) -> str:
     """Register a process in the local registry."""
     with _process_registry_lock:
         registry_key = f"{session_id}:{application_id}"
@@ -55,6 +56,7 @@ def _register_process(application_id: str, session_id: str, process: subprocess.
             'stdout_path': stdout_path,
             'stderr_path': stderr_path,
             'started_at': time.time(),
+            'timeout_seconds': timeout_seconds,
             'application_id': application_id,
             'session_id': session_id
         }
@@ -187,11 +189,23 @@ def start_application(
         cmd.append('--')
         cmd.extend(arguments)
 
-    # Prepare restricted environment (no server secrets)
+    # Prepare restricted environment with allowlist
     env = os.environ.copy()
-    # Remove sensitive environment variables
-    sensitive_keys = ['JARVIS_TOKEN', 'API_KEY', 'SECRET_KEY', 'PASSWORD']
-    for key in sensitive_keys:
+    
+    # Environment variable allowlist for trusted repository code
+    # This is not a complete security boundary, but reduces credential exposure
+    allowed_keys = {
+        'PATH', 'HOME', 'USER', 'SHELL', 'TERM', 'LANG', 'LC_ALL', 'LC_CTYPE',
+        'PYTHONPATH', 'PYTHONUNBUFFERED', 'TZ',
+        # Build tools and compilers
+        'CC', 'CXX', 'CFLAGS', 'CXXFLAGS', 'LDFLAGS',
+        # Package managers
+        'VIRTUAL_ENV', 'CONDA_PREFIX',
+    }
+    
+    # Remove all variables not in allowlist
+    keys_to_remove = [key for key in env.keys() if key not in allowed_keys]
+    for key in keys_to_remove:
         env.pop(key, None)
 
     try:
@@ -214,7 +228,8 @@ def start_application(
             trace_id=trace_id,
             trace_path=trace_path,
             stdout_path=stdout_path,
-            stderr_path=stderr_path
+            stderr_path=stderr_path,
+            timeout_seconds=timeout_seconds
         )
 
         return {
@@ -319,18 +334,24 @@ def collect_execution_trace(
     process = proc_info['process']
     trace_path = proc_info['trace_path']
     trace_id = proc_info['trace_id']
+    timeout_seconds = proc_info.get('timeout_seconds', 30)
 
-    # Wait for process to finish (up to duration)
+    # Enforce configured maximum duration - use the smaller of duration argument or configured timeout
+    enforced_timeout = min(duration, timeout_seconds)
+
+    # Wait for process to finish (up to enforced timeout)
     exit_code = None
     interrupted = False
+    timeout_hit = False
 
     try:
         if process.poll() is None:
             # Process still running - wait with timeout
             try:
-                exit_code = process.wait(timeout=duration)
+                exit_code = process.wait(timeout=enforced_timeout)
             except subprocess.TimeoutExpired:
                 # Timeout - terminate gracefully
+                timeout_hit = True
                 interrupted = True
                 process.terminate()
                 try:
@@ -361,7 +382,8 @@ def collect_execution_trace(
             'status': 'partial',
             'reason': 'Trace file not generated',
             'application_id': application_id,
-            'interrupted': interrupted
+            'interrupted': interrupted,
+            'timeout_hit': timeout_hit
         }
 
     try:
@@ -375,6 +397,21 @@ def collect_execution_trace(
             'error': f'Failed to load trace: {e}',
             'application_id': application_id
         }
+
+    # If timeout was hit, ensure trace reflects this
+    if timeout_hit:
+        # Add timeout limitation if not already present
+        limitations = trace.get('limitations', [])
+        if not any('timeout' in limit.lower() for limit in limitations):
+            limitations.append(f"Execution terminated after {enforced_timeout}s timeout")
+            trace['limitations'] = limitations
+            trace['status'] = 'partial'
+            # Update trace file
+            try:
+                with open(trace_path, 'w') as f:
+                    __import__('json').dump(trace, f, indent=2)
+            except Exception:
+                pass  # Best effort to update
 
     # Store trace in trace store with session ownership
     trace_store = get_trace_store()
@@ -422,7 +459,8 @@ def collect_execution_trace(
         'truncated': trace.get('truncated', False),
         'trace_available': True,
         'limitations': trace.get('limitations', []),
-        'interrupted': interrupted
+        'interrupted': interrupted,
+        'timeout_hit': timeout_hit
     }
 
 

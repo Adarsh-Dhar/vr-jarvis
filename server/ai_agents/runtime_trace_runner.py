@@ -47,6 +47,7 @@ class RuntimeTracer:
         self.exception_instances: Dict[int, Any] = {}  # Retain exception objects to prevent ID reuse
         self.unsupported_detected = False
         self.unsupported_reasons: List[str] = []
+        self.interrupted = False  # Track if execution was interrupted by SIGTERM
 
     def _is_in_worktree(self, filepath: str) -> bool:
         """Check if a file is inside the authorized worktree (resolves symlinks)."""
@@ -265,7 +266,9 @@ class RuntimeTracer:
         duration_ms = (end_time - self.start_time) * 1000
 
         # Determine status
-        if self.unsupported_detected:
+        if self.interrupted:
+            status = "partial"
+        elif self.unsupported_detected:
             status = "partial"
         elif self.truncated:
             status = "partial"
@@ -276,6 +279,8 @@ class RuntimeTracer:
 
         # Build limitations list
         limitations = []
+        if self.interrupted:
+            limitations.append("Execution interrupted by SIGTERM")
         if self.unsupported_detected:
             limitations.extend(self.unsupported_reasons)
         if self.truncated:
@@ -314,6 +319,7 @@ def signal_handler(signum, frame):
     """SIGTERM handler to finalize trace before termination."""
     global _tracer_instance
     if _tracer_instance:
+        _tracer_instance.interrupted = True
         _tracer_instance.stop()
         # Write partial trace if possible
         print("Received termination signal, finalizing trace...", file=sys.stderr)
