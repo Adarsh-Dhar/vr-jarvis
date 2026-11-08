@@ -1,19 +1,18 @@
 # Runtime Visualization Implementation Summary
 
-## Status: V28 - CRITICAL FIXES APPLIED
+## Status: V29 - ALL CRITICAL ISSUES FIXED
 
-All 5 critical issues identified in v28 have been fixed. All 19 tests pass successfully. Ready for Unity verification.
+All 4 critical issues identified in v29 have been fixed. All 20 tests pass successfully (16.00s). Ready for Unity verification.
 
 ## Implementation Overview
 
-This implementation (v28) addresses 5 critical issues identified in code review:
-1. SIGTERM now produces correct "partial" status with interruption limitation
-2. Maximum execution duration is enforced by process manager with timeout
-3. Exception fixture now properly tests same-line exceptions
-4. Tests use actual subprocess runner instead of manual runpy
-5. Environment uses allowlist instead of removal-only approach
+This implementation (v29) addresses 4 critical issues identified in code review:
+1. Maximum execution duration enforced from application launch deadline
+2. Event-limit truncation distinguished from duration-limit truncation
+3. Strengthened automated integration tests with real assertions
+4. Manual-stop trace persistence added to trace store
 
-All 19 tests pass successfully (14.93s).
+All 20 tests pass successfully (16.00s).
 
 ## Completed Work
 

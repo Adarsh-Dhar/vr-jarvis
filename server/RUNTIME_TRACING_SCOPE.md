@@ -1,6 +1,6 @@
 # Runtime Tracing - Supported Scope
 
-## Basic Implementation (v28)
+## Basic Implementation (v29)
 
 The runtime tracing feature provides a **basic Python execution visualizer** for synchronous code within the authorized worktree. This is not a full debugger or production-grade profiler.
 

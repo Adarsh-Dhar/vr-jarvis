@@ -273,6 +273,8 @@ def stop_application(application_id: str, tool_context: ToolContext) -> dict:
         }
 
     process = proc_info['process']
+    trace_path = proc_info['trace_path']
+    trace_id = proc_info['trace_id']
 
     try:
         if process.poll() is None:
@@ -287,12 +289,37 @@ def stop_application(application_id: str, tool_context: ToolContext) -> dict:
                 except ProcessLookupError:
                     pass
 
+        # Save trace file to trace store if it exists
+        if trace_path.exists():
+            try:
+                with open(trace_path, 'r') as f:
+                    trace_data = f.read()
+                    trace = __import__('json').loads(trace_data)
+                
+                trace_store = get_trace_store()
+                save_success = trace_store.save_trace(trace_id, session_id, trace)
+                
+                if not save_success:
+                    return {
+                        'status': 'error',
+                        'error': 'Failed to save trace (exceeds size limit)',
+                        'application_id': application_id
+                    }
+            except Exception as e:
+                # Trace save failed but process is stopped - return warning
+                return {
+                    'status': 'partial',
+                    'warning': f'Process stopped but trace save failed: {e}',
+                    'application_id': application_id
+                }
+
         # Unregister process
         _unregister_process(application_id, session_id)
 
         return {
             'status': 'ok',
             'application_id': application_id,
+            'trace_id': trace_id if trace_path.exists() else None,
             'stopped': True
         }
 
@@ -335,11 +362,16 @@ def collect_execution_trace(
     trace_path = proc_info['trace_path']
     trace_id = proc_info['trace_id']
     timeout_seconds = proc_info.get('timeout_seconds', 30)
+    started_at = proc_info.get('started_at', time.time())
 
-    # Enforce configured maximum duration - use the smaller of duration argument or configured timeout
-    enforced_timeout = min(duration, timeout_seconds)
+    # Calculate remaining time from configured deadline
+    elapsed_since_start = time.time() - started_at
+    remaining_time = max(0, timeout_seconds - elapsed_since_start)
 
-    # Wait for process to finish (up to enforced timeout)
+    # Enforce actual deadline from application launch
+    enforced_timeout = min(duration, remaining_time)
+
+    # Wait for process to finish (up to enforced deadline)
     exit_code = None
     interrupted = False
     timeout_hit = False
@@ -403,7 +435,7 @@ def collect_execution_trace(
         # Add timeout limitation if not already present
         limitations = trace.get('limitations', [])
         if not any('timeout' in limit.lower() for limit in limitations):
-            limitations.append(f"Execution terminated after {enforced_timeout}s timeout")
+            limitations.append(f"Execution terminated after {timeout_seconds}s timeout")
             trace['limitations'] = limitations
             trace['status'] = 'partial'
             # Update trace file

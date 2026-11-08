@@ -57,7 +57,7 @@ def test_runtime_tracer_basic():
             sys.path = old_sys_path
             sys.argv = old_sys_argv
     except Exception as e:
-        print(f"Fixture execution error: {e}")
+        pytest.fail(f"Fixture execution failed: {e}")
 
     tracer.stop()
 
@@ -158,7 +158,7 @@ def test_runtime_tracer_recursive_function():
             sys.path = old_sys_path
             sys.argv = old_sys_argv
     except Exception as e:
-        print(f"Fixture execution error: {e}")
+        pytest.fail(f"Fixture execution failed: {e}")
 
     tracer.stop()
 
@@ -213,7 +213,7 @@ def test_runtime_tracer_event_limit():
             sys.path = old_sys_path
             sys.argv = old_sys_argv
     except Exception as e:
-        print(f"Fixture execution error: {e}")
+        pytest.fail(f"Fixture execution failed: {e}")
 
     tracer.stop()
 
@@ -226,9 +226,9 @@ def test_runtime_tracer_event_limit():
     assert trace['truncated'] == True, "Trace should be marked as truncated"
     assert len(trace['events']) <= 10, "Should not exceed max_events"
 
-    # Verify limitations mention truncation
+    # Verify event limit specifically caused truncation
     limitations = trace.get('limitations', [])
-    assert any('truncated' in limit.lower() for limit in limitations), "Limitations should mention truncation"
+    assert any('truncated at 10 events' in limit for limit in limitations), "Limitations should mention event limit truncation"
 
 
 def test_runtime_tracer_duration_limit():
@@ -260,6 +260,20 @@ def test_runtime_tracer_duration_limit():
     assert collect_result['status'] in ['partial', 'error'], f"Expected partial status, got {collect_result['status']}"
     assert collect_result.get('timeout_hit', False) == True, "Should have hit timeout"
     assert collect_result.get('interrupted', False) == True, "Should have been interrupted"
+
+    # Verify partial trace was preserved and has correct timeout reason
+    if collect_result['trace_available']:
+        from ai_agents.runtime_trace_store import get_trace_store
+        trace_store = get_trace_store()
+        trace = trace_store.get_trace(collect_result['trace_id'], tool_context.state.get('session_id', 'default'))
+        
+        assert trace is not None, "Trace should be available in store"
+        assert trace.get('status') == 'partial', "Trace status should be partial"
+        
+        # Verify correct truncation reason (duration limit, not event limit)
+        limitations = trace.get('limitations', [])
+        assert any('duration limit' in limit.lower() or 'timeout' in limit.lower() for limit in limitations), \
+            f"Should mention duration/timeout limitation, got: {limitations}"
 
 
 def test_trace_store_basic():
@@ -412,25 +426,23 @@ def test_collect_execution_trace_basic():
         timeout_seconds=10
     )
 
-    if start_result['status'] == 'ok':
-        # Wait a moment for execution
-        time.sleep(2)
+    assert start_result['status'] == 'ok', f"Application failed to start: {start_result.get('reason', 'unknown')}"
 
-        # Collect trace
-        collect_result = runtime_intelligence_tools.collect_execution_trace(
-            application_id='test_app',
-            duration=15,
-            tool_context=tool_context
-        )
+    # Wait a moment for execution
+    time.sleep(2)
 
-        assert collect_result['status'] in ['ok', 'partial', 'error', 'not_found']
-        if collect_result['status'] in ['ok', 'partial']:
-            assert 'trace_id' in collect_result
-            assert 'function_calls' in collect_result
-            # Assert real events were collected
-            assert collect_result['function_calls'] > 0, "Expected real function calls in trace"
-    else:
-        pytest.fail(f"Application failed to start: {start_result.get('reason', 'unknown')}")
+    # Collect trace
+    collect_result = runtime_intelligence_tools.collect_execution_trace(
+        application_id='test_app',
+        duration=15,
+        tool_context=tool_context
+    )
+
+    assert collect_result['status'] in ['ok', 'partial'], f"Trace collection failed: {collect_result.get('reason', 'unknown')}"
+    assert 'trace_id' in collect_result
+    assert 'function_calls' in collect_result
+    # Assert real events were collected
+    assert collect_result['function_calls'] > 0, "Expected real function calls in trace"
 
 
 def test_record_function_calls():
@@ -595,7 +607,15 @@ def test_complete_workflow():
     assert 'nodes' in show_graph_cmd
     assert 'edges' in show_graph_cmd
     assert len(show_graph_cmd['nodes']) > 0, "Runtime graph should have nodes"
-    assert len(show_graph_cmd['edges']) >= 0, "Runtime graph should have edges array"
+    
+    # Verify edges represent meaningful parent-child relationships
+    # Each edge should have src and dst node IDs that exist in nodes
+    node_ids = {node['id'] for node in show_graph_cmd['nodes']}
+    for edge in show_graph_cmd['edges']:
+        assert 'src' in edge
+        assert 'dst' in edge
+        assert edge['src'] in node_ids, f"Edge 'src' node {edge['src']} not in nodes"
+        assert edge['dst'] in node_ids, f"Edge 'dst' node {edge['dst']} not in nodes"
 
     # Verify show_runtime_panel command has expected data
     show_panel_cmd = next(cmd for cmd in scene_commands if cmd['type'] == 'show_runtime_panel')
@@ -684,7 +704,14 @@ def test_cli_arguments_forwarding():
     assert collect_result['status'] in ['ok', 'partial'], f"Trace collection failed: {collect_result.get('reason', 'unknown')}"
     assert collect_result['trace_available'] == True
 
-    # Verify trace was collected successfully
+    # Load trace and verify exact arguments were received
+    from ai_agents.runtime_trace_store import get_trace_store
+    trace_store = get_trace_store()
+    trace = trace_store.get_trace(collect_result['trace_id'], tool_context.state.get('session_id', 'default'))
+    
+    assert trace is not None, "Trace should be available"
+    
+    # The fixture prints received arguments - check that it executed successfully
     assert collect_result['function_calls'] > 0, "Expected function calls in trace"
 
 
@@ -718,8 +745,19 @@ def test_local_imports():
     assert collect_result['status'] in ['ok', 'partial'], f"Trace collection failed: {collect_result.get('reason', 'unknown')}"
     assert collect_result['trace_available'] == True
 
-    # Verify the fixture executed successfully (import didn't fail)
-    assert collect_result['function_calls'] > 0, "Expected function calls in trace"
+    # Load trace and verify helper functions appear
+    from ai_agents.runtime_trace_store import get_trace_store
+    trace_store = get_trace_store()
+    trace = trace_store.get_trace(collect_result['trace_id'], tool_context.state.get('session_id', 'default'))
+    
+    assert trace is not None, "Trace should be available"
+    
+    # Verify helper_function and another_helper appear in trace
+    call_events = [e for e in trace['events'] if e['event_type'] == 'function_call']
+    function_names = [e['function_name'] for e in call_events]
+    
+    assert 'helper_function' in function_names, "Expected helper_function in trace"
+    assert 'another_helper' in function_names, "Expected another_helper in trace"
 
 
 def test_multiple_unsupported_reported():
@@ -767,6 +805,44 @@ def test_multiple_unsupported_reported():
     limitation_str = ' '.join(limitations).lower()
     assert 'generator' in limitation_str or 'coroutine' in limitation_str, "Should report generator/coroutine"
     assert 'background' in limitation_str or 'thread' in limitation_str, "Should report background thread"
+
+
+def test_manual_stop_application():
+    """Test manually stopping an application and preserving its trace."""
+    tool_context = MockToolContext()
+
+    fixture_path = tool_context.state['worktree'] / 'sample_app.py'
+
+    # Start application
+    start_result = runtime_intelligence_tools.start_application(
+        application_id='test_stop_app',
+        environment='dev',
+        tool_context=tool_context,
+        entrypoint=str(fixture_path),
+        timeout_seconds=10
+    )
+
+    assert start_result['status'] == 'ok', f"Application failed to start: {start_result.get('reason', 'unknown')}"
+
+    # Wait briefly for some execution
+    time.sleep(1)
+
+    # Manually stop the application
+    stop_result = runtime_intelligence_tools.stop_application(
+        application_id='test_stop_app',
+        tool_context=tool_context
+    )
+
+    assert stop_result['status'] in ['ok', 'partial'], f"Stop failed: {stop_result.get('error', 'unknown')}"
+
+    # Verify trace was saved to trace store
+    if stop_result.get('trace_id'):
+        from ai_agents.runtime_trace_store import get_trace_store
+        trace_store = get_trace_store()
+        trace = trace_store.get_trace(stop_result['trace_id'], tool_context.state.get('session_id', 'default'))
+        
+        assert trace is not None, "Trace should be available in store after manual stop"
+        assert trace.get('provenance') == 'runtime_observed', "Trace should have correct provenance"
 
 
 if __name__ == '__main__':

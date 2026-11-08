@@ -48,6 +48,8 @@ class RuntimeTracer:
         self.unsupported_detected = False
         self.unsupported_reasons: List[str] = []
         self.interrupted = False  # Track if execution was interrupted by SIGTERM
+        self.event_limit_reached = False  # Track if event limit was the cause of truncation
+        self.duration_limit_reached = False  # Track if duration limit was the cause of truncation
 
     def _is_in_worktree(self, filepath: str) -> bool:
         """Check if a file is inside the authorized worktree (resolves symlinks)."""
@@ -76,6 +78,7 @@ class RuntimeTracer:
         # Check if we've hit the event limit
         if len(self.events) >= self.max_events:
             self.truncated = True
+            self.event_limit_reached = True
             return False
 
         # Exclude the runner file itself
@@ -116,6 +119,7 @@ class RuntimeTracer:
             # Check duration limit
             if time.time() - self.start_time > self.max_duration:
                 self.truncated = True
+                self.duration_limit_reached = True
                 return
 
             filepath = frame.f_code.co_filename
@@ -277,15 +281,17 @@ class RuntimeTracer:
         else:
             status = "completed"
 
-        # Build limitations list
+        # Build limitations list with correct reasons
         limitations = []
         if self.interrupted:
             limitations.append("Execution interrupted by SIGTERM")
         if self.unsupported_detected:
             limitations.extend(self.unsupported_reasons)
-        if self.truncated:
+        if self.event_limit_reached:
             limitations.append(f"Trace truncated at {self.max_events} events")
-        if duration_ms / 1000 > self.max_duration * 0.9:
+        if self.duration_limit_reached:
+            limitations.append(f"Execution terminated after {self.max_duration}s duration limit")
+        if duration_ms / 1000 > self.max_duration * 0.9 and not self.duration_limit_reached:
             limitations.append(f"Execution near {self.max_duration}s timeout limit")
 
         return {
