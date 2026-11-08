@@ -177,11 +177,14 @@ def start_application(
         '--trace-out', str(trace_path),
         '--max-events', '5000',
         '--max-duration', str(timeout_seconds),
-        '--worktree', str(worktree_path)
+        '--worktree', str(worktree_path),
+        '--trace-id', trace_id,
+        '--application-id', application_id
     ]
 
-    # Add arguments if provided
+    # Add application arguments after -- separator
     if arguments:
+        cmd.append('--')
         cmd.extend(arguments)
 
     # Prepare restricted environment (no server secrets)
@@ -375,7 +378,18 @@ def collect_execution_trace(
 
     # Store trace in trace store with session ownership
     trace_store = get_trace_store()
-    trace_store.save_trace(trace_id, session_id, trace)
+    save_success = trace_store.save_trace(trace_id, session_id, trace)
+
+    if not save_success:
+        _unregister_process(application_id, session_id)
+        return {
+            'status': 'error',
+            'error': 'Failed to save trace (exceeds size limit)',
+            'application_id': application_id
+        }
+
+    # Save trace ID in session state for recording tools
+    tool_context.state['runtime_trace_id'] = trace_id
 
     # Unregister process
     _unregister_process(application_id, session_id)
@@ -446,23 +460,26 @@ def record_function_calls(
 ) -> dict:
     """Record observed function calls from trace."""
     session_id = _get_session_id(tool_context)
+
+    # First try to get from process registry (for active applications)
     proc_info = _get_process(application_id, session_id)
 
-    if not proc_info:
-        return {
-            'status': 'not_found',
-            'reason': 'Application not found in process registry',
-            'application_id': application_id
-        }
-
-    trace_id = proc_info['trace_id']
-    trace_store = get_trace_store()
-    trace = trace_store.get_trace(trace_id, session_id)
+    trace = None
+    if proc_info:
+        trace_id = proc_info['trace_id']
+        trace_store = get_trace_store()
+        trace = trace_store.get_trace(trace_id, session_id)
+    else:
+        # If not in process registry, try to get trace ID from session state
+        trace_id = tool_context.state.get('runtime_trace_id')
+        if trace_id:
+            trace_store = get_trace_store()
+            trace = trace_store.get_trace(trace_id, session_id)
 
     if not trace:
         return {
             'status': 'not_found',
-            'reason': 'Trace not found',
+            'reason': 'Trace not found for application',
             'application_id': application_id
         }
 
@@ -482,7 +499,7 @@ def record_function_calls(
     return {
         'status': 'ok',
         'application_id': application_id,
-        'trace_id': trace_id,
+        'trace_id': trace.get('trace_id'),
         'function_calls': call_events,
         'total_calls': len(call_events)
     }
@@ -525,23 +542,26 @@ def record_execution_timing(
 ) -> dict:
     """Record measured execution duration per call."""
     session_id = _get_session_id(tool_context)
+
+    # First try to get from process registry (for active applications)
     proc_info = _get_process(application_id, session_id)
 
-    if not proc_info:
-        return {
-            'status': 'not_found',
-            'reason': 'Application not found in process registry',
-            'application_id': application_id
-        }
-
-    trace_id = proc_info['trace_id']
-    trace_store = get_trace_store()
-    trace = trace_store.get_trace(trace_id, session_id)
+    trace = None
+    if proc_info:
+        trace_id = proc_info['trace_id']
+        trace_store = get_trace_store()
+        trace = trace_store.get_trace(trace_id, session_id)
+    else:
+        # If not in process registry, try to get trace ID from session state
+        trace_id = tool_context.state.get('runtime_trace_id')
+        if trace_id:
+            trace_store = get_trace_store()
+            trace = trace_store.get_trace(trace_id, session_id)
 
     if not trace:
         return {
             'status': 'not_found',
-            'reason': 'Trace not found',
+            'reason': 'Trace not found for application',
             'application_id': application_id
         }
 
@@ -565,7 +585,7 @@ def record_execution_timing(
     return {
         'status': 'ok',
         'application_id': application_id,
-        'trace_id': trace_id,
+        'trace_id': trace.get('trace_id'),
         'timing_data': timing_data,
         'total_calls': len(timing_data)
     }

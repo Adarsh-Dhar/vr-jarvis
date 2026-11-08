@@ -1346,6 +1346,9 @@ namespace JarvisVR
             sb.AppendLine($"RUNTIME EXECUTION");
 
             // Display application and trace details
+            if (!string.IsNullOrEmpty(c.application_id))
+              sb.AppendLine($"Application: {c.application_id}");
+
             if (!string.IsNullOrEmpty(c.trace_id))
               sb.AppendLine($"Trace ID: {c.trace_id.Substring(0, 8)}...");
 

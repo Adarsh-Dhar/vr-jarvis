@@ -37,6 +37,7 @@ class RuntimeTracer:
         self.max_duration = max_duration
         self.events: List[Dict[str, Any]] = []
         self.call_stacks: Dict[int, List[str]] = defaultdict(list)  # thread_id -> call_id stack
+        self.frame_call_ids: Dict[int, str] = {}  # frame object id -> call_id mapping
         self.call_counter = 0
         self.start_time_ns = time.perf_counter_ns()
         self.start_time = time.time()
@@ -49,15 +50,24 @@ class RuntimeTracer:
 
     def _is_in_worktree(self, filepath: str) -> bool:
         """Check if a file is inside the authorized worktree (resolves symlinks)."""
+        if not filepath:
+            return False
+
+        # Reject pseudo-files (like <frozen runpy>, <string>, etc.)
+        if filepath.startswith("<") and filepath.endswith(">"):
+            return False
+
         try:
-            abs_path = Path(filepath).resolve()
-            # Check if the path is inside the worktree
-            try:
-                abs_path.relative_to(self.worktree)
-                return True
-            except ValueError:
+            path = Path(filepath).resolve()
+
+            # Reject if not a regular file
+            if not path.is_file():
                 return False
-        except Exception:
+
+            # Check if the path is inside the worktree
+            path.relative_to(self.worktree)
+            return True
+        except (ValueError, OSError):
             return False
 
     def _should_record(self, filepath: str) -> bool:
@@ -65,6 +75,10 @@ class RuntimeTracer:
         # Check if we've hit the event limit
         if len(self.events) >= self.max_events:
             self.truncated = True
+            return False
+
+        # Exclude the runner file itself
+        if 'runtime_trace_runner.py' in filepath:
             return False
 
         # Only record files inside the worktree
@@ -131,6 +145,9 @@ class RuntimeTracer:
                 self.call_counter += 1
                 call_id = f"call_{self.call_counter:06d}"
 
+                # Map frame object to call ID for return handling
+                self.frame_call_ids[id(frame)] = call_id
+
                 # Get parent call ID from stack (using frame identity)
                 parent_call_id = self.call_stacks[thread_id][-1] if self.call_stacks[thread_id] else None
 
@@ -155,11 +172,14 @@ class RuntimeTracer:
                 self.events.append(event_data)
 
             elif event == 'return':
-                # Pop from stack
-                if self.call_stacks[thread_id]:
-                    call_id = self.call_stacks[thread_id].pop()
+                # Use frame identity to get the original call ID
+                call_id = self.frame_call_ids.pop(id(frame), None)
 
                 if call_id:
+                    # Remove from call stack if present
+                    if self.call_stacks[thread_id] and self.call_stacks[thread_id][-1] == call_id:
+                        self.call_stacks[thread_id].pop()
+
                     # Calculate duration (wall-clock time, not CPU time)
                     current_ns = time.perf_counter_ns() - self.start_time_ns
                     current_ms = current_ns / 1_000_000.0
@@ -229,11 +249,14 @@ class RuntimeTracer:
         sys.setprofile(self._profile_callback)
         # Also set trace for exception events (line events disabled in callback)
         sys.settrace(self._trace_callback)
+        # Install thread profiler to detect worker threads
+        threading.setprofile(self._profile_callback)
 
     def stop(self):
         """Stop profiling."""
         sys.setprofile(None)
         sys.settrace(None)
+        threading.setprofile(None)
 
     def get_trace(self, application_id: str, exit_code: int) -> Dict[str, Any]:
         """Generate the final trace structure."""
@@ -306,12 +329,16 @@ def main():
     parser.add_argument("--max-events", type=int, default=5000, help="Maximum events to record")
     parser.add_argument("--max-duration", type=int, default=30, help="Maximum execution duration in seconds")
     parser.add_argument("--worktree", required=True, help="Authorized worktree path")
+    parser.add_argument("--trace-id", required=True, help="Trace ID to use")
+    parser.add_argument("--application-id", required=True, help="Application ID to use")
 
     args = parser.parse_args()
 
     target_path = Path(args.target).resolve()
     trace_out_path = Path(args.trace_out).resolve()
     worktree = Path(args.worktree).resolve()
+    trace_id = args.trace_id
+    application_id = args.application_id
 
     # Validate inputs (resolve symlinks)
     if not target_path.exists():
@@ -367,9 +394,10 @@ def main():
         # Stop profiling
         tracer.stop()
 
-    # Generate trace
-    application_id = target_path.stem
+    # Generate trace with provided IDs
     trace = tracer.get_trace(application_id, exit_code)
+    # Override the trace_id with the provided one
+    trace['trace_id'] = trace_id
 
     # Write trace atomically
     trace_out_path.parent.mkdir(parents=True, exist_ok=True)

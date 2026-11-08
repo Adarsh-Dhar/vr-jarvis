@@ -32,6 +32,7 @@ namespace JarvisVR
     public GitCommitDto[] commits;
     // Runtime panel fields
     public string trace_id;
+    public string application_id;
     public string runtime_status;
     public float runtime_duration_ms;
     public int runtime_event_count;

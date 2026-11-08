@@ -1207,21 +1207,19 @@ def visualize_execution_flow(
             edges=runtime_edges
         )
 
-        # Emit show_runtime_panel command
+        # Emit show_runtime_panel command with correct field names matching C# SceneCommand
+        events = trace.get('events', [])
+
         _emit_command(
             tool_context,
             'show_runtime_panel',
             trace_id=trace_id,
-            summary={
-                'application_id': trace.get('application_id'),
-                'status': trace.get('status'),
-                'duration_ms': trace.get('duration_ms'),
-                'function_calls': trace.get('statistics', {}).get('function_calls', 0),
-                'exceptions': trace.get('statistics', {}).get('exceptions', 0),
-                'truncated': trace.get('truncated', False),
-                'limitations': trace.get('limitations', [])
-            },
-            events=trace.get('events', [])[:30]  # First 30 events for panel
+            application_id=trace.get('application_id', 'unknown'),
+            runtime_status=trace.get('status', 'unknown'),
+            runtime_duration_ms=float(trace.get('duration_ms', 0)),
+            runtime_event_count=len(events),
+            runtime_truncated=bool(trace.get('truncated', False)),
+            runtime_events=events[:30]  # First 30 events for panel
         )
 
         return {
