@@ -59,7 +59,9 @@ def _register_process(application_id: str, session_id: str, process: subprocess.
             'started_at': time.time(),
             'timeout_seconds': timeout_seconds,
             'application_id': application_id,
-            'session_id': session_id
+            'session_id': session_id,
+            'termination_reason': None,  # Will be set to 'timeout', 'manual', or None
+            'watchdog_cancelled': False
         }
         return registry_key
 
@@ -76,6 +78,8 @@ def _unregister_process(application_id: str, session_id: str):
     with _process_registry_lock:
         registry_key = f"{session_id}:{application_id}"
         if registry_key in _process_registry:
+            # Cancel watchdog before unregistering
+            _process_registry[registry_key]['watchdog_cancelled'] = True
             del _process_registry[registry_key]
         # Stop watchdog thread if exists
         watchdog_key = f"{session_id}:{application_id}"
@@ -84,11 +88,14 @@ def _unregister_process(application_id: str, session_id: str):
             del _watchdog_threads[watchdog_key]
 
 
-def _process_watchdog(application_id: str, session_id: str, timeout_seconds: int):
+def _process_watchdog(application_id: str, session_id: str, timeout_seconds: int, process: subprocess.Popen, trace_id: str):
     """
     Independent watchdog thread that enforces timeout from application launch.
     This runs independently of trace collection and will terminate the process
     if it exceeds the configured maximum duration.
+    
+    Uses process reference and trace_id to ensure it only terminates its own process,
+    preventing old watchdogs from affecting newer applications with the same ID.
     """
     watchdog_key = f"{session_id}:{application_id}"
     
@@ -102,11 +109,19 @@ def _process_watchdog(application_id: str, session_id: str, timeout_seconds: int
             # Process was already unregistered (completed or stopped)
             return
         
-        process = proc_info['process']
+        # Verify this is still the same process (prevent old watchdog from terminating new process)
+        if proc_info['process'] is not process or proc_info['trace_id'] != trace_id:
+            # This is a different process with the same application_id
+            return
+        
+        # Check if watchdog was cancelled
+        if proc_info.get('watchdog_cancelled', False):
+            return
         
         # Check if process is still running
         if process.poll() is None:
-            # Process exceeded timeout - terminate it
+            # Process exceeded timeout - terminate it and record reason
+            proc_info['termination_reason'] = 'timeout'
             try:
                 process.terminate()
                 # Give grace period for trace finalization
@@ -279,7 +294,7 @@ def start_application(
         watchdog_key = f"{session_id}:{application_id}"
         watchdog_thread = threading.Thread(
             target=_process_watchdog,
-            args=(application_id, session_id, timeout_seconds),
+            args=(application_id, session_id, timeout_seconds, process, trace_id),
             daemon=True
         )
         watchdog_thread.start()
@@ -417,6 +432,7 @@ def collect_execution_trace(
     trace_id = proc_info['trace_id']
     timeout_seconds = proc_info.get('timeout_seconds', 30)
     started_at = proc_info.get('started_at', time.time())
+    termination_reason = proc_info.get('termination_reason')
 
     # Calculate remaining time from configured deadline
     elapsed_since_start = time.time() - started_at
@@ -430,34 +446,40 @@ def collect_execution_trace(
     interrupted = False
     timeout_hit = False
 
-    try:
-        if process.poll() is None:
-            # Process still running - wait with timeout
-            try:
-                exit_code = process.wait(timeout=enforced_timeout)
-            except subprocess.TimeoutExpired:
-                # Timeout - terminate gracefully
-                timeout_hit = True
-                interrupted = True
-                process.terminate()
+    # If watchdog already terminated the process, check the reason
+    if termination_reason == 'timeout':
+        timeout_hit = True
+        interrupted = True
+        exit_code = process.poll() if process.poll() is not None else None
+    else:
+        try:
+            if process.poll() is None:
+                # Process still running - wait with timeout
                 try:
-                    process.wait(timeout=5)  # Grace period for trace finalization
+                    exit_code = process.wait(timeout=enforced_timeout)
                 except subprocess.TimeoutExpired:
-                    # Didn't stop - kill process group
+                    # Timeout - terminate gracefully
+                    timeout_hit = True
+                    interrupted = True
+                    process.terminate()
                     try:
-                        os.killpg(os.getpgid(process.pid), signal.SIGKILL)
-                    except ProcessLookupError:
-                        pass
-                exit_code = None  # Indicate interrupted
-        else:
-            exit_code = process.poll()
+                        process.wait(timeout=5)  # Grace period for trace finalization
+                    except subprocess.TimeoutExpired:
+                        # Didn't stop - kill process group
+                        try:
+                            os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+                        except ProcessLookupError:
+                            pass
+                    exit_code = None  # Indicate interrupted
+            else:
+                exit_code = process.poll()
 
-    except Exception as e:
-        return {
-            'status': 'error',
-            'error': str(e),
-            'application_id': application_id
-        }
+        except Exception as e:
+            return {
+                'status': 'error',
+                'error': str(e),
+                'application_id': application_id
+            }
 
     # Load trace file
     if not trace_path.exists():
@@ -489,16 +511,25 @@ def collect_execution_trace(
     if timeout_hit:
         # Add timeout limitation if not already present
         limitations = trace.get('limitations', [])
-        if not any('timeout' in limit.lower() for limit in limitations):
-            limitations.append(f"Execution terminated after {timeout_seconds}s timeout")
-            trace['limitations'] = limitations
-            trace['status'] = 'partial'
-            # Update trace file
-            try:
-                with open(trace_path, 'w') as f:
-                    __import__('json').dump(trace, f, indent=2)
-            except Exception:
-                pass  # Best effort to update
+        
+        # Remove any SIGTERM interruption message if this was an automatic timeout
+        # The watchdog terminates with SIGTERM, but we want to classify it as duration_limit
+        limitations = [lim for lim in limitations if 'SIGTERM' not in lim and 'interrupted' not in lim.lower()]
+        
+        # Add timeout limitation if not already present
+        if not any('timeout' in limit.lower() or 'duration limit' in limit.lower() for limit in limitations):
+            limitations.append(f"Execution terminated after {timeout_seconds}s duration limit")
+        
+        # Always update the trace with modified limitations
+        trace['limitations'] = limitations
+        trace['status'] = 'partial'
+        
+        # Update trace file
+        try:
+            with open(trace_path, 'w') as f:
+                __import__('json').dump(trace, f, indent=2)
+        except Exception:
+            pass  # Best effort to update
 
     # Store trace in trace store with session ownership
     trace_store = get_trace_store()

@@ -1,0 +1,88 @@
+{
+  "schema_version": 1,
+  "trace_id": "0fcdd442-da7c-4ce7-8386-5375afe46ed6",
+  "application_id": "test_reuse_app",
+  "language": "python",
+  "provenance": "runtime_observed",
+  "status": "completed",
+  "started_at": "2026-11-08T11:08:41",
+  "ended_at": "2026-11-08T11:08:44",
+  "duration_ms": 3031.019926071167,
+  "exit_code": 0,
+  "events": [
+    {
+      "event_type": "function_call",
+      "call_id": "call_000001",
+      "parent_call_id": null,
+      "function_name": "<module>",
+      "qualified_name": "<module>",
+      "file": "/Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/integration-test-infrastructure/runtime/test_limits_fixture.py",
+      "line": 0,
+      "timestamp_ns": 23607833,
+      "elapsed_ms": 23.608375,
+      "duration_ms": 3007.1908750000002,
+      "thread_id": 8667955072,
+      "depth": 0
+    },
+    {
+      "event_type": "function_call",
+      "call_id": "call_000002",
+      "parent_call_id": "call_000001",
+      "function_name": "main",
+      "qualified_name": "main",
+      "file": "/Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/integration-test-infrastructure/runtime/test_limits_fixture.py",
+      "line": 29,
+      "timestamp_ns": 23686791,
+      "elapsed_ms": 23.687166,
+      "duration_ms": 3006.996875,
+      "thread_id": 8667955072,
+      "depth": 1
+    },
+    {
+      "event_type": "function_call",
+      "call_id": "call_000003",
+      "parent_call_id": "call_000002",
+      "function_name": "long_running_task",
+      "qualified_name": "long_running_task",
+      "file": "/Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/integration-test-infrastructure/runtime/test_limits_fixture.py",
+      "line": 22,
+      "timestamp_ns": 24123541,
+      "elapsed_ms": 24.123833,
+      "duration_ms": 3006.419125,
+      "thread_id": 8667955072,
+      "depth": 2
+    },
+    {
+      "event_type": "function_return",
+      "call_id": "call_000003",
+      "timestamp_ns": 3030542958,
+      "elapsed_ms": 3030.542958,
+      "duration_ms": 3006.419125,
+      "thread_id": 8667955072
+    },
+    {
+      "event_type": "function_return",
+      "call_id": "call_000002",
+      "timestamp_ns": 3030684041,
+      "elapsed_ms": 3030.684041,
+      "duration_ms": 3006.996875,
+      "thread_id": 8667955072
+    },
+    {
+      "event_type": "function_return",
+      "call_id": "call_000001",
+      "timestamp_ns": 3030799250,
+      "elapsed_ms": 3030.79925,
+      "duration_ms": 3007.1908750000002,
+      "thread_id": 8667955072
+    }
+  ],
+  "truncated": false,
+  "limitations": [],
+  "statistics": {
+    "function_calls": 3,
+    "function_returns": 3,
+    "exceptions": 0,
+    "total_events": 6
+  }
+}

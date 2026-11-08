@@ -862,5 +862,200 @@ def test_manual_stop_application():
     assert trace.get('status') == 'partial', "Trace should be partial after manual stop"
 
 
+def test_watchdog_automatic_timeout():
+    """Test that watchdog automatically terminates application after timeout without trace collection."""
+    tool_context = MockToolContext()
+
+    fixture_path = tool_context.state['worktree'] / 'test_limits_fixture.py'
+
+    # Start application with very short timeout
+    start_result = runtime_intelligence_tools.start_application(
+        application_id='test_watchdog_timeout',
+        environment='dev',
+        tool_context=tool_context,
+        entrypoint=str(fixture_path),
+        arguments=['--duration-limit', '5'],  # Fixture will sleep for 5 seconds
+        timeout_seconds=1  # Watchdog should terminate after 1 second
+    )
+
+    assert start_result['status'] == 'ok', f"Application failed to start: {start_result.get('reason', 'unknown')}"
+
+    # Wait for watchdog to terminate the process (timeout + grace period)
+    time.sleep(3)
+
+    # Now collect trace - should show timeout termination, not manual interruption
+    collect_result = runtime_intelligence_tools.collect_execution_trace(
+        application_id='test_watchdog_timeout',
+        duration=5,
+        tool_context=tool_context
+    )
+
+    assert collect_result['status'] == 'partial', f"Expected partial status, got {collect_result['status']}"
+    assert collect_result.get('timeout_hit', False) == True, "Should have hit timeout"
+    assert collect_result.get('interrupted', False) == True, "Should have been interrupted"
+    assert collect_result['trace_available'] == True, "Trace should be available"
+
+    # Verify the trace limitations show duration limit, not SIGTERM/manual interruption
+    from ai_agents.runtime_trace_store import get_trace_store
+    trace_store = get_trace_store()
+    trace = trace_store.get_trace(collect_result['trace_id'], tool_context.state.get('session_id', 'default'))
+    
+    assert trace is not None, "Trace should be available in store"
+    assert trace.get('status') == 'partial', "Trace status should be partial"
+    
+    limitations = trace.get('limitations', [])
+    limitation_str = ' '.join(limitations).lower()
+    
+    # Should mention duration limit or timeout
+    assert 'duration limit' in limitation_str or 'timeout' in limitation_str, \
+        f"Should mention duration/timeout limitation, got: {limitations}"
+    
+    # Should NOT mention SIGTERM or manual interruption (watchdog timeout is automatic)
+    assert 'sigterm' not in limitation_str, f"Should not mention SIGTERM for automatic timeout, got: {limitations}"
+    assert 'interrupted' not in limitation_str or 'duration limit' in limitation_str, \
+        f"Should classify as duration limit, not manual interruption, got: {limitations}"
+
+
+def test_watchdog_id_reuse_safety():
+    """Test that old watchdog cannot terminate newer application with same ID."""
+    tool_context = MockToolContext()
+
+    fixture_path = tool_context.state['worktree'] / 'test_limits_fixture.py'
+
+    # Start first application with short timeout
+    start_result1 = runtime_intelligence_tools.start_application(
+        application_id='test_reuse_app',
+        environment='dev',
+        tool_context=tool_context,
+        entrypoint=str(fixture_path),
+        arguments=['--duration-limit', '10'],  # Will sleep for 10 seconds
+        timeout_seconds=1  # Watchdog will terminate after 1 second
+    )
+
+    assert start_result1['status'] == 'ok', f"First application failed to start: {start_result1.get('reason', 'unknown')}"
+
+    # Wait for first application to be terminated by watchdog
+    time.sleep(3)
+
+    # Collect trace for first application to unregister it
+    collect_result1 = runtime_intelligence_tools.collect_execution_trace(
+        application_id='test_reuse_app',
+        duration=5,
+        tool_context=tool_context
+    )
+
+    assert collect_result1['status'] == 'partial', f"First application should be partial, got {collect_result1['status']}"
+
+    # Start second application with same ID but longer timeout
+    start_result2 = runtime_intelligence_tools.start_application(
+        application_id='test_reuse_app',
+        environment='dev',
+        tool_context=tool_context,
+        entrypoint=str(fixture_path),
+        arguments=['--duration-limit', '3'],  # Will sleep for 3 seconds
+        timeout_seconds=10  # Longer timeout
+    )
+
+    assert start_result2['status'] == 'ok', f"Second application failed to start: {start_result2.get('reason', 'unknown')}"
+
+    # Wait for second application to complete naturally (3 seconds)
+    time.sleep(4)
+
+    # Collect trace for second application
+    collect_result2 = runtime_intelligence_tools.collect_execution_trace(
+        application_id='test_reuse_app',
+        duration=5,
+        tool_context=tool_context
+    )
+
+    # Second application should complete successfully (not be terminated by old watchdog)
+    assert collect_result2['status'] in ['ok', 'partial'], f"Second application collection failed: {collect_result2.get('reason', 'unknown')}"
+    assert collect_result2.get('timeout_hit', False) == False, "Second application should not hit timeout from old watchdog"
+    
+    # Verify second application completed naturally
+    from ai_agents.runtime_trace_store import get_trace_store
+    trace_store = get_trace_store()
+    trace = trace_store.get_trace(collect_result2['trace_id'], tool_context.state.get('session_id', 'default'))
+    
+    assert trace is not None, "Second application trace should be available"
+    assert trace.get('status') == 'completed', f"Second application should complete naturally, got status: {trace.get('status')}"
+
+
+def test_trace_limitation_classification():
+    """Test that trace limitations correctly distinguish timeout from manual interruption for VR panel."""
+    tool_context = MockToolContext()
+
+    fixture_path = tool_context.state['worktree'] / 'test_limits_fixture.py'
+
+    # Test 1: Automatic timeout via watchdog
+    start_result1 = runtime_intelligence_tools.start_application(
+        application_id='test_classify_timeout',
+        environment='dev',
+        tool_context=tool_context,
+        entrypoint=str(fixture_path),
+        arguments=['--duration-limit', '5'],
+        timeout_seconds=1  # Watchdog will terminate
+    )
+
+    assert start_result1['status'] == 'ok'
+
+    # Wait for watchdog to terminate
+    time.sleep(3)
+
+    collect_result1 = runtime_intelligence_tools.collect_execution_trace(
+        application_id='test_classify_timeout',
+        duration=5,
+        tool_context=tool_context
+    )
+
+    assert collect_result1['status'] == 'partial'
+    assert collect_result1.get('timeout_hit', False) == True
+
+    # Verify limitations for VR panel
+    from ai_agents.runtime_trace_store import get_trace_store
+    trace_store = get_trace_store()
+    trace1 = trace_store.get_trace(collect_result1['trace_id'], tool_context.state.get('session_id', 'default'))
+    
+    limitations1 = trace1.get('limitations', [])
+    limitation_str1 = ' '.join(limitations1).lower()
+    
+    # Automatic timeout should mention duration limit, not SIGTERM
+    assert 'duration limit' in limitation_str1 or 'timeout' in limitation_str1, \
+        f"Timeout should mention duration limit, got: {limitations1}"
+    assert 'sigterm' not in limitation_str1, \
+        f"Timeout should not mention SIGTERM, got: {limitations1}"
+
+    # Test 2: Manual interruption
+    start_result2 = runtime_intelligence_tools.start_application(
+        application_id='test_classify_manual',
+        environment='dev',
+        tool_context=tool_context,
+        entrypoint=str(fixture_path),
+        arguments=['--duration-limit', '10'],
+        timeout_seconds=30  # Long timeout so watchdog won't fire
+    )
+
+    assert start_result2['status'] == 'ok'
+
+    # Wait briefly then manually stop
+    time.sleep(2)
+    stop_result = runtime_intelligence_tools.stop_application(
+        application_id='test_classify_manual',
+        tool_context=tool_context
+    )
+
+    assert stop_result['status'] in ['ok', 'partial']
+
+    # Verify limitations for VR panel
+    if stop_result.get('trace_id'):
+        trace2 = trace_store.get_trace(stop_result['trace_id'], tool_context.state.get('session_id', 'default'))
+        limitations2 = trace2.get('limitations', [])
+        limitation_str2 = ' '.join(limitations2).lower()
+        
+        # Manual interruption should mention SIGTERM or interrupted
+        assert 'sigterm' in limitation_str2 or 'interrupted' in limitation_str2, \
+            f"Manual stop should mention SIGTERM/interrupted, got: {limitations2}"
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])

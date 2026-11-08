@@ -352,5 +352,161 @@
     "created_at": "2026-11-08T05:22:26.499320",
     "size_bytes": 1285,
     "application_id": "test_stop_app"
+  },
+  "3d16f4fc-6acf-4d0f-86a4-d616ed7d40e9": {
+    "session_id": "test_session",
+    "created_at": "2026-11-08T05:37:14.209465",
+    "size_bytes": 108389,
+    "application_id": "test_app"
+  },
+  "326091f1-3bb6-45e1-bde7-c4f8dd5ade1e": {
+    "session_id": "test_session",
+    "created_at": "2026-11-08T05:37:16.245283",
+    "size_bytes": 108409,
+    "application_id": "test_app"
+  },
+  "bcdc4b48-07b6-46ed-a0e2-ef17562d1b55": {
+    "session_id": "test_session",
+    "created_at": "2026-11-08T05:37:18.283263",
+    "size_bytes": 108327,
+    "application_id": "test_app"
+  },
+  "a1baceef-fb31-46bf-a613-a29dbab2995b": {
+    "session_id": "test_session",
+    "created_at": "2026-11-08T05:37:20.316945",
+    "size_bytes": 108510,
+    "application_id": "test_app"
+  },
+  "4cc0cec7-d32b-43fb-ad61-00a736ee8d7a": {
+    "session_id": "test_session",
+    "created_at": "2026-11-08T05:37:22.482197",
+    "size_bytes": 1606,
+    "application_id": "test_args_app"
+  },
+  "84aa22af-5da1-46c2-bb70-595155b25c85": {
+    "session_id": "test_session",
+    "created_at": "2026-11-08T05:37:24.507078",
+    "size_bytes": 3401,
+    "application_id": "test_import_app"
+  },
+  "e9613974-aff3-448e-880d-65bdb8905b22": {
+    "session_id": "test_session",
+    "created_at": "2026-11-08T05:37:27.157222",
+    "size_bytes": 1282,
+    "application_id": "test_stop_app"
+  },
+  "72edfe20-17c9-4406-ab04-d43fcfa6dad3": {
+    "session_id": "test_session",
+    "created_at": "2026-11-08T05:37:30.188915",
+    "size_bytes": 1733,
+    "application_id": "test_watchdog_timeout"
+  },
+  "d3762eac-dc61-46e1-a75e-49f8d8356f3f": {
+    "session_id": "test_session",
+    "created_at": "2026-11-08T05:37:33.249061",
+    "size_bytes": 1725,
+    "application_id": "test_reuse_app"
+  },
+  "208d5528-6458-4efa-9980-ae258c236027": {
+    "session_id": "test_session",
+    "created_at": "2026-11-08T05:37:37.271329",
+    "size_bytes": 2197,
+    "application_id": "test_reuse_app"
+  },
+  "9483a984-54bc-480e-bcb5-042be42e6b50": {
+    "session_id": "test_session",
+    "created_at": "2026-11-08T05:37:40.304960",
+    "size_bytes": 1733,
+    "application_id": "test_classify_timeout"
+  },
+  "ef08d0af-3677-4087-9a2b-f63dad428303": {
+    "session_id": "test_session",
+    "created_at": "2026-11-08T05:37:57.284090",
+    "size_bytes": 1733,
+    "application_id": "test_watchdog_timeout"
+  },
+  "be077e9a-19f1-4c34-8679-bdeb5bf25ece": {
+    "session_id": "test_session",
+    "created_at": "2026-11-08T05:38:09.645415",
+    "size_bytes": 1694,
+    "application_id": "test_watchdog_timeout"
+  },
+  "1070c327-2a83-495d-8516-9d04779e7552": {
+    "session_id": "test_session",
+    "created_at": "2026-11-08T05:38:18.239106",
+    "size_bytes": 1693,
+    "application_id": "test_duration_app"
+  },
+  "cf4c4e26-b91c-4c8b-98a0-5d36f8465994": {
+    "session_id": "test_session",
+    "created_at": "2026-11-08T05:38:22.294474",
+    "size_bytes": 108450,
+    "application_id": "test_app"
+  },
+  "83b44b27-0eb0-402d-837c-34cedcfed882": {
+    "session_id": "test_session",
+    "created_at": "2026-11-08T05:38:24.326614",
+    "size_bytes": 108492,
+    "application_id": "test_app"
+  },
+  "6d6e45be-f857-4d85-8f80-de7057094cec": {
+    "session_id": "test_session",
+    "created_at": "2026-11-08T05:38:26.363395",
+    "size_bytes": 108464,
+    "application_id": "test_app"
+  },
+  "a81d05cd-86f0-43f7-aa52-289ee9946fbb": {
+    "session_id": "test_session",
+    "created_at": "2026-11-08T05:38:28.400676",
+    "size_bytes": 108471,
+    "application_id": "test_app"
+  },
+  "61e75c04-a4f5-47f9-9321-3a694ecccda7": {
+    "session_id": "test_session",
+    "created_at": "2026-11-08T05:38:30.569291",
+    "size_bytes": 1607,
+    "application_id": "test_args_app"
+  },
+  "e67f55a9-3c4a-43f6-9d53-e12ec378353b": {
+    "session_id": "test_session",
+    "created_at": "2026-11-08T05:38:32.591911",
+    "size_bytes": 3407,
+    "application_id": "test_import_app"
+  },
+  "033b927b-acc3-45bd-a5de-62121a77f459": {
+    "session_id": "test_session",
+    "created_at": "2026-11-08T05:38:34.974129",
+    "size_bytes": 1284,
+    "application_id": "test_stop_app"
+  },
+  "3e13bbaf-9efe-4c65-a878-c210a670d8a5": {
+    "session_id": "test_session",
+    "created_at": "2026-11-08T05:38:37.999172",
+    "size_bytes": 1697,
+    "application_id": "test_watchdog_timeout"
+  },
+  "4d8554e5-79a5-46e1-a267-cfee6785ad2c": {
+    "session_id": "test_session",
+    "created_at": "2026-11-08T05:38:41.026799",
+    "size_bytes": 1689,
+    "application_id": "test_reuse_app"
+  },
+  "0fcdd442-da7c-4ce7-8386-5375afe46ed6": {
+    "session_id": "test_session",
+    "created_at": "2026-11-08T05:38:45.044641",
+    "size_bytes": 2201,
+    "application_id": "test_reuse_app"
+  },
+  "4e38304d-40d8-4f01-923f-c8851f39117e": {
+    "session_id": "test_session",
+    "created_at": "2026-11-08T05:38:48.070400",
+    "size_bytes": 1696,
+    "application_id": "test_classify_timeout"
+  },
+  "2ea2e801-e02f-42ac-98d4-4f49a9178044": {
+    "session_id": "test_session",
+    "created_at": "2026-11-08T05:38:50.107030",
+    "size_bytes": 1697,
+    "application_id": "test_classify_manual"
   }
 }

@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "trace_id": "4e38304d-40d8-4f01-923f-c8851f39117e",
+  "application_id": "test_classify_timeout",
+  "language": "python",
+  "provenance": "runtime_observed",
+  "status": "partial",
+  "started_at": "2026-11-08T11:08:45",
+  "ended_at": "2026-11-08T11:08:46",
+  "duration_ms": 945.6279277801514,
+  "exit_code": 130,
+  "events": [
+    {
+      "event_type": "function_call",
+      "call_id": "call_000001",
+      "parent_call_id": null,
+      "function_name": "<module>",
+      "qualified_name": "<module>",
+      "file": "/Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/integration-test-infrastructure/runtime/test_limits_fixture.py",
+      "line": 0,
+      "timestamp_ns": 24207291,
+      "elapsed_ms": 24.208083,
+      "duration_ms": 0.0,
+      "thread_id": 8667955072,
+      "depth": 0
+    },
+    {
+      "event_type": "function_call",
+      "call_id": "call_000002",
+      "parent_call_id": "call_000001",
+      "function_name": "main",
+      "qualified_name": "main",
+      "file": "/Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/integration-test-infrastructure/runtime/test_limits_fixture.py",
+      "line": 29,
+      "timestamp_ns": 24288333,
+      "elapsed_ms": 24.28875,
+      "duration_ms": 0.0,
+      "thread_id": 8667955072,
+      "depth": 1
+    },
+    {
+      "event_type": "function_call",
+      "call_id": "call_000003",
+      "parent_call_id": "call_000002",
+      "function_name": "long_running_task",
+      "qualified_name": "long_running_task",
+      "file": "/Users/adarsh/Documents/vr-agent/jarvis-tests/fixtures/integration-test-infrastructure/runtime/test_limits_fixture.py",
+      "line": 22,
+      "timestamp_ns": 24746916,
+      "elapsed_ms": 24.747166,
+      "duration_ms": 0.0,
+      "thread_id": 8667955072,
+      "depth": 2
+    }
+  ],
+  "truncated": false,
+  "limitations": [
+    "Execution near 1s timeout limit"
+  ],
+  "statistics": {
+    "function_calls": 3,
+    "function_returns": 0,
+    "exceptions": 0,
+    "total_events": 3
+  }
+}
