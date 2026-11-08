@@ -30,6 +30,13 @@ namespace JarvisVR
     public TaintPathDto[] taint_paths;
     // Git history fields
     public GitCommitDto[] commits;
+    // Runtime panel fields
+    public string trace_id;
+    public string runtime_status;
+    public float runtime_duration_ms;
+    public int runtime_event_count;
+    public bool runtime_truncated;
+    public RuntimeEventDto[] runtime_events;
   }
 
   [Serializable] public class SecurityFindingDto
@@ -159,6 +166,24 @@ namespace JarvisVR
     public int deletions;
     public string[] mapped_node_ids;
   }
+
+  [Serializable] public class RuntimeEventDto
+  {
+    public string event_type;
+    public string call_id;
+    public string parent_call_id;
+    public string function_name;
+    public string qualified_name;
+    public string file;
+    public int line;           // Function definition line
+    public int callsite_line;  // Line where invocation occurred (if available)
+    public long timestamp_ns;  // Use long, not string
+    public float elapsed_ms;
+    public float duration_ms;
+    public long thread_id;     // Use long, not string
+    public int depth;
+  }
+
   [Serializable] internal class RepoSelectRequest { public string name; }
   [Serializable] public class HealthDto { public bool ok, cached_tests; public string repo, branch; public int changed; }
 

@@ -57,7 +57,7 @@ namespace JarvisVR
     private ReposDto _repos;
     private RepoTreeDto _repoTree;
     private RepoFileDto _openFile;
-    private JarvisSpatialPanel _repoPanel, _codePanel;
+    private JarvisSpatialPanel _repoPanel, _codePanel, _runtimePanel;
     private JarvisSpatialButton _repoBack, _repoHome, _repoPrev, _repoNext;
     private JarvisSpatialButton _codePrev, _codeClose, _codeNext;
     private readonly List<GameObject> _repoRows = new List<GameObject>();
@@ -149,7 +149,7 @@ namespace JarvisVR
 
     // =========================================================== panels
 
-    private static readonly string[] NavModes = { "MAP", "CODE", "FLOW", "ISSUES", "TESTS", "GIT", "IMPACT", "AGENT" };
+    private static readonly string[] NavModes = { "MAP", "CODE", "FLOW", "ISSUES", "TESTS", "GIT", "IMPACT", "AGENT", "RUNTIME" };
     private static readonly Dictionary<string, string[]> ModePanels = new Dictionary<string, string[]>
     {
       { "REPOS",  new[] { "repo" } },
@@ -161,6 +161,7 @@ namespace JarvisVR
       { "GIT",    new[] { "history", "history_detail" } },
       { "IMPACT", new[] { "repo", "impact", "evidence", "legend" } },
       { "AGENT",  new[] { "activity", "ghost" } },
+      { "RUNTIME", new[] { "runtime", "evidence", "legend" } },
     };
 
     // Panels live on a dome around the user instead of one flat wall:
@@ -186,6 +187,7 @@ namespace JarvisVR
       { "security", new Vector3(  65f, -28f, 1.8f) },
       { "history",  new Vector3(  65f,   6f, 1.9f) },
       { "history_detail", new Vector3( -65f, -28f, 1.8f) },
+      { "runtime",  new Vector3(  65f, -28f, 1.8f) },
     };
 
     /// <summary>Where the user's head is, in the workspace root's local space (see Recenter).</summary>
@@ -277,6 +279,12 @@ namespace JarvisVR
       _historyDetailPanel.SetBody("Select a commit to view details.");
       _historyDetailPanel.Show(false);  // Hidden by default
 
+      // Runtime panel for execution traces
+      _runtimePanel = AddPanel("runtime", "Runtime Execution", 600, 450, 1.18f, -0.46f, pal.Green);
+      _runtimePanel.SetBodyBox(60, 380); _runtimePanel.Body.fontSize = 18;
+      _runtimePanel.SetBody("No runtime trace loaded yet.");
+      _runtimePanel.Show(false);  // Hidden by default
+
       JarvisSpatialPanel caption = AddPanel("caption", "JARVIS", 820, 190, 0.15f, -0.52f, pal.Cyan);
       caption.SetBodyBox(54, 70); caption.Body.fontSize = 26;
       _quickChange = caption.AddButton("What breaks if I change this?", 20, 128, 400, 50, () => Ask(QuickChangeQuestion()));   // label follows the selection
@@ -305,7 +313,7 @@ namespace JarvisVR
       if (_graphRoot != null) _graphRoot.gameObject.SetActive(mode != "REPOS" && mode != "CODE");
       string[] visible = ModePanels.ContainsKey(mode) ? ModePanels[mode] : ModePanels["MAP"];
       int shown = 0;
-      foreach (string key in new[] { "repo", "code", "evidence", "tests", "activity", "legend", "ghost", "approval", "security", "history", "history_detail", "impact" })
+      foreach (string key in new[] { "repo", "code", "evidence", "tests", "activity", "legend", "ghost", "approval", "security", "history", "history_detail", "impact", "runtime" })
       {
         bool on = visible.Contains(key);
         // approval shares its slot with evidence and tests: while something is pending, approval wins
@@ -1329,6 +1337,66 @@ namespace JarvisVR
           {
             if (_nodes.ContainsKey(c.node_id1)) Select(c.node_id1);
             Log("compare: " + c.node_id1 + " vs " + c.node_id2);
+          }
+          return true;
+        case "show_runtime_panel":
+          if (_runtimePanel != null)
+          {
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine($"RUNTIME EXECUTION");
+
+            // Display application and trace details
+            if (!string.IsNullOrEmpty(c.trace_id))
+              sb.AppendLine($"Trace ID: {c.trace_id.Substring(0, 8)}...");
+
+            if (!string.IsNullOrEmpty(c.runtime_status))
+              sb.AppendLine($"Status: {c.runtime_status.ToUpper()}");
+
+            sb.AppendLine();
+
+            // Display execution summary
+            if (c.runtime_duration_ms > 0)
+              sb.AppendLine($"Duration: {c.runtime_duration_ms:F1} ms");
+
+            if (c.runtime_event_count > 0)
+              sb.AppendLine($"Trace events: {c.runtime_event_count}");
+
+            sb.AppendLine();
+
+            // Display execution timeline (first 20-30 events)
+            if (c.runtime_events != null && c.runtime_events.Length > 0)
+            {
+              sb.AppendLine($"EXECUTION TIMELINE");
+              sb.AppendLine();
+
+              int displayCount = Math.Min(c.runtime_events.Length, 30);
+              for (int i = 0; i < displayCount; i++)
+              {
+                var evt = c.runtime_events[i];
+                if (evt.event_type == "function_call")
+                {
+                  float elapsed = evt.elapsed_ms;
+                  string indent = new string(' ', evt.depth * 2);
+                  sb.AppendLine($"{elapsed:F3} ms  {indent}{evt.function_name}()");
+                }
+              }
+
+              if (c.runtime_events.Length > 30)
+                sb.AppendLine($"... and {c.runtime_events.Length - 30} more events");
+            }
+
+            // Show warning if truncated or partial
+            if (c.runtime_truncated)
+            {
+              sb.AppendLine();
+              sb.AppendLine($"WARNING: Trace was truncated");
+            }
+
+            sb.AppendLine();
+            sb.AppendLine($"Provenance: RUNTIME OBSERVED");
+
+            _runtimePanel.SetBody(sb.ToString());
+            _runtimePanel.Show(true);
           }
           return true;
         case "expand_node":

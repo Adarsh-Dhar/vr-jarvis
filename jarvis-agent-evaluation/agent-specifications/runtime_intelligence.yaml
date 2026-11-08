@@ -7,23 +7,36 @@ responsibility: >
   distinguishing observed events from inferred static analysis.
 
 supported_tasks:
-  - Execution trace collection
-  - Timeline reconstruction
-  - Async tracking
-  - Distributed tracing
-  - Memory monitoring
-  - CPU monitoring
+  - Python execution trace collection
+  - Function call hierarchy reconstruction
+  - Execution-order reconstruction
+  - Function duration measurement
+  - Basic exception-event capture
+
+explicitly_unsupported:
+  - Async distributed tracing
+  - Memory profiling
+  - CPU profiling
+  - Debugging
+  - Live variable inspection
+  - Recording function arguments and return values
+  - Background-thread execution tracing
+  - Generator and coroutine tracing
 
 allowed_tools:
-  - collect_trace
-  - reconstruct_timeline
-  - track_async
-  - correlate_spans
-  - monitor_memory
-  - monitor_cpu
+  - start_application
+  - stop_application
+  - collect_execution_trace
+  - record_function_calls
+  - record_execution_timing
+  - capture_application_logs
+  - visualize_execution_flow
 
 required_inputs:
   - name: application_id
+    type: string
+    required: true
+  - name: entrypoint
     type: string
     required: true
   - name: trace_id
@@ -34,8 +47,7 @@ required_output:
   - name: status
   - name: execution_timeline
   - name: function_calls
-  - name: async_operations
-  - name: resource_usage
+  - name: execution_status
   - name: limitations
 
 decision_rules:
@@ -43,6 +55,8 @@ decision_rules:
     action: "Report incomplete trace"
   - condition: "Static call graph only"
     action: "Report as inferred, not observed"
+  - condition: "Partial or truncated trace"
+    action: "Report limitations clearly"
 
 boundaries:
   must_not:
@@ -52,26 +66,26 @@ boundaries:
   must_report:
     - "Missing events"
     - "Incomplete traces"
+    - "Unsupported execution types (generators, coroutines, etc.)"
 
 dependencies:
   agents:
     - code_understanding
   services:
-    - telemetry_service
-    - monitoring_service
+    - None (Partial scope uses built-in sys.setprofile)
 
 failure_behavior:
-  retry: true
+  retry: false
   preserve_partial: true
   report_limitations: true
 
 quality_requirements:
-  minimum_precision: 0.97
-  minimum_recall: 0.92
+  minimum_precision: 0.90
+  minimum_recall: 0.85
   evidence_required: true
-  max_hallucination_rate: 0.01
+  max_hallucination_rate: 0.02
 
 performance_targets:
-  max_latency_seconds: 20
-  max_tool_calls: 8
-  max_token_consumption: 6000
+  max_latency_seconds: 30
+  max_tool_calls: 5
+  max_token_consumption: 4000

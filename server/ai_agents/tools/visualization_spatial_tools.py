@@ -1151,13 +1151,93 @@ def visualize_execution_flow(
     tool_context: ToolContext
 ) -> dict:
     """Visualize execution flow with runtime_observed provenance."""
-    # Return unsupported until we have real trace data
-    return {
-        'status': 'unsupported',
-        'reason': 'Execution flow visualization requires actual execution trace data from sys.setprofile',
-        'trace_id': trace_id,
-        'note': 'Visualization infrastructure in place but requires runtime events'
-    }
+    try:
+        from ..runtime_trace_store import get_trace_store
+
+        session_id = tool_context.state.get('session_id', 'default')
+        trace_store = get_trace_store()
+
+        # Load trace with session validation
+        trace = trace_store.get_trace(trace_id, session_id)
+        if not trace:
+            return {
+                'status': 'not_found',
+                'reason': 'Trace not found or session mismatch',
+                'trace_id': trace_id
+            }
+
+        # Generate runtime graph nodes (one per function invocation)
+        runtime_nodes = []
+        call_events = [e for e in trace.get('events', []) if e.get('event_type') == 'function_call']
+
+        for event in call_events:
+            node = {
+                'id': f"runtime:{event['call_id']}",
+                'name': event.get('function_name', 'unknown'),
+                'file': event.get('file', ''),
+                'kind': 'function',
+                'line': event.get('line', 0),
+                'provenance': 'runtime_observed',
+                'duration_ms': event.get('duration_ms', 0),
+                'depth': event.get('depth', 0),
+                'call_id': event.get('call_id')
+            }
+            runtime_nodes.append(node)
+
+        # Generate runtime edges from parent_call_id relationships
+        runtime_edges = []
+        for event in call_events:
+            parent_call_id = event.get('parent_call_id')
+            if parent_call_id:
+                edge = {
+                    'src': f"runtime:{parent_call_id}",
+                    'dst': f"runtime:{event['call_id']}",
+                    'type': 'runtime_call',
+                    'kind': 'runtime'
+                }
+                runtime_edges.append(edge)
+
+        # Emit show_graph command
+        _emit_command(
+            tool_context,
+            'show_graph',
+            graph_type='runtime',
+            title=f'Runtime Execution: {trace.get("application_id", "unknown")}',
+            nodes=runtime_nodes,
+            edges=runtime_edges
+        )
+
+        # Emit show_runtime_panel command
+        _emit_command(
+            tool_context,
+            'show_runtime_panel',
+            trace_id=trace_id,
+            summary={
+                'application_id': trace.get('application_id'),
+                'status': trace.get('status'),
+                'duration_ms': trace.get('duration_ms'),
+                'function_calls': trace.get('statistics', {}).get('function_calls', 0),
+                'exceptions': trace.get('statistics', {}).get('exceptions', 0),
+                'truncated': trace.get('truncated', False),
+                'limitations': trace.get('limitations', [])
+            },
+            events=trace.get('events', [])[:30]  # First 30 events for panel
+        )
+
+        return {
+            'status': 'ok',
+            'trace_id': trace_id,
+            'provenance': 'runtime_observed',
+            'node_count': len(runtime_nodes),
+            'edge_count': len(runtime_edges)
+        }
+
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e),
+            'trace_id': trace_id
+        }
 
 
 @safe

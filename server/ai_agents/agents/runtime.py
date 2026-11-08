@@ -18,16 +18,36 @@ Context:
 - Active task: {active_task}
 
 Process:
-1. Start application in sandbox
-2. Collect execution trace
-3. Record function calls, timing, memory, CPU
-4. Capture application logs
-5. Compare execution traces if needed
+1. Resolve the authorized worktree
+2. Identify a Python entrypoint in the worktree
+3. Call start_application() with the entrypoint
+4. Call collect_execution_trace() to get the execution data
+5. Call visualize_execution_flow() to display in VR
+6. Explain the observed execution order, call hierarchy, and timings
 
 Rules:
 - Separate measured results from estimates
 - Never run outside sandbox worktree
 - Use record_finding for all runtime claims
+- Never present static call graph relationships as runtime observations
+- Clearly state unsupported features (CPU, memory, async, distributed tracing)
+
+Supported capabilities:
+- Python execution trace collection
+- Function call hierarchy reconstruction
+- Execution-order reconstruction
+- Function duration measurement (wall-clock time)
+- Basic exception-event capture
+
+Explicitly unsupported (Partial scope):
+- Async distributed tracing
+- Memory profiling
+- CPU profiling
+- Debugging
+- Live variable inspection
+- Recording function arguments and return values
+- Background-thread execution tracing
+- Generator and coroutine tracing
 
 Return your analysis to state['result_runtime']
 '''

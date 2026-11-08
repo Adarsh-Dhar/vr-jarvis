@@ -4,87 +4,411 @@ Understand actual execution.
 
 Phase 5 Status: PARTIALLY IMPLEMENTED
 - Core application lifecycle tools (start_application, stop_application) implemented with subprocess management
-- Other tools remain as stubs returning 'unsupported' status
-- Full implementation requires OpenTelemetry integration and process manager
+- Trace collection and visualization implemented
+- Basic recording tools return actual trace data
+- Advanced tools (CPU, memory, async, debugging) remain unsupported
+
+Technical Corrections Applied:
+- Process-local registry with threading.Lock (not ADK session state)
+- Session ID + trace ID for identifying executions
+- Process group execution for clean termination
+- Bounded log files (not PIPE)
+- Graceful termination with grace period
+- Symlink resolution in path validation
 """
 
 from typing import Optional, List, Dict, Any
 import subprocess
 import time
 import os
+import sys
 import signal
+import uuid
+import threading
+from pathlib import Path
 from google.adk.tools import ToolContext
 from ._safe import safe
 
-# In-memory application state
-_application_state = {}
+# Import trace store
+from ..runtime_trace_store import get_trace_store
+
+# Process-local registry (not ADK session state)
+# Assumes single worker or sticky routing for initial implementation
+_process_registry: Dict[str, Dict[str, Any]] = {}
+_process_registry_lock = threading.Lock()
+
+
+def _get_session_id(tool_context: ToolContext) -> str:
+    """Get session ID from tool context."""
+    return tool_context.state.get('session_id', 'default')
+
+
+def _register_process(application_id: str, session_id: str, process: subprocess.Popen,
+                     trace_id: str, trace_path: Path, stdout_path: Path, stderr_path: Path) -> str:
+    """Register a process in the local registry."""
+    with _process_registry_lock:
+        registry_key = f"{session_id}:{application_id}"
+        _process_registry[registry_key] = {
+            'process': process,
+            'trace_id': trace_id,
+            'trace_path': trace_path,
+            'stdout_path': stdout_path,
+            'stderr_path': stderr_path,
+            'started_at': time.time(),
+            'application_id': application_id,
+            'session_id': session_id
+        }
+        return registry_key
+
+
+def _get_process(application_id: str, session_id: str) -> Optional[Dict[str, Any]]:
+    """Get a process from the local registry."""
+    with _process_registry_lock:
+        registry_key = f"{session_id}:{application_id}"
+        return _process_registry.get(registry_key)
+
+
+def _unregister_process(application_id: str, session_id: str):
+    """Unregister a process from the local registry."""
+    with _process_registry_lock:
+        registry_key = f"{session_id}:{application_id}"
+        if registry_key in _process_registry:
+            del _process_registry[registry_key]
 
 
 @safe
 def start_application(
     application_id: str,
     environment: str,
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    entrypoint: Optional[str] = None,
+    arguments: Optional[List[str]] = None,
+    timeout_seconds: int = 30
 ) -> dict:
     """
-    Launch an application in an authorized environment.
-    
-    This is a basic implementation using subprocess. Full implementation should use:
-    - A controlled process manager
-    - OpenTelemetry for telemetry
-    - Proper cleanup and signal handling
-    
+    Launch a Python application in an authorized environment with runtime tracing.
+
     Args:
         application_id: Identifier for the application
         environment: Environment configuration (dev, staging, prod)
         tool_context: Tool context
-        
+        entrypoint: Path to Python entrypoint file (required for tracing)
+        arguments: Optional command-line arguments
+        timeout_seconds: Maximum execution duration in seconds
+
     Returns:
         Process ID and status
     """
-    # For now, this is a placeholder - actual implementation would:
-    # 1. Validate the application exists
-    # 2. Check environment configuration
-    # 3. Launch with proper isolation
-    # 4. Return actual process/session ID
-    
-    # Placeholder: Record that we want to start this application
-    _application_state[application_id] = {
-        'status': 'requested',
-        'environment': environment,
-        'requested_at': time.time()
-    }
-    
-    return {
-        'status': 'unsupported',
-        'reason': 'Runtime application management requires controlled process manager and sandbox environment',
-        'application_id': application_id,
-        'environment': environment,
-        'note': 'Basic subprocess management implemented, but full isolation requires infrastructure setup'
-    }
+    # Get worktree from tool context
+    worktree = tool_context.state.get('worktree')
+    if not worktree:
+        return {
+            'status': 'blocked',
+            'reason': 'No authorized worktree available',
+            'application_id': application_id
+        }
+
+    worktree_path = Path(worktree).resolve()
+
+    # Validate entrypoint
+    if not entrypoint:
+        return {
+            'status': 'blocked',
+            'reason': 'Entrypoint required for runtime tracing',
+            'application_id': application_id
+        }
+
+    entrypoint_path = Path(entrypoint).resolve()
+
+    # Check entrypoint exists and is a Python file
+    if not entrypoint_path.exists():
+        return {
+            'status': 'blocked',
+            'reason': f'Entrypoint not found: {entrypoint}',
+            'application_id': application_id
+        }
+
+    if not entrypoint_path.is_file():
+        return {
+            'status': 'blocked',
+            'reason': f'Entrypoint is not a file: {entrypoint}',
+            'application_id': application_id
+        }
+
+    if not entrypoint_path.suffix == '.py':
+        return {
+            'status': 'blocked',
+            'reason': f'Entrypoint must be a Python file: {entrypoint}',
+            'application_id': application_id
+        }
+
+    # Validate entrypoint is inside worktree (resolve symlinks)
+    try:
+        entrypoint_path.relative_to(worktree_path)
+    except ValueError:
+        return {
+            'status': 'blocked',
+            'reason': 'Entrypoint must be inside authorized worktree',
+            'application_id': application_id
+        }
+
+    # Create unique trace ID
+    trace_id = str(uuid.uuid4())
+    session_id = _get_session_id(tool_context)
+
+    # Set up trace output path
+    trace_store = get_trace_store()
+    trace_path = trace_store.storage_dir / f"{trace_id}.json"
+
+    # Set up bounded log files
+    logs_dir = trace_store.storage_dir / 'logs'
+    logs_dir.mkdir(parents=True, exist_ok=True)
+    stdout_path = logs_dir / f"{trace_id}.stdout"
+    stderr_path = logs_dir / f"{trace_id}.stderr"
+
+    # Get trace runner path
+    runner_path = Path(__file__).parent.parent / 'runtime_trace_runner.py'
+
+    # Build command
+    cmd = [
+        sys.executable,
+        str(runner_path),
+        '--target', str(entrypoint_path),
+        '--trace-out', str(trace_path),
+        '--max-events', '5000',
+        '--max-duration', str(timeout_seconds),
+        '--worktree', str(worktree_path)
+    ]
+
+    # Add arguments if provided
+    if arguments:
+        cmd.extend(arguments)
+
+    # Prepare restricted environment (no server secrets)
+    env = os.environ.copy()
+    # Remove sensitive environment variables
+    sensitive_keys = ['JARVIS_TOKEN', 'API_KEY', 'SECRET_KEY', 'PASSWORD']
+    for key in sensitive_keys:
+        env.pop(key, None)
+
+    try:
+        # Launch in process group for clean termination
+        process = subprocess.Popen(
+            cmd,
+            cwd=str(worktree_path),
+            env=env,
+            stdout=open(stdout_path, 'w'),
+            stderr=open(stderr_path, 'w'),
+            shell=False,
+            start_new_session=True  # Create new process group
+        )
+
+        # Register process
+        _register_process(
+            application_id=application_id,
+            session_id=session_id,
+            process=process,
+            trace_id=trace_id,
+            trace_path=trace_path,
+            stdout_path=stdout_path,
+            stderr_path=stderr_path
+        )
+
+        return {
+            'status': 'ok',
+            'application_id': application_id,
+            'pid': process.pid,
+            'trace_id': trace_id,
+            'entrypoint': str(entrypoint_path),
+            'timeout_seconds': timeout_seconds,
+            'environment': environment
+        }
+
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e),
+            'application_id': application_id
+        }
 
 
 @safe
 def stop_application(application_id: str, tool_context: ToolContext) -> dict:
     """
-    Stop an application.
-    
+    Stop a running application.
+
     Args:
         application_id: Application identifier
         tool_context: Tool context
-        
+
     Returns:
         Status of stop operation
     """
-    if application_id in _application_state:
-        _application_state[application_id]['status'] = 'stopped'
-        _application_state[application_id]['stopped_at'] = time.time()
-    
+    session_id = _get_session_id(tool_context)
+    proc_info = _get_process(application_id, session_id)
+
+    if not proc_info:
+        return {
+            'status': 'not_found',
+            'reason': 'Application not found in process registry',
+            'application_id': application_id
+        }
+
+    process = proc_info['process']
+
+    try:
+        if process.poll() is None:
+            # Process is still running - terminate gracefully
+            process.terminate()
+            try:
+                process.wait(timeout=5)  # Grace period
+            except subprocess.TimeoutExpired:
+                # Didn't stop - kill process group
+                try:
+                    os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+
+        # Unregister process
+        _unregister_process(application_id, session_id)
+
+        return {
+            'status': 'ok',
+            'application_id': application_id,
+            'stopped': True
+        }
+
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e),
+            'application_id': application_id
+        }
+
+
+@safe
+def collect_execution_trace(
+    application_id: str,
+    duration: int,
+    tool_context: ToolContext
+) -> dict:
+    """
+    Collect execution trace from a running or completed application.
+
+    Args:
+        application_id: Application identifier
+        duration: Maximum wait time in seconds
+        tool_context: Tool context
+
+    Returns:
+        Trace summary and events
+    """
+    session_id = _get_session_id(tool_context)
+    proc_info = _get_process(application_id, session_id)
+
+    if not proc_info:
+        return {
+            'status': 'not_found',
+            'reason': 'Application not found in process registry',
+            'application_id': application_id
+        }
+
+    process = proc_info['process']
+    trace_path = proc_info['trace_path']
+    trace_id = proc_info['trace_id']
+
+    # Wait for process to finish (up to duration)
+    exit_code = None
+    interrupted = False
+
+    try:
+        if process.poll() is None:
+            # Process still running - wait with timeout
+            try:
+                exit_code = process.wait(timeout=duration)
+            except subprocess.TimeoutExpired:
+                # Timeout - terminate gracefully
+                interrupted = True
+                process.terminate()
+                try:
+                    process.wait(timeout=5)  # Grace period for trace finalization
+                except subprocess.TimeoutExpired:
+                    # Didn't stop - kill process group
+                    try:
+                        os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                exit_code = None  # Indicate interrupted
+        else:
+            exit_code = process.poll()
+
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e),
+            'application_id': application_id
+        }
+
+    # Load trace file
+    if not trace_path.exists():
+        # Unregister process since we're done
+        _unregister_process(application_id, session_id)
+
+        return {
+            'status': 'partial',
+            'reason': 'Trace file not generated',
+            'application_id': application_id,
+            'interrupted': interrupted
+        }
+
+    try:
+        with open(trace_path, 'r') as f:
+            trace_data = f.read()
+            trace = __import__('json').loads(trace_data)
+    except Exception as e:
+        _unregister_process(application_id, session_id)
+        return {
+            'status': 'error',
+            'error': f'Failed to load trace: {e}',
+            'application_id': application_id
+        }
+
+    # Store trace in trace store with session ownership
+    trace_store = get_trace_store()
+    trace_store.save_trace(trace_id, session_id, trace)
+
+    # Unregister process
+    _unregister_process(application_id, session_id)
+
+    # Determine actual status
+    if interrupted:
+        status = 'partial'
+    elif trace.get('status') == 'failed':
+        status = 'failed'
+    elif trace.get('truncated') or trace.get('limitations'):
+        status = 'partial'
+    else:
+        status = 'ok'
+
+    # Check if we have real events
+    stats = trace.get('statistics', {})
+    if stats.get('total_events', 0) == 0:
+        status = 'partial'
+
     return {
-        'status': 'unsupported',
-        'reason': 'Runtime application management requires controlled process manager',
+        'status': status,
         'application_id': application_id,
-        'note': 'Basic tracking implemented, but actual process termination requires infrastructure'
+        'trace_id': trace_id,
+        'provenance': trace.get('provenance', 'runtime_observed'),
+        'execution_status': trace.get('status', 'unknown'),
+        'function_calls': stats.get('function_calls', 0),
+        'function_returns': stats.get('function_returns', 0),
+        'exceptions': stats.get('exceptions', 0),
+        'duration_ms': trace.get('duration_ms', 0),
+        'truncated': trace.get('truncated', False),
+        'trace_available': True,
+        'limitations': trace.get('limitations', []),
+        'interrupted': interrupted
     }
 
 
@@ -96,7 +420,7 @@ def attach_runtime_profiler(
     """Attach a profiler."""
     return {
         'status': 'unsupported',
-        'reason': 'Runtime profiling requires OpenTelemetry integration',
+        'reason': 'Runtime profiling uses built-in sys.setprofile during execution',
         'application_id': application_id
     }
 
@@ -115,33 +439,52 @@ def attach_debugger(
 
 
 @safe
-def collect_execution_trace(
-    application_id: str,
-    duration: int,
-    tool_context: ToolContext
-) -> dict:
-    """Collect execution traces using Python sys.setprofile for Python applications."""
-    # Return unsupported until we have actual application execution capability
-    return {
-        'status': 'unsupported',
-        'reason': 'Execution tracing requires actual application execution with sys.setprofile hooks',
-        'application_id': application_id,
-        'duration': duration,
-        'note': 'Infrastructure in place but requires process manager to run target application'
-    }
-
-
-@safe
 def record_function_calls(
     application_id: str,
     tool_context: ToolContext,
     function_names: Optional[List[str]] = None
 ) -> dict:
-    """Record actual function calls."""
+    """Record observed function calls from trace."""
+    session_id = _get_session_id(tool_context)
+    proc_info = _get_process(application_id, session_id)
+
+    if not proc_info:
+        return {
+            'status': 'not_found',
+            'reason': 'Application not found in process registry',
+            'application_id': application_id
+        }
+
+    trace_id = proc_info['trace_id']
+    trace_store = get_trace_store()
+    trace = trace_store.get_trace(trace_id, session_id)
+
+    if not trace:
+        return {
+            'status': 'not_found',
+            'reason': 'Trace not found',
+            'application_id': application_id
+        }
+
+    # Filter events for function calls
+    call_events = [
+        e for e in trace.get('events', [])
+        if e.get('event_type') == 'function_call'
+    ]
+
+    # Filter by function names if provided
+    if function_names:
+        call_events = [
+            e for e in call_events
+            if e.get('function_name') in function_names
+        ]
+
     return {
-        'status': 'unsupported',
-        'reason': 'Function call recording requires runtime instrumentation',
-        'application_id': application_id
+        'status': 'ok',
+        'application_id': application_id,
+        'trace_id': trace_id,
+        'function_calls': call_events,
+        'total_calls': len(call_events)
     }
 
 
@@ -154,7 +497,7 @@ def record_function_arguments(
     """Record permitted argument information."""
     return {
         'status': 'unsupported',
-        'reason': 'Function argument recording requires runtime instrumentation',
+        'reason': 'Function argument recording not implemented (security limitation)',
         'application_id': application_id,
         'function_id': function_id
     }
@@ -169,7 +512,7 @@ def record_function_returns(
     """Record return values."""
     return {
         'status': 'unsupported',
-        'reason': 'Function return recording requires runtime instrumentation',
+        'reason': 'Function return recording not implemented (security limitation)',
         'application_id': application_id,
         'function_id': function_id
     }
@@ -180,11 +523,51 @@ def record_execution_timing(
     application_id: str,
     tool_context: ToolContext
 ) -> dict:
-    """Record execution duration."""
+    """Record measured execution duration per call."""
+    session_id = _get_session_id(tool_context)
+    proc_info = _get_process(application_id, session_id)
+
+    if not proc_info:
+        return {
+            'status': 'not_found',
+            'reason': 'Application not found in process registry',
+            'application_id': application_id
+        }
+
+    trace_id = proc_info['trace_id']
+    trace_store = get_trace_store()
+    trace = trace_store.get_trace(trace_id, session_id)
+
+    if not trace:
+        return {
+            'status': 'not_found',
+            'reason': 'Trace not found',
+            'application_id': application_id
+        }
+
+    # Extract timing information from call events
+    call_events = [
+        e for e in trace.get('events', [])
+        if e.get('event_type') == 'function_call'
+    ]
+
+    timing_data = []
+    for event in call_events:
+        timing_data.append({
+            'call_id': event.get('call_id'),
+            'function_name': event.get('function_name'),
+            'file': event.get('file'),
+            'line': event.get('line'),
+            'duration_ms': event.get('duration_ms', 0),
+            'elapsed_ms': event.get('elapsed_ms', 0)
+        })
+
     return {
-        'status': 'unsupported',
-        'reason': 'Execution timing requires OpenTelemetry integration',
-        'application_id': application_id
+        'status': 'ok',
+        'application_id': application_id,
+        'trace_id': trace_id,
+        'timing_data': timing_data,
+        'total_calls': len(timing_data)
     }
 
 
@@ -197,7 +580,7 @@ def record_variable_state(
     """Observe selected runtime variables."""
     return {
         'status': 'unsupported',
-        'reason': 'Variable state observation requires runtime instrumentation',
+        'reason': 'Variable state observation not implemented (security limitation)',
         'application_id': application_id,
         'variable_id': variable_id
     }
@@ -211,7 +594,7 @@ def record_memory_usage(
     """Monitor memory consumption."""
     return {
         'status': 'unsupported',
-        'reason': 'Memory monitoring requires OpenTelemetry integration',
+        'reason': 'Memory profiling not implemented in Partial scope',
         'application_id': application_id
     }
 
@@ -224,7 +607,7 @@ def record_cpu_usage(
     """Monitor CPU utilization."""
     return {
         'status': 'unsupported',
-        'reason': 'CPU monitoring requires OpenTelemetry integration',
+        'reason': 'CPU profiling not implemented in Partial scope',
         'application_id': application_id
     }
 
@@ -237,7 +620,7 @@ def record_network_activity(
     """Observe network operations."""
     return {
         'status': 'unsupported',
-        'reason': 'Network activity monitoring requires OpenTelemetry integration',
+        'reason': 'Network activity monitoring not implemented in Partial scope',
         'application_id': application_id
     }
 
@@ -250,7 +633,7 @@ def record_database_activity(
     """Observe database operations."""
     return {
         'status': 'unsupported',
-        'reason': 'Database activity monitoring requires OpenTelemetry integration',
+        'reason': 'Database activity monitoring not implemented in Partial scope',
         'application_id': application_id
     }
 
@@ -263,7 +646,7 @@ def record_async_tasks(
     """Observe asynchronous tasks."""
     return {
         'status': 'unsupported',
-        'reason': 'Async task monitoring requires runtime instrumentation',
+        'reason': 'Async task tracing not implemented in Partial scope',
         'application_id': application_id
     }
 
@@ -276,7 +659,7 @@ def record_thread_activity(
     """Observe threads."""
     return {
         'status': 'unsupported',
-        'reason': 'Thread activity monitoring requires runtime instrumentation',
+        'reason': 'Thread activity tracing not implemented in Partial scope',
         'application_id': application_id
     }
 
@@ -287,11 +670,47 @@ def capture_application_logs(
     tool_context: ToolContext,
     since: Optional[str] = None
 ) -> dict:
-    """Collect application logs."""
+    """Collect bounded stdout/stderr from trace logs."""
+    session_id = _get_session_id(tool_context)
+    proc_info = _get_process(application_id, session_id)
+
+    if not proc_info:
+        return {
+            'status': 'not_found',
+            'reason': 'Application not found in process registry',
+            'application_id': application_id
+        }
+
+    stdout_path = proc_info['stdout_path']
+    stderr_path = proc_info['stderr_path']
+
+    # Read bounded excerpts (last 100 lines)
+    stdout_excerpt = []
+    stderr_excerpt = []
+
+    try:
+        if stdout_path.exists():
+            with open(stdout_path, 'r') as f:
+                lines = f.readlines()
+                stdout_excerpt = lines[-100:] if len(lines) > 100 else lines
+    except Exception:
+        pass
+
+    try:
+        if stderr_path.exists():
+            with open(stderr_path, 'r') as f:
+                lines = f.readlines()
+                stderr_excerpt = lines[-100:] if len(lines) > 100 else lines
+    except Exception:
+        pass
+
     return {
-        'status': 'unsupported',
-        'reason': 'Log capture requires OpenTelemetry integration',
-        'application_id': application_id
+        'status': 'ok',
+        'application_id': application_id,
+        'stdout_lines': len(stdout_excerpt),
+        'stderr_lines': len(stderr_excerpt),
+        'stdout_excerpt': ''.join(stdout_excerpt),
+        'stderr_excerpt': ''.join(stderr_excerpt)
     }
 
 
@@ -304,7 +723,7 @@ def capture_runtime_events(
     """Collect runtime events."""
     return {
         'status': 'unsupported',
-        'reason': 'Runtime event capture requires OpenTelemetry integration',
+        'reason': 'Runtime event capture handled by collect_execution_trace',
         'application_id': application_id
     }
 
@@ -318,7 +737,7 @@ def compare_execution_traces(
     """Compare different executions."""
     return {
         'status': 'unsupported',
-        'reason': 'Trace comparison requires OpenTelemetry integration',
+        'reason': 'Trace comparison not implemented in Partial scope',
         'trace1_id': trace1_id,
         'trace2_id': trace2_id
     }
@@ -329,6 +748,6 @@ def replay_execution_trace(trace_id: str, tool_context: ToolContext) -> dict:
     """Replay a captured execution where supported."""
     return {
         'status': 'unsupported',
-        'reason': 'Trace replay requires OpenTelemetry integration',
+        'reason': 'Trace replay not implemented in Partial scope',
         'trace_id': trace_id
     }
