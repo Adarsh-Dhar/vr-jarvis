@@ -58,3 +58,6 @@ sysinfo.txt
 
 # Crashlytics generated file
 crashlytics-build.properties
+
+# Vendored local ISDK package (file: dependency in packages-lock.json)
+/Packages/com.meta.xr.sdk.interaction/
