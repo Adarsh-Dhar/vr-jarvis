@@ -18,7 +18,6 @@ from .agents.software_engineering import software_engineering_agent
 from .agents.testing_verification import testing_verification_agent
 from .agents.visualization import visualization_agent
 from .agents.conversational import conversational_agent
-from .agents.orchestrator import orchestrator_agent
 from .callbacks import init_state, trim_history
 from .config import MODEL
 from .tools.control_tools import request_approval
@@ -93,7 +92,6 @@ phase2_pipeline = SequentialAgent(
     name='phase2_pipeline',
     description='First vertical slice: explain function and show connections',
     sub_agents=[
-        orchestrator_agent,
         phase2_specialists,
         make_critic('phase2_critic', 'findings'),
         visualization_agent,

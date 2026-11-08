@@ -25,14 +25,19 @@ namespace JarvisVR
   public sealed class JarvisSpatialButton : MonoBehaviour
   {
     public Action OnClick;
+    /// <summary>Push-to-talk style hooks: OnPress fires the moment the pinch/button goes down,
+    /// OnRelease fires when the press ends (release or ray moved off). When OnPress is set the
+    /// normal OnClick is not fired.</summary>
+    public Action OnPress, OnRelease;
     public float HoldSeconds;
     public Image Background, Fill, FocusRing;
     public Text Label;
     public Color Idle = new Color(0.1f, 0.15f, 0.24f, 1f), Hover = new Color(0.16f, 0.27f, 0.42f, 1f);
     public Color Pressed = new Color(0.22f, 0.40f, 0.60f, 1f), DisabledColor = new Color(0.07f, 0.08f, 0.10f, 1f);
+    public Color SelectedColor = new Color(0.30f, 0.50f, 0.75f, 1f);
     public Color LabelColor = Color.white, DisabledLabel = new Color(0.42f, 0.47f, 0.53f, 1f);
 
-    private bool _hover, _pressed, _disabled, _focused;
+    private bool _hover, _pressed, _disabled, _focused, _selected;
     private static JarvisSpatialButton _focusOwner;   // only one button has focus at a time
 
     /// <summary>False greys the button out and makes it ignore presses. Priority of looks: disabled, pressed, hover, idle.</summary>
@@ -50,6 +55,13 @@ namespace JarvisVR
     public void SetHover(bool on) { _hover = on; Refresh(); }
     public void SetPressed(bool on) { _pressed = on && !_disabled; Refresh(); }
 
+    /// <summary>Persistent highlight for the active choice (e.g. the current nav mode). Hover still wins while pointing at it.</summary>
+    public bool Selected
+    {
+      get { return _selected; }
+      set { _selected = value && !_disabled; Refresh(); }
+    }
+
     /// <summary>Keyboard-style focus ring: the last button that was activated keeps an outline until another takes focus.</summary>
     public void Focus()
     {
@@ -62,7 +74,7 @@ namespace JarvisVR
 
     private void Refresh()
     {
-      if (Background != null) Background.color = _disabled ? DisabledColor : _pressed ? Pressed : _hover ? Hover : Idle;
+      if (Background != null) Background.color = _disabled ? DisabledColor : _pressed ? Pressed : _hover ? Hover : _selected ? SelectedColor : Idle;
       if (FocusRing != null) FocusRing.enabled = _focused && !_disabled;
       if (Label != null) Label.color = _disabled ? DisabledLabel : LabelColor;
     }
@@ -72,6 +84,20 @@ namespace JarvisVR
     {
       if (_disabled || OnClick == null) return;
       try { OnClick(); }
+      catch (Exception ex) { Debug.LogException(ex, this); }
+    }
+
+    public void Press()
+    {
+      if (_disabled || OnPress == null) return;
+      try { OnPress(); }
+      catch (Exception ex) { Debug.LogException(ex, this); }
+    }
+
+    public void Release()
+    {
+      if (OnRelease == null) return;
+      try { OnRelease(); }
       catch (Exception ex) { Debug.LogException(ex, this); }
     }
   }
@@ -352,6 +378,7 @@ namespace JarvisVR
       btn.Idle = new Color(a.r * 0.18f, a.g * 0.18f, a.b * 0.18f, 1f);
       btn.Hover = new Color(a.r * 0.40f, a.g * 0.40f, a.b * 0.40f, 1f);
       btn.Pressed = new Color(a.r * 0.62f, a.g * 0.62f, a.b * 0.62f, 1f);
+      btn.SelectedColor = new Color(a.r * 0.50f, a.g * 0.50f, a.b * 0.50f, 1f);
       btn.LabelColor = pal.Text;
       btn.FocusRing = NewImage(go.transform, "Focus", w + 10, h + 10, new Color(a.r, a.g, a.b, 0.95f));   // drawn first, so it shows as an outline
       btn.FocusRing.enabled = false;

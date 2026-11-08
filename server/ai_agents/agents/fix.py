@@ -1,6 +1,6 @@
 from google.adk.agents import LlmAgent
 
-from ..callbacks import permission_guard
+from ..callbacks import permission_guard, evidence_collector
 from ..config import MODEL
 from ..tools.control_tools import exit_loop
 from ..tools.exec_tools import read_test_results, run_tests, run_typecheck
@@ -42,6 +42,7 @@ confidence).
            get_symbol_definition, get_symbol_references, get_symbol_hover_info,
            get_call_hierarchy],
     before_tool_callback=permission_guard,
+    after_tool_callback=evidence_collector,
     output_key='proposed_patch',
 )
 
@@ -68,6 +69,7 @@ objects with id and message), not_run (list), typecheck (passed, failed or not_r
 ''',
     tools=[run_tests, run_typecheck, read_test_results, exit_loop],
     before_tool_callback=permission_guard,
+    after_tool_callback=evidence_collector,
     output_key='test_results',
 )
 
@@ -92,5 +94,6 @@ assumptions, claims), with diff taken from get_worktree_diff and summary updated
 ''',
     tools=[get_source, apply_patch_to_worktree, get_worktree_diff],
     before_tool_callback=permission_guard,
+    after_tool_callback=evidence_collector,
     output_key='proposed_patch',
 )

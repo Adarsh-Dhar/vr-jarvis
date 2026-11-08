@@ -508,5 +508,83 @@
     "created_at": "2026-11-08T05:38:50.107030",
     "size_bytes": 1697,
     "application_id": "test_classify_manual"
+  },
+  "372490ec-8d1b-4949-8058-ff8c8ab581e1": {
+    "session_id": "test_session",
+    "created_at": "2026-11-08T20:14:11.731106",
+    "size_bytes": 1704,
+    "application_id": "test_duration_app"
+  },
+  "464fe953-24b5-47fc-a07c-61e4abd01dfc": {
+    "session_id": "test_session",
+    "created_at": "2026-11-08T20:14:15.927963",
+    "size_bytes": 109036,
+    "application_id": "test_app"
+  },
+  "6f25d164-eb2e-4be0-8820-4fea1adf6f7a": {
+    "session_id": "test_session",
+    "created_at": "2026-11-08T20:14:17.984187",
+    "size_bytes": 109065,
+    "application_id": "test_app"
+  },
+  "58a28599-f4e2-4408-88ed-4924a1a03b53": {
+    "session_id": "test_session",
+    "created_at": "2026-11-08T20:14:20.024248",
+    "size_bytes": 109034,
+    "application_id": "test_app"
+  },
+  "eb88391f-2e51-4fd3-8cdc-2c50c15de274": {
+    "session_id": "test_session",
+    "created_at": "2026-11-08T20:14:22.070009",
+    "size_bytes": 109002,
+    "application_id": "test_app"
+  },
+  "21f129f4-69a8-48d1-a268-024fb45cd6dc": {
+    "session_id": "test_session",
+    "created_at": "2026-11-08T20:14:24.264999",
+    "size_bytes": 1580,
+    "application_id": "test_args_app"
+  },
+  "40e2c3b8-b3a0-4204-89d6-75d2de5ad5f1": {
+    "session_id": "test_session",
+    "created_at": "2026-11-08T20:14:26.285305",
+    "size_bytes": 3420,
+    "application_id": "test_import_app"
+  },
+  "2db3bc3f-fe98-4264-9407-2ec404434ff0": {
+    "session_id": "test_session",
+    "created_at": "2026-11-08T20:14:28.910687",
+    "size_bytes": 1285,
+    "application_id": "test_stop_app"
+  },
+  "382f0476-8815-4c5d-bb0f-9b8c4d0badc4": {
+    "session_id": "test_session",
+    "created_at": "2026-11-08T20:14:31.956550",
+    "size_bytes": 1709,
+    "application_id": "test_watchdog_timeout"
+  },
+  "8bc10d6b-0c4f-4d07-9261-c1f473e852dc": {
+    "session_id": "test_session",
+    "created_at": "2026-11-08T20:14:35.104824",
+    "size_bytes": 1708,
+    "application_id": "test_reuse_app"
+  },
+  "9e31fb99-609e-4a77-9191-4a9d9ab119be": {
+    "session_id": "test_session",
+    "created_at": "2026-11-08T20:14:39.125340",
+    "size_bytes": 2212,
+    "application_id": "test_reuse_app"
+  },
+  "f0c5d0fa-1d78-420c-ba83-abd812e5d71d": {
+    "session_id": "test_session",
+    "created_at": "2026-11-08T20:14:42.151735",
+    "size_bytes": 1709,
+    "application_id": "test_classify_timeout"
+  },
+  "a6c2384d-4a7a-4438-98f7-3b01b6b3dfeb": {
+    "session_id": "test_session",
+    "created_at": "2026-11-08T20:14:44.184827",
+    "size_bytes": 1698,
+    "application_id": "test_classify_manual"
   }
 }

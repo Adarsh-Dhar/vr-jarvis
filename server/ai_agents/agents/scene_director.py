@@ -3,7 +3,7 @@ from google.adk.agents import LlmAgent
 from ..config import LITE_MODEL
 from ..tools.scene_tools import (dim_unrelated, focus_camera, highlight_vr_path, open_code_panel,
                                  set_edge_style, show_ghost_diff, show_test_badges)
-from ..callbacks import permission_guard
+from ..callbacks import permission_guard, evidence_collector
 
 INSTRUCTION = '''
 You are the Scene Director. You turn verified results into scene commands for the VR headset, then
@@ -56,6 +56,7 @@ def make_scene_director(name: str) -> LlmAgent:
         tools=[highlight_vr_path, dim_unrelated, focus_camera, open_code_panel,
                set_edge_style, show_ghost_diff, show_test_badges],
         before_tool_callback=permission_guard,
+        after_tool_callback=evidence_collector,
     )
     from .registry import AGENT_CONFIG
     AGENT_CONFIG[name] = {
@@ -73,6 +74,7 @@ def make_result_scene_director(name: str, result_key: str) -> LlmAgent:
         tools=[highlight_vr_path, dim_unrelated, focus_camera, open_code_panel,
                set_edge_style, show_ghost_diff, show_test_badges],
         before_tool_callback=permission_guard,
+        after_tool_callback=evidence_collector,
     )
     from .registry import AGENT_CONFIG
     AGENT_CONFIG[name] = {

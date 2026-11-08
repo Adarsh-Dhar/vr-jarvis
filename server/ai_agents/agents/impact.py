@@ -4,7 +4,7 @@ from ..config import MODEL
 from ..tools.git_tools import get_diff, list_changed_nodes
 from ..tools.graph_tools import (find_tests_for_node, get_callers, get_coverage, get_dependents,
                                  get_node, trace_path)
-from ..callbacks import permission_guard
+from ..callbacks import permission_guard, evidence_collector
 
 change_loader = LlmAgent(
     name='change_loader_agent',
@@ -23,6 +23,7 @@ diff_summary (at most two sentences).
     tools=[list_changed_nodes, get_diff, get_node],
     output_key='changed_nodes',
     before_tool_callback=permission_guard,
+    after_tool_callback=evidence_collector,
 )
 
 static_impact = LlmAgent(
@@ -45,6 +46,7 @@ unresolved (same, plus reason), counts (confirmed and unresolved totals).
     tools=[get_dependents, get_callers, trace_path, get_node],
     output_key='impact_static',
     before_tool_callback=permission_guard,
+    after_tool_callback=evidence_collector,
 )
 
 test_mapper = LlmAgent(
@@ -63,6 +65,7 @@ tests), low_coverage_nodes (node ids with coverage below 0.5).
     tools=[get_callers, find_tests_for_node, get_coverage],
     output_key='tests_relevant',
     before_tool_callback=permission_guard,
+    after_tool_callback=evidence_collector,
 )
 
 impact_synthesizer = LlmAgent(
@@ -88,6 +91,7 @@ reason), recommended_tests (list), claims (list of objects with text, node_ids, 
 ''',
     output_key='impact_report',
     before_tool_callback=permission_guard,
+    after_tool_callback=evidence_collector,
 )
 
 from .registry import AGENT_CONFIG

@@ -155,6 +155,15 @@ def open_repository(repository_path: str, tool_context: ToolContext) -> dict:
         }
 
 
+IGNORED_DIRS = {'.git', 'node_modules', 'dist', 'build', '.next', 'coverage', '__pycache__', '.venv', 'venv', '.idea', '.vscode'}
+MAX_LIST_ENTRIES = 3000
+MAX_FILE_CHARS = 200_000
+
+
+def _ignored(item: Path, root: Path) -> bool:
+    return any(part in IGNORED_DIRS for part in item.relative_to(root).parts[:-1]) or item.name in IGNORED_DIRS
+
+
 @safe
 def list_files(
     tool_context: ToolContext,
@@ -167,37 +176,43 @@ def list_files(
         dir_path = Path(directory)
         if not dir_path.is_absolute():
             dir_path = resolve_in_repo(dir_path)
-        
+
         if not dir_path.exists():
             return {
                 'status': 'error',
                 'error': f'Directory does not exist: {directory}'
             }
-        
+
         files = []
-        
+        truncated = False
+
         if recursive:
-            for item in dir_path.rglob('*'):
-                if pattern is None or pattern in item.name:
-                    files.append({
-                        'path': str(item.relative_to(dir_path)),
-                        'type': 'directory' if item.is_dir() else 'file',
-                        'size': item.stat().st_size if item.is_file() else 0
-                    })
+            iterator = dir_path.rglob('*')
         else:
-            for item in dir_path.iterdir():
-                if pattern is None or pattern in item.name:
-                    files.append({
-                        'path': str(item.relative_to(dir_path)),
-                        'type': 'directory' if item.is_dir() else 'file',
-                        'size': item.stat().st_size if item.is_file() else 0
-                    })
-        
-        return {
+            iterator = dir_path.iterdir()
+        for item in iterator:
+            if _ignored(item, dir_path):
+                continue
+            if pattern is None or pattern in item.name:
+                files.append({
+                    'path': str(item.relative_to(dir_path)),
+                    'type': 'directory' if item.is_dir() else 'file',
+                    'size': item.stat().st_size if item.is_file() else 0
+                })
+                if len(files) >= MAX_LIST_ENTRIES:
+                    truncated = True
+                    break
+
+        result = {
             'status': 'ok',
             'directory': str(dir_path),
-            'files': files
+            'files': files,
+            'total': len(files),
+            'truncated': truncated,
         }
+        if truncated:
+            result['hint'] = 'Listing truncated. Use directory= or pattern= to narrow the search.'
+        return result
     except Exception as e:
         return {
             'status': 'error',
@@ -233,13 +248,20 @@ def read_file(file_path: str, tool_context: ToolContext) -> dict:
             content = path.read_text(encoding='latin-1')
 
         line_count = len(content.splitlines())
+        truncated = len(content) > MAX_FILE_CHARS
+        if truncated:
+            content = content[:MAX_FILE_CHARS]
 
-        return {
+        result = {
             'status': 'ok',
             'file_path': str(path),
             'content': content,
-            'line_count': line_count
+            'line_count': line_count,
+            'truncated': truncated,
         }
+        if truncated:
+            result['hint'] = 'File truncated. Use read_file_range for specific sections.'
+        return result
     except Exception as e:
         return {
             'status': 'error',
@@ -313,26 +335,35 @@ def search_files(
             }
         
         matches = []
-        
+        truncated = False
+
         for item in dir_path.rglob('*'):
-            if item.is_file():
+            if item.is_file() and not _ignored(item, dir_path):
                 # Check file extension filter
                 if file_extension:
                     if not item.suffix.lower().lstrip('.') == file_extension.lower():
                         continue
-                
+
                 # Check pattern in filename
                 if pattern.lower() in item.name.lower():
                     matches.append({
                         'path': str(item.relative_to(dir_path)),
                         'name': item.name
                     })
-        
-        return {
+                    if len(matches) >= MAX_LIST_ENTRIES:
+                        truncated = True
+                        break
+
+        result = {
             'status': 'ok',
             'pattern': pattern,
-            'matches': matches
+            'matches': matches,
+            'total': len(matches),
+            'truncated': truncated,
         }
+        if truncated:
+            result['hint'] = 'Too many matches. Narrow the pattern or directory.'
+        return result
     except Exception as e:
         return {
             'status': 'error',
@@ -349,37 +380,48 @@ def search_code(
 ) -> dict:
     """Search source code in one repository (default: the active repository)."""
     try:
-        # Use grep to search for code patterns
+        # Use grep to search for code patterns, skipping dependency/build dirs
         from ._common import repo_root
         cwd = Path(directory).resolve() if directory else repo_root()
         matches = []
-        
+
+        excludes = [arg for d in IGNORED_DIRS for arg in ('--exclude-dir', d)]
+
         # Build grep command
-        cmd = ['grep', '-rn', '--include=*.py', '--include=*.js', '--include=*.ts', '--include=*.java', '--include=*.go', '--include=*.rs', query, str(cwd)]
-        
+        cmd = ['grep', '-rn', *excludes, '--include=*.py', '--include=*.js', '--include=*.ts', '--include=*.java', '--include=*.go', '--include=*.rs', query, str(cwd)]
+
         if file_pattern:
-            cmd = ['grep', '-rn', f'--include={file_pattern}', query, str(cwd)]
-        
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        
+            cmd = ['grep', '-rn', *excludes, f'--include={file_pattern}', query, str(cwd)]
+
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+        truncated = False
+
         if result.returncode == 0:
             for line in result.stdout.splitlines():
                 parts = line.split(':', 2)
                 if len(parts) >= 3:
                     file_path = parts[0]
                     line_num = parts[1]
-                    snippet = parts[2].strip()
+                    snippet = parts[2].strip()[:500]
                     matches.append({
                         'file': file_path,
-                        'line': int(line_num),
+                        'line': int(line_num) if line_num.isdigit() else 0,
                         'snippet': snippet
                     })
-        
-        return {
+                    if len(matches) >= MAX_LIST_ENTRIES:
+                        truncated = True
+                        break
+
+        out = {
             'status': 'ok',
             'query': query,
-            'matches': matches
+            'matches': matches,
+            'total': len(matches),
+            'truncated': truncated,
         }
+        if truncated:
+            out['hint'] = 'Too many matches. Narrow the query or use directory= to scope the search.'
+        return out
     except Exception as e:
         return {
             'status': 'error',

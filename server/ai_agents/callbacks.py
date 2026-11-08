@@ -81,6 +81,28 @@ PERMISSION_LEVELS = {
 from .agents.toolsets import TOOL_LEVELS as TOOL_PERMISSIONS
 
 
+def _record_grant(state, calling_agent: str, name: str) -> None:
+    """Count a tool call that was actually granted. Blocked attempts must not
+    consume budget or leak a concurrent-call slot."""
+    per_turn_budgets = state.get('per_turn_budgets')
+    if not isinstance(per_turn_budgets, dict):
+        per_turn_budgets = {}
+    per_turn_budgets[calling_agent] = per_turn_budgets.get(calling_agent, 0) + 1
+    state['per_turn_budgets'] = per_turn_budgets
+
+    concurrent_calls = state.get('concurrent_calls')
+    if not isinstance(concurrent_calls, dict):
+        concurrent_calls = {}
+    concurrent_calls[calling_agent] = concurrent_calls.get(calling_agent, 0) + 1
+    state['concurrent_calls'] = concurrent_calls
+
+    tool_timeouts = state.get('tool_timeouts')
+    if not isinstance(tool_timeouts, dict):
+        tool_timeouts = {}
+    tool_timeouts[name] = {'start_time': time.time(), 'agent': calling_agent}
+    state['tool_timeouts'] = tool_timeouts
+
+
 def generate_approval_key(tool_name: str, args: dict) -> str:
     """
     Generate a deterministic key for an approval request.
@@ -221,22 +243,6 @@ def permission_guard(tool, args, tool_context):
                 'reason': f'Agent {calling_agent} exceeded concurrent call limit of {concurrent_limit}'
             }
 
-        # Increment per-turn budget (atomic - this happens before tool execution)
-        per_turn_budgets[calling_agent] += 1
-        tool_context.state['per_turn_budgets'] = per_turn_budgets
-
-        # Increment concurrent call count (atomic)
-        concurrent_calls[calling_agent] = current_concurrent + 1
-        tool_context.state['concurrent_calls'] = concurrent_calls
-
-        # Store tool start time for timeout tracking
-        tool_timeouts = tool_context.state.get('tool_timeouts', {})
-        if not isinstance(tool_timeouts, dict):
-            tool_timeouts = {}
-            tool_context.state['tool_timeouts'] = tool_timeouts
-        tool_timeouts[name] = {'start_time': time.time(), 'agent': calling_agent}
-        tool_context.state['tool_timeouts'] = tool_timeouts
-
     # Original tier2 checks
     if name in TIER2_TOOLS and not tool_context.state.get('approved'):
         outcome = 'blocked_tier2'
@@ -254,6 +260,7 @@ def permission_guard(tool, args, tool_context):
         # Check if this call was previously approved
         if validate_approval(name, args, tool_context):
             # Approved - proceed with execution
+            _record_grant(tool_context.state, calling_agent, name)
             outcome = 'granted'
             _log_authorization(calling_agent, name, redacted_args, outcome, time.time() - start_time)
             return None
@@ -284,6 +291,8 @@ def permission_guard(tool, args, tool_context):
         }
 
     # Permission granted
+    if calling_agent:
+        _record_grant(tool_context.state, calling_agent, name)
     outcome = 'granted'
     _log_authorization(calling_agent, name, redacted_args, outcome, time.time() - start_time)
     return None
@@ -327,43 +336,34 @@ def _is_plain_text(content):
         part.text and not part.function_call and not part.function_response for part in content.parts)
 
 
-def evidence_collector(callback_context, tool_result):
-    """Phase 1.4: after_tool_callback that copies evidence from tool results into state."""
-    state = callback_context.state
+def evidence_collector(tool, args, tool_context, tool_response):
+    """Phase 1.4: after_tool_callback that copies evidence from tool results into state
+    and releases the concurrent-call slot taken by permission_guard."""
+    state = tool_context.state
 
     # Initialize evidence list if needed
     if "evidence" not in state:
         state["evidence"] = []
 
     # Extract evidence from tool result
-    if isinstance(tool_result, dict):
+    if isinstance(tool_response, dict):
         # Common evidence fields
         evidence_fields = ["node_id", "file", "start", "end", "evidence", "nodes", "references"]
 
         for field in evidence_fields:
-            if field in tool_result and tool_result[field]:
+            if field in tool_response and tool_response[field]:
                 # Add to evidence list
-                if isinstance(tool_result[field], list):
-                    state["evidence"].extend(tool_result[field])
+                if isinstance(tool_response[field], list):
+                    state["evidence"].extend(tool_response[field])
                 else:
-                    state["evidence"].append(tool_result[field])
-    
+                    state["evidence"].append(tool_response[field])
+
     # Decrement concurrent call count
-    calling_agent = callback_context.agent_name
+    calling_agent = tool_context.agent_name
     concurrent_calls = state.get('concurrent_calls', {})
     if calling_agent in concurrent_calls and concurrent_calls[calling_agent] > 0:
         concurrent_calls[calling_agent] -= 1
         state['concurrent_calls'] = concurrent_calls
-    
-    return None
-
-    # Decrement concurrent call count after tool completes
-    calling_agent = callback_context.agent_name
-    if calling_agent:
-        concurrent_calls = state.get('concurrent_calls', {})
-        if isinstance(concurrent_calls, dict) and calling_agent in concurrent_calls:
-            concurrent_calls[calling_agent] = max(0, concurrent_calls[calling_agent] - 1)
-            state['concurrent_calls'] = concurrent_calls
 
     return None
 

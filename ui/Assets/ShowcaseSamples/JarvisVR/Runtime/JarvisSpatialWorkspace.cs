@@ -40,6 +40,7 @@ namespace JarvisVR
     private bool _mock;
     private JarvisVoice _voice;
     private readonly Dictionary<string, JarvisSpatialPanel> _panels = new Dictionary<string, JarvisSpatialPanel>();
+    private readonly Dictionary<string, JarvisSpatialButton> _navButtons = new Dictionary<string, JarvisSpatialButton>();
     private readonly Dictionary<string, NodeView> _nodes = new Dictionary<string, NodeView>();
     private readonly List<EdgeView> _edges = new List<EdgeView>();
     private readonly Dictionary<string, ClusterView> _clusters = new Dictionary<string, ClusterView>();
@@ -115,7 +116,6 @@ namespace JarvisVR
       JarvisCityscape.Build(_root);
       LoadGraph(JarvisGraphModel.Sample());
       SetMode("REPOS");                 // begin with the repository picker, like an IDE start screen
-      Select("service.delete");
 
       gameObject.AddComponent<JarvisSpatialInput>().Initialize(_cam, _graphRoot, ToggleVoice);
       Say("Hi. Pinch the orb to talk, or tap a quick question.");
@@ -129,8 +129,9 @@ namespace JarvisVR
         _serverOnline = true;
         LoadGraph(g);
         Log("graph from server: " + g.nodes.Count + " nodes");
-        string first = g.nodes[0].id;
-        Select(_nodes.ContainsKey(_selected ?? "") ? _selected : first);
+        // Select the first non-module node from the server graph
+        var first = g.nodes.FirstOrDefault(n => n.kind != "module" && n.kind != "file");
+        if (first != null) Select(first.id);
         RefreshStatus();
       });
     }
@@ -225,6 +226,7 @@ namespace JarvisVR
 
       _codePanel = AddPanel("code", "Code inspector", 560, 520, 1.18f, 0.20f, pal.Cyan);
       _codePanel.SetBodyBox(60, 370); _codePanel.UseMono(17);
+      _codePanel.Body.horizontalOverflow = HorizontalWrapMode.Overflow;
       _codePrev = _codePanel.AddButton("< PREVIOUS", 18, 454, 166, 48, () => ChangeEditorPage(-1));
       _codeClose = _codePanel.AddButton("CLOSE FILE", 192, 454, 166, 48, CloseOpenFile);
       _codeNext = _codePanel.AddButton("NEXT >", 366, 454, 176, 48, () => ChangeEditorPage(+1));
@@ -296,7 +298,7 @@ namespace JarvisVR
       foreach (string m in NavModes)
       {
         string mode = m;
-        nav.AddButton(mode, x, 52, 100, 46, () => { foreach (JarvisSpatialPanel pp in _panels.Values) pp.Reopen(); SetMode(mode); });
+        _navButtons[mode] = nav.AddButton(mode, x, 52, 100, 46, () => { foreach (JarvisSpatialPanel pp in _panels.Values) pp.Reopen(); SetMode(mode); });
         x += 108f;
       }
       nav.AddButton("CENTER", x, 52, 100, 46, Recenter);
@@ -310,6 +312,7 @@ namespace JarvisVR
     {
       if (mode != _mode && _panels.ContainsKey("menu")) _panels["menu"].Show(false);
       _mode = mode;
+      foreach (KeyValuePair<string, JarvisSpatialButton> nb in _navButtons) nb.Value.Selected = nb.Key == mode;
       if (_graphRoot != null) _graphRoot.gameObject.SetActive(mode != "REPOS" && mode != "CODE");
       string[] visible = ModePanels.ContainsKey(mode) ? ModePanels[mode] : ModePanels["MAP"];
       int shown = 0;
@@ -415,6 +418,12 @@ namespace JarvisVR
 
         nv.Base = baseColor;
         body.AddComponent<JarvisGraphNode>().Initialize(dto.id, Select, DragCluster, ShowNodeMenu);
+        // Invisible pinch target: the rendered node is only a few centimetres wide, which is
+        // hard to hit reliably at arm's length. Parent it to Body so it grows with the pop animation.
+        var hitArea = new GameObject("HitArea");
+        hitArea.transform.SetParent(body.transform, false);
+        hitArea.transform.localScale = Vector3.one * 2.4f;
+        hitArea.AddComponent<SphereCollider>();
         nv.Fx = rootGo.AddComponent<JarvisNodeFx>();
         nv.Fx.Begin(nv.BodyT, 0.06f * _nodes.Count, nv.Base);
 
@@ -863,6 +872,15 @@ namespace JarvisVR
 
     private void ToggleVoice() { if (_voice != null) _voice.ToggleListening(); }
 
+    // Push-to-talk on the orb: hold the pinch while you speak, let go to send the message.
+    private void VoiceDown()
+    {
+      if (_voice == null || _voice.Current == JarvisVoice.State.Listening) return;
+      JarvisAudio.Play(JarvisAudio.Cue.SelectTick);
+      _voice.StartPushToTalk();
+    }
+    private void VoiceUp() { if (_voice != null) _voice.StopPushToTalk(); }
+
     private void Ask(string text)
     {
       if (_bridge == null || string.IsNullOrEmpty(text)) return;
@@ -885,6 +903,7 @@ namespace JarvisVR
         {
           Say(r.error);
           Log("error: " + r.error);
+          Debug.LogError("[JARVIS] error: " + r.error);
           _errorUntil = Time.unscaledTime + 4f;
         }
         return;
@@ -899,8 +918,11 @@ namespace JarvisVR
       if (r.test_source == "cached") reply += "  (Test results are SIMULATED.)";
       Say(reply);
       Log("JARVIS answered");
+      Debug.Log("[JARVIS] reply: " + reply);
       if (_voice != null) _voice.Speak(reply);
-      RefreshActivity();
+      RefreshAll();
+      if (!string.IsNullOrEmpty(_pending)) SetMode("GIT");
+      else if (graphChanged) SetMode("MAP");
     }
 
     private void RefreshAll() { RefreshStyles(); RefreshEvidence(); RefreshCode(); RefreshGhost(); RefreshApproval(); RefreshTests(); RefreshQuickButtons(); SetMode(_mode); }
@@ -1809,17 +1831,18 @@ namespace JarvisVR
     {
       if (_codePanel == null || _openFile == null) return;
       _codePanel.SetTitle(_openFile.path);
-      string[] lines = (_openFile.content ?? "").Split('\n');
-      int pages = Mathf.Max(1, Mathf.CeilToInt(lines.Length / (float)EditorLinesPerPage));
+      string[] hl = JarvisSyntax.HighlightLines(_openFile.content, _openFile.path);
+      int pages = Mathf.Max(1, Mathf.CeilToInt(hl.Length / (float)EditorLinesPerPage));
       int first = _openFilePage * EditorLinesPerPage;
-      int last = Mathf.Min(lines.Length, first + EditorLinesPerPage);
+      int last = Mathf.Min(hl.Length, first + EditorLinesPerPage);
+      int width = hl.Length.ToString().Length;
       var sb = new StringBuilder();
       sb.Append("<color=#").Append(Hex(JarvisPalette.Current.TextMuted)).Append(">READ-ONLY VIEW  ·  ")
-        .Append(lines.Length).Append(" lines  ·  page ").Append(_openFilePage + 1).Append('/').Append(pages).Append("</color>\n\n");
+        .Append(hl.Length).Append(" lines  ·  page ").Append(_openFilePage + 1).Append('/').Append(pages).Append("</color>\n\n");
       for (int i = first; i < last; i++)
       {
         sb.Append("<color=#").Append(Hex(JarvisPalette.Current.TextMuted)).Append('>')
-          .Append(i + 1).Append("</color>  ").Append(EscapeRichText(lines[i].TrimEnd('\r'))).Append('\n');
+          .Append((i + 1).ToString().PadLeft(width)).Append("</color>  ").Append(hl[i]).Append('\n');
       }
       if (_openFile.truncated) sb.Append("\n<color=#").Append(Hex(JarvisPalette.Current.Amber)).Append(">File truncated at 512 KB.</color>");
       _codePanel.SetBody(sb.ToString());
@@ -1900,23 +1923,46 @@ namespace JarvisVR
         if (_bridge != null && !_source.ContainsKey(_selected))
         {
           string selectedId = _selected; // Capture for async callback
-          UnityEngine.Debug.Log("JARVIS: Fetching source for " + selectedId);
           _bridge.GetSource(selectedId, src => {
-            UnityEngine.Debug.Log("JARVIS: Source callback for " + selectedId + " status=" + (src?.status ?? "null"));
             if (src != null && src.status == "ok") {
               _source[selectedId] = src;
               if (_selected == selectedId) RefreshCode();
+            } else if (src != null && src.status == "error") {
+              // Show error in the code panel
+              if (_selected == selectedId) {
+                _panels["code"].SetTitle("Error");
+                _panels["code"].SetBody(src.error ?? "Failed to load source");
+              }
             }
           });
         }
         return;
       }
-      _panels["code"].SetTitle(s.file);
-      string[] lines = (s.source ?? "").Split('\n');
+      // IDE-style header with file path and language
+      string fileName = System.IO.Path.GetFileName(s.file);
+      string dirPath = System.IO.Path.GetDirectoryName(s.file) ?? "";
+      string ext = System.IO.Path.GetExtension(s.file).ToLower();
+      string lang = ext switch
+      {
+        ".ts" or ".tsx" or ".js" or ".jsx" => "TypeScript",
+        ".py" => "Python",
+        ".cs" => "C#",
+        ".java" => "Java",
+        ".cpp" or ".h" or ".cc" => "C++",
+        ".go" => "Go",
+        ".rs" => "Rust",
+        _ => ext.TrimStart('.')
+      };
+      _panels["code"].SetTitle($"{fileName}  ·  {lang}  ·  {dirPath}");
+
+      string[] hl = JarvisSyntax.HighlightLines(s.source, s.file);
+      int width = (s.first_line + hl.Length).ToString().Length;   // pad line numbers so code starts in one column
       var sb = new StringBuilder();
-      for (int i = 0; i < lines.Length && i < MaxCodeLines; i++)
-        sb.Append("<color=#").Append(Hex(pal.TextMuted)).Append('>').Append(s.first_line + i).Append("</color>  ").Append(lines[i].TrimEnd('\r')).Append('\n');
-      if (lines.Length > MaxCodeLines) sb.Append("… ").Append(lines.Length - MaxCodeLines).Append(" more lines");
+      for (int i = 0; i < hl.Length && i < MaxCodeLines; i++)
+        sb.Append("<color=#").Append(Hex(pal.TextMuted)).Append('>')
+          .Append((s.first_line + i).ToString().PadLeft(width)).Append("</color>  ")
+          .Append(hl[i]).Append('\n');
+      if (hl.Length > MaxCodeLines) sb.Append("… ").Append(hl.Length - MaxCodeLines).Append(" more lines");
       _panels["code"].SetBody(sb.ToString());
     }
 
@@ -2116,7 +2162,9 @@ namespace JarvisVR
       _orbMat = JarvisSpatialGfx.Neon(pal.Cyan, 2f, true);
       go.GetComponent<Renderer>().sharedMaterial = _orbMat;
       JarvisSpatialGfx.Flat(go.GetComponent<Renderer>());
-      go.AddComponent<JarvisSpatialButton>().OnClick = ToggleVoice;   // pinch the orb to talk
+      var orbBtn = go.AddComponent<JarvisSpatialButton>();
+      orbBtn.OnPress = VoiceDown;    // hold the orb pinch to talk; release to send
+      orbBtn.OnRelease = VoiceUp;
 
       var halo = GameObject.CreatePrimitive(PrimitiveType.Sphere);
       halo.name = "Halo";

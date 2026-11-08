@@ -236,10 +236,11 @@ namespace JarvisVR
           // Activate normal buttons on press-down. Waiting for a perfectly stable release
           // ray made hand pinch and controller clicks feel unresponsive in VR. Deliberate
           // hold actions (for example approval) still wait for HoldSeconds below.
+          // Buttons with OnPress (push-to-talk) get Press() instead of a click.
           if (s.Btn.HoldSeconds <= 0f)
           {
             s.BtnFired = true;
-            FireButton(s.Btn);
+            if (s.Btn.OnPress != null) s.Btn.Press(); else FireButton(s.Btn);
           }
         }
         else if (hoverNode != null)
@@ -273,7 +274,7 @@ namespace JarvisVR
             if (s.Btn.HoldSeconds <= 0f)
             {
               s.BtnFired = true;
-              FireButton(s.Btn);
+              if (s.Btn.OnPress != null) s.Btn.Press(); else FireButton(s.Btn);
             }
           }
           else
@@ -291,7 +292,7 @@ namespace JarvisVR
       {
         if (s.Btn != null)
         {
-          if (hoverBtn != s.Btn) { s.Btn.SetPressed(false); s.Btn.SetProgress(0f); if (s.Btn.HoldSeconds > 0f) JarvisAudio.SetCharge(0f); s.Btn = null; }
+          if (hoverBtn != s.Btn) { s.Btn.SetPressed(false); s.Btn.SetProgress(0f); if (s.Btn.HoldSeconds > 0f) JarvisAudio.SetCharge(0f); s.Btn.Release(); s.Btn = null; }
           else if (s.Btn.HoldSeconds > 0f && !s.BtnFired)
           {
             float p = (Time.unscaledTime - s.BtnTime) / s.Btn.HoldSeconds;
@@ -309,7 +310,7 @@ namespace JarvisVR
         else if (s.Node != null)
         {
           Vector3 point = s.Ray.GetPoint(s.NodeDist);
-          if (!s.NodeDragging && Vector3.Distance(point, s.NodeStart) > 0.04f) s.NodeDragging = true;
+          if (!s.NodeDragging && Vector3.Distance(point, s.NodeStart) > Mathf.Max(0.05f, s.NodeDist * 0.05f)) s.NodeDragging = true;
           if (s.NodeDragging) { s.Node.DragCluster(point - s.NodeLast); s.NodeLast = point; }
           else if (!s.NodeHeld && Time.unscaledTime - s.NodeTime > 0.7f) { s.NodeHeld = true; JarvisAudio.Play(JarvisAudio.Cue.SelectTick); s.Node.Hold(); }
         }
@@ -350,7 +351,7 @@ namespace JarvisVR
         JarvisSpatialButton button = collider.GetComponentInParent<JarvisSpatialButton>();
         if (button == null || !button.Interactable) continue;
         JarvisSpatialPanel buttonPanel = button.GetComponentInParent<JarvisSpatialPanel>();
-        if (buttonPanel != null && (firstPanel == null || buttonPanel == firstPanel || i == 0 || hits[i].distance - hits[0].distance <= 0.025f))
+        if (buttonPanel != null && (buttonPanel == firstPanel || i == 0 || hits[i].distance - hits[0].distance <= 0.025f))
         {
           selected = hits[i];
           return true;
@@ -397,6 +398,7 @@ namespace JarvisVR
         s.Btn.SetPressed(false);
         s.Btn.SetProgress(0f);
         if (s.Btn.HoldSeconds > 0f) JarvisAudio.SetCharge(0f);
+        s.Btn.Release();
       }
       if (s.Node != null && !s.NodeDragging && !s.NodeHeld) s.Node.Select();
       s.Btn = null; s.Node = null; s.Grab = null; s.Resize = null; s.NodeDragging = false; s.NodeHeld = false;

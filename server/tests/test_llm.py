@@ -68,6 +68,7 @@ def test_a_plain_model_fails_on_the_first_503(fake):
 
 
 def test_make_model_retries_through_503s(fake, monkeypatch):
+    monkeypatch.setattr(llm.RETRY, 'attempts', 3)
     monkeypatch.setattr(llm.RETRY, 'initial_delay', 0.05)
     _Fake.fail_first = 2
     assert asyncio.run(_ask(llm.make_model('m', base_url=fake))) == 'hello'

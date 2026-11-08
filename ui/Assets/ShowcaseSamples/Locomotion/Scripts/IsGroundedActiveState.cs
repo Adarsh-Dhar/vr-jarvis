@@ -24,24 +24,24 @@ using UnityEngine;
 namespace Oculus.Interaction.Locomotion
 {
     /// <summary>
-    /// ActiveState indicating if the associated <see cref="CharacterController"/> is touching the ground
+    /// ActiveState indicating if the associated <see cref="LocomotionCharacterController"/> is touching the ground
     /// </summary>
     [MetaCodeSample("ISDK-Locomotion")]
     public class IsGroundedActiveState : MonoBehaviour, IActiveState
     {
         [SerializeField]
-        private CharacterController _characterController;
+        private LocomotionCharacterController _characterController;
 
         public bool Active => _characterController.IsGrounded;
 
         #region Inject
 
-        public void InjectAllIsGroundedActiveState(CharacterController characterController)
+        public void InjectAllIsGroundedActiveState(LocomotionCharacterController characterController)
         {
             InjectCharacterController(characterController);
         }
 
-        public void InjectCharacterController(CharacterController characterController)
+        public void InjectCharacterController(LocomotionCharacterController characterController)
         {
             _characterController = characterController;
         }

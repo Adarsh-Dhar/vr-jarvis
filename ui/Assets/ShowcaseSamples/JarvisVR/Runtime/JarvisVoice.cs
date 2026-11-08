@@ -22,7 +22,7 @@ namespace JarvisVR
     /// <summary>Set by the workspace. Sends a 16 kHz mono WAV to the server and returns the transcript, so speech to text
     /// works on a Quest build without the Meta Voice SDK.</summary>
     public Action<byte[], Action<string>, Action<string>> Transcriber;
-    private bool _recording, _heardVoice;
+    private bool _recording, _heardVoice, _pushToTalk;
     private int _recStart;
     private float _recStartedAt, _lastVoiceAt;
     private const int LoopSeconds = 30, MaxRecordSeconds = 12;
@@ -32,10 +32,17 @@ namespace JarvisVR
     private readonly float[] _buf = new float[256];
     private AudioClip _mic;
     private float _retryAt;
+    private float _micLoggedAt;
+    private bool _devicesLogged;
     private float _speakStartedAt;
     private float _speakUntil; // editor simulation
 
     private void Awake() { Instance = this; }
+
+    private void OnDestroy()
+    {
+      if (_mic != null) { Microphone.End(null); _mic = null; }
+    }
 
     private void Start()
     {
@@ -54,14 +61,20 @@ namespace JarvisVR
       if (Current == State.Listening) StopListening(); else StartListening();
     }
 
+    /// <summary>Orb hold-to-talk: recording runs until StopPushToTalk (the release),
+    /// so a pause mid-sentence does not cut the message short. Still capped by MaxRecordSeconds.</summary>
+    public void StartPushToTalk() { _pushToTalk = true; StartListening(); }
+    public void StopPushToTalk() { _pushToTalk = false; StopListening(); }
+
     public void StartListening()
     {
+      if (Current == State.Listening) return;
       Current = State.Listening;
 #if JARVIS_META_VOICE
       if (_wit != null) { _wit.Activate(); return; }
 #else
       // Record the microphone; the server transcribes it. Stops by itself after a pause, or tap the orb again to send.
-      if (Transcriber != null && _mic != null && Microphone.IsRecording(null))
+      if (Transcriber != null && EnsureMic())
       {
         _recStart = Microphone.GetPosition(null);
         _recStartedAt = _lastVoiceAt = Time.unscaledTime;
@@ -92,14 +105,45 @@ namespace JarvisVR
     }
 
 #if !JARVIS_META_VOICE
+    /// <summary>Keeps the looping mic clip alive for the level meter and for recording. Microphone.IsRecording
+    /// misreports on Android and a clip started before RECORD_AUDIO was granted records silence, so a dead
+    /// capture is detected and restarted instead of being trusted.</summary>
+    private bool EnsureMic()
+    {
+#if UNITY_ANDROID && !UNITY_EDITOR
+      if (!Permission.HasUserAuthorizedPermission(Permission.Microphone)) return false;
+#endif
+      if (_mic != null && !Microphone.IsRecording(null))
+      {
+        Microphone.End(null);   // stale clip: the OS stopped capture without telling us
+        _mic = null;
+      }
+      if (!_devicesLogged)
+      {
+        _devicesLogged = true;
+        var devices = Microphone.devices;
+        Debug.Log("[JarvisVoice] available input devices (" + devices.Length + "):");
+        foreach (var d in devices) Debug.Log("[JarvisVoice]   device: " + d);
+      }
+      if (_mic == null)
+      {
+        if (Microphone.devices.Length == 0) return false;
+        _mic = Microphone.Start(null, true, LoopSeconds, Rate);
+        Debug.Log("[JarvisVoice] recording from default input device " +
+                  "(clip=" + (_mic != null) + ", editor=" + Application.isEditor + ")");
+      }
+      return _mic != null;
+    }
+
     private void FinishRecording(bool discard)
     {
       _recording = false;
+      _pushToTalk = false;
       if (Current == State.Listening) Current = State.Idle;
       int end = Microphone.GetPosition(null);
       int total = _mic != null ? _mic.samples : 0;
       int count = end >= _recStart ? end - _recStart : total - _recStart + end;   // the microphone buffer loops
-      if (_mic == null || discard || count < Rate / 4)
+      if (_mic == null || discard || count < Rate * 3 / 2)
       {
         if (Notice != null) Notice(discard ? "I did not hear anything. Pinch the orb and try again." : "That was too short. Try again.");
         return;
@@ -118,6 +162,16 @@ namespace JarvisVR
           Array.Copy(tail, 0, data, head.Length, tail.Length);
         }
       }
+      float peak = 0f, sumSq = 0f;
+      for (int i = 0; i < data.Length; i++)
+      {
+        float a = Mathf.Abs(data[i]);
+        if (a > peak) peak = a;
+        sumSq += data[i] * data[i];
+      }
+      Debug.Log("[JarvisVoice] sending " + data.Length + " samples (" +
+                (data.Length / (float)Rate).ToString("F1") + "s) peak=" + peak.ToString("F4") +
+                " rms=" + Mathf.Sqrt(sumSq / data.Length).ToString("F4"));
       if (Notice != null) Notice("Transcribing…");
       Transcriber(EncodeWav(data, Rate),
         text =>
@@ -148,7 +202,11 @@ namespace JarvisVR
     public void SubmitTranscript(string text)
     {
       if (Current == State.Listening) Current = State.Idle;
-      if (!string.IsNullOrEmpty(text) && Transcript != null) Transcript(text);
+      if (!string.IsNullOrEmpty(text))
+      {
+        Debug.Log("[JarvisVoice] message received: " + text.Trim());
+        if (Transcript != null) Transcript(text.Trim());
+      }
     }
 
     public void Speak(string text)
@@ -165,10 +223,10 @@ namespace JarvisVR
     private void Update()
     {
 #if !JARVIS_META_VOICE
-      if (_mic == null && Time.unscaledTime >= _retryAt)
+      if (Time.unscaledTime >= _retryAt && (_mic == null || (!_recording && !Microphone.IsRecording(null))))
       {
         _retryAt = Time.unscaledTime + 2f;
-        if (Microphone.devices.Length > 0) _mic = Microphone.Start(null, true, LoopSeconds, Rate);
+        EnsureMic();
       }
       if (_mic != null)
       {
@@ -185,9 +243,15 @@ namespace JarvisVR
       if (_recording)
       {
         float now = Time.unscaledTime;
+        if (now >= _micLoggedAt)
+        {
+          _micLoggedAt = now + 1f;
+          Debug.Log("[JarvisVoice] level=" + Level.ToString("F3") +
+                    " heardVoice=" + _heardVoice + " rec=" + (now - _recStartedAt).ToString("F1") + "s");
+        }
         if (Level > VoiceLevel) { _lastVoiceAt = now; _heardVoice = true; }
         float t = now - _recStartedAt;
-        if (_heardVoice && now - _lastVoiceAt > SilenceStopSeconds) FinishRecording(false);
+        if (_heardVoice && !_pushToTalk && now - _lastVoiceAt > SilenceStopSeconds) FinishRecording(false);
         else if (t >= MaxRecordSeconds) FinishRecording(false);
         else if (!_heardVoice && t >= NoSpeechGiveUpSeconds) FinishRecording(true);
       }
@@ -197,7 +261,11 @@ namespace JarvisVR
         Level = 0.25f + 0.15f * Mathf.Sin(Time.unscaledTime * 12f);
         bool done = Time.unscaledTime >= _speakUntil;
 #if UNITY_ANDROID && !UNITY_EDITOR
-        done = _ttsReady && Time.unscaledTime - _speakStartedAt > 0.4f && !_tts.Call<bool>("isSpeaking");
+        // With a TTS engine, wait for it to finish; without one, fall back to the text-length estimate
+        // or the orb would stay in the Speaking state forever.
+        done = _ttsReady
+          ? Time.unscaledTime - _speakStartedAt > 0.4f && !_tts.Call<bool>("isSpeaking")
+          : Time.unscaledTime >= _speakUntil;
 #endif
         if (done) Current = State.Idle;
       }

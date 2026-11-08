@@ -326,7 +326,7 @@ namespace JarvisVR
     private IEnumerator SourceRoutine(string nodeId, Action<SourceResponse> ok)
     {
       yield return Send("GET", "/source/" + UnityWebRequest.EscapeURL(nodeId), null,
-        b => { Debug.Log("JARVIS source response: " + b); ok(JsonUtility.FromJson<SourceResponse>(b)); }, e => Debug.LogWarning("JARVIS source: " + e));
+        b => ok(JsonUtility.FromJson<SourceResponse>(b)), e => Debug.LogWarning("JARVIS source: " + e));
     }
 
     private IEnumerator Send(string method, string path, string json, Action<string> ok, Action<string> fail)

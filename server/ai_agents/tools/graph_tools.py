@@ -200,6 +200,15 @@ def get_source(node_id: str, tool_context: ToolContext, context_lines: int = 0) 
     else:
         n = _graph()['nodes'][node_id]
 
+    # Handle module nodes (directories, not files)
+    if n.get('kind') == 'module' or n.get('level') == 'module':
+        nodes = _graph()['nodes']
+        children = sorted(c['file'] for c in nodes.values() if c.get('parent') == node_id)
+        listing = f"# module: {n['name']}\n# {len(children)} file(s)\n" + '\n'.join('#   ' + f for f in children)
+        record_evidence(tool_context, [node_id])
+        return {'status': 'ok', 'id': node_id, 'file': n['file'], 'first_line': 1,
+                'source': listing, 'truncated': False, 'total_lines': len(children) + 2}
+
     root = REPO_ROOT.resolve()
     path = (REPO_ROOT / n['file']).resolve()
     if not path.is_relative_to(root):
