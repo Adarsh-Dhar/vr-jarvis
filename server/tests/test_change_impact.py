@@ -188,7 +188,7 @@ def test_change_impact_no_duplication():
     mock_graph.covering_tests = Mock(return_value=[])
 
     # Patch the imports at the actual import locations inside the function
-    with patch('ai_agents.intelligence.graph_engine.codegraph.codegraph', mock_graph):
+    with patch('ai_agents.codegraph.load_current_graph', return_value=mock_graph):
         with patch('ai_agents.tools.graph_tools.get_dependents', side_effect=mock_get_dependents):
             result = calculate_change_impact("test_function", mock_tool_context)
 
@@ -216,3 +216,73 @@ def test_change_impact_no_duplication():
     # Verify total affected uses deduplication
     expected_total = len(direct_ids) + len(possible_ids) + len(indirect_ids) + len(import_ids)
     assert result['total_affected'] == expected_total
+
+
+def test_change_impact_import_dependents_uses_parent_file():
+    """Test that import dependents are found using the parent file node, not the function ID."""
+    from unittest.mock import Mock, patch
+
+    # Mock the graph and tool context
+    mock_tool_context = Mock()
+    mock_graph = Mock()
+
+    # Create mock callers data
+    def mock_callers(symbol_id, depth, include_possible=False):
+        return []
+
+    mock_graph.callers = mock_callers
+
+    # Track which symbol_id was passed to get_dependents for imports
+    import_queries = []
+
+    def mock_get_dependents(symbol_id, tool_context, max_depth, edge_types):
+        if 'imports' in edge_types:
+            import_queries.append(symbol_id)
+            return {
+                'status': 'ok',
+                'dependents': [
+                    {'id': 'file::other_module.py', 'edge_type': 'imports'}
+                ]
+            }
+        return {'status': 'ok', 'dependents': []}
+
+    # Mock graph node hierarchy:
+    # file::routes/users.py (level='file')
+    #   └── routes/users.py::delete_user (level='function', parent='file::routes/users.py')
+    def mock_graph_get(node_id):
+        if node_id == 'routes/users.py::delete_user':
+            return {
+                'id': 'routes/users.py::delete_user',
+                'name': 'delete_user',
+                'level': 'function',
+                'parent': 'file::routes/users.py'
+            }
+        elif node_id == 'file::routes/users.py':
+            return {
+                'id': 'file::routes/users.py',
+                'name': 'routes/users.py',
+                'level': 'file'
+            }
+        return None
+
+    mock_graph.get = mock_graph_get
+    mock_graph.covering_tests = Mock(return_value=[])
+
+    # Patch the imports at the actual import locations inside the function
+    with patch('ai_agents.codegraph.load_current_graph', return_value=mock_graph):
+        with patch('ai_agents.tools.graph_tools.get_dependents', side_effect=mock_get_dependents):
+            result = calculate_change_impact("routes/users.py::delete_user", mock_tool_context)
+
+    # Verify the result structure
+    assert result['status'] == 'ok'
+    assert 'import_dependents' in result
+
+    # Verify that get_dependents was called with the file node ID, not the function ID
+    assert len(import_queries) == 1, "get_dependents should be called once for imports"
+    assert import_queries[0] == 'file::routes/users.py', \
+        f"get_dependents should be called with file node ID, got {import_queries[0]}"
+
+    # Verify the import dependent was found
+    assert len(result['import_dependents']) == 1
+    assert result['import_dependents'][0]['id'] == 'file::other_module.py'
+    assert result['import_dependents'][0]['edge_type'] == 'imports'

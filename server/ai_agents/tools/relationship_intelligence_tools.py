@@ -998,11 +998,24 @@ def calculate_change_impact(
                 dep['uncertain'] = True
 
         # Get import-dependent modules/files separately (imports only, depth up to 6)
-        import_dependents_result = get_dependents(symbol_id, tool_context, max_depth=6, edge_types=['imports'])
+        # Import edges are between file nodes, not function nodes, so we need to use the parent file ID
+        file_node_id = symbol_id
+        current_node = node
+        # Walk up the parent chain until we reach a file-level node
+        while current_node:
+            if current_node.get('level') == 'file':
+                file_node_id = current_node['id']
+                break
+            parent_id = current_node.get('parent')
+            if not parent_id:
+                break
+            current_node = graph.get(parent_id)
+
+        import_dependents_result = get_dependents(file_node_id, tool_context, max_depth=6, edge_types=['imports'])
         import_dependents = []
         if import_dependents_result.get('status') == 'ok':
             import_dependents = [d for d in import_dependents_result['dependents']
-                                if d['edge_type'] == 'imports' and d['id'] != symbol_id]
+                                if d['edge_type'] == 'imports' and d['id'] != file_node_id]
 
         # Calculate total affected nodes using deduplicated ID set
         all_affected_ids = (direct_caller_ids |
