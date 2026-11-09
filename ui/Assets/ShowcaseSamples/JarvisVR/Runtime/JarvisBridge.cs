@@ -16,11 +16,7 @@ namespace JarvisVR
     public int depth, line;
     public float dx, dy, dz, value, azimuth, elevation, radius;
     public bool collapsed;
-    public string scope;
-    public string group_id;
     public string text;
-    public string label;
-    public string node_id1, node_id2;
     public GraphNodeDto[] nodes;
     public GraphEdgeDto[] edges;
     public string graph_type;
@@ -28,55 +24,6 @@ namespace JarvisVR
     // Impact panel fields
     public string[] direct_callers, indirect_dependents, possible_callers, import_dependents;
     public string[] passed_tests, failed_tests, not_run_tests;
-    // Security panel fields
-    public SecurityFindingDto[] findings;
-    public TaintPathDto[] taint_paths;
-    // Git history fields
-    public GitCommitDto[] commits;
-    // Runtime panel fields
-    public string trace_id;
-    public string application_id;
-    public string runtime_status;
-    public float runtime_duration_ms;
-    public int runtime_event_count;
-    public bool runtime_truncated;
-    public RuntimeEventDto[] runtime_events;
-    public string[] runtime_limitations;
-  }
-
-  [Serializable] public class SecurityFindingDto
-  {
-    public string id, type, severity, file, evidence, confidence;
-    public int line;
-  }
-
-  [Serializable] public class TaintPathDto
-  {
-    public string id, kind;
-    public TaintSourceDto source;
-    public TaintSinkDto sink;
-    public TaintStepDto[] steps;
-  }
-
-  [Serializable] public class TaintSourceDto
-  {
-    public int line;
-    public string call, kind, variable, file;
-  }
-
-  [Serializable] public class TaintSinkDto
-  {
-    public int line;
-    public string call, kind, file;
-  }
-
-  [Serializable] public class TaintStepDto
-  {
-    public string kind;
-    public string variable;
-    public string call;
-    public string file;
-    public int line;
   }
   [Serializable] public class AskResponse
   {
@@ -145,50 +92,6 @@ namespace JarvisVR
     public long size;
     public int total_lines;
     public bool truncated;
-  }
-
-  [Serializable] public class GitCommitDto
-  {
-    public string hash;
-    public string parent_hash;
-    public string message;
-    public string author;
-    public string date;
-    public int additions;
-    public int deletions;
-    public int file_count;
-    public GitFileChangeDto[] files;
-    public string[] mapped_node_ids;
-    public string mapping_status;
-  }
-
-  [Serializable] public class GitFileChangeDto
-  {
-    public string path;
-    public string old_path;
-    public string status;
-    public int additions;
-    public int deletions;
-    public string[] mapped_node_ids;
-  }
-
-  [Serializable] public class RuntimeEventDto
-  {
-    public string event_type;
-    public string call_id;
-    public string parent_call_id;
-    public string function_name;
-    public string qualified_name;
-    public string file;
-    public int line;           // Function definition line
-    public int callsite_line;  // Line where invocation occurred (if available)
-    public long timestamp_ns;  // Use long, not string
-    public float elapsed_ms;
-    public float duration_ms;
-    public long thread_id;     // Use long, not string
-    public int depth;
-    public string exception_type;
-    public string exception_id;
   }
 
   [Serializable] internal class RepoSelectRequest { public string name; }

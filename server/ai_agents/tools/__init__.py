@@ -82,9 +82,6 @@ from .orchestrator_tools import (
     invoke_code_understanding,
     invoke_relationship_intelligence,
     invoke_data_flow_intelligence,
-    invoke_runtime_intelligence,
-    invoke_debugging_intelligence,
-    invoke_security_quality,
     invoke_software_engineering,
     invoke_testing_verification,
     invoke_visualization_spatial,
@@ -200,84 +197,8 @@ from .data_flow_intelligence_tools import (
     visualize_data_flow,
 )
 
-# Agent 7 - Runtime Intelligence
-from .runtime_intelligence_tools import (
-    start_application,
-    stop_application,
-    attach_runtime_profiler,
-    attach_debugger,
-    collect_execution_trace,
-    record_function_calls,
-    record_function_arguments,
-    record_function_returns,
-    record_execution_timing,
-    record_variable_state,
-    record_memory_usage,
-    record_cpu_usage,
-    record_network_activity,
-    record_database_activity,
-    record_async_tasks,
-    record_thread_activity,
-    capture_application_logs,
-    capture_runtime_events,
-    compare_execution_traces,
-    replay_execution_trace,
-)
 
-# Agent 8 - Debugging Intelligence
-from .debugging_intelligence_tools import (
-    capture_exception,
-    analyze_stack_trace,
-    find_error_origin,
-    trace_error_propagation,
-    identify_failure_path,
-    set_breakpoint,
-    remove_breakpoint,
-    step_into,
-    step_over,
-    step_out,
-    inspect_variables,
-    evaluate_debug_expression,
-    inspect_call_stack,
-    watch_expression,
-    reproduce_bug,
-    compare_success_failure,
-    identify_root_cause,
-    suggest_debugging_actions,
-)
 
-# Agent 9 - Security & Quality
-from .security_quality_tools import (
-    # Security tools
-    scan_secrets,
-    scan_vulnerabilities,
-    scan_security_vulnerabilities,
-    scan_dependency_vulnerabilities,
-    analyze_authentication,
-    analyze_authorization,
-    analyze_permissions,
-    analyze_input_validation,
-    analyze_injection_risks,
-    detect_sql_injection,
-    analyze_cryptography,
-    trace_sensitive_data,
-    analyze_attack_surface,
-    analyze_boundaries,
-    check_advisories,
-    generate_security_report,
-    # Code quality tools
-    calculate_complexity,
-    calculate_cognitive_complexity,
-    detect_code_smells,
-    detect_duplicates,
-    detect_anti_patterns,
-    analyze_maintainability,
-    analyze_testability,
-    analyze_violations,
-    identify_technical_debt,
-    generate_quality_report,
-    check_code_quality,
-)
 
 # Agent 10 - Software Engineering
 from .software_engineering_tools import (
@@ -353,7 +274,6 @@ from .testing_verification_tools import (
     verify_compilation,
     verify_types,
     verify_lint,
-    verify_security,
     compare_before_after,
     generate_test_report,
 )
@@ -368,7 +288,6 @@ from .visualization_spatial_tools import (
     remove_graph_edge,
     expand_graph_node,
     collapse_graph_node,
-    filter_graph,
     search_graph,
     highlight_path,
     highlight_dependencies,
@@ -384,16 +303,7 @@ from .visualization_spatial_tools import (
     visualize_dependency_graph,
     visualize_control_flow,
     visualize_unified_graph,
-    visualize_execution_flow,
-    visualize_class_hierarchy,
     visualize_architecture,
-    visualize_database_relationships,
-    visualize_api_relationships,
-    visualize_event_flow,
-    visualize_memory_usage,
-    visualize_performance,
-    visualize_security_flow,
-    visualize_git_history,
     visualize_test_coverage,
     visualize_change_impact,
     # Spatial tools
@@ -404,30 +314,11 @@ from .visualization_spatial_tools import (
     expand_relationships,
     trace_relationship_path,
     isolate_relationship_path,
-    compare_code_regions,
-    pin_investigation,
-    restore_investigation,
-    create_spatial_bookmark,
-    annotate_code_element,
-    synchronize_graphs,
-    request_visualization,
-    change_visualization_depth,
-    change_visualization_scope,
-    get_visualization_state,
     get_spatial_object_details,
     # Aliases for missing spatial tools
     focus_on_graph_node,
-    set_graph_depth,
     navigate_to_code_element,
     navigate_to_relationship,
-    set_visualization_scope,
-    set_visualization_filters,
-    create_spatial_group,
-    compare_spatial_objects,
-    bookmark_investigation,
-    annotate_visualization,
-    synchronize_visualizations,
-    transition_visualization,
     get_selected_node_details,
     get_current_spatial_context,
     explain_graph_edge,
@@ -436,121 +327,9 @@ from .visualization_spatial_tools import (
     focus_on_code_element,
 )
 
-# Specialist Toolkit A - API and Database Intelligence
-from .api_database_toolkit import (
-    # API intelligence
-    discover_api_endpoints,
-    inspect_api_schema,
-    inspect_http_routes,
-    trace_request_lifecycle,
-    inspect_middleware,
-    inspect_authentication,
-    inspect_authorization,
-    analyze_api_contract,
-    analyze_api_security,
-    trace_api_call,
-    # Database intelligence
-    inspect_database_schema,
-    inspect_tables,
-    inspect_columns,
-    inspect_indexes,
-    inspect_foreign_keys,
-    inspect_sql_queries,
-    explain_query_plan,
-    inspect_orm_models,
-    inspect_orm_relationships,
-    trace_transaction,
-    trace_migrations,
-    map_api_to_database,
-    visualize_database_schema,
-    discover_database_schema,
-    inspect_database_connection,
-    analyze_database_queries,
-    analyze_database_performance,
-    trace_database_operation,
-)
 
-# Specialist Toolkit B - Documentation and Knowledge
-from .documentation_toolkit import (
-    search_documentation,
-    read_documentation,
-    search_external_docs,
-    search_library_docs,
-    search_framework_docs,
-    search_api_docs,
-    search_issues,
-    search_prs,
-    search_discussions,
-    generate_architecture_doc,
-    generate_function_documentation,
-    generate_dependency_documentation,
-    generate_investigation_report,
-    generate_code_documentation,
-    update_knowledge,
-    retrieve_knowledge,
-    verify_documentation_coverage,
-    extract_docstrings,
-)
 
-# Specialist Toolkit C - Git and Development History
-from .git_history_toolkit import (
-    find_introducing_commit,
-    trace_function_history,
-    find_regression_commit,
-    analyze_commit_impact,
-    trace_file_history,
-    visualize_git_history,
-)
 
-# Specialist Toolkit D - External Integrations
-from .external_integrations_toolkit import (
-    # GitHub
-    github_get_repository,
-    github_get_commits,
-    github_get_pull_requests,
-    github_get_issues,
-    # CI/CD
-    get_ci_status,
-    get_ci_logs,
-    trigger_ci_build,
-    cancel_ci_build,
-    # Docker
-    docker_list_containers,
-    docker_get_container_logs,
-    docker_inspect_container,
-    docker_exec_command,
-    # Kubernetes
-    kubernetes_list_pods,
-    kubernetes_get_pod_logs,
-    kubernetes_describe_pod,
-    kubernetes_exec_command,
-    kubernetes_get_deployments,
-    # Cloud Platforms
-    cloud_list_instances,
-    cloud_get_instance_logs,
-    cloud_execute_command,
-    cloud_describe_instance,
-    # Monitoring Systems
-    monitoring_get_metrics,
-    monitoring_query_metrics,
-    monitoring_create_alert,
-    # Error Tracking
-    error_tracking_get_errors,
-    error_tracking_get_error_details,
-    error_tracking_resolve_error,
-    # Database
-    database_query,
-    database_execute,
-    database_get_schema,
-    # Issue Trackers
-    create_issue,
-    get_issue,
-    update_issue,
-    list_issues,
-    # Package Registries
-    package_search,
-    package_get_version,
-)
 
 # Language and Framework Adapters
 from .language_adapters import (
@@ -580,95 +359,7 @@ from .language_adapters import (
 
 # VR-Specific Tools
 # Note: Spatial tools (select_code_element, focus_on_object, etc.) are in visualization_spatial_tools.py
-# This module contains only VR-specific state management, voice, haptics, and environment tools
-from .vr_specific_tools import (
-    get_vr_session_state,
-    get_selected_object,
-    # Voice commands
-    process_voice_command,
-    register_voice_command,
-    list_voice_commands,
-    # Spatial interaction
-    set_hand_interaction_mode,
-    get_hand_interaction_state,
-    set_spatial_audio,
-    set_haptic_feedback,
-    # Environment and scene
-    set_vr_environment,
-    get_environment_info,
-    set_theme,
-    set_layout_algorithm,
-    set_spatial_scaling,
-    reset_camera,
-    save_scene_state,
-    load_scene_state,
-)
 
-# Infrastructure Services
-from .infrastructure_services import (
-    # Permission system
-    check_permission,
-    grant_permission,
-    revoke_permission,
-    list_permissions,
-    set_permission_level,
-    request_sensitive_approval,
-    check_approval_status,
-    # Tool registry
-    register_tool,
-    unregister_tool,
-    get_tool_definition,
-    list_tools,
-    discover_tools,
-    update_tool_definition,
-    # Universal Code Intelligence Graph
-    store_graph_node,
-    store_graph_edge,
-    get_graph_node,
-    query_graph,
-    delete_graph_node,
-    delete_graph_edge,
-    clear_graph,
-    # Repository Indexing Service
-    start_indexing,
-    get_index_status,
-    update_index,
-    # Agent Runtime
-    start_agent,
-    stop_agent,
-    get_agent_state,
-    list_agents,
-    # Agent Message Bus
-    send_message_to_agent,
-    get_agent_messages,
-    subscribe_to_topic,
-    publish_message,
-    unsubscribe_from_topic,
-    # Task and Workflow Engine
-    create_workflow,
-    execute_workflow,
-    get_workflow_status,
-    # Knowledge and Memory Store
-    store_memory,
-    retrieve_memory,
-    delete_memory,
-    # Runtime Telemetry Service
-    start_telemetry_collection,
-    get_telemetry_data,
-    stop_telemetry_collection,
-    # Sandbox Service
-    create_sandbox,
-    execute_in_sandbox,
-    destroy_sandbox,
-    # Evidence Service
-    get_evidence,
-    record_evidence,
-    verify_evidence,
-    # Rendering Service
-    render_graph,
-    get_rendering_state,
-    update_rendering,
-)
 
 # Existing tools (preserved for compatibility)
 from .graph_tools import (
@@ -701,11 +392,6 @@ from .git_tools import (
     commit_worktree,
 )
 
-from .memory_tools import (
-    load_project_memory,
-    save_finding,
-    record_decision,
-)
 
 from .scene_tools import (
     highlight_vr_path,

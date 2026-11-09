@@ -9,10 +9,9 @@ from .state import DEFAULT_STATE
 
 # Results that belong to one request. They are cleared every turn so no agent sees a previous turn's data.
 PER_TURN_KEYS = ['changed_nodes', 'impact_static', 'tests_relevant', 'impact_report', 'answer_draft',
-                 'proposed_patch', 'test_results', 'verified_answer', 'briefing',
+                 'proposed_patch', 'test_results', 'verified_answer',
                  'result_repository', 'result_code_understanding', 'result_relationship',
-                 'result_data_flow', 'result_runtime', 'result_debugging',
-                 'result_security', 'result_software_eng', 'result_testing',
+                 'result_data_flow', 'result_software_eng', 'result_testing',
                  'result_visualization', 'result_orchestrator', 'result_conversational']
 
 

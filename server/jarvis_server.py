@@ -51,8 +51,6 @@ DIRECT_TOOL_ALLOWLIST = {
     'get_repository_metadata',
     'get_changed_files',
     'git_diff',
-    'git_log',
-    'git_show',
     'git_status',
     'git_branch',
     'get_worktree_diff',
@@ -64,9 +62,6 @@ QUICK_ACTIONS_ALLOWLIST = {
     'find_callees',
     'get_symbol_definition',
     'calculate_change_impact',
-    'detect_dead_code',
-    'calculate_complexity',
-    'scan_secrets',
 }
 
 # Security validation on startup
@@ -653,9 +648,8 @@ async def get_task_state(session_id: str):
     # Flatten results into a list for Unity
     agent_results = []
     for key in ['result_repository', 'result_code_understanding', 'result_relationship',
-                'result_data_flow', 'result_runtime', 'result_debugging', 'result_security',
-                'result_software_eng', 'result_testing', 'result_visualization', 'result_orchestrator',
-                'result_conversational']:
+                'result_data_flow', 'result_software_eng', 'result_testing',
+                'result_visualization', 'result_orchestrator', 'result_conversational']:
         value = state.get(key, {})
         if value and isinstance(value, dict):
             agent_name = key.replace('result_', '')

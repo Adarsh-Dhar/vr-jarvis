@@ -23,9 +23,6 @@ agents_to_test = [
     ("conversational", "server.ai_agents.agents.conversational"),
     ("orchestrator", "server.ai_agents.agents.orchestrator"),
     ("data_flow", "server.ai_agents.agents.data_flow"),
-    ("runtime", "server.ai_agents.agents.runtime"),
-    ("debugging", "server.ai_agents.agents.debugging"),
-    ("security_quality", "server.ai_agents.agents.security_quality"),
     ("software_engineering", "server.ai_agents.agents.software_engineering"),
     ("testing_verification", "server.ai_agents.agents.testing_verification"),
 ]

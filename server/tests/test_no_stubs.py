@@ -45,38 +45,6 @@ def test_data_flow_graph_emission():
         assert 'Real visualization requires' not in str(result.get('note', ''))
 
 
-def test_git_history_real_commit():
-    """Test git history tools work on real repository with commits."""
-    from ai_agents.tools.git_history_toolkit import trace_function_history, find_introducing_commit
-    
-    # Use the rp repository instead (it should have git history)
-    fixture_path = Path(__file__).parent.parent.parent / 'repository' / 'rp'
-    
-    if not fixture_path.exists():
-        pytest.skip("rp repository not found")
-    
-    # Test trace_function_history with a real file
-    result = trace_function_history('eutro/train.py:train', str(fixture_path), None)
-    
-    # Should either work or return appropriate error
-    assert result.get('status') in ['ok', 'error', 'not_found']
-
-
-def test_git_history_churn():
-    """Test git history visualization calculates churn."""
-    from ai_agents.tools.git_history_toolkit import visualize_git_history
-    
-    fixture_path = Path(__file__).parent.parent.parent / 'repository' / 'rp'
-    
-    if not fixture_path.exists():
-        pytest.skip("rp repository not found")
-    
-    result = visualize_git_history(str(fixture_path), None)
-    
-    # Should return ok or error
-    assert result.get('status') in ['ok', 'error']
-
-
 def test_change_impact_depth_correct():
     """Test change impact distinguishes direct vs indirect callers."""
     from ai_agents.tools.relationship_intelligence_tools import calculate_change_impact

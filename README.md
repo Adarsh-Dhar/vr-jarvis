@@ -1,6 +1,6 @@
 # vr-jarvis
 
-JARVIS is a VR-native code intelligence system with 12 specialist agents for repository analysis, security, testing, and spatial visualization.
+JARVIS is a VR-native code intelligence system with specialist agents for repository analysis, architecture visualization, change impact, patch proposals, and test verification.
 
 ## Quick Start
 
@@ -55,7 +55,7 @@ status bar while questions fail with "Unauthorized".
 
 ## Architecture
 
-### Agent Specialists (12)
+### Agent Specialists (9)
 
 1. **Orchestrator** - Routes requests to specialists
 2. **Conversational** - Q&A and explanation
@@ -63,12 +63,9 @@ status bar while questions fail with "Unauthorized".
 4. **Code Understanding** - Symbol analysis and navigation
 5. **Relationship Intelligence** - Call graphs and dependencies
 6. **Data Flow Intelligence** - Variable tracing
-7. **Runtime Intelligence** - Process monitoring (sandboxed)
-8. **Debugging Intelligence** - Breakpoint debugging (sandboxed)
-9. **Security & Quality** - Vulnerability scanning
-10. **Software Engineering** - Code editing (worktree only)
-11. **Testing & Verification** - Test execution (sandboxed)
-12. **Visualization & Spatial** - VR scene commands
+7. **Software Engineering** - Code editing (worktree only)
+8. **Testing & Verification** - Test execution (sandboxed)
+9. **Visualization & Spatial** - VR scene commands
 
 ### Security Model
 

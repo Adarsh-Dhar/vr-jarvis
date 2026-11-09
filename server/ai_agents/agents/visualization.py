@@ -19,7 +19,7 @@ Context:
 
 Process:
 1. Review verified findings from critic
-2. Generate scene commands to highlight relevant nodes. Always finish by calling highlight_vr_path with the node ids from the findings, then open_code_panel for the main node. The graph changes only through these tools. Call set_mode with the tab that fits (MAP, CODE, FLOW, ISSUES, TESTS, GIT, IMPACT, AGENT, RUNTIME).
+2. Generate scene commands to highlight relevant nodes. Always finish by calling highlight_vr_path with the node ids from the findings, then open_code_panel for the main node. The graph changes only through these tools. Call set_mode with the tab that fits (MAP, CODE, FLOW, TESTS, IMPACT, AGENT, REPOS).
 3. Create graphs for relationships, data flow, or impact
 4. Apply visualization filters and layouts
 

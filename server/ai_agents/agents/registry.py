@@ -24,9 +24,6 @@ EXPECTED_AGENTS = [
     "code_understanding",
     "relationship_intelligence",
     "data_flow_intelligence",
-    "runtime_intelligence",
-    "debugging_intelligence",
-    "security_quality",
     "software_engineering",
     "testing_verification",
     "visualization_spatial",
@@ -40,9 +37,6 @@ DEFAULT_AGENT_CONFIG = {
     "code_understanding": {"tool_budget": 25, "permission_ceiling": "read"},
     "relationship_intelligence": {"tool_budget": 25, "permission_ceiling": "read"},
     "data_flow_intelligence": {"tool_budget": 25, "permission_ceiling": "read"},
-    "runtime_intelligence": {"tool_budget": 30, "permission_ceiling": "execute"},
-    "debugging_intelligence": {"tool_budget": 30, "permission_ceiling": "execute"},
-    "security_quality": {"tool_budget": 25, "permission_ceiling": "read"},
     "software_engineering": {"tool_budget": 20, "permission_ceiling": "write"},
     "testing_verification": {"tool_budget": 25, "permission_ceiling": "execute"},
     "visualization_spatial": {"tool_budget": 20, "permission_ceiling": "read"},
@@ -141,11 +135,11 @@ def initialize_agents() -> None:
     Explicitly initialize and register all agents.
     
     This function:
-    - Imports all 12 agent factories through a controlled initialization
+    - Imports all agent factories through a controlled initialization
     - Instantiates each agent exactly once per application lifecycle
     - Registers every agent under a unique identifier
     - Fails loudly if a required agent cannot load (raises ImportError)
-    - Verifies that all 12 expected agents are registered
+    - Verifies that all expected agents are registered
     - Initializes AGENT_CONFIG with tool budgets and permission ceilings
     
     Raises:
@@ -186,30 +180,6 @@ def initialize_agents() -> None:
     except ImportError as e:
         logger.error(f"✗ Failed to import data_flow_intelligence: {e}")
         raise ImportError(f"Failed to load agent data_flow_intelligence: {e}")
-    
-    try:
-        from .runtime import runtime_intelligence_agent
-        register_agent("runtime_intelligence", runtime_intelligence_agent)
-        logger.info("✓ Registered runtime_intelligence")
-    except ImportError as e:
-        logger.error(f"✗ Failed to import runtime_intelligence: {e}")
-        raise ImportError(f"Failed to load agent runtime_intelligence: {e}")
-    
-    try:
-        from .debugging import debugging_intelligence_agent
-        register_agent("debugging_intelligence", debugging_intelligence_agent)
-        logger.info("✓ Registered debugging_intelligence")
-    except ImportError as e:
-        logger.error(f"✗ Failed to import debugging_intelligence: {e}")
-        raise ImportError(f"Failed to load agent debugging_intelligence: {e}")
-    
-    try:
-        from .security_quality import security_quality_agent
-        register_agent("security_quality", security_quality_agent)
-        logger.info("✓ Registered security_quality")
-    except ImportError as e:
-        logger.error(f"✗ Failed to import security_quality: {e}")
-        raise ImportError(f"Failed to load agent security_quality: {e}")
     
     try:
         from .software_engineering import software_engineering_agent

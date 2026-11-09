@@ -9,7 +9,7 @@ namespace JarvisVR
 
   public static class JarvisGraphModel
   {
-    /// <summary>Shown until (or unless) the server's /graph answers. Same ids as the fixtures in JarvisWorkspaceBootstrap.</summary>
+    /// <summary>Placeholder graph shown until (or unless) the server's /graph answers.</summary>
     public static GraphDto Sample()
     {
       var g = new GraphDto();

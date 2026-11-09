@@ -947,33 +947,6 @@ def verify_lint(
 
 
 @safe
-def verify_security(
-    repository_path: str,
-    tool_context: ToolContext
-) -> dict:
-    """Check security findings."""
-    try:
-        from .security_quality_tools import scan_security_vulnerabilities, scan_vulnerabilities
-        
-        # Use existing security scanning tools
-        vuln_result = scan_vulnerabilities(repository_path, tool_context)
-        security_result = scan_security_vulnerabilities(repository_path, tool_context)
-        
-        return {
-            'status': 'ok',
-            'repository_path': repository_path,
-            'vulnerabilities': vuln_result.get('vulnerabilities', []),
-            'security_issues': security_result.get('security_issues', []),
-            'note': 'Using existing security scanning tools - additional verification requires bandit/safety integration'
-        }
-    except Exception as e:
-        return {
-            'status': 'error',
-            'error': str(e)
-        }
-
-
-@safe
 def compare_before_after(
     before_snapshot: str,
     after_snapshot: str,

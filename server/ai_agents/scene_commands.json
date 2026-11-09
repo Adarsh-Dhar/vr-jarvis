@@ -2,157 +2,190 @@
   "commands": [
     {
       "name": "select_node",
-      "fields": ["node_id"],
+      "fields": [
+        "node_id"
+      ],
       "description": "Select a node in the graph"
     },
     {
       "name": "expand_node",
-      "fields": ["node_id", "depth"],
+      "fields": [
+        "node_id",
+        "depth"
+      ],
       "description": "Expand a node to show its connections"
     },
     {
       "name": "collapse_node",
-      "fields": ["node_id"],
+      "fields": [
+        "node_id"
+      ],
       "description": "Collapse a node to hide its connections"
     },
     {
-      "name": "set_depth",
-      "fields": ["depth"],
-      "description": "Set the visualization depth"
-    },
-    {
-      "name": "set_scope",
-      "fields": ["scope"],
-      "description": "Set the visualization scope"
-    },
-    {
-      "name": "set_filters",
-      "fields": ["filters"],
-      "description": "Set visualization filters"
-    },
-    {
-      "name": "create_group",
-      "fields": ["group_id", "node_ids"],
-      "description": "Create a spatial group of nodes"
-    },
-    {
-      "name": "annotate",
-      "fields": ["node_id", "text"],
-      "description": "Add an annotation to a node"
-    },
-    {
-      "name": "bookmark",
-      "fields": ["node_id", "label"],
-      "description": "Bookmark a node for later"
-    },
-    {
-      "name": "compare",
-      "fields": ["node_id1", "node_id2"],
-      "description": "Compare two nodes side by side"
-    },
-    {
       "name": "show_graph",
-      "fields": ["nodes", "edges"],
+      "fields": [
+        "nodes",
+        "edges"
+      ],
       "description": "Replace the visible graph with a new node/edge list"
     },
     {
       "name": "highlight_path",
-      "fields": ["path"],
+      "fields": [
+        "path"
+      ],
       "description": "Highlight a path through the graph"
     },
     {
       "name": "dim_unrelated",
-      "fields": ["node_ids"],
+      "fields": [
+        "node_ids"
+      ],
       "description": "Dim nodes not in the list"
     },
     {
       "name": "open_code_panel",
-      "fields": ["file_path", "line"],
+      "fields": [
+        "file_path",
+        "line"
+      ],
       "description": "Open code panel at a specific location"
     },
     {
       "name": "focus_camera",
-      "fields": ["target", "position"],
+      "fields": [
+        "target",
+        "position"
+      ],
       "description": "Move camera to focus on a target"
     },
     {
       "name": "set_edge_style",
-      "fields": ["edge_id", "style"],
+      "fields": [
+        "edge_id",
+        "style"
+      ],
       "description": "Change the visual style of an edge"
     },
     {
       "name": "show_ghost_diff",
-      "fields": ["diff"],
+      "fields": [
+        "diff"
+      ],
       "description": "Show a ghost overlay of code changes"
     },
     {
       "name": "show_test_badges",
-      "fields": ["test_results"],
+      "fields": [
+        "test_results"
+      ],
       "description": "Show test pass/fail badges on nodes"
     },
     {
       "name": "set_mode",
-      "fields": ["mode"],
+      "fields": [
+        "mode"
+      ],
       "description": "Switch the workspace tab (REPOS, MAP, CODE, FLOW, ISSUES, TESTS, GIT, IMPACT, AGENT, RUNTIME)"
     },
     {
       "name": "show_approval_prompt",
-      "fields": ["action", "description"],
+      "fields": [
+        "action",
+        "description"
+      ],
       "description": "Show a prompt for user approval"
     },
     {
       "name": "open_repo",
-      "fields": ["repo"],
+      "fields": [
+        "repo"
+      ],
       "description": "Open a repository in the workspace"
     },
     {
       "name": "browse_folder",
-      "fields": ["repo", "path"],
+      "fields": [
+        "repo",
+        "path"
+      ],
       "description": "Show a folder in the repository browser"
     },
     {
       "name": "open_file",
-      "fields": ["repo", "path", "line"],
+      "fields": [
+        "repo",
+        "path",
+        "line"
+      ],
       "description": "Open a file in the code viewer at a line"
     },
     {
       "name": "move_cluster",
-      "fields": ["node_id", "dx", "dy", "dz"],
+      "fields": [
+        "node_id",
+        "dx",
+        "dy",
+        "dz"
+      ],
       "description": "Move a whole cluster by a graph-local offset"
     },
     {
       "name": "move_graph",
-      "fields": ["dx", "dy", "dz"],
+      "fields": [
+        "dx",
+        "dy",
+        "dz"
+      ],
       "description": "Move the whole graph"
     },
     {
       "name": "zoom_graph",
-      "fields": ["value"],
+      "fields": [
+        "value"
+      ],
       "description": "Set graph zoom"
     },
     {
       "name": "move_panel",
-      "fields": ["panel", "azimuth", "elevation", "radius"],
+      "fields": [
+        "panel",
+        "azimuth",
+        "elevation",
+        "radius"
+      ],
       "description": "Place a panel on the dome"
     },
     {
       "name": "scale_panel",
-      "fields": ["panel", "value"],
+      "fields": [
+        "panel",
+        "value"
+      ],
       "description": "Resize a panel"
     },
     {
       "name": "panel_state",
-      "fields": ["panel", "state"],
+      "fields": [
+        "panel",
+        "state"
+      ],
       "description": "show, hide, pin, unpin, minimize or restore a panel"
     },
     {
       "name": "set_cluster_collapsed",
-      "fields": ["node_id", "collapsed"],
+      "fields": [
+        "node_id",
+        "collapsed"
+      ],
       "description": "Collapse or expand a cluster"
     },
     {
       "name": "highlight_callers",
-      "fields": ["node_id"],
+      "fields": [
+        "node_id"
+      ],
       "description": "Highlight a node's callers"
     },
     {

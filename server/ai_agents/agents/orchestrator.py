@@ -43,14 +43,13 @@ For these common questions, use the specified specialist workflows:
    - Return: module/file structure, layers, import relationships
 
 2. Authentication:
-   - Delegate to security_quality for auth analysis
+   - Delegate to code_understanding for auth code analysis
    - Delegate to relationship_intelligence for auth call chains
    - Return: auth layer nodes, protected routes, auth flow
 
 3. Request-to-database trace:
    - Delegate to relationship_intelligence for API endpoint discovery
    - Delegate to relationship_intelligence for call chain tracing
-   - Delegate to database tools for schema inspection
    - Return: route -> service -> repository -> database chain with file/line evidence
 
 4. Dependents:
@@ -88,9 +87,6 @@ def build_orchestrator_agent() -> LlmAgent:
         "invoke_code_understanding",
         "invoke_relationship_intelligence",
         "invoke_data_flow_intelligence",
-        "invoke_runtime_intelligence",
-        "invoke_debugging_intelligence",
-        "invoke_security_quality",
         "invoke_software_engineering",
         "invoke_testing_verification",
         "invoke_visualization_spatial",

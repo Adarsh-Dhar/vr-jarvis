@@ -27,7 +27,7 @@ namespace JarvisVR
     private sealed class NodeView
     {
       public GraphNodeDto Dto; public Transform Root, BodyT; public Renderer Body; public TextMesh Label;
-      public JarvisRiskRing Risk; public Color Base; public bool NoCallers; public string Badge = "";
+      public Color Base; public string Badge = "";
       public ClusterView Cluster; public int In, Out; public JarvisNodeFx Fx;
     }
     private sealed class EdgeView { public GraphEdgeDto Dto; public NodeView From, To; public LineRenderer Line; public Color Base; public string Style; }
@@ -58,7 +58,7 @@ namespace JarvisVR
     private ReposDto _repos;
     private RepoTreeDto _repoTree;
     private RepoFileDto _openFile;
-    private JarvisSpatialPanel _repoPanel, _codePanel, _runtimePanel, _impactPanel, _securityPanel, _historyPanel;
+    private JarvisSpatialPanel _repoPanel, _codePanel, _impactPanel;
     private JarvisSpatialButton _repoBack, _repoHome, _repoPrev, _repoNext;
     private JarvisSpatialButton _codePrev, _codeClose, _codeNext;
     private readonly List<GameObject> _repoRows = new List<GameObject>();
@@ -82,12 +82,6 @@ namespace JarvisVR
     private readonly List<JarvisPathDot> _pulses = new List<JarvisPathDot>();
     private JarvisSpatialPanel _menu;
     private string _menuNode;
-    private GitCommitDto[] _historyCommits = Array.Empty<GitCommitDto>();
-    private readonly List<JarvisSpatialButton> _historyRowButtons = new List<JarvisSpatialButton>();
-    private int _historyPage = 0;
-    private const int HistoryPageSize = 5;
-    private JarvisSpatialPanel _historyDetailPanel;
-    private JarvisSpatialButton _historyPrev, _historyNext;
 
     public void Initialize(Camera cam)
     {
@@ -115,7 +109,6 @@ namespace JarvisVR
       BuildOrb();
       JarvisAtmosphere.BuildFloor(_root, JarvisPalette.Current.Cyan);
       JarvisAtmosphere.BuildDust(_root, JarvisSpatialFx.Magenta, JarvisPalette.Current.Cyan);
-      JarvisCityscape.Build(_root);
       LoadGraph(JarvisGraphModel.Sample());
       SetMode("REPOS");                 // begin with the repository picker, like an IDE start screen
 
@@ -152,19 +145,16 @@ namespace JarvisVR
 
     // =========================================================== panels
 
-    private static readonly string[] NavModes = { "MAP", "CODE", "FLOW", "ISSUES", "TESTS", "GIT", "IMPACT", "AGENT", "RUNTIME" };
+    private static readonly string[] NavModes = { "MAP", "CODE", "FLOW", "TESTS", "IMPACT", "AGENT" };
     private static readonly Dictionary<string, string[]> ModePanels = new Dictionary<string, string[]>
     {
       { "REPOS",  new[] { "repo" } },
       { "MAP",    new[] { "repo", "evidence", "legend" } },
       { "CODE",   new[] { "repo", "code", "evidence", "legend" } },
       { "FLOW",   new[] { "activity", "evidence" } },
-      { "ISSUES", new[] { "repo", "security", "evidence" } },
       { "TESTS",  new[] { "tests", "code", "legend" } },
-      { "GIT",    new[] { "history", "history_detail" } },
       { "IMPACT", new[] { "repo", "impact", "evidence", "legend" } },
       { "AGENT",  new[] { "activity", "ghost" } },
-      { "RUNTIME", new[] { "runtime", "evidence", "legend" } },
     };
 
     // Panels live on a dome around the user instead of one flat wall:
@@ -187,10 +177,6 @@ namespace JarvisVR
       { "tests",    new Vector3( 125f,   0f, 2.0f) },
       { "legend",   new Vector3( -30f,  58f, 1.7f) },
       { "impact",   new Vector3(  65f, -28f, 1.8f) },
-      { "security", new Vector3(  65f, -28f, 1.8f) },
-      { "history",  new Vector3(  65f,   6f, 1.9f) },
-      { "history_detail", new Vector3( -65f, -28f, 1.8f) },
-      { "runtime",  new Vector3(  65f, -28f, 1.8f) },
     };
 
     /// <summary>Where the user's head is, in the workspace root's local space (see Recenter).</summary>
@@ -249,8 +235,7 @@ namespace JarvisVR
         "<color=#" + Hex(pal.Cyan) + ">solid</color>  static (parser fact)\n" +
         "<color=#" + Hex(pal.Violet) + ">dashed</color>  AI-inferred\n" +
         "<color=#" + Hex(pal.Green) + ">dotted</color>  seen at runtime\n" +
-        "<color=#" + Hex(pal.Amber) + ">amber</color>  change path\n" +
-        "<color=#" + Hex(pal.Red) + ">red ring</color>  risk: no callers found");
+        "<color=#" + Hex(pal.Amber) + ">amber</color>  change path");
 
       JarvisSpatialPanel ghost = AddPanel("ghost", "Ghost diff (proposed)", 560, 520, 1.18f, 0.20f, pal.Amber);
       ghost.SetBodyBox(60, 450); ghost.UseMono(20);
@@ -266,28 +251,6 @@ namespace JarvisVR
       _impactPanel = AddPanel("impact", "Change Impact", 560, 400, 1.18f, -0.46f, pal.Violet);
       _impactPanel.SetBodyBox(60, 340); _impactPanel.Body.fontSize = 20;
       _impactPanel.SetBody("No impact analysis yet. Select a function and ask about change impact.");
-
-      // Security panel for security findings
-      _securityPanel = AddPanel("security", "Security Findings", 560, 400, 1.18f, -0.46f, pal.Red);
-      _securityPanel.SetBodyBox(60, 340); _securityPanel.Body.fontSize = 18;
-      _securityPanel.SetBody("No security analysis yet. Select a component and scan for vulnerabilities.");
-
-      // History panel for Git commit history
-      _historyPanel = AddPanel("history", "Git History", 560, 450, 1.18f, -0.46f, pal.Cyan);
-      _historyPanel.SetBodyBox(60, 390); _historyPanel.Body.fontSize = 16;
-      _historyPanel.SetBody("No commit history loaded yet.");
-
-      // History detail panel for selected commit details
-      _historyDetailPanel = AddPanel("history_detail", "Commit Details", 560, 400, -1.12f, -0.46f, pal.Cyan);
-      _historyDetailPanel.SetBodyBox(60, 340); _historyDetailPanel.Body.fontSize = 18;
-      _historyDetailPanel.SetBody("Select a commit to view details.");
-      _historyDetailPanel.Show(false);  // Hidden by default
-
-      // Runtime panel for execution traces
-      _runtimePanel = AddPanel("runtime", "Runtime Execution", 600, 450, 1.18f, -0.46f, pal.Green);
-      _runtimePanel.SetBodyBox(60, 380); _runtimePanel.Body.fontSize = 18;
-      _runtimePanel.SetBody("No runtime trace loaded yet.");
-      _runtimePanel.Show(false);  // Hidden by default
 
       JarvisSpatialPanel caption = AddPanel("caption", "JARVIS", 820, 190, 0.15f, -0.52f, pal.Cyan);
       caption.SetBodyBox(54, 70); caption.Body.fontSize = 26;
@@ -318,7 +281,7 @@ namespace JarvisVR
       if (_graphRoot != null) _graphRoot.gameObject.SetActive(mode != "REPOS" && mode != "CODE");
       string[] visible = ModePanels.ContainsKey(mode) ? ModePanels[mode] : ModePanels["MAP"];
       int shown = 0;
-      foreach (string key in new[] { "repo", "code", "evidence", "tests", "activity", "legend", "ghost", "approval", "security", "history", "history_detail", "impact", "runtime" })
+      foreach (string key in new[] { "repo", "code", "evidence", "tests", "activity", "legend", "ghost", "approval", "impact" })
       {
         bool on = visible.Contains(key) || _agentShown.Contains(key);
         // approval shares its slot with evidence and tests: while something is pending, approval wins
@@ -400,7 +363,6 @@ namespace JarvisVR
         Collider nodeCollider = body.GetComponent<Collider>();
         if (nodeCollider != null) nodeCollider.isTrigger = false;
 
-        // Color based on level, with severity override for security nodes
         Color baseColor = dto.level == "module" ? pal.Amber
           : dto.level == "file" ? pal.Violet
           : dto.level == "class" ? pal.Green
@@ -408,15 +370,6 @@ namespace JarvisVR
           : dto.kind == "external" ? pal.Gray
           : dto.kind == "test" ? pal.Violet
           : pal.Cyan;
-
-        // Apply severity-based coloring for security findings
-        if (dto.type == "vulnerability" || dto.type == "secret" || dto.type == "taint_path")
-        {
-          string severity = dto.severity ?? "medium";
-          baseColor = severity == "high" ? pal.Red
-            : severity == "medium" ? pal.Amber
-            : pal.Green;
-        }
 
         nv.Base = baseColor;
         body.AddComponent<JarvisGraphNode>().Initialize(dto.id, Select, DragCluster, ShowNodeMenu);
@@ -441,13 +394,6 @@ namespace JarvisVR
         var ev = new EdgeView { Dto = e, From = a, To = b };
         DrawEdge(ev);
         _edges.Add(ev);
-      }
-
-      // Risk marker: a code node (not a route or test) that nothing calls.
-      foreach (NodeView n in _nodes.Values)
-      {
-        n.NoCallers = n.In == 0 && n.Dto.kind != "route" && n.Dto.kind != "test";
-        if (n.NoCallers) n.Risk = n.BodyT.gameObject.AddComponent<JarvisRiskRing>();
       }
 
       foreach (ClusterView cv in _clusters.Values)
@@ -924,7 +870,7 @@ namespace JarvisVR
       Debug.Log("[JARVIS] reply: " + reply);
       if (_voice != null) _voice.Speak(reply);
       RefreshAll();
-      if (!string.IsNullOrEmpty(_pending)) SetMode("GIT");          // pending approval always wins
+      if (!string.IsNullOrEmpty(_pending)) SetMode("AGENT");         // pending approval always wins
       else if (!string.IsNullOrEmpty(_agentMode))
       {
         foreach (JarvisSpatialPanel pp in _panels.Values) pp.Reopen();   // same as tapping the tab
@@ -958,150 +904,6 @@ namespace JarvisVR
       _quickChange.Label.text = t != null ? "What breaks if I change " + t + "?" : "What does this repository do?";
     }
 
-    private void RefreshHistoryPanel()
-    {
-      if (_historyPanel == null || _historyCommits == null || _historyCommits.Length == 0)
-      {
-        if (_historyPanel != null)
-          _historyPanel.SetBody("No commit history loaded yet.");
-        return;
-      }
-
-      int totalPages = (int)Math.Ceiling((double)_historyCommits.Length / HistoryPageSize);
-      int startIdx = _historyPage * HistoryPageSize;
-      int endIdx = Math.Min(startIdx + HistoryPageSize, _historyCommits.Length);
-
-      // Destroy old row buttons and navigation buttons
-      foreach (var btn in _historyRowButtons)
-        if (btn != null) Destroy(btn.gameObject);
-      _historyRowButtons.Clear();
-
-      if (_historyPrev != null) { Destroy(_historyPrev.gameObject); _historyPrev = null; }
-      if (_historyNext != null) { Destroy(_historyNext.gameObject); _historyNext = null; }
-
-      // Set body text to page heading only
-      var sb = new System.Text.StringBuilder();
-      sb.AppendLine($"GIT HISTORY");
-      sb.AppendLine($"{_historyCommits.Length} RECENT COMMITS · PAGE {_historyPage + 1} OF {totalPages}");
-      _historyPanel.SetBody(sb.ToString());
-
-      // Display commits as labelled buttons for current page
-      for (int row = 0; row < (endIdx - startIdx); row++)
-      {
-        int i = startIdx + row;
-        var commit = _historyCommits[i];
-        int idx = i;
-
-        // Format commit message (truncate if too long)
-        string msg = commit.message.Length > 40 ? commit.message.Substring(0, 37) + "..." : commit.message;
-        string shortHash = commit.hash.Length > 7 ? commit.hash.Substring(0, 7) : commit.hash;
-
-        // Button label: short hash + message
-        string buttonLabel = $"{shortHash} {msg}";
-
-        // Add button for this commit (width 500, height 50, vertical position 80 + row * 65)
-        var btn = _historyPanel.AddButton(buttonLabel, 20, 80 + row * 65, 500, 50, () => SelectHistoryCommit(idx));
-        _historyRowButtons.Add(btn);
-      }
-
-      // Add navigation buttons at the bottom
-      if (_historyPage > 0)
-      {
-        _historyPrev = _historyPanel.AddButton("PREV", 20, 395, 80, 50, () => { _historyPage--; RefreshHistoryPanel(); });
-      }
-      if (_historyPage < totalPages - 1)
-      {
-        _historyNext = _historyPanel.AddButton("NEXT", 110, 395, 80, 50, () => { _historyPage++; RefreshHistoryPanel(); });
-      }
-    }
-
-    private string FormatDate(string isoDate)
-    {
-      try
-      {
-        System.DateTime dt = System.DateTime.Parse(isoDate);
-        TimeSpan diff = System.DateTime.Now - dt;
-        if (diff.TotalDays < 1) return "Today";
-        if (diff.TotalDays < 2) return "Yesterday";
-        if (diff.TotalDays < 7) return $"{(int)diff.TotalDays} days ago";
-        return dt.ToString("d MMM");
-      }
-      catch
-      {
-        return isoDate.Split('T')[0];
-      }
-    }
-
-    private string Capitalize(string s)
-    {
-      if (string.IsNullOrEmpty(s)) return s;
-      return char.ToUpper(s[0]) + s.Substring(1);
-    }
-
-    private void SelectHistoryCommit(int index)
-    {
-      if (index < 0 || index >= _historyCommits.Length) return;
-
-      var commit = _historyCommits[index];
-      if (_historyDetailPanel == null) return;
-
-      var sb = new System.Text.StringBuilder();
-      sb.AppendLine($"COMMIT DETAILS");
-      sb.AppendLine();
-      sb.AppendLine(commit.message);
-      sb.AppendLine();
-      sb.AppendLine($"Hash: {commit.hash}");
-      sb.AppendLine($"Author: {commit.author}");
-      sb.AppendLine($"Date: {FormatDate(commit.date)}");
-      if (!string.IsNullOrEmpty(commit.parent_hash))
-        sb.AppendLine($"Parent: {commit.parent_hash.Substring(0, 7)}");
-      sb.AppendLine();
-      sb.AppendLine($"CHANGED FILES");
-      sb.AppendLine();
-
-      foreach (var file in commit.files)
-      {
-        string statusChar = file.status == "added" ? "A" : file.status == "deleted" ? "D" : file.status == "renamed" ? "R" : "M";
-        sb.AppendLine($"{statusChar}  {file.path}   +{file.additions} / -{file.deletions}");
-      }
-
-      sb.AppendLine();
-      sb.AppendLine($"TOTAL");
-      sb.AppendLine($"{commit.additions} additions");
-      sb.AppendLine($"{commit.deletions} deletions");
-      sb.AppendLine($"{commit.file_count} files changed");
-
-      _historyDetailPanel.SetBody(sb.ToString());
-      _historyDetailPanel.Show(true);
-
-      // Highlight corresponding graph nodes
-      _hot.Clear();
-      if (commit.mapped_node_ids != null)
-      {
-        foreach (string id in commit.mapped_node_ids)
-        {
-          if (_nodes.ContainsKey(id))
-            _hot.Add(id);
-        }
-      }
-
-      // Use file-level matching as fallback
-      if (_hot.Count == 0 && commit.files != null)
-      {
-        foreach (var file in commit.files)
-        {
-          foreach (var kvp in _nodes)
-          {
-            if (kvp.Value.Dto.file != null && kvp.Value.Dto.file.Contains(file.path))
-              _hot.Add(kvp.Key);
-          }
-        }
-      }
-
-      // Update _keep to fade unrelated nodes
-      _keep = new HashSet<string>(_hot);
-      RefreshStyles();
-    }
 
     /// <returns>true when the command changes what the graph shows.</returns>
     private bool ApplyCommand(SceneCommand c)
@@ -1246,100 +1048,6 @@ namespace JarvisVR
             _impactPanel.SetBody(sb.ToString());
           }
           return true;
-        case "show_security_panel":
-          if (_securityPanel != null)
-          {
-            var sb = new System.Text.StringBuilder();
-            sb.AppendLine($"SECURITY FINDINGS");
-
-            // Display individual findings with full details
-            if (c.findings != null && c.findings.Length > 0)
-            {
-              sb.AppendLine($"Total findings: {c.findings.Length}");
-              sb.AppendLine();
-
-              foreach (var finding in c.findings.Take(10))
-              {
-                sb.AppendLine($"{finding.type.ToUpper()}");
-                sb.AppendLine($"Severity: {Capitalize(finding.severity ?? "medium")}");
-                sb.AppendLine($"File: {finding.file}");
-                sb.AppendLine($"Line: {finding.line}");
-                sb.AppendLine($"Confidence: {Capitalize(finding.confidence ?? "heuristic")}");
-
-                // Mask secret values
-                if (finding.type == "secret" && !string.IsNullOrEmpty(finding.evidence))
-                {
-                  // Show only first 4 chars of secret for identification
-                  string masked = finding.evidence.Length > 4
-                    ? finding.evidence.Substring(0, 4) + "***"
-                    : "***";
-                  sb.AppendLine($"Evidence: {masked}");
-                }
-                else if (!string.IsNullOrEmpty(finding.evidence))
-                {
-                  sb.AppendLine($"Evidence: {finding.evidence}");
-                }
-                sb.AppendLine();
-              }
-
-              if (c.findings.Length > 10)
-                sb.AppendLine($"... and {c.findings.Length - 10} more");
-            }
-            else
-            {
-              sb.AppendLine("No findings detected.");
-            }
-
-            // Display taint paths with intermediate steps
-            if (c.taint_paths != null && c.taint_paths.Length > 0)
-            {
-              sb.AppendLine();
-              sb.AppendLine($"TAINT FLOWS: {c.taint_paths.Length}");
-              foreach (var path in c.taint_paths.Take(3))
-              {
-                sb.AppendLine();
-                sb.AppendLine($"[{Capitalize(path.kind ?? "heuristic")}] {path.source?.call} → {path.sink?.call}");
-
-                // Display intermediate steps with arrows
-                if (path.steps != null && path.steps.Length > 0)
-                {
-                  for (int i = 0; i < path.steps.Length; i++)
-                  {
-                    var step = path.steps[i];
-                    string step_label = "";
-                    if (step.kind == "source")
-                      step_label = $"{step.call}";
-                    else if (step.kind == "sink")
-                      step_label = $"{step.call}";
-                    else if (step.kind == "transform")
-                      step_label = $"{step.call}";
-                    else
-                      step_label = step.variable ?? "unknown";
-
-                    sb.AppendLine($"  {step_label}       Line {step.line}");
-
-                    // Add arrow for all but last step
-                    if (i < path.steps.Length - 1)
-                      sb.AppendLine($"       ↓");
-                  }
-                }
-              }
-
-              if (c.taint_paths.Length > 3)
-                sb.AppendLine($"... and {c.taint_paths.Length - 3} more");
-            }
-
-            _securityPanel.SetBody(sb.ToString());
-          }
-          return true;
-        case "show_history_panel":
-          if (_historyPanel != null && c.commits != null)
-          {
-            _historyCommits = c.commits;
-            _historyPage = 0;
-            RefreshHistoryPanel();
-          }
-          return true;
         case "show_approval_prompt":
           _pending = c.summary;
           return false;
@@ -1416,158 +1124,6 @@ namespace JarvisVR
           if (!string.IsNullOrEmpty(c.repo)) _browserRepo = c.repo;
           if (!string.IsNullOrEmpty(c.path)) { _pendingOpenLine = c.line; OpenRepoFile(c.path); }
           return false;
-        case "set_depth":
-          // Store depth for future filtering (implementation depends on graph traversal)
-          Log("set_depth: " + c.depth);
-          return true;
-        case "set_scope":
-          // Store scope for future filtering
-          Log("set_scope: " + c.scope);
-          return true;
-        case "set_filters":
-          // Store filters for future filtering
-          Log("set_filters applied");
-          return true;
-        case "create_group":
-          if (!string.IsNullOrEmpty(c.group_id) && c.node_ids != null)
-          {
-            // Tint the listed nodes with a group color (implementation needed)
-            Log("create_group: " + c.group_id + " with " + c.node_ids.Length + " nodes");
-          }
-          return true;
-        case "annotate":
-          if (!string.IsNullOrEmpty(c.node_id) && !string.IsNullOrEmpty(c.text))
-          {
-            // Show floating label at node (implementation needed)
-            Log("annotate: " + c.node_id + " = " + c.text);
-          }
-          return false;
-        case "bookmark":
-          if (!string.IsNullOrEmpty(c.node_id) && !string.IsNullOrEmpty(c.label))
-          {
-            // Save selection and camera pose (implementation needed)
-            Log("bookmark: " + c.label + " for " + c.node_id);
-          }
-          return false;
-        case "compare":
-          if (!string.IsNullOrEmpty(c.node_id1) && !string.IsNullOrEmpty(c.node_id2))
-          {
-            if (_nodes.ContainsKey(c.node_id1)) Select(c.node_id1);
-            Log("compare: " + c.node_id1 + " vs " + c.node_id2);
-          }
-          return true;
-        case "show_runtime_panel":
-          if (_runtimePanel != null)
-          {
-            var sb = new System.Text.StringBuilder();
-            sb.AppendLine($"RUNTIME EXECUTION");
-
-            // Application and trace details
-            if (!string.IsNullOrEmpty(c.application_id))
-              sb.AppendLine($"Application: {c.application_id}");
-            if (!string.IsNullOrEmpty(c.trace_id))
-              sb.AppendLine($"Trace ID: {c.trace_id.Substring(0, 8)}...");
-            if (!string.IsNullOrEmpty(c.runtime_status))
-              sb.AppendLine($"Status: {c.runtime_status.ToUpper()}");
-
-            sb.AppendLine();
-
-            // Display execution summary
-            if (c.runtime_duration_ms > 0)
-              sb.AppendLine($"Duration: {c.runtime_duration_ms:F1} ms");
-
-            if (c.runtime_event_count > 0)
-              sb.AppendLine($"Trace events: {c.runtime_event_count}");
-
-            sb.AppendLine();
-
-            // Display execution timeline (first 30 events)
-            if (c.runtime_events != null && c.runtime_events.Length > 0)
-            {
-              sb.AppendLine($"EXECUTION TIMELINE");
-              sb.AppendLine();
-
-              int displayCount = Math.Min(c.runtime_events.Length, 30);
-              for (int i = 0; i < displayCount; i++)
-              {
-                var evt = c.runtime_events[i];
-                if (evt.event_type == "function_call")
-                {
-                  float elapsed = evt.elapsed_ms;
-                  float duration = evt.duration_ms;
-                  string indent = new string(' ', evt.depth * 2);
-                  sb.AppendLine($"{elapsed:F3} ms  {indent}{evt.function_name}() ({duration:F2}ms)");
-                }
-                else if (evt.event_type == "exception")
-                {
-                  string indent = new string(' ', evt.depth * 2);
-                  sb.AppendLine($"{indent}EXCEPTION: {evt.exception_type} at {evt.file}:{evt.line} in {evt.function_name}");
-                }
-              }
-
-              // Omitted events indicator - distinguish panel limit vs recording limit
-              int receivedCount = c.runtime_events.Length;
-              if (c.runtime_event_count > receivedCount)
-              {
-                sb.AppendLine();
-                sb.AppendLine($"Showing {receivedCount} of {c.runtime_event_count} events");
-              }
-            }
-
-            // Show warning if truncated or partial - distinguish causes
-            if (c.runtime_truncated || c.runtime_status == "partial")
-            {
-              sb.AppendLine();
-              
-              // Check limitations to determine specific cause
-              bool eventLimitTruncated = false;
-              bool durationLimitTerminated = false;
-              bool manuallyInterrupted = false;
-              
-              if (c.runtime_limitations != null)
-              {
-                foreach (var limit in c.runtime_limitations)
-                {
-                  string lowerLimit = limit.ToLower();
-                  if (lowerLimit.Contains("truncated at") && lowerLimit.Contains("events"))
-                    eventLimitTruncated = true;
-                  if (lowerLimit.Contains("duration limit") || lowerLimit.Contains("timeout"))
-                    durationLimitTerminated = true;
-                  if (lowerLimit.Contains("interrupted") || lowerLimit.Contains("sigterm"))
-                    manuallyInterrupted = true;
-                }
-              }
-              
-              if (manuallyInterrupted)
-                sb.AppendLine($"WARNING: Execution was manually interrupted");
-              else if (durationLimitTerminated)
-                sb.AppendLine($"WARNING: Execution terminated at duration limit");
-              else if (eventLimitTruncated)
-                sb.AppendLine($"WARNING: Trace was truncated at event limit");
-              else if (c.runtime_truncated)
-                sb.AppendLine($"WARNING: Trace was truncated");
-              else
-                sb.AppendLine($"WARNING: Trace is partial (limitations detected)");
-            }
-
-            // Display limitations
-            if (c.runtime_limitations != null && c.runtime_limitations.Length > 0)
-            {
-              sb.AppendLine();
-              sb.AppendLine($"LIMITATIONS:");
-              foreach (var limit in c.runtime_limitations)
-              {
-                sb.AppendLine($"  - {limit}");
-              }
-            }
-
-            sb.AppendLine();
-            sb.AppendLine($"Provenance: RUNTIME OBSERVED");
-
-            _runtimePanel.SetBody(sb.ToString());
-            _runtimePanel.Show(true);
-          }
-          return true;
         case "expand_node":
           if (!string.IsNullOrEmpty(c.node_id) && _nodes.ContainsKey(c.node_id))
           {
@@ -1965,7 +1521,6 @@ namespace JarvisVR
         int runtime = _edges.Count(e => (e.From == n || e.To == n) && e.Style == "dotted");
         if (inferred > 0) sb.Append("<color=#").Append(Hex(pal.Violet)).Append(">[inferred]</color> ").Append(inferred).Append(" links\n");
         if (runtime > 0) sb.Append("<color=#").Append(Hex(pal.Green)).Append(">[runtime]</color> ").Append(runtime).Append(" links\n");
-        if (n.NoCallers) sb.Append("<color=#").Append(Hex(pal.Red)).Append(">[risk]</color> no callers found: may be dead code or called dynamically\n");
         if (_hot.Contains(n.Dto.id)) sb.Append("<color=#").Append(Hex(pal.Amber)).Append(">[change path]</color> on the highlighted path\n");
       }
       if (haveAgent) AppendAgentEvidence(sb, pal);

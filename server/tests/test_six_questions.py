@@ -25,14 +25,8 @@ def test_six_questions_rp(setup_repos):
     # May return error if no active repository - that's ok for smoke test
     assert result['status'] in ['ok', 'error']
     
-    # Question 2: Authentication (may not apply to rp)
-    from ai_agents.tools.security_quality_tools import analyze_authentication
-    result = analyze_authentication(setup_repos / 'rp', None)
-    # May return 'not_applicable' - that's ok
-    
     # Question 3: Request-to-database trace (may not apply)
-    from ai_agents.tools.api_database_toolkit import trace_request_lifecycle
-    # This may not find routes in rp - that's ok
+    # Covered by relationship and data-flow tools
     
     # Question 4: Dependents
     from ai_agents.tools.relationship_intelligence_tools import find_dependents

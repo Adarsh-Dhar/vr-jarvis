@@ -1,6 +1,5 @@
 from google.adk.agents import LlmAgent, LoopAgent, ParallelAgent, SequentialAgent
 
-from .agents.briefing import briefing_agent
 from .agents.critic import make_critic
 from .agents.fix import patch_agent, patch_repair, verifier
 from .agents.impact import change_loader, impact_synthesizer, static_impact, test_mapper
@@ -12,9 +11,6 @@ from .agents.repository_intelligence import repository_intelligence_agent
 from .agents.code_understanding import code_understanding_agent
 from .agents.relationship_intelligence import relationship_intelligence_agent
 from .agents.data_flow import data_flow_intelligence_agent
-from .agents.runtime import runtime_intelligence_agent
-from .agents.debugging import debugging_intelligence_agent
-from .agents.security_quality import security_quality_agent
 from .agents.software_engineering import software_engineering_agent
 from .agents.testing_verification import testing_verification_agent
 from .agents.visualization import visualization_agent
@@ -30,9 +26,6 @@ def _with_scene(agent, key):
 
 
 data_flow_pipeline = _with_scene(data_flow_intelligence_agent, 'result_data_flow')
-runtime_pipeline = _with_scene(runtime_intelligence_agent, 'result_runtime')
-debugging_pipeline = _with_scene(debugging_intelligence_agent, 'result_debugging')
-security_pipeline = _with_scene(security_quality_agent, 'result_security')
 engineering_pipeline = _with_scene(software_engineering_agent, 'result_software_eng')
 testing_pipeline = _with_scene(testing_verification_agent, 'result_testing')
 
@@ -76,12 +69,6 @@ fix_pipeline = SequentialAgent(
                 make_scene_director('fix_scene')],
 )
 
-briefing_pipeline = SequentialAgent(
-    name='briefing_pipeline',
-    description='Opening briefing for a project: what changed, what is risky, what is untested.',
-    sub_agents=[briefing_agent, make_scene_director('briefing_scene')],
-)
-
 # Phase 2: New pipeline for vertical slice
 phase2_specialists = ParallelAgent(
     name='phase2_specialists',
@@ -112,12 +99,10 @@ Route each request by delegating to exactly one sub-agent:
 - investigate_pipeline: how existing code works, where something happens, what a selected node does.
 - impact_pipeline: what breaks, what is affected, risk of changing or removing something, change review.
 - fix_pipeline: add, fix or change code, propose a patch.
-- briefing_pipeline: the user opens a project, asks for a status, or asks what is new.
 - navigator: open or switch a repository, show a folder or file, change tab, or move, resize, hide, pin, zoom or recenter anything in the workspace.
 
-For security, debugging, data flow, runtime, engineering or testing requests, delegate to exactly one of:
-- security_quality_pipeline, debugging_intelligence_pipeline, data_flow_intelligence_pipeline,
-  runtime_intelligence_pipeline, software_engineering_pipeline, testing_verification_pipeline.
+For data flow, engineering or testing requests, delegate to exactly one of:
+- data_flow_intelligence_pipeline, software_engineering_pipeline, testing_verification_pipeline.
 
 Rules:
 - Do not answer code questions yourself. You have no code tools.
@@ -132,9 +117,8 @@ root_agent = LlmAgent(
     description='Voice-and hands assistant for understanding and changing code in VR.',
     instruction=ROOT_INSTRUCTION,
     tools=[request_approval],
-    sub_agents=[phase2_pipeline, investigate_pipeline, impact_pipeline, fix_pipeline, briefing_pipeline,
-                data_flow_pipeline, runtime_pipeline, debugging_pipeline,
-                security_pipeline, engineering_pipeline, testing_pipeline, navigator_agent],
+    sub_agents=[phase2_pipeline, investigate_pipeline, impact_pipeline, fix_pipeline,
+                data_flow_pipeline, engineering_pipeline, testing_pipeline, navigator_agent],
     before_agent_callback=init_state,
     before_model_callback=trim_history,
 )

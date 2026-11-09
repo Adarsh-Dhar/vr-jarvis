@@ -1,6 +1,6 @@
 KEYS = [
     'selection',        # node id the user pinched, or empty
-    'active_task',      # explain | impact | fix | briefing
+    'active_task',      # explain | impact | fix
     'evidence',         # node ids returned by tools this session
     'changed_nodes',    # change_loader output
     'impact_static',    # static_impact output
@@ -10,7 +10,6 @@ KEYS = [
     'proposed_patch',   # patch_agent / patch_repair output
     'test_results',     # verifier output
     'verified_answer',  # critic output
-    'briefing',         # briefing_agent output
     'worktree',         # path of the sandbox worktree
     'last_test_run',    # raw test data for read_test_results
     'impact_context',   # last turn's impact report, kept for the patch agent
@@ -21,9 +20,6 @@ KEYS = [
     'result_code_understanding',  # Code Understanding output
     'result_relationship',  # Relationship Intelligence output
     'result_data_flow',     # Data Flow Intelligence output
-    'result_runtime',       # Runtime Intelligence output
-    'result_debugging',     # Debugging Intelligence output
-    'result_security',      # Security and Quality output
     'result_software_eng',  # Software Engineering output
     'result_testing',       # Testing and Verification output
     'result_visualization', # Visualization output

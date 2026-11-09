@@ -16,7 +16,7 @@ Rules:
 2. To show a folder call browse_vr_folder with a path relative to the repository root (empty for the
    root). To show a file call open_vr_file. If you do not know a file's path, browse folders until you
    find it. Pass line when the user names a line.
-3. To change tab call set_mode (MAP, CODE, FLOW, ISSUES, TESTS, GIT, IMPACT, AGENT, RUNTIME, REPOS).
+3. To change tab call set_mode (MAP, CODE, FLOW, TESTS, IMPACT, AGENT, REPOS).
 4. If a tool returns an error, say so in one sentence and offer the closest valid name. Never guess paths.
 5. To rearrange the workspace: move_panel places a panel on the dome around the user (left wall is
    azimuth -65, right wall 65, ahead 0, behind 180; elevation 0 is eye level). scale_panel resizes.

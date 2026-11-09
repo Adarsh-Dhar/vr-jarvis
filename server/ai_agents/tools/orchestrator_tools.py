@@ -78,14 +78,11 @@ def classify_request(
         task_type = "investigation"
         required_agents = ["repository_intelligence", "code_understanding", "relationship_intelligence"]
     elif "bug" in request_lower or "error" in request_lower or "fix" in request_lower:
-        task_type = "debugging"
-        required_agents = ["debugging_intelligence", "runtime_intelligence"]
+        task_type = "investigation"
+        required_agents = ["code_understanding", "relationship_intelligence"]
     elif "test" in request_lower:
         task_type = "testing"
         required_agents = ["testing_verification"]
-    elif "security" in request_lower or "vulnerability" in request_lower:
-        task_type = "security"
-        required_agents = ["security_quality"]
     elif "change" in request_lower or "modify" in request_lower or "add" in request_lower:
         task_type = "modification"
         required_agents = ["software_engineering", "testing_verification"]
@@ -189,11 +186,9 @@ def select_agents(
     if "explain" in task_lower or "what is" in task_lower:
         agents = ["repository_intelligence", "code_understanding", "relationship_intelligence"]
     elif "bug" in task_lower or "error" in task_lower:
-        agents = ["debugging_intelligence", "runtime_intelligence"]
+        agents = ["code_understanding", "relationship_intelligence"]
     elif "test" in task_lower:
         agents = ["testing_verification"]
-    elif "security" in task_lower:
-        agents = ["security_quality"]
     else:
         agents = ["repository_intelligence"]
     
@@ -561,84 +556,6 @@ def invoke_data_flow_intelligence(
         'status': 'task_queued',
         'task': task,
         'agent': 'data_flow_intelligence',
-        'note': 'Task queued for agent invocation through main runner pipeline'
-    }
-
-
-@safe
-def invoke_runtime_intelligence(
-    task: str,
-    tool_context: ToolContext
-) -> dict:
-    """Invoke the Runtime Intelligence agent."""
-    from ..agents.registry import get_agent
-    
-    agent = get_agent("runtime_intelligence")
-    if not agent:
-        return {
-            'status': 'error',
-            'error': 'Runtime Intelligence agent not found'
-        }
-    
-    state = tool_context.state
-    state['runtime_task'] = task
-    
-    return {
-        'status': 'task_queued',
-        'task': task,
-        'agent': 'runtime_intelligence',
-        'note': 'Task queued for agent invocation through main runner pipeline'
-    }
-
-
-@safe
-def invoke_debugging_intelligence(
-    task: str,
-    tool_context: ToolContext
-) -> dict:
-    """Invoke the Debugging Intelligence agent."""
-    from ..agents.registry import get_agent
-    
-    agent = get_agent("debugging_intelligence")
-    if not agent:
-        return {
-            'status': 'error',
-            'error': 'Debugging Intelligence agent not found'
-        }
-    
-    state = tool_context.state
-    state['debugging_task'] = task
-    
-    return {
-        'status': 'task_queued',
-        'task': task,
-        'agent': 'debugging_intelligence',
-        'note': 'Task queued for agent invocation through main runner pipeline'
-    }
-
-
-@safe
-def invoke_security_quality(
-    task: str,
-    tool_context: ToolContext
-) -> dict:
-    """Invoke the Security and Quality agent."""
-    from ..agents.registry import get_agent
-    
-    agent = get_agent("security_quality")
-    if not agent:
-        return {
-            'status': 'error',
-            'error': 'Security and Quality agent not found'
-        }
-    
-    state = tool_context.state
-    state['security_task'] = task
-    
-    return {
-        'status': 'task_queued',
-        'task': task,
-        'agent': 'security_quality',
         'note': 'Task queued for agent invocation through main runner pipeline'
     }
 
