@@ -91,9 +91,79 @@
       "description": "Show test pass/fail badges on nodes"
     },
     {
+      "name": "set_mode",
+      "fields": ["mode"],
+      "description": "Switch the workspace tab (REPOS, MAP, CODE, FLOW, ISSUES, TESTS, GIT, IMPACT, AGENT, RUNTIME)"
+    },
+    {
       "name": "show_approval_prompt",
       "fields": ["action", "description"],
       "description": "Show a prompt for user approval"
+    },
+    {
+      "name": "open_repo",
+      "fields": ["repo"],
+      "description": "Open a repository in the workspace"
+    },
+    {
+      "name": "browse_folder",
+      "fields": ["repo", "path"],
+      "description": "Show a folder in the repository browser"
+    },
+    {
+      "name": "open_file",
+      "fields": ["repo", "path", "line"],
+      "description": "Open a file in the code viewer at a line"
+    },
+    {
+      "name": "move_cluster",
+      "fields": ["node_id", "dx", "dy", "dz"],
+      "description": "Move a whole cluster by a graph-local offset"
+    },
+    {
+      "name": "move_graph",
+      "fields": ["dx", "dy", "dz"],
+      "description": "Move the whole graph"
+    },
+    {
+      "name": "zoom_graph",
+      "fields": ["value"],
+      "description": "Set graph zoom"
+    },
+    {
+      "name": "move_panel",
+      "fields": ["panel", "azimuth", "elevation", "radius"],
+      "description": "Place a panel on the dome"
+    },
+    {
+      "name": "scale_panel",
+      "fields": ["panel", "value"],
+      "description": "Resize a panel"
+    },
+    {
+      "name": "panel_state",
+      "fields": ["panel", "state"],
+      "description": "show, hide, pin, unpin, minimize or restore a panel"
+    },
+    {
+      "name": "set_cluster_collapsed",
+      "fields": ["node_id", "collapsed"],
+      "description": "Collapse or expand a cluster"
+    },
+    {
+      "name": "highlight_callers",
+      "fields": ["node_id"],
+      "description": "Highlight a node's callers"
+    },
+    {
+      "name": "recenter",
+      "fields": [],
+      "description": "Recenter the workspace"
+    },
+    {
+      "name": "reset_layout",
+      "fields": [],
+      "description": "Reset panel and graph layout"
     }
   ]
 }

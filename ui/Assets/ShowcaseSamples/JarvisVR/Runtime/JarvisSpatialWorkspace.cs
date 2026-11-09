@@ -63,13 +63,15 @@ namespace JarvisVR
     private JarvisSpatialButton _codePrev, _codeClose, _codeNext;
     private readonly List<GameObject> _repoRows = new List<GameObject>();
     private string _browserRepo, _browserPath = "";
-    private int _browserPage, _openFilePage;
+    private int _browserPage, _openFilePage, _pendingOpenLine;
     private bool _treeLoading, _switching;
     private string _browserError;
     private const int BrowserRowsPerPage = 7;
     private const int EditorLinesPerPage = 18;
     private bool _serverOnline;
     private string _selected, _mode = "MAP", _pending, _ghostDiff, _testSummary = "No test run yet.";
+    private string _agentMode;
+    private readonly HashSet<string> _agentShown = new HashSet<string>();
     private readonly List<string> _log = new List<string>();
     private float _errorUntil;
     private int _progressSeen;
@@ -298,7 +300,7 @@ namespace JarvisVR
       foreach (string m in NavModes)
       {
         string mode = m;
-        _navButtons[mode] = nav.AddButton(mode, x, 52, 100, 46, () => { foreach (JarvisSpatialPanel pp in _panels.Values) pp.Reopen(); SetMode(mode); });
+        _navButtons[mode] = nav.AddButton(mode, x, 52, 100, 46, () => { _agentShown.Clear(); foreach (JarvisSpatialPanel pp in _panels.Values) pp.Reopen(); SetMode(mode); });
         x += 108f;
       }
       nav.AddButton("CENTER", x, 52, 100, 46, Recenter);
@@ -318,7 +320,7 @@ namespace JarvisVR
       int shown = 0;
       foreach (string key in new[] { "repo", "code", "evidence", "tests", "activity", "legend", "ghost", "approval", "security", "history", "history_detail", "impact", "runtime" })
       {
-        bool on = visible.Contains(key);
+        bool on = visible.Contains(key) || _agentShown.Contains(key);
         // approval shares its slot with evidence and tests: while something is pending, approval wins
         if (!string.IsNullOrEmpty(_pending) && key == "approval") on = true;
         if (!string.IsNullOrEmpty(_pending) && (key == "evidence" || key == "tests")) on = false;
@@ -909,6 +911,7 @@ namespace JarvisVR
         return;
       }
       ResetOverlay();
+      _agentMode = null;
       _agentEvidence = r.evidence;
       _agentTestResults = r.test_results;
       bool graphChanged = false;
@@ -921,7 +924,12 @@ namespace JarvisVR
       Debug.Log("[JARVIS] reply: " + reply);
       if (_voice != null) _voice.Speak(reply);
       RefreshAll();
-      if (!string.IsNullOrEmpty(_pending)) SetMode("GIT");
+      if (!string.IsNullOrEmpty(_pending)) SetMode("GIT");          // pending approval always wins
+      else if (!string.IsNullOrEmpty(_agentMode))
+      {
+        foreach (JarvisSpatialPanel pp in _panels.Values) pp.Reopen();   // same as tapping the tab
+        SetMode(_agentMode);
+      }
       else if (graphChanged) SetMode("MAP");
     }
 
@@ -1335,9 +1343,79 @@ namespace JarvisVR
         case "show_approval_prompt":
           _pending = c.summary;
           return false;
+        case "set_mode":
+          if (!string.IsNullOrEmpty(c.mode) && (c.mode == "REPOS" || System.Array.IndexOf(NavModes, c.mode) >= 0))
+            _agentMode = c.mode;
+          return false;   // false: don't let the "graph changed -> MAP" fallback fire
         case "select_node":
           if (!string.IsNullOrEmpty(c.node_id) && _nodes.ContainsKey(c.node_id)) Select(c.node_id);
           return true;
+        case "move_cluster":
+          if (!string.IsNullOrEmpty(c.node_id) && _nodes.TryGetValue(c.node_id, out NodeView mcNode))
+          {
+            Vector3 delta = new Vector3(c.dx, c.dy, c.dz);          // graph-local units, same space DragCluster uses
+            foreach (NodeView m in mcNode.Cluster.Members) m.Root.localPosition += delta;
+            _edgesDirty = true;
+          }
+          return false;
+        case "move_graph":
+          _graphRoot.localPosition = Vector3.ClampMagnitude(_graphRoot.localPosition + new Vector3(c.dx, c.dy, c.dz), 3f);
+          return false;
+        case "zoom_graph":
+          _graphRoot.localScale = Vector3.one * Mathf.Clamp(c.value, 0.4f, 2.2f);
+          return false;
+        case "move_panel":
+          if (AgentMayControl(c.panel) && _panels.TryGetValue(c.panel, out JarvisSpatialPanel mpPanel) && !mpPanel.Pinned)
+            mpPanel.transform.localPosition = SlotPosition(new Vector3(c.azimuth, c.elevation, c.radius));
+          return false;
+        case "scale_panel":
+          if (AgentMayControl(c.panel) && _panels.TryGetValue(c.panel, out JarvisSpatialPanel spPanel))
+            spPanel.Anim.UserScale = Mathf.Clamp(c.value, 0.5f, 2.2f);
+          return false;
+        case "panel_state":
+          if (AgentMayControl(c.panel) && _panels.TryGetValue(c.panel, out JarvisSpatialPanel psPanel))
+          {
+            switch (c.state)
+            {
+              case "show": _agentShown.Add(c.panel); psPanel.Reopen(); psPanel.Show(true); break;
+              case "hide": if (AgentMayHide(c.panel)) { _agentShown.Remove(c.panel); psPanel.Close(); } break;
+              case "pin": if (!psPanel.Pinned) psPanel.TogglePin(); break;
+              case "unpin": if (psPanel.Pinned) psPanel.TogglePin(); break;
+              case "minimize": psPanel.SetMinimized(true); break;
+              case "restore": psPanel.SetMinimized(false); break;
+            }
+          }
+          return false;
+        case "set_cluster_collapsed":
+          if (!string.IsNullOrEmpty(c.node_id) && _nodes.TryGetValue(c.node_id, out NodeView scNode))
+            SetClusterCollapsed(scNode.Cluster, c.collapsed);
+          return false;
+        case "highlight_callers":
+          if (!string.IsNullOrEmpty(c.node_id)) HighlightCallers(c.node_id);
+          return false;
+        case "recenter":
+          Recenter();
+          return false;
+        case "reset_layout":
+          ResetLayout();
+          return false;
+        case "open_repo":
+          if (!string.IsNullOrEmpty(c.repo) && !_switching && _bridge != null)
+          {
+            if (_repos != null && _repos.active == c.repo) OpenRepo(c.repo);   // already loaded: just show its root
+            else OnRepoActivated(c.repo);                                      // server already switched it
+          }
+          return false;
+        case "browse_folder":
+          if (!string.IsNullOrEmpty(c.repo)) _browserRepo = c.repo;
+          if (_openFile != null) CloseOpenFile();
+          SetMode("REPOS");
+          LoadRepoFolder(c.path ?? "");
+          return false;
+        case "open_file":
+          if (!string.IsNullOrEmpty(c.repo)) _browserRepo = c.repo;
+          if (!string.IsNullOrEmpty(c.path)) { _pendingOpenLine = c.line; OpenRepoFile(c.path); }
+          return false;
         case "set_depth":
           // Store depth for future filtering (implementation depends on graph traversal)
           Log("set_depth: " + c.depth);
@@ -1612,26 +1690,32 @@ namespace JarvisVR
       {
         _switching = false;
         if (!ok) { Say("Could not open repository " + name + ". Check the server log."); return; }
-        if (_repos != null) _repos.active = name;
-        _browserRepo = name;
-        _browserPath = "";
-        _browserPage = 0;
-        _repoTree = null;
-        _openFile = null;
-        SetMode("REPOS");
-        // Load the file tree independently: browsing must not depend on graph indexing succeeding.
-        LoadRepoFolder("");
-        _bridge.GetHealth(h => { _health = h; RefreshStatus(); }, e => { });
-        _bridge.GetGraph(g =>
+        OnRepoActivated(name);
+      });
+    }
+
+    /// <summary>Everything that happens once the server has made `name` its active repository.</summary>
+    private void OnRepoActivated(string name)
+    {
+      if (_repos != null) _repos.active = name;
+      _browserRepo = name;
+      _browserPath = "";
+      _browserPage = 0;
+      _repoTree = null;
+      _openFile = null;
+      SetMode("REPOS");
+      // Load the file tree independently: browsing must not depend on graph indexing succeeding.
+      LoadRepoFolder("");
+      _bridge.GetHealth(h => { _health = h; RefreshStatus(); }, e => { });
+      _bridge.GetGraph(g =>
+      {
+        if (g != null && g.nodes != null)
         {
-          if (g != null && g.nodes != null)
-          {
-            LoadGraph(g);
-            if (g.nodes.Count > 0) Select(g.nodes[0].id);
-            Log("repository " + name + ": " + g.nodes.Count + " graph nodes");
-          }
-          RefreshStatus();
-        });
+          LoadGraph(g);
+          if (g.nodes.Count > 0) Select(g.nodes[0].id);
+          Log("repository " + name + ": " + g.nodes.Count + " graph nodes");
+        }
+        RefreshStatus();
       });
     }
 
@@ -1806,7 +1890,10 @@ namespace JarvisVR
       {
         if (file == null || file.status != "ok") { Say("Could not open " + path + "."); return; }
         _openFile = file;
-        _openFilePage = 0;
+        int total = (file.content ?? "").Split('\n').Length;
+        int pageCount = Mathf.Max(1, Mathf.CeilToInt(total / (float)EditorLinesPerPage));
+        _openFilePage = Mathf.Clamp((Mathf.Max(1, _pendingOpenLine) - 1) / EditorLinesPerPage, 0, pageCount - 1);
+        _pendingOpenLine = 0;
         SetMode("CODE");
         RefreshOpenFile();
         Log("opened " + path);
@@ -2094,14 +2181,38 @@ namespace JarvisVR
         }
       }
       
-      cv.Collapsed = !cv.Collapsed;
+      SetClusterCollapsed(cv, !cv.Collapsed);
+      _menu.Show(false);
+    }
+
+    private void SetClusterCollapsed(ClusterView cv, bool collapsed)
+    {
+      cv.Collapsed = collapsed;
       for (int i = 1; i < cv.Members.Count; i++)   // member 0 stays as the cluster anchor
       {
-        cv.Members[i].Fx.SetShown(!cv.Collapsed);
-        cv.Members[i].Label.gameObject.SetActive(!cv.Collapsed);
+        cv.Members[i].Fx.SetShown(!collapsed);
+        cv.Members[i].Label.gameObject.SetActive(!collapsed);
       }
       RefreshEdgeVisibility();
-      _menu.Show(false);
+    }
+
+    // The agent may move and resize most panels, but never the approve/reject panel.
+    private static bool AgentMayControl(string key) { return !string.IsNullOrEmpty(key) && key != "approval"; }
+    private static bool AgentMayHide(string key) { return AgentMayControl(key) && key != "nav" && key != "status" && key != "caption"; }
+
+    private void ResetLayout()
+    {
+      foreach (KeyValuePair<string, JarvisSpatialPanel> kv in _panels)
+      {
+        kv.Value.Reopen();
+        kv.Value.SetMinimized(false);
+        kv.Value.Anim.UserScale = 1f;
+        if (!kv.Value.Pinned && Slots.TryGetValue(kv.Key, out Vector3 slot)) kv.Value.transform.localPosition = SlotPosition(slot);
+      }
+      _agentShown.Clear();
+      _graphRoot.localPosition = new Vector3(0f, 0.05f, 0f);
+      _graphRoot.localScale = Vector3.one * 0.85f;
+      Recenter();
     }
 
     private void RefreshEdgeVisibility()

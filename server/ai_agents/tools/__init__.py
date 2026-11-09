@@ -716,6 +716,21 @@ from .scene_tools import (
     show_ghost_diff,
     show_test_badges,
     show_approval_prompt,
+    set_mode,
+    list_vr_repositories,
+    open_vr_repository,
+    browse_vr_folder,
+    open_vr_file,
+    move_cluster,
+    move_graph,
+    zoom_graph,
+    move_panel,
+    scale_panel,
+    set_panel_state,
+    set_cluster_collapsed,
+    highlight_callers,
+    recenter_workspace,
+    reset_layout,
 )
 
 from .control_tools import (

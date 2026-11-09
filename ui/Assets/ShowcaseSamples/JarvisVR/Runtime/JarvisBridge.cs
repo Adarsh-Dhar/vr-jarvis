@@ -10,9 +10,12 @@ namespace JarvisVR
   // Field names match the server JSON exactly (JsonUtility is case-sensitive and ignores unknown fields).
   [Serializable] public class SceneCommand
   {
-    public string type, color, node_id, src, dst, style, diff, summary;
+    public string type, color, node_id, src, dst, style, diff, summary, mode;
+    public string repo, path, panel, state;
     public string[] node_ids, keep_ids, passed, failed, not_run;
-    public int depth;
+    public int depth, line;
+    public float dx, dy, dz, value, azimuth, elevation, radius;
+    public bool collapsed;
     public string scope;
     public string group_id;
     public string text;

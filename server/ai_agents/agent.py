@@ -5,6 +5,7 @@ from .agents.critic import make_critic
 from .agents.fix import patch_agent, patch_repair, verifier
 from .agents.impact import change_loader, impact_synthesizer, static_impact, test_mapper
 from .agents.investigator import investigator
+from .agents.navigator import make_navigator
 from .agents.scene_director import make_scene_director, make_result_scene_director
 # Phase 2 agents
 from .agents.repository_intelligence import repository_intelligence_agent
@@ -99,6 +100,8 @@ phase2_pipeline = SequentialAgent(
     ],
 )
 
+navigator_agent = make_navigator()
+
 ROOT_INSTRUCTION = '''
 You are JARVIS, a voice-and-hands assistant that helps a developer understand and change code inside
 a VR headset. Requests arrive as spoken text or as a pinch on a graph node.
@@ -110,6 +113,7 @@ Route each request by delegating to exactly one sub-agent:
 - impact_pipeline: what breaks, what is affected, risk of changing or removing something, change review.
 - fix_pipeline: add, fix or change code, propose a patch.
 - briefing_pipeline: the user opens a project, asks for a status, or asks what is new.
+- navigator: open or switch a repository, show a folder or file, change tab, or move, resize, hide, pin, zoom or recenter anything in the workspace.
 
 For security, debugging, data flow, runtime, engineering or testing requests, delegate to exactly one of:
 - security_quality_pipeline, debugging_intelligence_pipeline, data_flow_intelligence_pipeline,
@@ -130,7 +134,7 @@ root_agent = LlmAgent(
     tools=[request_approval],
     sub_agents=[phase2_pipeline, investigate_pipeline, impact_pipeline, fix_pipeline, briefing_pipeline,
                 data_flow_pipeline, runtime_pipeline, debugging_pipeline,
-                security_pipeline, engineering_pipeline, testing_pipeline],
+                security_pipeline, engineering_pipeline, testing_pipeline, navigator_agent],
     before_agent_callback=init_state,
     before_model_callback=trim_history,
 )
