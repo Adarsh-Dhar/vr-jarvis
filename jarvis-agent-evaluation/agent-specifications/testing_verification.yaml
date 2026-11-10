@@ -9,26 +9,27 @@ responsibility: >
 supported_tasks:
   - Test discovery
   - Test selection
-  - Unit-test generation
-  - Integration-test generation
-  - Edge-case generation
+  - Test-to-code mapping
   - Coverage measurement
   - Regression testing
-  - Mutation testing
   - Build verification
+  - Type and lint verification
   - Test failure diagnosis
 
 allowed_tools:
   - discover_tests
-  - select_tests
-  - generate_unit_test
-  - generate_integration_test
-  - find_edge_cases
-  - measure_coverage
+  - map_tests_to_functions
+  - identify_untested_paths
+  - run_unit_tests
   - run_regression_tests
-  - run_mutation_tests
-  - verify_build
-  - diagnose_failure
+  - measure_test_coverage
+  - verify_compilation
+  - verify_lint
+  - verify_types
+  - compare_before_after
+  - run_tests
+  - run_typecheck
+  - read_test_results
 
 required_inputs:
   - name: repository_id
@@ -44,10 +45,9 @@ required_inputs:
 required_output:
   - name: status
   - name: tests_selected
-  - name: tests_generated
+  - name: tests_executed
   - name: coverage_report
   - name: defects_detected
-  - name: mutation_score
   - name: verification_status
   - name: unverified_areas
   - name: evidence
@@ -57,7 +57,7 @@ decision_rules:
   - condition: "Software Engineering claims change works"
     action: "Run independent verification"
   - condition: "Tests pass but edge cases missing"
-    action: "Generate or recommend edge case tests"
+    action: "Report the coverage gap and recommend additional tests"
   - condition: "Defect detected"
     action: "Report defect and prevent approval"
   - condition: "Verification incomplete"
@@ -85,7 +85,6 @@ dependencies:
   services:
     - test_service
     - coverage_service
-    - mutation_service
 
 failure_behavior:
   retry: true

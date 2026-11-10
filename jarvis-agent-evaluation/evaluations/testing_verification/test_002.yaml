@@ -17,9 +17,19 @@ expected_output:
       - coverage_analysis
       - verification_independence
     allowed_tools:
-      - test_generator
-      - coverage_analyzer
-      - verification_runner
+      - discover_tests
+      - map_tests_to_functions
+      - identify_untested_paths
+      - run_unit_tests
+      - run_regression_tests
+      - measure_test_coverage
+      - verify_compilation
+      - verify_lint
+      - verify_types
+      - compare_before_after
+      - run_tests
+      - run_typecheck
+      - read_test_results
     boundaries:
       must_not:
         - modify_production_code

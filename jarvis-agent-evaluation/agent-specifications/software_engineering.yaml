@@ -12,20 +12,29 @@ supported_tasks:
   - File modification
   - Refactoring
   - Symbol renaming
-  - Dependency integration
+  - Function extraction
+  - Import organization
+  - Code formatting
   - Multi-file modification
 
 allowed_tools:
-  - generate_code
-  - create_file
-  - modify_file
-  - refactor_code
+  - create_worktree
+  - apply_patch_to_worktree
+  - get_worktree_diff
+  - edit_file
+  - apply_patch
+  - search_and_replace
   - rename_symbol
-  - add_dependency
-  - run_build
-  - run_tests
-  - create_checkpoint
-  - rollback
+  - extract_function
+  - organize_imports
+  - generate_function
+  - generate_class
+  - format_code
+  - git_status
+  - git_branch
+  - git_diff
+  - read_file
+  - search_code
 
 required_inputs:
   - name: repository_id
@@ -42,20 +51,16 @@ required_output:
   - name: status
   - name: modifications_made
   - name: files_modified
-  - name: build_status
   - name: test_status
   - name: regression_check
-  - name: checkpoint_created
   - name: evidence
   - name: limitations
 
 decision_rules:
   - condition: "Modification affects multiple files"
-    action: "Create checkpoint before proceeding"
-  - condition: "Build fails"
-    action: "Rollback and investigate"
-  - condition: "Tests fail"
-    action: "Rollback and investigate"
+    action: "Apply changes in an isolated git worktree"
+  - condition: "Tests fail after modification"
+    action: "Report failure to testing_verification and do not request approval"
   - condition: "Approval required"
     action: "Request approval before modifying"
 
@@ -66,12 +71,12 @@ boundaries:
     - "Ignore project conventions"
     - "Modify unrelated files"
     - "Deploy to production"
+    - "Commit to the main branch"
   must_delegate:
     - "Testing and verification"
-    - "Security assessment"
   must_report:
     - "Files that will be modified"
-    - "Build and test results"
+    - "Test results"
     - "Regressions detected"
     - "Any operations requiring approval"
 
@@ -81,7 +86,6 @@ dependencies:
     - code_understanding
     - testing_verification
   services:
-    - build_service
     - test_service
     - version_control_service
 

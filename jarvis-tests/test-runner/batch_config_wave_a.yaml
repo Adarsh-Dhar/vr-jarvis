@@ -114,11 +114,6 @@ tools:
     fixture: simple-python
     manifest: analyze_naming_conventions.yaml
   
-  - tool: detect_dead_code
-    archetype: analysis
-    fixture: simple-python
-    manifest: detect_dead_code.yaml
-  
   - tool: get_function_signatures
     archetype: read_search
     fixture: simple-python
@@ -270,8 +265,3 @@ tools:
     archetype: analysis
     fixture: simple-python
     manifest: suggest_refactoring.yaml
-  
-  - tool: generate_documentation
-    archetype: read_search
-    fixture: simple-python
-    manifest: generate_documentation.yaml

@@ -502,8 +502,7 @@ def compare_code_elements(
     """Explain differences between two code elements."""
     try:
         from .navigation_tools import get_symbol_definition
-        from .analysis_tools import analyze_code_complexity
-        
+
         def1 = get_symbol_definition(element1_id, tool_context)
         def2 = get_symbol_definition(element2_id, tool_context)
         

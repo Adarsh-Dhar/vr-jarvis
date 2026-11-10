@@ -1,56 +1,47 @@
 test_id: AG-TST-001
 agent: testing_verification
-scenario: generate_unit_tests
+scenario: run_tests_and_verify
 layer: layer2_responsibility
 severity: high
-description: Generate comprehensive unit tests for a function
+description: Discover, map and execute tests for changed code, then report verification status
 input:
-  task: "Generate unit tests for the helper function"
+  task: "Verify the changes on the current branch by running the relevant tests"
   context:
     repository: simple-python
     additional_context:
-      target_file: src/helper.py
-      target_function: helper
+      changed_files:
+        - src/helper.py
+      verification_scope: unit_tests
 expected_output:
-  test_file: tests/test_helper.py
-  test_cases:
-    - name: test_helper_basic
-      description: Test basic functionality
-      input: 5
-      expected_output: 10
-    - name: test_helper_zero
-      description: Test with zero input
-      input: 0
-      expected_output: 0
-    - name: test_helper_negative
-      description: Test with negative input
-      input: -5
-      expected_output: -10
-    - name: test_helper_large
-      description: Test with large input
-      input: 1000
-      expected_output: 2000
+  test_discovery:
+    tool: discover_tests
+    result: tests located for changed files
+  test_mapping:
+    tool: map_tests_to_functions
+    result: changed functions mapped to covering tests
+  test_execution:
+    tool: run_unit_tests
+    result: pytest executed against mapped tests
   coverage:
-    lines_covered: 10
-    lines_total: 10
-    coverage_percentage: 100
-  test_framework: pytest
+    tool: measure_test_coverage
+    result: coverage report for changed files
+  verification_status: pass
 expected_result:
-  tests_generated: true
-  test_count: 4
-  coverage_adequate: true
-  edge_cases_covered: true
-  framework_correct: true
+  tests_discovered: true
+  tests_mapped_to_changes: true
+  tests_executed: true
+  results_reported: true
+  unverified_areas_reported: true
 fixture:
   type: repository
   name: simple-python
 evidence_requirements:
-  - claim: tests_generated
+  - claim: tests_executed
     requires_evidence: true
   - claim: coverage
     requires_evidence: true
 boundary_checks:
   - must_not: modify_production_code
-  - must_not: execute_tests
-  - must_include: edge_cases
-  - must_include: assertions
+  - must_not: claim_verification_without_execution
+  - must_include: test_results
+  - must_include: unverified_areas
