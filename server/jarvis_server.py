@@ -243,6 +243,7 @@ class AskBody(BaseModel):
     text: str
     selection: str = ''
     repo: Optional[str] = None
+    task_id: Optional[str] = None   # set when the ask implements a plan task (WORK ON IT)
 
 
 def _turn_state(body):
@@ -254,6 +255,9 @@ def _turn_state(body):
         'repo_path': str(config.REPO_ROOT),
         'available_agents': ', '.join(list_agents()),
         'session_id': body.session_id,
+        # Links this turn's code change back to its plan task so /promote
+        # completes only that task. Cleared by any ask that is not task work.
+        'active_task_id': (body.task_id or '').strip(),
     }
 
 
@@ -675,16 +679,20 @@ async def promote(body: PromoteBody):
             return res
         g = await asyncio.to_thread(repository.activate, config.REPO_ROOT.name)   # re-index + clear caches
         await set_state(body.session_id, {'last_commit': {}, 'worktree': ''})
-        # The promoted change is the task that was in flight: mark it done.
+        # The promoted change belongs to the task that was in flight: mark only
+        # that task done. active_task_id is set by asks sent via WORK ON IT; a
+        # plain ask clears it, so unrelated running tasks are left untouched.
         plan = state.get('implementation_plan')
         if isinstance(plan, dict) and plan.get('tasks'):
-            changed = False
-            for t in plan['tasks']:
-                if t.get('status') == 'running':
-                    t['status'] = 'done'
-                    changed = True
-            if changed:
-                await set_state(body.session_id, {'implementation_plan': plan})
+            active = str(state.get('active_task_id') or '')
+            running = [t for t in plan['tasks'] if t.get('status') == 'running']
+            targets = ([t for t in running if str(t.get('id')) == active] if active
+                       else running if len(running) == 1 else [])
+            for t in targets:
+                t['status'] = 'done'
+            if targets:
+                await set_state(body.session_id, {'implementation_plan': plan,
+                                                  'active_task_id': ''})
                 await _persist_design(body.session_id)
         return {**res, 'graph_refreshed': True, 'nodes': len(g['nodes']), 'edges': len(g['edges'])}
 
@@ -763,6 +771,16 @@ from ai_agents.tools.architecture_tools import (
 
 DESIGN_KEYS = ('design_requirements', 'design', 'design_compare', 'implementation_plan')
 
+# Allowed values for architecture kinds; anything else is rejected.
+COMPONENT_KINDS = {'service', 'library', 'ui', 'data', 'external'}
+RELATIONSHIP_KINDS = {'calls', 'reads', 'publishes'}
+
+
+def _valid_design_id(value):
+    """Component/relationship ids must be short, printable tokens."""
+    v = (value or '').strip()
+    return bool(v) and len(v) <= 64 and all(ch.isalnum() or ch in '_.-' for ch in v)
+
 
 def _disk_payload(session_id):
     d = load_design(session_id)
@@ -826,6 +844,7 @@ class DesignEditOp(BaseModel):
     requirement_ids: list = []
     question: str = ''        # open-question text (resolve/update/add ops)
     new_question: str = ''    # replacement text for update_question
+    answer: str = ''          # developer's resolution/rationale for resolve_question
 
 
 class DesignEditBody(BaseModel):
@@ -884,11 +903,16 @@ def _apply_design_op(arch, op):
         if not op.name.strip():
             return arch, 'add_component requires a name'
         cid = op.id.strip() or _next_id('c', comps)
+        if not _valid_design_id(cid):
+            return arch, 'invalid component id: ' + cid
         if cid in comp_ids:
             return arch, 'component id already exists: ' + cid
+        kind = op.component_kind or 'service'
+        if kind not in COMPONENT_KINDS:
+            return arch, 'invalid component kind: ' + kind
         comps.append({'id': cid, 'name': op.name.strip(),
                       'responsibility': op.responsibility,
-                      'kind': op.component_kind or 'service',
+                      'kind': kind,
                       'requirement_ids': [str(x) for x in op.requirement_ids]})
     elif op_type == 'remove_component':
         if op.id not in comp_ids:
@@ -903,6 +927,8 @@ def _apply_design_op(arch, op):
             return arch, 'unknown component: ' + op.id
         for field, val in (('name', op.name), ('responsibility', op.responsibility), ('kind', op.component_kind)):
             if val:
+                if field == 'kind' and val not in COMPONENT_KINDS:
+                    return arch, 'invalid component kind: ' + val
                 comp[field] = val
         if op.requirement_ids:
             comp['requirement_ids'] = [str(x) for x in op.requirement_ids]
@@ -912,10 +938,15 @@ def _apply_design_op(arch, op):
         if op.src == op.dst:
             return arch, 'a component cannot relate to itself'
         rid = op.id.strip() or _next_id('e', rels)
+        if not _valid_design_id(rid):
+            return arch, 'invalid relationship id: ' + rid
         if any(r.get('id') == rid for r in rels):
             return arch, 'relationship id already exists: ' + rid
+        kind = op.kind or 'calls'
+        if kind not in RELATIONSHIP_KINDS:
+            return arch, 'invalid relationship kind: ' + kind
         rels.append({'id': rid, 'src': op.src, 'dst': op.dst,
-                     'kind': op.kind or 'calls', 'label': op.label})
+                     'kind': kind, 'label': op.label})
     elif op_type == 'remove_relationship':
         before = len(rels)
         arch['relationships'] = [r for r in rels
@@ -929,6 +960,8 @@ def _apply_design_op(arch, op):
             return arch, 'unknown relationship: ' + op.id
         for field, val in (('kind', op.kind), ('label', op.label), ('src', op.src), ('dst', op.dst)):
             if val:
+                if field == 'kind' and val not in RELATIONSHIP_KINDS:
+                    return arch, 'invalid relationship kind: ' + val
                 rel[field] = val
         comp_ids = {c.get('id') for c in arch['components']}
         if rel.get('src') not in comp_ids or rel.get('dst') not in comp_ids:
@@ -938,7 +971,13 @@ def _apply_design_op(arch, op):
         idx = _question_matches(questions, op.question)
         if not idx:
             return arch, 'open question not found: ' + (op.question or '<empty>')
+        resolved = arch.setdefault('resolved_questions', [])
+        answer = (op.answer or '').strip()
         for i in sorted(idx, reverse=True):
+            # Keep the decision on record: the question, the developer's
+            # answer/rationale (may be empty) and the revision it resolved at.
+            resolved.append({'question': questions[i], 'answer': answer,
+                             'revision': int(arch.get('revision') or 0) + 1})
             questions.pop(i)
     elif op_type == 'update_question':
         questions = arch.setdefault('open_questions', [])
@@ -1025,7 +1064,9 @@ async def design_edit(session_id: str, body: DesignEditBody):
         working['status'] = 'draft'
         working['approved_by'] = ''
         working['approved_version'] = 0
-    delta = {'design': working, 'implementation_plan': {}}
+    # Editing the design invalidates the implementation plan AND any
+    # repository comparison computed against the previous revision.
+    delta = {'design': working, 'implementation_plan': {}, 'design_compare': {}}
     if touched_questions and isinstance(view.get('requirements'), dict):
         # Keep the requirements document in step: its open_questions mirror the architecture's.
         req = copy.deepcopy(view['requirements'])
@@ -1101,13 +1142,32 @@ async def plan_update_task(session_id: str, task_id: str, body: PlanTaskPatch):
     if body.title is not None:
         task['title'] = body.title
     if body.status is not None:
-        new_status = body.status.strip().lower()
-        if new_status in ('running', 'in_progress', 'in-progress'):
-            done = {t['id'] for t in plan['tasks'] if t.get('status') in ('done', 'completed')}
-            missing = [d for d in (task.get('depends_on') or []) if d not in done]
-            if missing:
-                raise HTTPException(status_code=409, detail='Task is blocked by unfinished dependencies: ' + ', '.join(missing))
+        raw = body.status.strip().lower()
+        if raw in ('running', 'in_progress', 'in-progress'):
             new_status = 'running'
+        elif raw in ('done', 'completed'):
+            new_status = 'done'
+        elif raw == 'pending':
+            new_status = 'pending'
+        else:
+            raise HTTPException(status_code=400, detail='Invalid task status: ' + body.status)
+        current = task.get('status') or 'pending'
+        current = {'completed': 'done', 'in_progress': 'running', 'in-progress': 'running'}.get(current, current)
+        # Valid transitions: pending -> running|done, running -> done|pending,
+        # done -> pending (reopen for corrections). Same-status is a no-op.
+        allowed = {'pending': {'pending', 'running', 'done'},
+                   'running': {'running', 'done', 'pending'},
+                   'done': {'done', 'pending'}}
+        if new_status not in allowed.get(current, {current}):
+            raise HTTPException(status_code=409,
+                                detail='Cannot move task from %s to %s.' % (current, new_status))
+        if new_status in ('running', 'done') and new_status != current:
+            done_ids = {str(t.get('id')) for t in plan['tasks']
+                        if (t.get('status') or 'pending') in ('done', 'completed')}
+            missing = [str(d) for d in (task.get('depends_on') or []) if str(d) not in done_ids]
+            if missing:
+                raise HTTPException(status_code=409,
+                                    detail='Task is blocked by unfinished dependencies: ' + ', '.join(missing))
         task['status'] = new_status
     await set_state(session_id, {'implementation_plan': plan})
     await _persist_design(session_id)

@@ -23,6 +23,10 @@ REQUIREMENT_KEYS = ('goals', 'functional', 'non_functional', 'constraints', 'ass
 ARCH_VERSION = 3
 DESIGN_DIR = config.ROOT / 'data' / 'design'
 
+# Canonical vocabularies; model output outside these is normalised, not trusted.
+COMPONENT_KINDS = ('service', 'library', 'ui', 'data', 'external')
+RELATIONSHIP_KINDS = ('calls', 'reads', 'publishes')
+
 
 def _blank_requirements() -> Dict[str, List[str]]:
     return {k: [] for k in REQUIREMENT_KEYS}
@@ -144,26 +148,61 @@ def propose_architecture(requirements, tool_context: ToolContext = None) -> dict
     )
 
     comps = []
+    id_map = {}   # model-supplied id -> canonical id (duplicates are renamed)
+    used_ids = set()
     for i, c in enumerate(data.get('components') or [], 1):
         if not isinstance(c, dict):
             continue
+        cid = str(c.get('id') or '').strip() or 'c%d' % i
+        if cid in used_ids or cid in id_map.values():
+            # Duplicate id: keep the component under a fresh canonical id and
+            # remap relationship endpoints below.
+            base = re.sub(r'[^A-Za-z0-9_.-]', '', cid)[:40] or 'c'
+            cid = '%s_%d' % (base, i)
+            while cid in used_ids:
+                cid += 'x'
+        used_ids.add(cid)
+        kind = str(c.get('kind') or 'service').strip().lower()
+        if kind not in COMPONENT_KINDS:
+            log.warning('propose_architecture: dropping invalid component kind %r', kind)
+            kind = 'service'
+        raw_id = str(c.get('id') or '').strip()
+        if raw_id:
+            id_map.setdefault(raw_id, cid)   # first component wins ambiguous references
         comps.append({
-            'id': str(c.get('id') or 'c%d' % i),
+            'id': cid,
             'name': str(c.get('name') or 'Component %d' % i),
             'responsibility': str(c.get('responsibility') or ''),
-            'kind': str(c.get('kind') or 'service'),
+            'kind': kind,
             'requirement_ids': [str(x) for x in (c.get('requirement_ids') or [])],
         })
     ids = {c['id'] for c in comps}
     rels = []
+    seen_rels = set()
+    used_rel_ids = set()
     for i, r in enumerate(data.get('relationships') or [], 1):
         if not isinstance(r, dict):
             continue
-        src, dst = str(r.get('src') or ''), str(r.get('dst') or '')
+        src = id_map.get(str(r.get('src') or '').strip(), str(r.get('src') or '').strip())
+        dst = id_map.get(str(r.get('dst') or '').strip(), str(r.get('dst') or '').strip())
         if src not in ids or dst not in ids or src == dst:
             continue   # drop dangling/self relationships instead of failing the proposal
-        rels.append({'id': str(r.get('id') or 'e%d' % i), 'src': src, 'dst': dst,
-                     'kind': str(r.get('kind') or 'calls'), 'label': str(r.get('label') or '')})
+        kind = str(r.get('kind') or 'calls').strip().lower()
+        if kind not in RELATIONSHIP_KINDS:
+            log.warning('propose_architecture: normalising invalid relationship kind %r', kind)
+            kind = 'calls'
+        edge_key = (src, dst, kind)
+        if edge_key in seen_rels:
+            continue   # duplicate relationship
+        seen_rels.add(edge_key)
+        rid = str(r.get('id') or '').strip() or 'e%d' % i
+        if rid in used_rel_ids:
+            rid = 'e%d' % (len(used_rel_ids) + 1)
+            while rid in used_rel_ids:
+                rid += 'x'
+        used_rel_ids.add(rid)
+        rels.append({'id': rid, 'src': src, 'dst': dst,
+                     'kind': kind, 'label': str(r.get('label') or '')})
     if not comps:
         h = heuristic()
         comps, rels = h['components'], h['relationships']

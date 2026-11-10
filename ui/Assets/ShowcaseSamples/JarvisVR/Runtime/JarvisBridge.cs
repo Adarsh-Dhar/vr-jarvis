@@ -60,6 +60,7 @@ namespace JarvisVR
     public string[] requirement_ids;
   }
   [Serializable] public class RelationshipDto { public string id, src, dst, kind, label; }
+  [Serializable] public class ResolvedQuestionDto { public string question, answer; public int revision; }
   [Serializable] public class ArchitectureDto
   {
     public int version, revision, approved_version;
@@ -67,6 +68,7 @@ namespace JarvisVR
     public ComponentDto[] components;
     public RelationshipDto[] relationships;
     public string[] open_questions;
+    public ResolvedQuestionDto[] resolved_questions;
   }
   [Serializable] public class CompareItemDto { public string id, name, node, evidence; }
   [Serializable] public class CompareDto
@@ -99,7 +101,7 @@ namespace JarvisVR
   {
     public string op, id, src, dst, kind, label, name, responsibility, component_kind;
     public string[] requirement_ids;
-    public string question, new_question;   // open-question ops: resolve/update/add
+    public string question, new_question, answer;   // open-question ops: resolve/update/add
   }
   [Serializable] internal class DesignSessionRequest { public string session_id; public string idea_text; }
   [Serializable] internal class DesignEditRequest { public string session_id; public DesignEditOpDto[] ops; }
@@ -109,7 +111,7 @@ namespace JarvisVR
   [Serializable] public class AgentResultDto { public string agent, summary, status; public float confidence; }
   [Serializable] public class TaskResponse { public bool busy; public string plan_summary; public TaskDto[] tasks; public string[] circular; public AgentResultDto[] agent_results; public string[] findings; }
   [Serializable] internal class SessionResponse { public string session_id; }
-  [Serializable] internal class AskRequest { public string session_id, text, selection, repo; }
+  [Serializable] internal class AskRequest { public string session_id, text, selection, repo, task_id; }
   [Serializable] internal class ApproveRequest { public string session_id; public bool approved; public string repo; }
 
   // Field names match ai_agents/data/graph.json and the server's /health JSON.
@@ -204,10 +206,10 @@ namespace JarvisVR
 
     private string Url => ResolveUrl();
 
-    public void Ask(string text, string selection, Action<AskResponse> ok, Action<string> fail)
+    public void Ask(string text, string selection, Action<AskResponse> ok, Action<string> fail, string taskId = null)
     {
       if (Busy) { fail("JARVIS is still working on the previous request."); return; }
-      StartCoroutine(AskRoutine(text, selection, ok, fail));
+      StartCoroutine(AskRoutine(text, selection, taskId, ok, fail));
     }
 
     public void Approve(bool approved, Action<ApproveResponse> ok, Action<string> fail) =>
@@ -284,14 +286,14 @@ namespace JarvisVR
       if (body != null) _session = JsonUtility.FromJson<SessionResponse>(body).session_id;
     }
 
-    private IEnumerator AskRoutine(string text, string selection, Action<AskResponse> ok, Action<string> fail)
+    private IEnumerator AskRoutine(string text, string selection, string taskId, Action<AskResponse> ok, Action<string> fail)
     {
       Busy = true;
       bool failed = false;
       yield return EnsureSession(e => { failed = true; fail(e); });
       if (!failed)
       {
-        string json = JsonUtility.ToJson(new AskRequest { session_id = _session, text = text, selection = selection ?? "", repo = ActiveRepo });
+        string json = JsonUtility.ToJson(new AskRequest { session_id = _session, text = text, selection = selection ?? "", repo = ActiveRepo, task_id = taskId ?? "" });
         yield return Send("POST", "/ask", json, b =>
         {
           try { ok(JsonUtility.FromJson<AskResponse>(b)); }

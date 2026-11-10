@@ -9,7 +9,7 @@ namespace JarvisVR
   public interface IJarvisBackend
   {
     bool Busy { get; }
-    void Ask(string text, string selection, Action<AskResponse> ok, Action<string> fail);
+    void Ask(string text, string selection, Action<AskResponse> ok, Action<string> fail, string taskId = null);
     void Approve(bool approved, Action<ApproveResponse> ok, Action<string> fail);
     void Promote(Action<PromoteResponse> ok, Action<string> fail);
     void GetTask(Action<TaskResponse> ok);
@@ -417,24 +417,28 @@ namespace JarvisVR
       StartCoroutine(After(0.05f, () =>
       {
         if (_designPlan?.tasks == null) { fail("No plan."); return; }
+        string norm = status == "completed" ? "done"
+          : (status == "in_progress" || status == "in-progress") ? "running" : status;
+        if (norm != "pending" && norm != "running" && norm != "done") { fail("Invalid task status."); return; }
         foreach (TaskDto t in _designPlan.tasks)
           if (t.id == taskId)
           {
-            if (status == "running")
+            if (norm == "running" || norm == "done")
             {
               var done = new HashSet<string>();
-              foreach (TaskDto d in _designPlan.tasks) if (d.status == "done") done.Add(d.id);
+              foreach (TaskDto d in _designPlan.tasks)
+                if (d.status == "done" || d.status == "completed") done.Add(d.id);
               if (t.depends_on != null && System.Array.Exists(t.depends_on, x => !done.Contains(x)))
               { fail("Task is blocked by unfinished dependencies."); return; }
             }
-            t.status = status;
+            t.status = norm;
             ok(true); return;
           }
         fail("Task not found.");
       }));
     }
 
-    public void Ask(string text, string selection, Action<AskResponse> ok, Action<string> fail)
+    public void Ask(string text, string selection, Action<AskResponse> ok, Action<string> fail, string taskId = null)
     {
       if (Busy) { fail("JARVIS is still working on the previous request."); return; }
       StartCoroutine(AskRoutine(text ?? "", ok));

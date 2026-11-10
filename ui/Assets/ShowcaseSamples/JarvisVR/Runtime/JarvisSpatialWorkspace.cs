@@ -903,13 +903,14 @@ namespace JarvisVR
     }
 
     /// <summary>Send a message to the agent pipeline regardless of the current mode
-    /// (used by WORK ON IT so implementation tasks are not treated as design ideas).</summary>
-    private void AskAgent(string text)
+    /// (used by WORK ON IT so implementation tasks are not treated as design ideas).
+    /// taskId links the turn's code change back to its plan task for promotion.</summary>
+    private void AskAgent(string text, string taskId = null)
     {
       _progressSeen = 0;
       Say("Thinking…");
       Log("ask: " + text);
-      _bridge.Ask(text, _selected, OnAnswer, err => { Say(err); Log("error: " + err); _errorUntil = Time.unscaledTime + 4f; });
+      _bridge.Ask(text, _selected, OnAnswer, err => { Say(err); Log("error: " + err); _errorUntil = Time.unscaledTime + 4f; }, taskId);
     }
 
     // =========================================================== architecture design
@@ -1057,7 +1058,9 @@ namespace JarvisVR
       string q = SelectedQuestion();
       if (q == null) { Say("No open questions to resolve."); return; }
       _questionSel = -1;
-      SendDesignEdit(new[] { new DesignEditOpDto { op = "resolve_question", question = q } }, "Resolved question");
+      // Ask for an optional answer/decision rationale; submitting empty still resolves.
+      _kbOp = "resolve_question"; _kbOpId = q;
+      OpenKeyboard();
     }
 
     private void EditQuestion()
@@ -1122,9 +1125,17 @@ namespace JarvisVR
         ". This is component " + (string.IsNullOrEmpty(t.component_id) ? "?" : t.component_id) +
         " of the approved design. Find the relevant repository files, make the change, " +
         "run the relevant tests, and propose the patch for my approval.";
+      // Only start coding after the server confirms the task may run
+      // (dependency rules are enforced there); a rejection must not launch the agent.
+      Action start = () => AskAgent(prompt, t.id);
       if (t.status != "running")
-        _bridge.PlanUpdateTask(t.id, "running", ok => { if (ok) RefreshTasks(); }, e => { });
-      AskAgent(prompt);
+        _bridge.PlanUpdateTask(t.id, "running", ok =>
+        {
+          if (!ok) { Say("Task " + t.id + " could not be started."); return; }
+          RefreshTasks();
+          start();
+        }, err => Say(err));
+      else start();
     }
 
     private void SendDesignEdit(DesignEditOpDto[] ops, string what)
@@ -1142,7 +1153,13 @@ namespace JarvisVR
     /// <summary>Text typed for a design edit (rename / responsibility / question) instead of a chat message.</summary>
     private void ApplyDesignTextOp(string text)
     {
-      if (string.IsNullOrEmpty(_kbOpId) || string.IsNullOrEmpty(text)) { Say("Nothing to send."); return; }
+      if (string.IsNullOrEmpty(_kbOpId)) { Say("Nothing to send."); return; }
+      if (_kbOp == "resolve_question")
+      {
+        SendDesignEdit(new[] { new DesignEditOpDto { op = "resolve_question", question = _kbOpId, answer = text ?? "" } }, "Resolved question");
+        return;
+      }
+      if (string.IsNullOrEmpty(text)) { Say("Nothing to send."); return; }
       var op = new DesignEditOpDto { op = "update_component", id = _kbOpId };
       string what;
       if (_kbOp == "rename") { op.name = text; what = "Renamed component"; }
