@@ -70,7 +70,8 @@ def _approve(client, sid):
 
 def _resolve_all_questions(client, sid):
     for q in ('Q one?', 'Q two?'):
-        r = _edit(client, sid, [{'op': 'resolve_question', 'question': q}])
+        r = _edit(client, sid, [{'op': 'resolve_question', 'question': q,
+                                 'answer': 'decided in review'}])
         assert r.status_code == 200, r.text
 
 
@@ -115,8 +116,40 @@ class TestOpenQuestions:
     def test_resolve_unknown_question_fails(self, client):
         sid = _session(client)
         _propose(client, sid)
-        r = _edit(client, sid, [{'op': 'resolve_question', 'question': 'no such question'}])
+        r = _edit(client, sid, [{'op': 'resolve_question', 'question': 'no such question',
+                                 'answer': 'x'}])
         assert r.status_code == 400
+
+    def test_resolve_requires_answer(self, client):
+        """An empty answer must not clear a question from the approval gate."""
+        sid = _session(client)
+        _propose(client, sid)
+        r = _edit(client, sid, [{'op': 'resolve_question', 'question': 'Q one?'}])
+        assert r.status_code == 400
+        assert 'answer' in r.json()['detail']
+        # the question is still open and approval is still blocked
+        view = client.get('/design/' + sid, headers=H).json()
+        assert 'Q one?' in view['architecture']['open_questions']
+        assert _approve(client, sid).status_code == 409
+
+    def test_defer_question_unblocks_approval(self, client):
+        """Explicit deferral with a reason is a recorded decision, not a silent skip."""
+        sid = _session(client)
+        _propose(client, sid)
+        r = _edit(client, sid, [{'op': 'defer_question', 'question': 'Q one?',
+                                 'answer': 'defer to implementation phase'}])
+        assert r.status_code == 200, r.text
+        arch = r.json()['architecture']
+        assert arch['open_questions'] == ['Q two?']
+        assert arch['deferred_questions'][0]['question'] == 'Q one?'
+        assert arch['deferred_questions'][0]['reason'] == 'defer to implementation phase'
+        # deferral without a reason is rejected
+        r = _edit(client, sid, [{'op': 'defer_question', 'question': 'Q two?'}])
+        assert r.status_code == 400
+        r = _edit(client, sid, [{'op': 'resolve_question', 'question': 'Q two?',
+                                 'answer': 'decided'}])
+        assert r.status_code == 200
+        assert _approve(client, sid).status_code == 200
 
     def test_add_question(self, client):
         sid = _session(client)
@@ -212,6 +245,26 @@ class TestPlanLifecycle:
                          json={'status': 'done', 'accept_cycles': True,
                                'evidence': 'manual review: cycle is intentional'}, headers=H)
         assert r.status_code == 200
+
+    def test_done_evidence_is_verified(self, client):
+        """Fabricated commit evidence is rejected; uncheckable prose is flagged."""
+        sid, plan = self._approved_with_plan(client)
+        tid = plan['tasks'][0]['id']
+        r = client.patch('/plan/%s/tasks/%s' % (sid, tid),
+                         json={'status': 'done',
+                               'evidence': 'verified in commit deadbeef1'}, headers=H)
+        assert r.status_code == 409
+        assert 'contradicts' in r.json()['detail']
+        # task is still pending after the rejection
+        view = client.get('/design/' + sid, headers=H).json()
+        t = next(t for t in view['plan']['tasks'] if t['id'] == tid)
+        assert t['status'] != 'done'
+        r = client.patch('/plan/%s/tasks/%s' % (sid, tid),
+                         json={'status': 'done',
+                               'evidence': 'manual review: implementation matches plan'},
+                         headers=H)
+        assert r.status_code == 200
+        assert r.json()['task']['evidence_check']['verdict'] == 'unverified'
 
 
 if __name__ == '__main__':

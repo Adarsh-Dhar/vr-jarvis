@@ -31,6 +31,7 @@ TOOL_LEVELS = {
     "generate_implementation_plan": "read",
     "invoke_architecture_design": "read",
     "propose_architecture": "read",
+    "verify_task_evidence": "read",
     "analyze_control_flow": "read",
     "analyze_dependencies_manifest": "read",
     "analyze_repository_structure": "read",

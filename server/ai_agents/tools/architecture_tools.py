@@ -10,6 +10,7 @@ and an approved architecture reverts to draft on any edit.
 import json
 import logging
 import re
+import subprocess
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -48,7 +49,9 @@ def _sentences(text: str) -> List[str]:
 
 
 def _llm_json(system: str, user: str, fallback):
-    """Ask the model for a JSON object. Falls back to `fallback()` when there is
+    """Ask the model for a JSON object. Returns (data, source) where source is
+    'model' or 'heuristic' — callers MUST surface this so a fallback proposal is
+    never presented as AI-generated. Falls back to `fallback()` when there is
     no API key, the call fails, or the reply is not valid JSON."""
     try:
         from google import genai
@@ -60,10 +63,10 @@ def _llm_json(system: str, user: str, fallback):
         )
         data = json.loads(resp.text or '{}')
         if isinstance(data, dict):
-            return data
+            return data, 'model'
     except Exception as exc:
         log.warning('architecture LLM call failed, using heuristic fallback: %s', exc)
-    return fallback()
+    return fallback(), 'heuristic'
 
 
 # ---------------------------------------------------------------------------
@@ -83,7 +86,7 @@ def extract_requirements(idea_text: str, tool_context: ToolContext = None) -> di
         req['functional'] = sents[1:] if len(sents) > 1 else []
         return req
 
-    data = _llm_json(
+    data, source = _llm_json(
         'You extract software requirements from a developer idea. '
         'Reply with JSON only: {"goals": [...], "functional": [...], '
         '"non_functional": [...], "constraints": [...], "assumptions": [...], '
@@ -100,7 +103,8 @@ def extract_requirements(idea_text: str, tool_context: ToolContext = None) -> di
             req[k] = [v.strip()]
     if not any(req.values()):
         req = heuristic()
-    return {'status': 'ok', 'requirements': req}
+        source = 'heuristic'   # model replied with nothing usable
+    return {'status': 'ok', 'source': source, 'requirements': req}
 
 
 def propose_architecture(requirements, tool_context: ToolContext = None) -> dict:
@@ -136,7 +140,7 @@ def propose_architecture(requirements, tool_context: ToolContext = None) -> dict
                          'kind': 'calls', 'label': ''})
         return {'components': comps, 'relationships': rels}
 
-    data = _llm_json(
+    data, source = _llm_json(
         'You are a software architect. Given requirements, propose a component '
         'architecture. Reply with JSON only: {"components": [{"id": "c1", '
         '"name": "...", "responsibility": "...", "kind": '
@@ -207,20 +211,33 @@ def propose_architecture(requirements, tool_context: ToolContext = None) -> dict
     if not comps:
         h = heuristic()
         comps, rels = h['components'], h['relationships']
-    return {'status': 'ok', 'components': comps, 'relationships': rels}
+        source = 'heuristic'   # model output had no usable components
+    return {'status': 'ok', 'source': source,
+            'components': comps, 'relationships': rels}
 
 
 def _tokens(s: str) -> set:
-    """Word tokens for fuzzy matching: splits snake/kebab/camel case and paths."""
+    """Word tokens for fuzzy matching: splits snake/kebab/camel case and paths.
+    Adds a naive singular (services -> service) so plurals still match."""
     s = re.sub(r'([a-z0-9])([A-Z])', r'\1 \2', s or '')
-    return {t for t in re.split(r'[^A-Za-z0-9]+', s.lower()) if len(t) > 1}
+    out = set()
+    for t in re.split(r'[^A-Za-z0-9]+', s.lower()):
+        if len(t) <= 1:
+            continue
+        out.add(t)
+        if len(t) > 3 and t.endswith('s') and not t.endswith('ss'):
+            out.add(t[:-1])
+    return out
 
 
-def _graph_data():
-    """Load the repository graph once: (nodes, edges, normalized-name index)."""
+def _graph_data(graph_path=None):
+    """Load the repository graph once: (nodes, edges, normalized-name index).
+
+    `graph_path` overrides config.GRAPH_PATH so a session can compare against a
+    repository other than the globally active one."""
     nodes, edges = [], []
     try:
-        path = config.GRAPH_PATH
+        path = Path(graph_path) if graph_path else config.GRAPH_PATH
         if path.is_file():
             data = json.loads(path.read_text())
             nodes = data.get('nodes') or []
@@ -243,40 +260,121 @@ def _node_tokens(n) -> set:
     return toks
 
 
-def _match_component(comp, nodes):
-    """Best graph node for a component: exact normalised name, then token
-    overlap (Jaccard), then normalised containment as a weak last resort.
-    Returns (node, score, how)."""
+_LEVEL_RANK = {'module': 0, 'file': 1, 'class': 2, 'function': 3}
+
+
+def _component_tokens(comp):
+    """Tokens describing a component: name plus responsibility text."""
+    toks = _tokens(str(comp.get('name') or ''))
+    toks |= _tokens(str(comp.get('responsibility') or ''))
+    return toks
+
+
+def _match_candidates(comp, nodes, limit=8):
+    """Ranked repository-node candidates for a component.
+
+    Returns [(node, score, how), ...] best-first. Scoring tiers:
+      1.00  exact normalised equality with name/id/qualname
+      0.90  the component name equals a module or file name/path stem
+      jaccard  token overlap between component and node tokens (>= 0.34)
+      0.25  normalised containment either way (weak, reported as fuzzy)
+    """
     name = str(comp.get('name') or '')
     nn = _norm(name)
     if not nn:
-        return None, 0.0, ''
-    ctoks = _tokens(name)
-    best, best_score = None, 0.0
+        return []
+    ctoks = _component_tokens(comp) or _tokens(name)
+    scored = []
     for n in nodes:
-        if n.get('level') in ('module', 'file') and not ctoks:
-            continue
         ntoks = _node_tokens(n)
         if not ntoks:
             continue
         inter = len(ctoks & ntoks)
-        score = inter / len(ctoks | ntoks) if ctoks else 0.0
-        # Exact normalised equality always wins outright.
+        jaccard = inter / len(ctoks | ntoks) if ctoks else 0.0
         keys = [_norm(n.get(k)) for k in ('name', 'id', 'qualname')]
         if nn in keys:
-            return n, 1.0, 'exact name match'
-        if score > best_score:
-            best, best_score = n, score
-    if best is not None and best_score >= 0.5:
-        return best, best_score, 'token overlap %.2f' % best_score
-    # Weak fallback: normalised containment either way (kept for recall, but
-    # reported as fuzzy so it is not mistaken for a confident match).
+            scored.append((n, 1.0, 'exact name match'))
+            continue
+        # A component named like a module/file ("auth", "account service")
+        # should match that container, not an arbitrary symbol inside it.
+        file_stem = _norm(str(n.get('file') or '').rsplit('/', 1)[-1].rsplit('.', 1)[0])
+        if n.get('level') in ('module', 'file') and nn and nn == file_stem:
+            scored.append((n, 0.9, 'module/file name match'))
+            continue
+        if jaccard >= 0.5:
+            scored.append((n, jaccard, 'token overlap %.2f' % jaccard))
+        elif jaccard >= 0.34:
+            scored.append((n, jaccard * 0.8, 'weak token overlap %.2f' % jaccard))
+    # Fuzzy containment as a last resort, below every scored candidate.
+    fuzzy = []
     for n in nodes:
-        for key in ('name', 'id', 'qualname'):
+        for key in ('name', 'id', 'qualname', 'file'):
             k = _norm(n.get(key))
-            if k and (nn in k or k in nn):
-                return n, 0.25, 'fuzzy name containment'
-    return None, 0.0, ''
+            if k and len(k) >= 4 and (nn in k or k in nn):
+                fuzzy.append((n, 0.25, 'fuzzy name containment'))
+                break
+    scored.extend(fuzzy)
+    # Best score first; on ties prefer coarser nodes (module > file > class >
+    # function) so a component lands on the architectural unit, not a symbol.
+    scored.sort(key=lambda t: (-t[1], _LEVEL_RANK.get(t[0].get('level'), 9),
+                               str(t[0].get('id'))))
+    # dedupe by node id, keep best rank
+    seen, out = set(), []
+    for n, s, how in scored:
+        nid = n.get('id')
+        if nid in seen:
+            continue
+        seen.add(nid)
+        out.append((n, s, how))
+        if len(out) >= limit:
+            break
+    return out
+
+
+def _assign_matches(comps, nodes):
+    """Assign each component at most one repository node and each node at most
+    one component (global greedy by score). Returns (node_of, matched_info,
+    missing_info) where node_of maps component id -> node id."""
+    cand_lists = []
+    flat = []
+    for i, c in enumerate(comps):
+        cands = _match_candidates(c, nodes)
+        cand_lists.append(cands)
+        for rank, (n, s, how) in enumerate(cands):
+            flat.append((-s, _LEVEL_RANK.get(n.get('level'), 9), str(n.get('id')), i, rank))
+    flat.sort()
+    comp_of_node, node_of, used_cands = {}, {}, {}
+    for neg_s, _lr, _nid, i, rank in flat:
+        cid = str(comps[i].get('id'))
+        if cid in node_of:
+            continue
+        node = cand_lists[i][rank][0]
+        nid = node.get('id') or node.get('name')
+        if nid in comp_of_node:
+            continue                      # node already claimed by a better match
+        node_of[cid] = nid
+        comp_of_node[nid] = cid
+        used_cands[cid] = cand_lists[i][rank]
+    matched, missing = [], []
+    for i, c in enumerate(comps):
+        cid = str(c.get('id'))
+        if cid in node_of:
+            n, s, how = used_cands[cid]
+            nid = node_of[cid]
+            matched.append({'id': cid, 'name': str(c.get('name') or ''), 'node': nid,
+                            'score': round(s, 3),
+                            'confidence': ('high' if s >= 0.9 else
+                                           'medium' if s >= 0.5 else 'low'),
+                            'evidence': '%s (%s) [%s]' % (nid, n.get('file') or '?', how)})
+        else:
+            cands = cand_lists[i]
+            best = cands[0] if cands else None
+            why = ('best candidate %s already claimed by another component'
+                   % (best[0].get('id') if best else 'none'))
+            missing.append({'id': cid, 'name': str(c.get('name') or ''),
+                            'node': '', 'score': 0.0,
+                            'evidence': 'no unclaimed graph node matches (%s)' % why})
+    return node_of, matched, missing
 
 
 def _scopes(node_id, nodes):
@@ -300,9 +398,27 @@ def _edge_kind_rank(e):
     return 0 if e.get('kind') == 'confirmed' else 1
 
 
-def compare_to_repository(architecture, tool_context: ToolContext = None) -> dict:
+# Proposed relationship kinds -> repository edge types that can confirm them.
+# The graph records 'calls'/'may_call' for call edges and 'imports' for
+# module dependencies; there is no separate reads/publishes edge type, so
+# those proposals can only be corroborated by the closest available evidence.
+EDGE_TYPES_FOR_KIND = {
+    'calls': {'calls', 'may_call'},
+    'reads': {'imports', 'reads'},
+    'publishes': {'publishes', 'exports', 'imports'},
+}
+
+
+def compare_to_repository(architecture, tool_context: ToolContext = None,
+                          graph_path=None) -> dict:
     """Map each proposed component onto repository graph nodes and check each
     proposed relationship against actual repository edges.
+
+    Components are assigned to graph nodes globally (one node per component,
+    one component per node) so two proposed components cannot silently claim
+    the same repository unit. Relationships are checked for BOTH connectivity
+    and semantic type: an 'imports' edge does not confirm a proposed 'calls'
+    relationship — it is reported as 'possible' with the mismatch in evidence.
 
     Returns {matched, missing, extra, relationships}. matched/missing/extra
     carry the component (or node) id, name and the evidence used; each
@@ -312,33 +428,21 @@ def compare_to_repository(architecture, tool_context: ToolContext = None) -> dic
     arch = architecture.get('architecture', architecture) if isinstance(architecture, dict) else {}
     comps = arch.get('components') or []
     rels = arch.get('relationships') or []
-    nodes, edges, _index = _graph_data()
+    nodes, edges, _index = _graph_data(graph_path)
 
-    matched, missing = [], []
-    node_of = {}        # component id -> graph node id
-    used_nodes = set()
-    for c in comps:
-        cid = str(c.get('id'))
-        hit, score, how = _match_component(c, nodes)
-        if hit is not None:
-            nid = hit.get('id') or hit.get('name')
-            matched.append({'id': cid, 'name': str(c.get('name') or ''), 'node': nid,
-                            'evidence': '%s (%s) [%s]' % (nid, hit.get('file') or '?', how)})
-            node_of[cid] = nid
-            used_nodes.add(nid)
-        else:
-            missing.append({'id': cid, 'name': str(c.get('name') or ''),
-                            'node': '', 'evidence': 'no graph node matches'})
+    node_of, matched, missing = _assign_matches(comps, nodes)
+    used_nodes = set(node_of.values())
 
     # Relationship comparison: does a real (non-'contains') repository edge
-    # connect the two matched components' scopes, in the proposed direction?
+    # connect the two matched components' scopes, in the proposed direction,
+    # and does its type match the proposed relationship kind?
     scopes = {cid: _scopes(nid, nodes) for cid, nid in node_of.items()}
-    node_name = {n.get('id'): (n.get('name') or n.get('id')) for n in nodes}
     rel_results = []
     for r in rels:
         rid = str(r.get('id') or '')
         src, dst = str(r.get('src') or ''), str(r.get('dst') or '')
         kind = str(r.get('kind') or 'calls')
+        wanted = EDGE_TYPES_FOR_KIND.get(kind, {'calls', 'may_call'})
         entry = {'id': rid, 'src': src, 'dst': dst, 'kind': kind,
                  'status': 'missing', 'evidence': ''}
         if src not in scopes or dst not in scopes:
@@ -349,12 +453,23 @@ def compare_to_repository(architecture, tool_context: ToolContext = None) -> dic
             candidates = [e for e in edges
                           if e.get('src') in a_scope and e.get('dst') in b_scope
                           and e.get('type') != 'contains']
-            if candidates:
-                candidates.sort(key=_edge_kind_rank)
-                e = candidates[0]
+            semantic = [e for e in candidates if e.get('type') in wanted]
+            if semantic:
+                semantic.sort(key=_edge_kind_rank)
+                e = semantic[0]
                 entry['status'] = 'confirmed' if e.get('kind') == 'confirmed' else 'possible'
                 entry['evidence'] = '%s -> %s (%s, %s)' % (
                     e.get('src'), e.get('dst'), e.get('type'), e.get('kind'))
+            elif candidates:
+                # Connectivity exists but the edge type does not match the
+                # proposed relationship semantics.
+                candidates.sort(key=_edge_kind_rank)
+                e = candidates[0]
+                entry['status'] = 'possible'
+                entry['evidence'] = ('%s -> %s (%s, %s); type does not match '
+                                     'proposed kind %r' % (
+                                         e.get('src'), e.get('dst'),
+                                         e.get('type'), e.get('kind'), kind))
             else:
                 entry['evidence'] = 'no repository edge between %s and %s' % (
                     node_of.get(src), node_of.get(dst))
@@ -369,12 +484,16 @@ def compare_to_repository(architecture, tool_context: ToolContext = None) -> dic
             'extra': extra[:50], 'relationships': rel_results}
 
 
-def generate_implementation_plan(architecture, tool_context: ToolContext = None) -> dict:
+def generate_implementation_plan(architecture, tool_context: ToolContext = None,
+                                 graph_path=None) -> dict:
     """Turn an approved architecture into a dependency-ordered task list.
 
     Tasks are ordered so a component's task depends on the tasks of the
-    components it calls/reads. Returns {tasks: [...]} with depends_on,
-    component_id, acceptance and owner on every task.
+    components it calls/reads. Each task is grounded in the repository graph:
+    it names the files to change, the key symbols to modify, and concrete
+    acceptance criteria. `graph_path` overrides config.GRAPH_PATH.
+    Returns {tasks: [...]} with depends_on, component_id, acceptance,
+    files, symbols and owner on every task.
     """
     arch = architecture.get('architecture', architecture) if isinstance(architecture, dict) else {}
     comps = arch.get('components') or []
@@ -409,6 +528,10 @@ def generate_implementation_plan(architecture, tool_context: ToolContext = None)
     cyclic_set = set(cyclic)
     order = order + cyclic   # cyclic components still get tasks, scheduled last
 
+    # Ground every task in the repository: which files implement the component
+    # and which symbols are the likely edit points. Loaded once for all tasks.
+    grounding = _repo_grounding(comps, graph_path=graph_path)
+
     task_of = {}
     tasks = []
     for i, cid in enumerate(order, 1):
@@ -421,13 +544,231 @@ def generate_implementation_plan(architecture, tool_context: ToolContext = None)
         # edges; edges inside a cycle are dropped (reported via `circular`).
         depends = [d for d in sorted(deps.get(cid, ()))
                    if d in task_of and not (cid in cyclic_set and d in cyclic_set)]
+        g = grounding.get(cid) or {'files': [], 'symbols': [], 'match': 'unmatched'}
+        criteria = []
+        if comp.get('responsibility'):
+            criteria.append('Responsibility: ' + str(comp['responsibility']))
+        if g['files']:
+            criteria.append('Change is confined to: ' + ', '.join(g['files']))
+        if g['symbols']:
+            criteria.append('Primary symbols: ' + ', '.join(
+                s['name'] for s in g['symbols']))
+        if g['match'] == 'unmatched':
+            criteria.append('No repository component matched; identify the '
+                            'target files during implementation and record them.')
         tasks.append({'id': tid, 'title': 'Implement ' + comp.get('name', cid),
                       'status': 'pending', 'component_id': cid,
                       'depends_on': [task_of[d] for d in depends],
                       'acceptance': comp.get('responsibility') or '',
+                      'acceptance_criteria': criteria,
+                      'files': g['files'],
+                      'symbols': g['symbols'],
+                      'repo_match': g['match'],
                       'owner': 'developer'})
 
     return {'status': 'ok', 'tasks': tasks, 'circular': cyclic}
+
+
+def _repo_grounding(comps, graph_path=None):
+    """Map each component to concrete repository files and key symbols.
+
+    Returns {component_id: {'files': [relpaths], 'symbols': [{id,name,file}],
+    'match': 'repository'|'unmatched'}}. Symbols are ranked by confirmed+possible
+    incoming call edges so the most depended-on functions surface first.
+    """
+    out = {str(c.get('id')): {'files': [], 'symbols': [], 'match': 'unmatched'}
+           for c in comps}
+    try:
+        nodes, edges, _index = _graph_data(graph_path)
+    except Exception:
+        return out
+    if not nodes:
+        return out
+
+    # Reuse the comparison matcher so grounding and comparison agree on which
+    # repository unit a component refers to.
+    node_of, _matched, _missing = _assign_matches(comps, nodes)
+    node_by_id = {n.get('id'): n for n in nodes}
+
+    # Incoming-edge counts per symbol (confirmed calls weigh more than may_call).
+    in_degree = {}
+    for e in edges:
+        if e.get('type') in ('calls', 'may_call'):
+            w = 2 if e.get('kind') == 'confirmed' else 1
+            in_degree[e.get('dst')] = in_degree.get(e.get('dst'), 0) + w
+
+    for c in comps:
+        cid = str(c.get('id'))
+        nid = node_of.get(cid)
+        if not nid:
+            continue
+        node = node_by_id.get(nid)
+        if node is None:
+            continue
+        # Collect the file nodes inside this component's scope. If the match
+        # landed on a symbol, walk up to its file first.
+        scope = _scopes(nid, nodes)
+        file_nodes = [n for n in nodes
+                      if n.get('id') in scope and n.get('level') == 'file']
+        if not file_nodes:
+            cur = node
+            while cur is not None and cur.get('level') != 'file':
+                cur = node_by_id.get(cur.get('parent'))
+            if cur is not None:
+                file_nodes = [cur]
+                scope = _scopes(cur.get('id'), nodes) | {nid}
+        files = []
+        for fn in file_nodes:
+            f = fn.get('file')
+            if f and f not in files:
+                files.append(f)
+        files = files[:5]
+        # Symbols in those files, ranked by how many callers depend on them.
+        file_ids = {fn.get('id') for fn in file_nodes}
+        syms = [n for n in nodes
+                if n.get('id') in scope and n.get('level') in ('function', 'class')
+                and n.get('parent') in file_ids]
+        syms.sort(key=lambda n: (-in_degree.get(n.get('id'), 0), str(n.get('id'))))
+        symbols = [{'id': n.get('id'), 'name': n.get('name') or n.get('qualname') or '',
+                    'file': n.get('file') or ''} for n in syms[:5]]
+        out[cid] = {'files': files, 'symbols': symbols, 'match': 'repository'}
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Task-completion evidence verification
+
+_HEX_RE = re.compile(r'\b[0-9a-f]{7,40}\b')
+_BRANCH_RE = re.compile(r'\b[a-zA-Z][\w.-]*(?:/[\w.:-]+)+\b')
+_PYTEST_ID_RE = re.compile(r'([\w./-]+\.py)::([\w.:\[\]-]+)')
+_NODE_ID_RE = re.compile(r'\b((?:file::)?[\w./-]+(?:::[\w.$~\[\]-]+)+)\b')
+_SKIP_BRANCHES = {'and/or', 'either/or'}
+
+
+def _git(root, *args):
+    try:
+        p = subprocess.run(['git', '-C', str(root), *args],
+                           capture_output=True, text=True, timeout=10)
+        return p.returncode == 0, (p.stdout or '').strip()
+    except Exception:
+        return False, ''
+
+
+def _load_node_ids(graph_path=None):
+    try:
+        path = Path(graph_path) if graph_path else config.GRAPH_PATH
+        if path.is_file():
+            data = json.loads(path.read_text())
+            return {str(n.get('id')) for n in (data.get('nodes') or [])}
+    except Exception as exc:
+        log.warning('verify_task_evidence could not read graph: %s', exc)
+    return set()
+
+
+def verify_task_evidence(evidence: str, repo_root=None, graph_path=None) -> dict:
+    """Independently check the checkable claims inside a task-completion
+    evidence string against the repository and its graph.
+
+    Recognised claims:
+      - git commit SHAs (7-40 hex chars)        -> must resolve to a commit
+      - branch names containing '/'             -> must be a local branch
+      - pytest node ids  path.py::test_name     -> file must exist and contain
+                                                 the test name
+      - graph node ids  file::x.py::qual.name   -> must exist in the graph
+
+    Claims that cannot be checked ("manual review", "N passed") are reported
+    as 'unknown', not failures. Verdict:
+      'failed'      at least one checkable claim contradicts the repository
+      'verified'    at least one claim verified and none failed
+      'unverified'  nothing checkable was found
+    """
+    text = (evidence or '').strip()
+    checks = []
+    if not text:
+        return {'status': 'ok', 'verdict': 'unverified', 'checks': []}
+
+    root = Path(repo_root) if repo_root else Path(config.REPO_ROOT)
+    is_git = (root / '.git').exists()
+
+    # --- commit SHAs -------------------------------------------------------
+    for tok in sorted(set(_HEX_RE.findall(text))):
+        if len(tok) < 7:
+            continue
+        if is_git:
+            ok, _ = _git(root, 'rev-parse', '--verify', '--quiet', tok + '^{commit}')
+            checks.append({'claim': tok, 'kind': 'commit',
+                           'status': 'verified' if ok else 'failed',
+                           'detail': 'commit exists' if ok else 'not a commit in repo'})
+        else:
+            checks.append({'claim': tok, 'kind': 'commit', 'status': 'unknown',
+                           'detail': 'repository is not a git checkout'})
+
+    # --- branch names ------------------------------------------------------
+    # Only well-known branch prefixes are treated as claims; arbitrary
+    # "a/b" text (e.g. "docs/README") is ignored rather than failed.
+    _BRANCH_PREFIXES = ('jarvis/', 'feature/', 'fix/', 'chore/', 'devin/')
+    for tok in sorted(set(_BRANCH_RE.findall(text))):
+        if tok.lower() in _SKIP_BRANCHES or '..' in tok:
+            continue
+        if not tok.lower().startswith(_BRANCH_PREFIXES):
+            continue
+        if is_git:
+            ok, _ = _git(root, 'rev-parse', '--verify', '--quiet',
+                         'refs/heads/' + tok)
+            checks.append({'claim': tok, 'kind': 'branch',
+                           'status': 'verified' if ok else 'failed',
+                           'detail': 'local branch exists' if ok else 'no such branch'})
+        else:
+            checks.append({'claim': tok, 'kind': 'branch', 'status': 'unknown',
+                           'detail': 'repository is not a git checkout'})
+
+    # --- pytest node ids ---------------------------------------------------
+    for path, name in sorted(set(_PYTEST_ID_RE.findall(text))):
+        target = (root / path)
+        try:
+            target = target.resolve()
+            target.relative_to(root.resolve())
+        except Exception:
+            checks.append({'claim': path + '::' + name, 'kind': 'pytest',
+                           'status': 'failed', 'detail': 'path escapes repository'})
+            continue
+        if not target.is_file():
+            checks.append({'claim': path + '::' + name, 'kind': 'pytest',
+                           'status': 'failed', 'detail': 'test file not found'})
+            continue
+        try:
+            body = target.read_text(errors='replace')
+        except OSError:
+            body = ''
+        leaf = name.split('::')[-1].split('[')[0]
+        ok = leaf in body
+        checks.append({'claim': path + '::' + name, 'kind': 'pytest',
+                       'status': 'verified' if ok else 'failed',
+                       'detail': 'test name found in file' if ok
+                                 else 'test name not found in file'})
+
+    # --- graph node ids ----------------------------------------------------
+    node_ids = _load_node_ids(graph_path)
+    if node_ids:
+        for tok in sorted(set(_NODE_ID_RE.findall(text))):
+            # Strip a trailing sentence period before checking.
+            cand = tok.rstrip('.')
+            if cand in node_ids:
+                checks.append({'claim': cand, 'kind': 'graph_node',
+                               'status': 'verified',
+                               'detail': 'node exists in graph'})
+            elif cand.count('::') >= 1:
+                checks.append({'claim': cand, 'kind': 'graph_node',
+                               'status': 'unknown',
+                               'detail': 'not a graph node id'})
+
+    if any(c['status'] == 'failed' for c in checks):
+        verdict = 'failed'
+    elif any(c['status'] == 'verified' for c in checks):
+        verdict = 'verified'
+    else:
+        verdict = 'unverified'
+    return {'status': 'ok', 'verdict': verdict, 'checks': checks}
 
 
 # ---------------------------------------------------------------------------

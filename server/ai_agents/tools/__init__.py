@@ -57,6 +57,7 @@ from .architecture_tools import (
     propose_architecture,
     compare_to_repository,
     generate_implementation_plan,
+    verify_task_evidence,
 )
 
 from .conversational_tools import (
