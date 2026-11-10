@@ -14,21 +14,29 @@ supported_tasks:
   - Build-system discovery
   - Monorepo analysis
   - Dependency discovery
-  - Configuration analysis
+  - Manifest and dependency analysis
   - Generated code detection
   - Incremental indexing
 
 allowed_tools:
+  - index_repository
+  - incremental_index_repository
   - detect_languages
   - detect_frameworks
-  - classify_project
-  - find_entry_points
   - detect_build_system
-  - analyze_monorepo
-  - discover_dependencies
-  - analyze_configuration
-  - detect_generated_code
-  - incremental_index
+  - detect_project_type
+  - detect_package_manager
+  - analyze_repository_structure
+  - identify_entry_points
+  - identify_external_services
+  - identify_generated_files
+  - detect_repository_changes
+  - analyze_dependencies_manifest
+  - list_files
+  - read_file
+  - search_code
+  - get_repository_metadata
+  - get_changed_files
 
 required_inputs:
   - name: repository_id

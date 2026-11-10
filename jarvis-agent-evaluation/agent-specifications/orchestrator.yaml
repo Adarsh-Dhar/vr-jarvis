@@ -19,13 +19,21 @@ supported_tasks:
 
 allowed_tools:
   - classify_request
-  - select_agents
-  - plan_dependencies
-  - track_task_status
-  - aggregate_results
-  - resolve_conflicts
+  - understand_user_intent
+  - create_investigation_plan
+  - check_task_completion
+  - merge_agent_results
+  - resolve_conflicting_findings
+  - invoke_repository_intelligence
+  - invoke_code_understanding
+  - invoke_relationship_intelligence
+  - invoke_data_flow_intelligence
+  - invoke_software_engineering
+  - invoke_testing_verification
+  - invoke_visualization_spatial
+  - invoke_conversational
+  - request_more_evidence
   - request_approval
-  - detect_completion
 
 required_inputs:
   - name: user_request
@@ -111,16 +119,14 @@ boundaries:
     - "Ignore agent failures"
     - "Mix results from different repositories without context"
   must_delegate:
-    - "Code understanding tasks"
     - "Repository analysis"
+    - "Code understanding"
     - "Relationship discovery"
-    - "Data flow tracing"
-    - "Runtime investigation"
-    - "Debugging and root cause analysis"
-    - "Security assessment"
+    - "Data-flow tracing"
     - "Code modification"
     - "Testing and verification"
     - "Visualization generation"
+    - "Conversational clarification"
   must_report:
     - "Ambiguous or unclear requests"
     - "Agent failures"
@@ -134,10 +140,10 @@ dependencies:
     - repository_intelligence
     - code_understanding
     - relationship_intelligence
-    - data_flow
+    - data_flow_intelligence
     - software_engineering
     - testing_verification
-    - visualization
+    - visualization_spatial
   services:
     - task_tracking_service
     - approval_service

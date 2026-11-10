@@ -35,6 +35,5 @@ metrics: [tool_selection, evidence_accuracy, hallucination_rate, latency_ms]
 
 - `simple-python` - Basic Python project
 - `spring-boot` - Java Spring Boot application
-- `security-challenge` - Planted vulnerabilities and secrets
 - `intermittent-bug` - Race condition and timing issues
 - `polyglot-monorepo` - Multiple languages and frameworks

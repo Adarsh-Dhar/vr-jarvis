@@ -97,8 +97,6 @@ tool_limits:
     parse_source_code:
       max_file_size_mb: 5
       max_timeout_ms: 10000
-    analyze_code_complexity:
-      max_timeout_ms: 15000
 
   software_engineering_tools:
     edit_file:

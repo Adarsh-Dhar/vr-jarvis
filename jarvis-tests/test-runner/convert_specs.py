@@ -55,10 +55,6 @@ class SpecConverter:
             'spring-boot': {
                 'path': test_root / 'fixtures' / 'repositories' / 'spring-boot',
                 'description': 'Java Spring Boot application'
-            },
-            'security-challenge': {
-                'path': test_root / 'fixtures' / 'repositories' / 'security-challenge',
-                'description': 'Repository with security vulnerabilities'
             }
         }
 

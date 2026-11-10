@@ -14,7 +14,7 @@ from ._safe import safe
 from ._common import repo_root, resolve_in_repo
 from .navigation_tools import get_symbol_definition, get_symbol_hover_info
 from ._common import repo_root, resolve_in_repo
-from .analysis_tools import parse_source_code, analyze_code_complexity, analyze_control_flow
+from .analysis_tools import parse_source_code, analyze_control_flow
 from ._common import repo_root, resolve_in_repo
 
 
@@ -104,15 +104,6 @@ def explain_function(
         # Get hover info for documentation
         hover_result = get_symbol_hover_info(function_id, tool_context)
         
-        # Get complexity info
-        def_result = get_symbol_definition(function_id, tool_context)
-        complexity_info = {}
-        if def_result.get('status') == 'ok':
-            file_path = def_result['definition']['file']
-            complexity_result = analyze_code_complexity(file_path, tool_context)
-            if complexity_result.get('status') == 'ok':
-                complexity_info = complexity_result.get('complexity', {})
-        
         # Build explanation based on level
         if hover_result.get('status') == 'ok':
             docstring = hover_result.get('documentation', '')
@@ -126,8 +117,6 @@ def explain_function(
                 explanation = f"{signature}"
                 if docstring:
                     explanation += f"\n\nDocumentation: {docstring}"
-                if complexity_info:
-                    explanation += f"\n\nComplexity: {complexity_info}"
             else:  # intermediate
                 explanation = f"{function_id}: {signature}"
                 if docstring:
@@ -139,8 +128,7 @@ def explain_function(
             'status': 'ok',
             'function_id': function_id,
             'explanation': explanation,
-            'level': level,
-            'complexity': complexity_info
+            'level': level
         }
     except Exception as e:
         return {
@@ -801,25 +789,11 @@ def compare_implementations(
                 'error': 'Could not find one or both functions'
             }
         
-        file1 = def1['definition']['file']
-        file2 = def2['definition']['file']
-        
-        comp1 = analyze_code_complexity(file1, tool_context)
-        comp2 = analyze_code_complexity(file2, tool_context)
-        
-        complexity1 = comp1.get('complexity', {}).get('cyclomatic', 0) if comp1.get('status') == 'ok' else 0
-        complexity2 = comp2.get('complexity', {}).get('cyclomatic', 0) if comp2.get('status') == 'ok' else 0
-        
         # Get algorithm info
         algo1 = explain_algorithm(function1_id, tool_context)
         algo2 = explain_algorithm(function2_id, tool_context)
         
         comparison = {
-            'complexity': {
-                'function1': complexity1,
-                'function2': complexity2,
-                'simpler': function1_id if complexity1 < complexity2 else function2_id
-            },
             'algorithm': {
                 'function1': algo1.get('algorithm', 'unknown'),
                 'function2': algo2.get('algorithm', 'unknown')

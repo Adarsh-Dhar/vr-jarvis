@@ -117,7 +117,7 @@ class IndependentValidator:
             if repo_name == 'simple-python':
                 results[repo_name] = self.validate_python_repo(repo_name)
             elif repo_name in ['complex-typescript', 'spring-boot', 'rust-project', 'cpp-project', 
-                             'polyglot-monorepo', 'security-challenge', 'distributed-system', 'runtime-heavy']:
+                             'polyglot-monorepo', 'distributed-system']:
                 results[repo_name] = {'status': 'skip', 'reason': 'Language validation not implemented in Phase 1'}
             else:
                 results[repo_name] = {'status': 'skip', 'reason': 'Unknown repository type'}

@@ -18,14 +18,29 @@ supported_tasks:
   - Cross-file comprehension
 
 allowed_tools:
+  - get_symbol_definition
+  - get_symbol_references
+  - get_symbol_hover_info
+  - get_type_hierarchy
+  - get_imports
+  - get_exports
+  - get_scope_information
   - parse_source_code
-  - analyze_function
-  - analyze_class
-  - trace_control_flow
-  - detect_side_effects
-  - identify_exceptions
-  - extract_contract
-  - resolve_cross_file_references
+  - extract_symbols
+  - resolve_types
+  - explain_function
+  - explain_class
+  - explain_module
+  - explain_condition
+  - extract_function_contract
+  - identify_side_effects
+  - identify_hidden_assumptions
+  - infer_code_intent
+  - trace_function_logic
+  - analyze_control_flow
+  - read_file_range
+  - record_finding
+  - get_findings
 
 required_inputs:
   - name: repository_id

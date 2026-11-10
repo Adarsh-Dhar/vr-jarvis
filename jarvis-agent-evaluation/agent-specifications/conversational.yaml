@@ -13,22 +13,20 @@ supported_tasks:
   - Context switching
   - Code explanation
   - Follow-up handling
-  - Voice recognition (where applicable)
-  - Voice response (where applicable)
-  - Interruption handling
   - Ambiguity resolution
   - Evidence awareness
+  - Investigation summaries
+  - Visualization explanations
 
 allowed_tools:
-  - classify_intent
-  - resolve_references
-  - maintain_context
-  - retrieve_context
-  - explain_code
-  - synthesize_findings
-  - request_clarification
-  - recognize_speech
-  - synthesize_speech
+  - answer_code_question
+  - explain_visualization
+  - summarize_investigation
+  - retrieve_conversation_context
+  - retrieve_investigation_context
+  - ask_clarifying_question
+  - compare_code_elements
+  - manage_conversation_preferences
 
 required_inputs:
   - name: user_message
@@ -129,8 +127,10 @@ dependencies:
     - repository_intelligence
     - code_understanding
     - relationship_intelligence
-    - data_flow
-    - visualization
+    - data_flow_intelligence
+    - software_engineering
+    - testing_verification
+    - visualization_spatial
   services:
     - context_service
     - speech_recognition_service

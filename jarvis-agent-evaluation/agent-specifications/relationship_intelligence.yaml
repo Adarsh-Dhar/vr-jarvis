@@ -16,13 +16,21 @@ supported_tasks:
   - Calculate change impact
 
 allowed_tools:
-  - search_symbols
-  - get_symbol_definition
-  - get_symbol_references
-  - get_call_hierarchy
+  - find_callers
+  - find_callees
+  - find_indirect_callers
+  - trace_call_chain
+  - get_call_sites
+  - explain_call_resolution
   - build_call_graph
   - build_dependency_graph
+  - find_dependents
   - find_all_paths_between_symbols
+  - find_circular_dependencies
+  - analyze_architecture_boundaries
+  - calculate_change_impact
+  - find_interface_implementations
+  - trace_cross_module_relationships
 
 required_inputs:
   - name: repository_id

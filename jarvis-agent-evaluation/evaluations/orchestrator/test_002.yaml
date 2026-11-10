@@ -20,7 +20,7 @@ expected_output:
       assigned_to: relationship_intelligence
       priority: high
     - task: trace_data_flow
-      assigned_to: data_flow
+      assigned_to: data_flow_intelligence
       priority: medium
   execution_plan:
     - step: 1
@@ -53,7 +53,7 @@ expected_output:
       reason: needs_relationship_graph
 expected_result:
   decomposition_complete: true
-  agents_selected: ["repository_intelligence", "code_understanding", "relationship_intelligence", "data_flow"]
+  agents_selected: ["repository_intelligence", "code_understanding", "relationship_intelligence", "data_flow_intelligence"]
   dependencies_identified: 4
   dependency_graph_valid: true
 fixture:

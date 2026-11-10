@@ -50,8 +50,9 @@ with a curated toolset and a permission ceiling in
 | `visualization_spatial` | read | Build graph visualizations and drive the VR scene |
 | `conversational` | read | Answer questions, summarize investigations, manage conversation context |
 
-Pipelines (investigate, impact, fix, briefing) are composed from these agents;
-critic and scene-director agents check evidence and emit scene commands.
+Pipelines such as investigate, impact, fix, and the specialist agent pipelines are
+composed from these agents; critic and scene-director agents check evidence and
+emit scene commands.
 
 ## 3. Tools
 

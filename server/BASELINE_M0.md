@@ -1,5 +1,7 @@
 # Milestone M0 Baseline Recording
 
+> Historical note: this records the pre-cleanup M0 architecture and test state. It is not a description of the current MVP implementation.
+
 **Date:** 2026-11-06
 **Purpose:** Record current state before implementing JARVIS Skills Architecture and Six-Stage Call Graph
 
