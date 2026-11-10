@@ -15,6 +15,7 @@ from .agents.software_engineering import software_engineering_agent
 from .agents.testing_verification import testing_verification_agent
 from .agents.visualization import visualization_agent
 from .agents.conversational import conversational_agent
+from .agents.architecture_design import architecture_design_agent
 from .callbacks import init_state, trim_history
 from .config import MODEL
 from .tools.control_tools import request_approval
@@ -99,6 +100,7 @@ Route each request by delegating to exactly one sub-agent:
 - investigate_pipeline: how existing code works, where something happens, what a selected node does.
 - impact_pipeline: what breaks, what is affected, risk of changing or removing something, change review.
 - fix_pipeline: add, fix or change code, propose a patch.
+- architecture_design: turn an idea into requirements and a proposed component architecture (design mode requests).
 - navigator: open or switch a repository, show a folder or file, change tab, or move, resize, hide, pin, zoom or recenter anything in the workspace.
 
 For data flow, engineering or testing requests, delegate to exactly one of:
@@ -118,7 +120,8 @@ root_agent = LlmAgent(
     instruction=ROOT_INSTRUCTION,
     tools=[request_approval],
     sub_agents=[phase2_pipeline, investigate_pipeline, impact_pipeline, fix_pipeline,
-                data_flow_pipeline, engineering_pipeline, testing_pipeline, navigator_agent],
+                data_flow_pipeline, engineering_pipeline, testing_pipeline,
+                architecture_design_agent, navigator_agent],
     before_agent_callback=init_state,
     before_model_callback=trim_history,
 )

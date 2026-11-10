@@ -33,8 +33,9 @@ def _blank_requirements() -> Dict[str, List[str]]:
 
 
 def _blank_architecture() -> Dict[str, Any]:
-    return {'version': ARCH_VERSION, 'status': 'draft', 'components': [], 'relationships': [],
-            'approved_by': '', 'approved_version': 0}
+    return {'version': ARCH_VERSION, 'revision': 1, 'status': 'draft',
+            'components': [], 'relationships': [],
+            'approved_by': '', 'approved_version': 0, 'approved_revision': 0}
 
 
 def _norm(s: str) -> str:
@@ -209,58 +210,163 @@ def propose_architecture(requirements, tool_context: ToolContext = None) -> dict
     return {'status': 'ok', 'components': comps, 'relationships': rels}
 
 
-def _graph_node_index():
-    """Return {normalized_name: node} for the current repository graph."""
-    index = {}
+def _tokens(s: str) -> set:
+    """Word tokens for fuzzy matching: splits snake/kebab/camel case and paths."""
+    s = re.sub(r'([a-z0-9])([A-Z])', r'\1 \2', s or '')
+    return {t for t in re.split(r'[^A-Za-z0-9]+', s.lower()) if len(t) > 1}
+
+
+def _graph_data():
+    """Load the repository graph once: (nodes, edges, normalized-name index)."""
+    nodes, edges = [], []
     try:
         path = config.GRAPH_PATH
-        if not path.is_file():
-            return index
-        data = json.loads(path.read_text())
-        for n in data.get('nodes', []):
-            for key in (n.get('name'), n.get('id'), n.get('qualname')):
-                if key:
-                    index.setdefault(_norm(key), n)
+        if path.is_file():
+            data = json.loads(path.read_text())
+            nodes = data.get('nodes') or []
+            edges = data.get('edges') or []
     except Exception as exc:
         log.warning('compare_to_repository could not read graph: %s', exc)
-    return index
+    index = {}
+    for n in nodes:
+        for key in (n.get('name'), n.get('id'), n.get('qualname')):
+            if key:
+                index.setdefault(_norm(key), n)
+    return nodes, edges, index
+
+
+def _node_tokens(n) -> set:
+    parts = [n.get('name'), n.get('qualname'), n.get('id'), n.get('file'), n.get('module')]
+    toks = set()
+    for p in parts:
+        toks |= _tokens(str(p or ''))
+    return toks
+
+
+def _match_component(comp, nodes):
+    """Best graph node for a component: exact normalised name, then token
+    overlap (Jaccard), then normalised containment as a weak last resort.
+    Returns (node, score, how)."""
+    name = str(comp.get('name') or '')
+    nn = _norm(name)
+    if not nn:
+        return None, 0.0, ''
+    ctoks = _tokens(name)
+    best, best_score = None, 0.0
+    for n in nodes:
+        if n.get('level') in ('module', 'file') and not ctoks:
+            continue
+        ntoks = _node_tokens(n)
+        if not ntoks:
+            continue
+        inter = len(ctoks & ntoks)
+        score = inter / len(ctoks | ntoks) if ctoks else 0.0
+        # Exact normalised equality always wins outright.
+        keys = [_norm(n.get(k)) for k in ('name', 'id', 'qualname')]
+        if nn in keys:
+            return n, 1.0, 'exact name match'
+        if score > best_score:
+            best, best_score = n, score
+    if best is not None and best_score >= 0.5:
+        return best, best_score, 'token overlap %.2f' % best_score
+    # Weak fallback: normalised containment either way (kept for recall, but
+    # reported as fuzzy so it is not mistaken for a confident match).
+    for n in nodes:
+        for key in ('name', 'id', 'qualname'):
+            k = _norm(n.get(key))
+            if k and (nn in k or k in nn):
+                return n, 0.25, 'fuzzy name containment'
+    return None, 0.0, ''
+
+
+def _scopes(node_id, nodes):
+    """node_id plus every descendant (via the parent chain / contains edges)."""
+    children = {}
+    for n in nodes:
+        p = n.get('parent')
+        if p:
+            children.setdefault(p, []).append(n.get('id'))
+    scope, stack = set(), [node_id]
+    while stack:
+        cur = stack.pop()
+        if cur in scope:
+            continue
+        scope.add(cur)
+        stack.extend(children.get(cur, ()))
+    return scope
+
+
+def _edge_kind_rank(e):
+    return 0 if e.get('kind') == 'confirmed' else 1
 
 
 def compare_to_repository(architecture, tool_context: ToolContext = None) -> dict:
-    """Map each proposed component onto repository graph nodes.
+    """Map each proposed component onto repository graph nodes and check each
+    proposed relationship against actual repository edges.
 
-    Returns {matched, missing, extra} where each entry carries the component
-    (or node) id, name and the evidence used for the match.
+    Returns {matched, missing, extra, relationships}. matched/missing/extra
+    carry the component (or node) id, name and the evidence used; each
+    relationship entry reports 'confirmed', 'possible', 'missing' or
+    'unmatched' with the repository edge (or its absence) as evidence.
     """
     arch = architecture.get('architecture', architecture) if isinstance(architecture, dict) else {}
     comps = arch.get('components') or []
-    nodes = _graph_node_index()
+    rels = arch.get('relationships') or []
+    nodes, edges, _index = _graph_data()
 
     matched, missing = [], []
+    node_of = {}        # component id -> graph node id
     used_nodes = set()
     for c in comps:
-        cid, name = str(c.get('id')), str(c.get('name') or '')
-        hit = nodes.get(_norm(name))
-        if hit is None:   # fall back to containment either way
-            nn = _norm(name)
-            for k, n in nodes.items():
-                if nn and (nn in k or k in nn):
-                    hit = n
-                    break
+        cid = str(c.get('id'))
+        hit, score, how = _match_component(c, nodes)
         if hit is not None:
             nid = hit.get('id') or hit.get('name')
-            matched.append({'id': cid, 'name': name, 'node': nid,
-                            'evidence': '%s (%s)' % (nid, hit.get('file') or '?')})
+            matched.append({'id': cid, 'name': str(c.get('name') or ''), 'node': nid,
+                            'evidence': '%s (%s) [%s]' % (nid, hit.get('file') or '?', how)})
+            node_of[cid] = nid
             used_nodes.add(nid)
         else:
-            missing.append({'id': cid, 'name': name, 'node': '', 'evidence': 'no graph node matches'})
+            missing.append({'id': cid, 'name': str(c.get('name') or ''),
+                            'node': '', 'evidence': 'no graph node matches'})
+
+    # Relationship comparison: does a real (non-'contains') repository edge
+    # connect the two matched components' scopes, in the proposed direction?
+    scopes = {cid: _scopes(nid, nodes) for cid, nid in node_of.items()}
+    node_name = {n.get('id'): (n.get('name') or n.get('id')) for n in nodes}
+    rel_results = []
+    for r in rels:
+        rid = str(r.get('id') or '')
+        src, dst = str(r.get('src') or ''), str(r.get('dst') or '')
+        kind = str(r.get('kind') or 'calls')
+        entry = {'id': rid, 'src': src, 'dst': dst, 'kind': kind,
+                 'status': 'missing', 'evidence': ''}
+        if src not in scopes or dst not in scopes:
+            entry['status'] = 'unmatched'
+            entry['evidence'] = 'one or both endpoints have no repository match'
+        else:
+            a_scope, b_scope = scopes[src], scopes[dst]
+            candidates = [e for e in edges
+                          if e.get('src') in a_scope and e.get('dst') in b_scope
+                          and e.get('type') != 'contains']
+            if candidates:
+                candidates.sort(key=_edge_kind_rank)
+                e = candidates[0]
+                entry['status'] = 'confirmed' if e.get('kind') == 'confirmed' else 'possible'
+                entry['evidence'] = '%s -> %s (%s, %s)' % (
+                    e.get('src'), e.get('dst'), e.get('type'), e.get('kind'))
+            else:
+                entry['evidence'] = 'no repository edge between %s and %s' % (
+                    node_of.get(src), node_of.get(dst))
+        rel_results.append(entry)
 
     extra = [{'id': n.get('id') or n.get('name'), 'name': n.get('name') or n.get('id'),
               'node': n.get('id'), 'evidence': n.get('file') or ''}
-             for k, n in nodes.items()
+             for n in nodes
              if (n.get('id') or n.get('name')) not in used_nodes
              and n.get('level') not in ('module', 'file')]
-    return {'status': 'ok', 'matched': matched, 'missing': missing, 'extra': extra[:50]}
+    return {'status': 'ok', 'matched': matched, 'missing': missing,
+            'extra': extra[:50], 'relationships': rel_results}
 
 
 def generate_implementation_plan(architecture, tool_context: ToolContext = None) -> dict:

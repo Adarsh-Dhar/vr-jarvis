@@ -29,7 +29,8 @@ namespace JarvisVR
     void DesignCompare(Action<CompareDto> ok, Action<string> fail);
     void DesignApprove(bool approved, Action<ArchitectureDto> ok, Action<string> fail);
     void PlanGenerate(Action<ImplementationPlanDto> ok, Action<string> fail);
-    void PlanUpdateTask(string taskId, string status, Action<bool> ok, Action<string> fail);
+    void PlanUpdateTask(string taskId, string status, Action<bool> ok, Action<string> fail,
+                        string evidence = null, bool acceptCycles = false);
   }
 
   /// <summary>Local, network-free backend with scripted answers for UI development. Uses the ids of JarvisGraphModel.Sample().</summary>
@@ -238,7 +239,7 @@ namespace JarvisVR
     {
       return new ArchitectureDto
       {
-        version = 3, revision = 1, status = "draft", approved_by = "", approved_version = 0,
+        version = 3, revision = 1, status = "draft", approved_by = "", approved_version = 0, approved_revision = 0,
         open_questions = new[] { "Should export include archived accounts?" },
         components = new[]
         {
@@ -362,7 +363,7 @@ namespace JarvisVR
           if (_designReq != null) _designReq.open_questions = questions.ToArray();
         }
         _designArch.revision++;
-        if (_designArch.status == "approved") { _designArch.status = "draft"; _designArch.approved_by = ""; _designArch.approved_version = 0; }
+        if (_designArch.status == "approved") { _designArch.status = "draft"; _designArch.approved_by = ""; _designArch.approved_version = 0; _designArch.approved_revision = 0; }
         _designPlan = null;
         ok(new DesignEditResponse { ok = true, architecture = _designArch });
       }));
@@ -389,6 +390,7 @@ namespace JarvisVR
         _designArch.status = approved ? "approved" : "draft";
         _designArch.approved_by = approved ? "quest-user" : "";
         _designArch.approved_version = approved ? _designArch.version : 0;
+        _designArch.approved_revision = approved ? _designArch.revision : 0;
         ok(_designArch);
       }));
     }
@@ -400,7 +402,8 @@ namespace JarvisVR
         if (_designArch == null || _designArch.status != "approved") { fail("Architecture must be approved first."); return; }
         _designPlan = new ImplementationPlanDto
         {
-          architecture_version = _designArch.version, status = "active",
+          architecture_version = _designArch.version, architecture_revision = _designArch.revision,
+          status = "active",
           tasks = new[]
           {
             new TaskDto { id = "t1", title = "Implement Export API", status = "pending", component_id = "c1", depends_on = new string[0], acceptance = "Accept export requests and stream results", owner = "developer" },
@@ -412,7 +415,8 @@ namespace JarvisVR
       }));
     }
 
-    public void PlanUpdateTask(string taskId, string status, Action<bool> ok, Action<string> fail)
+    public void PlanUpdateTask(string taskId, string status, Action<bool> ok, Action<string> fail,
+                               string evidence = null, bool acceptCycles = false)
     {
       StartCoroutine(After(0.05f, () =>
       {
@@ -430,8 +434,14 @@ namespace JarvisVR
                 if (d.status == "done" || d.status == "completed") done.Add(d.id);
               if (t.depends_on != null && System.Array.Exists(t.depends_on, x => !done.Contains(x)))
               { fail("Task is blocked by unfinished dependencies."); return; }
+              if ((_designPlan.circular != null && System.Array.IndexOf(_designPlan.circular, t.component_id) >= 0)
+                  && !acceptCycles)
+              { fail("Task is part of a circular dependency; resubmit with accept_cycles=true."); return; }
             }
+            if (norm == "done" && t.status != "done" && string.IsNullOrEmpty(evidence))
+            { fail("Marking a task done requires evidence."); return; }
             t.status = norm;
+            if (norm == "done" && !string.IsNullOrEmpty(evidence)) t.evidence = evidence;
             ok(true); return;
           }
         fail("Task not found.");

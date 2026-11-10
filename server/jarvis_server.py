@@ -690,6 +690,8 @@ async def promote(body: PromoteBody):
                        else running if len(running) == 1 else [])
             for t in targets:
                 t['status'] = 'done'
+                t['evidence'] = 'promoted branch %s (%s)' % (
+                    last.get('branch'), (last.get('commit') or '')[:10])
             if targets:
                 await set_state(body.session_id, {'implementation_plan': plan,
                                                   'active_task_id': ''})
@@ -731,7 +733,8 @@ async def get_task_state(session_id: str):
                           'depends_on': [str(d) for d in (t.get('depends_on') or [])],
                           'component_id': str(t.get('component_id') or ''),
                           'acceptance': str(t.get('acceptance') or ''),
-                          'owner': str(t.get('owner') or '')})
+                          'owner': str(t.get('owner') or ''),
+                          'evidence': str(t.get('evidence') or '')})
         elif isinstance(t, str):
             tasks.append({'id': str(i), 'title': t, 'status': 'pending',
                           'depends_on': [], 'component_id': '', 'acceptance': '', 'owner': ''})
@@ -865,6 +868,8 @@ class PlanGenerateBody(BaseModel):
 class PlanTaskPatch(BaseModel):
     status: Optional[str] = None
     title: Optional[str] = None
+    evidence: Optional[str] = None      # required to mark a task done
+    accept_cycles: bool = False         # explicit acceptance of circular deps
 
 
 def _next_id(prefix, items, key='id'):
@@ -1064,6 +1069,7 @@ async def design_edit(session_id: str, body: DesignEditBody):
         working['status'] = 'draft'
         working['approved_by'] = ''
         working['approved_version'] = 0
+        working['approved_revision'] = 0
     # Editing the design invalidates the implementation plan AND any
     # repository comparison computed against the previous revision.
     delta = {'design': working, 'implementation_plan': {}, 'design_compare': {}}
@@ -1105,10 +1111,14 @@ async def design_approve(session_id: str, body: DesignApproveBody):
         arch['status'] = 'approved'
         arch['approved_by'] = body.approved_by
         arch['approved_version'] = arch.get('version')
+        # The editing revision is what actually identifies the approved design;
+        # 'version' is only the schema version and never changes per edit.
+        arch['approved_revision'] = arch.get('revision')
     else:
         arch['status'] = 'draft'
         arch['approved_by'] = ''
         arch['approved_version'] = 0
+        arch['approved_revision'] = 0
     await set_state(session_id, {'design': arch})
     await _persist_design(session_id)
     return {'ok': True, 'architecture': arch}
@@ -1123,7 +1133,9 @@ async def plan_generate(body: PlanGenerateBody):
     if arch.get('status') != 'approved':
         raise HTTPException(status_code=409, detail='Architecture must be approved before generating a plan.')
     res = await asyncio.to_thread(generate_implementation_plan, {'architecture': arch})
-    plan = {'architecture_version': arch.get('version'), 'status': 'active',
+    plan = {'architecture_version': arch.get('version'),
+            'architecture_revision': arch.get('revision'),
+            'status': 'active',
             'tasks': res['tasks'], 'circular': res.get('circular') or []}
     await set_state(body.session_id, {'implementation_plan': plan})
     await _persist_design(body.session_id)
@@ -1168,6 +1180,31 @@ async def plan_update_task(session_id: str, task_id: str, body: PlanTaskPatch):
             if missing:
                 raise HTTPException(status_code=409,
                                     detail='Task is blocked by unfinished dependencies: ' + ', '.join(missing))
+            # Tasks inside a dependency cycle cannot be scheduled until the
+            # developer either fixes the architecture or explicitly accepts
+            # the cycle for this task.
+            cyclic = {str(c) for c in (plan.get('circular') or [])}
+            if str(task.get('component_id') or '') in cyclic and not body.accept_cycles:
+                raise HTTPException(
+                    status_code=409,
+                    detail='Task %s is part of a circular dependency (%s). '
+                           'Resolve the cycle in the architecture or resubmit '
+                           'with accept_cycles=true to proceed anyway.'
+                           % (task_id, task.get('component_id')))
+            if body.accept_cycles:
+                task['cycle_accepted'] = True
+        if new_status == 'done' and current != 'done':
+            # Manual DONE is not proof of work: require the developer to
+            # record what demonstrates the task is complete (tests run,
+            # commit hash, review sign-off, ...).
+            ev = (body.evidence or '').strip()
+            if not ev:
+                raise HTTPException(
+                    status_code=400,
+                    detail='Marking a task done requires evidence '
+                           '(e.g. tests run, commit hash). Pass it in the '
+                           '"evidence" field.')
+            task['evidence'] = ev
         task['status'] = new_status
     await set_state(session_id, {'implementation_plan': plan})
     await _persist_design(session_id)

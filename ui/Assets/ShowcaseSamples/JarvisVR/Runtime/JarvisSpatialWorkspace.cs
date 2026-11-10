@@ -103,6 +103,7 @@ namespace JarvisVR
     private string _kbOp, _kbOpId;
     private int _taskSel, _questionSel = -1;
     private string[] _planCircular;
+    private readonly HashSet<string> _cycleAccepted = new HashSet<string>();   // tasks whose circular dep the user explicitly accepted
     private JarvisSpatialButton _qPrevBtn, _qNextBtn, _qResolveBtn, _qEditBtn;
     private JarvisSpatialButton _taskPrevBtn, _taskNextBtn, _taskStartBtn, _taskDoneBtn, _taskWorkBtn;
 
@@ -933,6 +934,7 @@ namespace JarvisVR
         }
         _design = new DesignStateDto { requirements = r.requirements, architecture = r.architecture };
         _compareStatus.Clear();
+        _cycleAccepted.Clear();
         RenderDesignGraph();
         DesignCompare();   // colour components against the repository immediately
         RefreshAll();
@@ -1022,6 +1024,7 @@ namespace JarvisVR
       _bridge.PlanGenerate(p =>
       {
         if (_design != null) _design.plan = p;
+        _cycleAccepted.Clear();
         RefreshTasks();
         RefreshAll();
         Say(p != null ? "Plan generated: " + (p.tasks != null ? p.tasks.Length : 0) + " tasks." : "Plan generation failed.");
@@ -1104,12 +1107,41 @@ namespace JarvisVR
     {
       TaskDto t = SelectedTask();
       if (t == null) { Say("No task selected. Generate a plan first."); return; }
+      if (t.status == "done" || t.status == "completed") { Say("Task " + t.id + " is already done."); return; }
+      if (status == "done")
+      {
+        // The server refuses DONE without evidence; collect it first.
+        _kbOp = "task_done"; _kbOpId = t.id;
+        OpenKeyboard();
+        return;
+      }
+      PatchTask(t, status, null);
+    }
+
+    /// <summary>PATCH a task status, gating circular-dependency tasks behind an
+    /// explicit second confirmation (the server requires accept_cycles).</summary>
+    private void PatchTask(TaskDto t, string status, string evidence)
+    {
+      bool accept = _cycleAccepted.Contains(t.id);
+      if (!accept && IsCyclicTask(t) && (status == "running" || status == "done"))
+      {
+        _cycleAccepted.Add(t.id);
+        Say("Task " + t.id + " is in a circular dependency. Press again to accept the cycle and proceed, or fix the architecture first.");
+        return;
+      }
       _bridge.PlanUpdateTask(t.id, status, ok =>
       {
         if (!ok) { Say("Task update rejected."); return; }
         RefreshTasks();
         Say("Task " + t.id + " -> " + status + ".");
-      }, err => Say(err));
+      }, err => Say(err), evidence, accept);
+    }
+
+    private bool IsCyclicTask(TaskDto t)
+    {
+      string[] circ = _planCircular ?? (_design != null && _design.plan != null ? _design.plan.circular : null);
+      return circ != null && t != null && !string.IsNullOrEmpty(t.component_id)
+        && System.Array.IndexOf(circ, t.component_id) >= 0;
     }
 
     /// <summary>Mark the selected task running and hand it to the agent pipeline as a
@@ -1129,12 +1161,20 @@ namespace JarvisVR
       // (dependency rules are enforced there); a rejection must not launch the agent.
       Action start = () => AskAgent(prompt, t.id);
       if (t.status != "running")
-        _bridge.PlanUpdateTask(t.id, "running", ok =>
+      {
+        if (!IsCyclicTask(t) || _cycleAccepted.Contains(t.id))
+          _bridge.PlanUpdateTask(t.id, "running", ok =>
+          {
+            if (!ok) { Say("Task " + t.id + " could not be started."); return; }
+            RefreshTasks();
+            start();
+          }, err => Say(err), null, _cycleAccepted.Contains(t.id));
+        else
         {
-          if (!ok) { Say("Task " + t.id + " could not be started."); return; }
-          RefreshTasks();
-          start();
-        }, err => Say(err));
+          _cycleAccepted.Add(t.id);
+          Say("Task " + t.id + " is in a circular dependency. Press WORK ON IT again to accept the cycle and proceed, or fix the architecture first.");
+        }
+      }
       else start();
     }
 
@@ -1144,8 +1184,18 @@ namespace JarvisVR
       {
         if (r == null || !r.ok) { Say("Edit failed: " + (r != null ? r.detail : "no response")); return; }
         if (r.architecture != null && _design != null) _design.architecture = r.architecture;
+        // Every design edit invalidates the repository comparison and the
+        // implementation plan server-side; mirror that here so stale colours
+        // and plan rows don't linger, then recompute the comparison.
+        if (_design != null) { _design.compare = null; _design.plan = null; }
+        _compareStatus.Clear();
+        _tasks = null;
+        _planCircular = null;
+        _cycleAccepted.Clear();
         RenderDesignGraph();
         RefreshAll();
+        RefreshTasks();
+        DesignCompare();
         Say(what + " done.");
       }, err => Say(err));
     }
@@ -1154,6 +1204,15 @@ namespace JarvisVR
     private void ApplyDesignTextOp(string text)
     {
       if (string.IsNullOrEmpty(_kbOpId)) { Say("Nothing to send."); return; }
+      if (_kbOp == "task_done")
+      {
+        TaskDto dt = null;
+        if (_tasks != null) foreach (TaskDto x in _tasks) if (x.id == _kbOpId) dt = x;
+        if (dt == null) { Say("That task no longer exists."); return; }
+        if (string.IsNullOrEmpty(text)) { Say("Completion needs evidence (tests run, commit). Nothing recorded."); return; }
+        PatchTask(dt, "done", text);
+        return;
+      }
       if (_kbOp == "resolve_question")
       {
         SendDesignEdit(new[] { new DesignEditOpDto { op = "resolve_question", question = _kbOpId, answer = text ?? "" } }, "Resolved question");
@@ -1264,7 +1323,9 @@ namespace JarvisVR
       }
       var sb = new StringBuilder();
       sb.Append("v").Append(a.version).Append(" rev ").Append(a.revision).Append("  ")
-        .Append(a.status == "approved" ? "<color=#" + Hex(JarvisPalette.Current.Green) + ">approved</color>" : a.status)
+        .Append(a.status == "approved"
+          ? "<color=#" + Hex(JarvisPalette.Current.Green) + ">approved rev " + a.approved_revision + "</color>"
+          : a.status)
         .Append('\n');
       if (!string.IsNullOrEmpty(a.approved_by)) sb.Append("by ").Append(a.approved_by).Append('\n');
       sb.Append(a.components != null ? a.components.Length : 0).Append(" components, ")
@@ -1272,12 +1333,18 @@ namespace JarvisVR
       if (a.open_questions != null && a.open_questions.Length > 0)
         sb.Append("<color=#").Append(Hex(JarvisPalette.Current.Amber)).Append(">").Append(a.open_questions.Length).Append(" open questions block approval</color>\n");
       if (_design?.plan?.tasks != null && _design.plan.tasks.Length > 0)
-        sb.Append("Plan: ").Append(_design.plan.tasks.Length).Append(" tasks (see activity panel)\n");
+        sb.Append("Plan: ").Append(_design.plan.tasks.Length).Append(" tasks (arch rev ")
+          .Append(_design.plan.architecture_revision).Append(", see activity panel)\n");
       TaskDto sel = SelectedTask();
       if (sel != null)
       {
         sb.Append("\n<b>Task ").Append(sel.id).Append("</b>  ").Append(sel.status ?? "pending").Append('\n');
         if (!string.IsNullOrEmpty(sel.title)) sb.Append(sel.title).Append('\n');
+        if (!string.IsNullOrEmpty(sel.evidence)) sb.Append("evidence: ").Append(sel.evidence).Append('\n');
+        if (IsCyclicTask(sel) && sel.status != "done" && sel.status != "completed")
+          sb.Append("<color=#").Append(Hex(JarvisPalette.Current.Amber))
+            .Append(">").Append(_cycleAccepted.Contains(sel.id) ? "cycle accepted" : "circular dependency — confirm twice")
+            .Append("</color>\n");
       }
       string[] circ = _planCircular ?? (_design?.plan?.circular);
       if (circ != null && circ.Length > 0)

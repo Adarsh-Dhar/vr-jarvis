@@ -171,7 +171,12 @@ class TestPlanLifecycle:
         r = client.patch('/plan/%s/tasks/t2' % sid, json={'status': 'running'}, headers=H)
         assert r.status_code == 409
         assert client.patch('/plan/%s/tasks/t1' % sid, json={'status': 'running'}, headers=H).status_code == 200
-        assert client.patch('/plan/%s/tasks/t1' % sid, json={'status': 'done'}, headers=H).status_code == 200
+        # DONE without evidence is rejected; with evidence it succeeds.
+        assert client.patch('/plan/%s/tasks/t1' % sid, json={'status': 'done'}, headers=H).status_code == 400
+        r = client.patch('/plan/%s/tasks/t1' % sid,
+                         json={'status': 'done', 'evidence': 'pytest tests/ -q: 12 passed'}, headers=H)
+        assert r.status_code == 200
+        assert r.json()['task']['evidence'] == 'pytest tests/ -q: 12 passed'
         assert client.patch('/plan/%s/tasks/t2' % sid, json={'status': 'running'}, headers=H).status_code == 200
 
     def test_circular_dependencies_reported(self, client):
@@ -193,6 +198,20 @@ class TestPlanLifecycle:
         for t in plan['tasks']:
             for d in t['depends_on']:
                 assert d != t['id'] and pos[d] < pos[t['id']]
+        # Cyclic tasks cannot start or complete without explicit acceptance.
+        cyclic_task = next(t for t in plan['tasks'] if t['component_id'] in ('c1', 'c2'))
+        tid = cyclic_task['id']
+        assert client.patch('/plan/%s/tasks/%s' % (sid, tid),
+                            json={'status': 'running'}, headers=H).status_code == 409
+        assert client.patch('/plan/%s/tasks/%s' % (sid, tid),
+                            json={'status': 'running', 'accept_cycles': True}, headers=H).status_code == 200
+        # done still requires evidence even with the cycle accepted
+        assert client.patch('/plan/%s/tasks/%s' % (sid, tid),
+                            json={'status': 'done', 'accept_cycles': True}, headers=H).status_code == 400
+        r = client.patch('/plan/%s/tasks/%s' % (sid, tid),
+                         json={'status': 'done', 'accept_cycles': True,
+                               'evidence': 'manual review: cycle is intentional'}, headers=H)
+        assert r.status_code == 200
 
 
 if __name__ == '__main__':
