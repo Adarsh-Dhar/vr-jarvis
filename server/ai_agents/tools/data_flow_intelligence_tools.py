@@ -6,6 +6,7 @@ Understand how data moves through the entire application.
 from typing import Optional, List, Dict, Any
 from google.adk.tools import ToolContext
 from ._safe import safe
+from ._common import abs_repo_path
 import ast
 
 
@@ -15,8 +16,7 @@ def _is_python_file(file_path: str) -> bool:
 
 def _parse_python_ast(file_path: str) -> Optional[ast.AST]:
     try:
-        from pathlib import Path
-        content = Path(file_path).read_text(encoding='utf-8')
+        content = abs_repo_path(file_path).read_text(encoding='utf-8')
         return ast.parse(content)
     except Exception:
         return None
@@ -658,7 +658,7 @@ def build_data_flow_graph(
             }
 
         # Read source code
-        with open(file_path, 'r', encoding='utf-8') as f:
+        with open(abs_repo_path(file_path), 'r', encoding='utf-8') as f:
             source = f.read()
 
         # Call the data-flow service
@@ -699,7 +699,7 @@ def build_data_flow_graph(
 
 
         # Read source
-        with open(file_path, 'r', encoding='utf-8') as f:
+        with open(abs_repo_path(file_path), 'r', encoding='utf-8') as f:
             source = f.read()
 
         # Build CFG

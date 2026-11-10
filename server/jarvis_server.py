@@ -26,13 +26,14 @@ from ai_agents.agent import root_agent
 from ai_agents import config, repository
 from ai_agents.config import USE_CACHED_TESTS
 from ai_agents import llm
-from ai_agents.tools.git_tools import commit_worktree
+from ai_agents.tools.git_tools import commit_worktree, promote_branch
 from ai_agents.tools.graph_tools import get_source
 from ai_agents.agents.registry import initialize_agents
 
 APP, USER = 'jarvis', 'quest'
 TOKEN = os.getenv('JARVIS_TOKEN')
 ASK_TIMEOUT = float(os.getenv('JARVIS_ASK_TIMEOUT', '170'))   # keep below the Unity request timeout
+TURN_TIMEOUT = float(os.getenv('JARVIS_TURN_TIMEOUT', '120'))
 MAX_SESSIONS = int(os.getenv('JARVIS_MAX_SESSIONS', '50'))
 SESSION_IDLE_TIMEOUT = int(os.getenv('JARVIS_SESSION_IDLE_TIMEOUT', '3600'))  # 1 hour
 ENABLE_DIRECT_TOOLS = os.getenv('JARVIS_ENABLE_DIRECT_TOOLS', '0') == '1'
@@ -101,7 +102,13 @@ def validate_security_config():
 # Validate security on import
 validate_security_config()
 
-sessions = InMemorySessionService()
+try:
+    from google.adk.sessions import DatabaseSessionService
+    sessions = DatabaseSessionService(
+        db_url=os.getenv('JARVIS_SESSION_DB', 'sqlite+aiosqlite:///' + str(config.ROOT / 'data' / 'sessions.db')))
+except Exception:
+    # sqlalchemy/aiosqlite not installed: sessions live only for this process.
+    sessions = InMemorySessionService()
 runner = Runner(agent=root_agent, app_name=APP, session_service=sessions)
 locks = defaultdict(asyncio.Lock)
 session_last_used = {}  # Track session last activity for eviction
@@ -235,6 +242,7 @@ class AskBody(BaseModel):
     session_id: str
     text: str
     selection: str = ''
+    repo: Optional[str] = None
 
 
 def _turn_state(body):
@@ -252,6 +260,7 @@ def _turn_state(body):
 class ApproveBody(BaseModel):
     session_id: str
     approved: bool
+    repo: Optional[str] = None
 
 
 @app.post('/session', dependencies=[Depends(auth)])
@@ -259,6 +268,15 @@ async def new_session():
     session_id = uuid.uuid4().hex
     await ensure(session_id)
     return {'session_id': session_id}
+
+
+repo_lock = asyncio.Lock()
+
+
+def _require_active_repo(name: Optional[str]):
+    if name and name != config.REPO_ROOT.name:
+        raise HTTPException(status_code=409,
+            detail=f'Active repository is {config.REPO_ROOT.name}, not {name}. Select it again.')
 
 
 def _git(*args):
@@ -273,7 +291,8 @@ async def health():
     """Public health check endpoint - no authentication required."""
     changed = len([line for line in _git('status', '--porcelain').splitlines() if line.strip()])
     return {'ok': True, 'cached_tests': USE_CACHED_TESTS, 'repo': config.REPO_ROOT.name,
-            'branch': _git('rev-parse', '--abbrev-ref', 'HEAD') or '?', 'changed': changed}
+            'branch': _git('rev-parse', '--abbrev-ref', 'HEAD') or '?', 'changed': changed,
+            'semantic_languages': ['python', 'javascript', 'typescript']}
 
 
 @app.get('/graph', dependencies=[Depends(auth)])
@@ -336,7 +355,8 @@ async def repos():
 @app.post('/repos/select', dependencies=[Depends(auth)])
 async def select_repo(body: RepoBody):
     try:
-        g = await asyncio.to_thread(repository.activate, body.name)
+        async with repo_lock:
+            g = await asyncio.to_thread(repository.activate, body.name)
     except KeyError:
         raise HTTPException(status_code=404, detail='unknown repository: ' + body.name)
     return {'active': body.name, 'nodes': len(g['nodes']), 'edges': len(g['edges'])}
@@ -469,6 +489,7 @@ async def _run_turn_streaming(body):
 @app.post('/ask/stream', dependencies=[Depends(auth)])
 async def ask_stream(body: AskBody):
     """Stream agent progress as Server-Sent Events."""
+    _require_active_repo(body.repo)
     async def gen():
         async with locks[body.session_id]:      # hold the lock for the whole stream
             await ensure(body.session_id)
@@ -476,13 +497,20 @@ async def ask_stream(body: AskBody):
 
             reply = ''
             error = ''
+            deadline = time.monotonic() + TURN_TIMEOUT
+            stream = _run_turn_streaming(body).__aiter__()
             try:
-                async for ev in _run_turn_streaming(body):
+                while True:
+                    try:
+                        ev = await asyncio.wait_for(stream.__anext__(),
+                                                    timeout=max(1.0, deadline - time.monotonic()))
+                    except StopAsyncIteration:
+                        break
                     yield 'data: ' + json.dumps(ev) + '\n\n'
                     if ev.get('type') == 'final_response':
                         reply = ev.get('content', '')
             except asyncio.TimeoutError:
-                error = 'JARVIS took too long to answer. Try a narrower question.'
+                error = 'JARVIS timed out on this request. Nothing was changed. Try again.'
                 yield 'data: ' + json.dumps({'type': 'error', 'error': error}) + '\n\n'
             except Exception as exc:
                 error = f'{type(exc).__name__}: {str(exc)[:200]}'
@@ -518,6 +546,12 @@ async def _run_turn(body):
     return reply
 
 
+def _unverified_evidence(state: dict) -> list:
+    from ai_agents.tools.graph_tools import _graph
+    nodes = _graph()['nodes']
+    return [i for i in state.get('evidence', []) if i not in nodes]
+
+
 def _build_ask_response(reply: str, error: str, state: dict) -> dict:
     """Build the standardized response for /ask and /ask/stream endpoints.
 
@@ -539,12 +573,14 @@ def _build_ask_response(reply: str, error: str, state: dict) -> dict:
         'test_results': _s(state.get('test_results')),
         'test_source': last.get('source', '') if isinstance(last, dict) else '',
         'evidence': list(state.get('evidence', [])),
+        'unverified_evidence': _unverified_evidence(state),
     }
 
 
 @app.post('/ask', dependencies=[Depends(auth)])
 async def ask(body: AskBody):
     """Non-streaming endpoint for compatibility."""
+    _require_active_repo(body.repo)
     error = ''
     calls_before = llm.stats['requests']
     reply = ''
@@ -552,9 +588,9 @@ async def ask(body: AskBody):
         await ensure(body.session_id)
         await set_state(body.session_id, _turn_state(body))
         try:
-            reply = await asyncio.wait_for(_run_turn(body), ASK_TIMEOUT)
+            reply = await asyncio.wait_for(_run_turn(body), TURN_TIMEOUT)
         except asyncio.TimeoutError:
-            error = 'JARVIS took too long to answer. Try a narrower question.'
+            error = 'JARVIS timed out on this request. Nothing was changed. Try again.'
         except Exception as exc:
             error = f'{type(exc).__name__}: {str(exc)[:200]}'
         state = (await ensure(body.session_id)).state
@@ -579,64 +615,67 @@ async def ask(body: AskBody):
 
 @app.post('/approve', dependencies=[Depends(auth)])
 async def approve(body: ApproveBody):
-    """Handle user approval for commits or tool actions.
-
-    Approval workflow:
-    - Commits: requires worktree and passed tests
-    - Tool actions: marks the pending approval as approved
-    - Rejection: clears pending state
-    """
+    _require_active_repo(body.repo)
     async with locks[body.session_id]:
         state = (await ensure(body.session_id)).state
         pending = state.get('pending_approval', '')
         worktree = state.get('worktree', '')
-        approval_type = state.get('approval_type', 'commit')  # 'commit' or 'tool'
+        approval_type = state.get('approval_type', 'commit')
         approval_key = state.get('approval_key')
+        cleared = {'pending_approval': '', 'approval_type': '', 'approval_key': ''}
 
-        # Prepare state delta
-        delta = {
-            'approved': body.approved,
-            'pending_approval': '',
-            'approval_type': '',
-            'approval_key': ''
-        }
+        if not body.approved:
+            await set_state(body.session_id, {**cleared, 'approved': False})
+            return {'ok': True, 'action': 'rejected', 'detail': 'Rejected. Nothing was changed.'}
 
-        if approval_type == 'tool' and approval_key and body.approved:
-            # Mark the approval as approved
+        if not pending:
+            return {'ok': False, 'action': 'none', 'detail': 'Nothing was waiting for approval.'}
+
+        if approval_type == 'tool':
+            delta = {**cleared, 'approved': True}
             pending_approvals = state.get('pending_approvals', {})
-            if approval_key in pending_approvals:
+            if approval_key and approval_key in pending_approvals:
                 pending_approvals[approval_key]['status'] = 'approved'
                 delta['pending_approvals'] = pending_approvals
+            await set_state(body.session_id, delta)
+            return {'ok': True, 'action': 'tool', 'detail': f'Tool action approved: {pending}'}
 
-        # Persist all state changes in a single call
-        await set_state(body.session_id, delta)
+        if approval_type != 'commit':
+            return {'ok': False, 'action': 'unknown', 'detail': f'Unknown approval type: {approval_type}'}
 
-    if not body.approved:
-        return {'ok': True, 'action': 'rejected', 'detail': 'Rejected. Nothing was changed.'}
-
-    if not pending:
-        return {'ok': False, 'action': 'none', 'detail': 'Nothing was waiting for approval.'}
-
-    if approval_type == 'commit':
-        # Commit workflow: requires worktree and passed tests
+        # Commit path: every check runs BEFORE anything is cleared, so a refusal leaves the proposal pending.
         if not worktree:
             return {'ok': False, 'action': 'commit', 'detail': 'No sandbox worktree to commit.'}
-
-        # Re-fetch state to get latest after set_state
-        state = (await ensure(body.session_id)).state
         last = state.get('last_test_run', {})
         if not isinstance(last, dict) or last.get('status') != 'passed':
             return {'ok': False, 'action': 'commit', 'detail': 'Tests must pass before committing.'}
+        if (state.get('last_typecheck') or {}).get('typecheck') == 'failed':
+            return {'ok': False, 'action': 'commit', 'detail': 'Type check failed. Fix it before committing.'}
 
-        return {'ok': True, 'action': 'commit', **commit_worktree(worktree, 'JARVIS: ' + str(pending)[:120])}
+        result = await asyncio.to_thread(commit_worktree, worktree, 'JARVIS: ' + str(pending)[:120])
+        if result.get('ok'):
+            await set_state(body.session_id, {**cleared, 'approved': True,
+                            'last_commit': {'branch': result['branch'], 'commit': result['commit']}})
+        return {'action': 'commit', **result}
 
-    elif approval_type == 'tool':
-        # Tool action workflow: approval is now marked as approved
-        # The permission guard will validate and consume it on retry
-        return {'ok': True, 'action': 'tool', 'detail': f'Tool action approved: {pending}'}
 
-    else:
-        return {'ok': False, 'action': 'unknown', 'detail': f'Unknown approval type: {approval_type}'}
+class PromoteBody(BaseModel):
+    session_id: str
+
+
+@app.post('/promote', dependencies=[Depends(auth)])
+async def promote(body: PromoteBody):
+    async with locks[body.session_id]:
+        state = (await ensure(body.session_id)).state
+        last = state.get('last_commit') or {}
+        if not last.get('branch'):
+            return {'ok': False, 'detail': 'No committed change to promote.'}
+        res = await asyncio.to_thread(promote_branch, last['branch'])
+        if not res.get('ok'):
+            return res
+        g = await asyncio.to_thread(repository.activate, config.REPO_ROOT.name)   # re-index + clear caches
+        await set_state(body.session_id, {'last_commit': {}, 'worktree': ''})
+        return {**res, 'graph_refreshed': True, 'nodes': len(g['nodes']), 'edges': len(g['edges'])}
 
 
 @app.get('/task/{session_id}', dependencies=[Depends(auth)])
@@ -660,9 +699,18 @@ async def get_task_state(session_id: str):
                 'status': value.get('status', 'unknown')
             })
 
-    # Extract plan summary
+    # Extract plan summary and task list
     plan = state.get('plan', {})
     plan_summary = plan.get('summary', '') if isinstance(plan, dict) else str(plan)
+    raw_tasks = plan.get('tasks', []) if isinstance(plan, dict) else (plan if isinstance(plan, list) else [])
+    tasks = []
+    for i, t in enumerate(raw_tasks if isinstance(raw_tasks, list) else []):
+        if isinstance(t, dict):
+            tasks.append({'id': str(t.get('id', i)),
+                          'title': t.get('title') or t.get('summary', ''),
+                          'status': t.get('status', 'pending')})
+        elif isinstance(t, str):
+            tasks.append({'id': str(i), 'title': t, 'status': 'pending'})
 
     # Extract findings as strings
     findings_raw = state.get('findings', [])
@@ -679,6 +727,7 @@ async def get_task_state(session_id: str):
     return {
         'busy': locks[session_id].locked(),
         'plan_summary': plan_summary,
+        'tasks': tasks,
         'agent_results': agent_results,
         'findings': findings
     }

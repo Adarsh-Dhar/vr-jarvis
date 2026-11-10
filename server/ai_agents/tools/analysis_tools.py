@@ -9,7 +9,7 @@ import ast
 import re
 from google.adk.tools import ToolContext
 from ._safe import safe
-from ._common import resolve_in_repo
+from ._common import resolve_in_repo, abs_repo_path
 
 
 def _is_python_file(file_path: str) -> bool:
@@ -59,7 +59,7 @@ def parse_source_code(file_path: str, tool_context: ToolContext) -> dict:
             }
         
         if _is_python_file(file_path):
-            tree = _parse_python_ast(file_path)
+            tree = _parse_python_ast(str(path))
             if tree:
                 return {
                     'status': 'ok',
@@ -100,7 +100,7 @@ def extract_symbols(file_path: str, tool_context: ToolContext) -> dict:
         symbols = []
         
         if _is_python_file(file_path):
-            tree = _parse_python_ast(file_path)
+            tree = _parse_python_ast(str(path))
             if tree:
                 for node in ast.walk(tree):
                     if isinstance(node, ast.FunctionDef):
@@ -173,7 +173,7 @@ def resolve_types(file_path: str, tool_context: ToolContext) -> dict:
         type_relationships = []
         
         if _is_python_file(file_path):
-            tree = _parse_python_ast(file_path)
+            tree = _parse_python_ast(str(path))
             if tree:
                 for node in ast.walk(tree):
                     # Extract type annotations
@@ -236,7 +236,7 @@ def resolve_references(file_path: str, tool_context: ToolContext) -> dict:
         references = []
         
         if _is_python_file(file_path):
-            tree = _parse_python_ast(file_path)
+            tree = _parse_python_ast(str(path))
             if tree:
                 # Build symbol table
                 symbols = {}
@@ -309,7 +309,7 @@ def analyze_control_flow(function_name: str, tool_context: ToolContext) -> dict:
             }
 
         # Read source code
-        with open(file_path, 'r', encoding='utf-8') as f:
+        with open(abs_repo_path(file_path), 'r', encoding='utf-8') as f:
             source = f.read()
 
         # Call the control-flow service
@@ -357,7 +357,7 @@ def analyze_control_flow(function_name: str, tool_context: ToolContext) -> dict:
             }
 
         # Read source file
-        with open(file_path, 'r', encoding='utf-8') as f:
+        with open(abs_repo_path(file_path), 'r', encoding='utf-8') as f:
             source = f.read()
 
         # Build CFG using the new engine

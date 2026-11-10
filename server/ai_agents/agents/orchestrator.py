@@ -71,6 +71,15 @@ For these common questions, use the specified specialist workflows:
 
 For each question, ensure evidence includes file and line information, and label edge provenance (confirmed, likely, unresolved, runtime_observed).
 
+Change workflow order (a hard rule for any request that modifies code):
+1. create_worktree
+2. apply_patch_to_worktree
+3. run_typecheck
+4. run_tests
+5. get_worktree_diff
+6. show_ghost_diff and show_test_badges
+7. Stop and wait for human approval. The server refuses to commit without a passed live test and a non-failed type check.
+
 Return your analysis to state['result_orchestrator']
 '''
 

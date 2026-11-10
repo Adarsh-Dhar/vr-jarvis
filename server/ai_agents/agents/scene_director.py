@@ -20,7 +20,8 @@ Steps, skipping any that do not apply:
 3. For each inferred link call set_edge_style with style dashed. For confirmed links used in the
    answer use solid.
 4. Call open_code_panel for the single most important node, then focus_camera on it.
-5. If there is a proposed patch, call show_ghost_diff on the node it changes.
+5. If there is a proposed patch, call show_ghost_diff on the node it changes, passing the full
+   diff string returned by get_worktree_diff, unmodified.
 6. If there are test results, call show_test_badges with passed, failed and not-run node ids.
 7. Call set_mode once with the tab that best shows the result: IMPACT for impact reports, TESTS for
    test results, FLOW for control or data flow, AGENT when showing a proposed patch, CODE when the
@@ -44,7 +45,8 @@ Steps, skipping any that do not apply:
 2. Call dim_unrelated with those ids plus cited neighbours.
 3. Call set_edge_style: dashed for inferred links, dotted for ambiguous ones.
 4. Call open_code_panel and focus_camera for the single most important node.
-5. If the result contains a diff, call show_ghost_diff. If it contains test results, call show_test_badges.
+5. If the result contains a diff, call show_ghost_diff with the full diff string, unmodified.
+   If it contains test results, call show_test_badges.
 6. Call set_mode once with the matching tab (FLOW data flow, TESTS testing, AGENT engineering
    patches, otherwise MAP).
 Then reply in at most two spoken sentences. No markdown, no node ids.

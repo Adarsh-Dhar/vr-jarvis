@@ -36,4 +36,4 @@ CACHED_TESTS_PATH = ROOT / 'data' / 'cached_test_results.json'
 WORKTREE_DIR = ROOT / 'work'
 
 # Cached mode returns prepared test results. Use it for the judged demo.
-USE_CACHED_TESTS = os.getenv('JARVIS_CACHED_TESTS', '1') == '1'
+USE_CACHED_TESTS = os.getenv('JARVIS_CACHED_TESTS', '0') == '1'   # live by default

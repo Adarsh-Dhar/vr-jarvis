@@ -70,12 +70,22 @@ namespace JarvisVR
     private const int EditorLinesPerPage = 18;
     private bool _serverOnline;
     private string _selected, _mode = "MAP", _pending, _ghostDiff, _testSummary = "No test run yet.";
+    private int _ghostPage;
+    private bool _ghostSeenAll;
+    private const int GhostLinesPerPage = 14;   // 14 diff lines + 1 header line fit the panel
+    private bool _approving;
+    private string _lastCommitBranch;
+    private bool _hasTestRun, _testFailed;
+    private string[] _testFailureLines;
+    private TaskDto[] _tasks;
+    private string[] _unverifiedEvidence;
     private string _agentMode;
     private readonly HashSet<string> _agentShown = new HashSet<string>();
     private readonly List<string> _log = new List<string>();
     private float _errorUntil;
     private int _progressSeen;
     private float _progressAt;
+    private float _taskAt;
     private Transform _orb, _halo;
     private Material _orbMat;
     private JarvisOrbFx _orbFx;
@@ -238,14 +248,17 @@ namespace JarvisVR
         "<color=#" + Hex(pal.Amber) + ">amber</color>  change path");
 
       JarvisSpatialPanel ghost = AddPanel("ghost", "Ghost diff (proposed)", 560, 520, 1.18f, 0.20f, pal.Amber);
-      ghost.SetBodyBox(60, 450); ghost.UseMono(20);
+      ghost.SetBodyBox(60, 380); ghost.UseMono(20);
+      ghost.AddButton("< PREV", 20, 450, 160, 56, () => { _ghostPage--; RefreshGhost(); }, 0f, pal.Amber);
+      ghost.AddButton("NEXT >", 380, 450, 160, 56, () => { _ghostPage++; RefreshGhost(); }, 0f, pal.Amber);
       ghost.SetBody("No proposed change yet. Ask JARVIS to fix something.");
 
-      JarvisSpatialPanel approval = AddPanel("approval", "Approval", 560, 250, 1.18f, -0.46f, pal.Amber);
+      JarvisSpatialPanel approval = AddPanel("approval", "Approval", 560, 320, 1.18f, -0.46f, pal.Amber);
       approval.SetBodyBox(60, 80); approval.Body.fontSize = 22;
       approval.SetBody("Nothing is waiting for approval.");
       approval.AddButton("HOLD 2s TO APPROVE", 20, 150, 330, 80, OnApprove, 2f, pal.Green);
       approval.AddButton("REJECT", 370, 150, 170, 80, OnReject, 0f, pal.Red);
+      approval.AddButton("PROMOTE TO MAIN", 20, 235, 520, 70, OnPromote, 0f, pal.Violet);
 
       // Impact panel for change impact visualization
       _impactPanel = AddPanel("impact", "Change Impact", 560, 400, 1.18f, -0.46f, pal.Violet);
@@ -299,7 +312,7 @@ namespace JarvisVR
     {
       _graph = g;
       _graph.graph_type = g.graph_type;  // Preserve graph type
-      _agentEvidence = null; _agentTestResults = null;   // ids from another repository would not resolve
+      _agentEvidence = null; _agentTestResults = null; _unverifiedEvidence = null;   // ids from another repository would not resolve
       for (int i = _graphRoot.childCount - 1; i >= 0; i--) Destroy(_graphRoot.GetChild(i).gameObject);
       _nodes.Clear(); _edges.Clear(); _clusters.Clear(); _pulses.Clear();
       BuildGraph();
@@ -860,6 +873,7 @@ namespace JarvisVR
       _agentMode = null;
       _agentEvidence = r.evidence;
       _agentTestResults = r.test_results;
+      _unverifiedEvidence = r.unverified_evidence;
       bool graphChanged = false;
       if (r.scene_commands != null) foreach (SceneCommand c in r.scene_commands) graphChanged |= ApplyCommand(c);
       if (!string.IsNullOrEmpty(r.pending_approval)) _pending = r.pending_approval;
@@ -965,10 +979,12 @@ namespace JarvisVR
             if ((e.Dto.src == c.src && e.Dto.dst == c.dst) || (e.Dto.src == c.dst && e.Dto.dst == c.src)) StyleEdge(e, c.style);
           return false;
         case "show_ghost_diff":
-          _ghostDiff = c.diff;
+          _ghostDiff = c.diff; _ghostPage = 0; _ghostSeenAll = false;
           return false;
         case "show_test_badges":
           Badge(c.passed, " [ok]"); Badge(c.failed, " [x]"); Badge(c.not_run, " [-]");
+          _hasTestRun = true; _testFailed = c.failed != null && c.failed.Length > 0;
+          _testFailureLines = c.failure_lines;
           _testSummary = Summarize("PASSED", c.passed) + Summarize("FAILED", c.failed) + Summarize("NOT RUN", c.not_run);
           return false;
         case "show_impact_panel":
@@ -978,6 +994,8 @@ namespace JarvisVR
             sb.AppendLine($"CHANGE IMPACT");
             sb.AppendLine($"Changed function: {c.text ?? "Unknown"}");
             sb.AppendLine($"Risk level: {c.summary ?? "Unknown"}");
+            if (!string.IsNullOrEmpty(c.test_mapping)) sb.AppendLine($"Test mapping: {c.test_mapping}");
+            if (!string.IsNullOrEmpty(c.risk_basis)) sb.AppendLine($"Risk basis: {c.risk_basis}");
             sb.AppendLine();
 
             // Direct callers (confirmed)
@@ -1148,7 +1166,9 @@ namespace JarvisVR
     {
       foreach (JarvisPathDot pd in _pulses) if (pd != null) Destroy(pd.gameObject);
       _pulses.Clear();
-      _hot.Clear(); _keep = null; _ghostDiff = null; _testSummary = "No test run yet.";
+      _hot.Clear(); _keep = null; _ghostDiff = null; _ghostPage = 0; _ghostSeenAll = false;
+      _hasTestRun = false; _testFailed = false; _testFailureLines = null;
+      _testSummary = "No test run yet.";
       foreach (NodeView n in _nodes.Values) { n.Badge = ""; n.Label.text = n.Dto.name; }
       foreach (EdgeView e in _edges) StyleEdge(e, e.Dto.kind);
       RefreshStyles();
@@ -1157,24 +1177,86 @@ namespace JarvisVR
     private void OnApprove()
     {
       if (string.IsNullOrEmpty(_pending)) { Say("Nothing is waiting for approval."); return; }
+      if (_approving) return;
+      if (!string.IsNullOrEmpty(_ghostDiff) && !_ghostSeenAll) { Say("Page through the whole diff before approving."); return; }
+      _approving = true;
       Say("Committing to the sandbox branch…"); Log("approval: approve");
       _bridge.Approve(true,
-        r => { Say(r.ok ? "Committed " + r.commit + " on " + r.branch + ". Main is untouched." : r.detail); Log(r.ok ? "committed " + r.commit : "approve failed"); },
-        err => { Say(err); _errorUntil = Time.unscaledTime + 4f; });
-      _pending = null; RefreshAll();
+        r =>
+        {
+          _approving = false;
+          if (r != null && r.ok)
+          {
+            _pending = null; _lastCommitBranch = r.branch;
+            Say("Committed " + r.commit + " on " + r.branch + ". Main is untouched until you press PROMOTE.");
+            Log("committed " + r.commit);
+          }
+          else
+          {
+            Say("NOT committed: " + (r != null ? r.detail : "no response") + " The proposal is still pending.");
+            _errorUntil = Time.unscaledTime + 4f;
+          }
+          RefreshAll();
+        },
+        err => { _approving = false; Say(err + " The proposal is still pending."); _errorUntil = Time.unscaledTime + 4f; RefreshAll(); });
     }
 
     private void OnReject()
     {
-      if (string.IsNullOrEmpty(_pending)) return;
+      if (string.IsNullOrEmpty(_pending) || _approving) return;
+      _approving = true;
       Say("Rejecting…"); Log("approval: reject");
-      _bridge.Approve(false, r => Say(r.ok ? "Change rejected." : r.detail), err => Say(err));
-      _pending = null; RefreshAll();
+      _bridge.Approve(false,
+        r =>
+        {
+          _approving = false;
+          if (r != null && r.ok) { _pending = null; _ghostDiff = null; _ghostPage = 0; Say("Change rejected. Nothing was changed."); }
+          else Say("Reject failed: " + (r != null ? r.detail : "no response"));
+          RefreshAll();
+        },
+        err => { _approving = false; Say(err); RefreshAll(); });
+    }
+
+    private void OnPromote()
+    {
+      if (string.IsNullOrEmpty(_lastCommitBranch)) { Say("No committed change to promote."); return; }
+      if (_approving) return;
+      _approving = true;
+      Say("Promoting " + _lastCommitBranch + " to the main checkout and re-indexing…");
+      _bridge.Promote(
+        r =>
+        {
+          _approving = false;
+          if (r != null && r.ok)
+          {
+            _lastCommitBranch = null; _ghostDiff = null; _ghostPage = 0;
+            Say("Promoted " + r.commit + ". Graph re-indexed: " + r.nodes + " nodes, " + r.edges + " edges.");
+            ReloadGraph();
+          }
+          else Say("NOT promoted: " + (r != null ? r.detail : "no response"));
+          RefreshAll();
+        },
+        err => { _approving = false; Say(err); });
+    }
+
+    private void ReloadGraph()
+    {
+      _bridge.GetGraph(g =>
+      {
+        if (g == null || g.nodes == null) return;
+        string sel = _selected;
+        LoadGraph(g);
+        if (!string.IsNullOrEmpty(sel) && _nodes.ContainsKey(sel)) Select(sel);
+        else if (g.nodes.Count > 0) Select(g.nodes[0].id);
+        RefreshStatus();
+        if (_openFile != null) OpenRepoFile(_openFile.path);   // viewer shows the committed text
+      });
     }
 
     // =========================================================== text and styling
 
     private static string Hex(Color c) { return ColorUtility.ToHtmlStringRGB(c); }
+    private static string Esc(string s) { return s.Replace("<", "<​"); }
 
     private void Say(string msg) { if (_panels.TryGetValue("caption", out JarvisSpatialPanel p)) p.SetBody(msg); }
 
@@ -1440,6 +1522,7 @@ namespace JarvisVR
         _pendingOpenLine = 0;
         SetMode("CODE");
         RefreshOpenFile();
+        HighlightFileNodes(path);
         Log("opened " + path);
       }, error => Say("Could not open file: " + error));
     }
@@ -1482,6 +1565,13 @@ namespace JarvisVR
       _codeNext.Interactable = _openFilePage < pages - 1;
     }
 
+    private void HighlightFileNodes(string path)
+    {
+      _hot.Clear();
+      foreach (var kv in _nodes) if (kv.Value.Dto.file == path) _hot.Add(kv.Key);
+      RefreshStyles();
+    }
+
     private void CloseOpenFile()
     {
       _openFile = null;
@@ -1489,7 +1579,23 @@ namespace JarvisVR
       RefreshCode();
     }
 
-    private void RefreshActivity() { if (_panels.ContainsKey("activity")) _panels["activity"].SetBody(string.Join("\n", _log)); }
+    private void RefreshActivity()
+    {
+      if (!_panels.ContainsKey("activity")) return;
+      var sb = new StringBuilder();
+      if (_tasks != null && _tasks.Length > 0)
+      {
+        sb.Append("<b>TASKS</b>\n");
+        foreach (TaskDto t in _tasks)
+        {
+          string mark = t.status == "done" || t.status == "completed" ? "[x]" : t.status == "running" ? "[~]" : "[ ]";
+          sb.Append(mark).Append(' ').Append(t.title ?? "").Append('\n');
+        }
+        sb.Append('\n');
+      }
+      sb.Append(string.Join("\n", _log));
+      _panels["activity"].SetBody(sb.ToString());
+    }
 
     private void RefreshEvidence()
     {
@@ -1529,6 +1635,9 @@ namespace JarvisVR
         sb.Append("• ").Append(line).Append('\n');
       }
       if (_agentEvidence.Length > shown) sb.Append("… ").Append(_agentEvidence.Length - shown).Append(" more\n");
+      if (_unverifiedEvidence != null && _unverifiedEvidence.Length > 0)
+        sb.Append("<color=#").Append(Hex(pal.Amber)).Append("><b>UNVERIFIED CITATIONS: ")
+          .Append(_unverifiedEvidence.Length).Append("</b></color>\n");
     }
 
     private void RefreshCode()
@@ -1601,13 +1710,25 @@ namespace JarvisVR
       if (!_panels.ContainsKey("ghost")) return;
       JarvisPalette pal = JarvisPalette.Current;
       if (string.IsNullOrEmpty(_ghostDiff)) { _panels["ghost"].SetBody("No proposed change yet. Ask JARVIS to fix something."); return; }
-      var sb = new StringBuilder();
-      string[] lines = _ghostDiff.Split('\n');
-      for (int i = 0; i < lines.Length && i < MaxCodeLines + 2; i++)
+      string[] lines = _ghostDiff.Replace("\r", "").TrimEnd('\n').Split('\n');
+      int add = 0, del = 0;
+      foreach (string l in lines)
       {
-        string l = lines[i].TrimEnd('\r');
+        if (l.StartsWith("+") && !l.StartsWith("+++")) add++;
+        else if (l.StartsWith("-") && !l.StartsWith("---")) del++;
+      }
+      int pages = Mathf.Max(1, Mathf.CeilToInt(lines.Length / (float)GhostLinesPerPage));
+      _ghostPage = Mathf.Clamp(_ghostPage, 0, pages - 1);
+      if (_ghostPage == pages - 1) _ghostSeenAll = true;
+      var sb = new StringBuilder();
+      sb.Append("<color=#").Append(Hex(pal.TextMuted)).Append(">+").Append(add).Append("  -").Append(del)
+        .Append("   page ").Append(_ghostPage + 1).Append('/').Append(pages).Append("</color>\n");
+      int from = _ghostPage * GhostLinesPerPage;
+      for (int i = from; i < lines.Length && i < from + GhostLinesPerPage; i++)
+      {
+        string l = lines[i];
         Color c = l.StartsWith("+") ? pal.Green : l.StartsWith("-") ? pal.Red : pal.TextMuted;
-        sb.Append("<color=#").Append(Hex(c)).Append('>').Append(l).Append("</color>\n");
+        sb.Append("<color=#").Append(Hex(c)).Append('>').Append(Esc(l)).Append("</color>\n");
       }
       _panels["ghost"].SetBody(sb.ToString());
     }
@@ -1621,14 +1742,24 @@ namespace JarvisVR
     private void RefreshTests()
     {
       if (!_panels.ContainsKey("tests")) return;
+      JarvisPalette pal = JarvisPalette.Current;
+      string verdict; Color vc;
+      if (!_hasTestRun) { verdict = "UNVERIFIED: no test has run for this change"; vc = pal.Amber; }
+      else if (_testFailed) { verdict = "FAILED"; vc = pal.Red; }
+      else { verdict = "PASSED"; vc = pal.Green; }
       string extra = "";
-      if (!string.IsNullOrWhiteSpace(_agentTestResults))       // the test run text the agents returned with the answer
+      if (!string.IsNullOrWhiteSpace(_agentTestResults))   // includes command, exit_code, duration_s from the live run
       {
         string t = _agentTestResults.Trim().Replace("\r", "");
-        if (t.Length > 420) t = t.Substring(0, 419) + "…";
-        extra = "\n\n<b>Test run</b>\n" + t;
+        if (t.Length > 1400) t = t.Substring(0, 1399) + "…";
+        extra = "\n\n<b>Test run</b>\n" + Esc(t);
       }
-      _panels["tests"].SetBody(_testSummary + extra);
+      if (_testFailureLines != null && _testFailureLines.Length > 0)
+      {
+        extra += "\n\n<b><color=#" + Hex(pal.Red) + ">Failures</color></b>\n";
+        foreach (string f in _testFailureLines) extra += "• " + Esc(f) + "\n";
+      }
+      _panels["tests"].SetBody("<b><color=#" + Hex(vc) + ">" + verdict + "</color></b>\n" + _testSummary + extra);
     }
 
     private void RefreshStyles()
@@ -1699,33 +1830,28 @@ namespace JarvisVR
     {
       if (!_nodes.TryGetValue(_menuNode ?? "", out NodeView n)) return;
       ClusterView cv = n.Cluster;
-      
-      if (cv.Collapsed)
-      {
-        // Expanding: fetch children from server
-        string clusterId = cv.Name;
-        if (_bridge != null && !_mock)
-        {
-          _bridge.GetGraphWithFocus(clusterId, 2, g =>
-          {
-            if (g != null && g.nodes != null)
-            {
-              // Add new nodes to the graph
-              foreach (var node in g.nodes)
-              {
-                if (!_nodes.ContainsKey(node.id))
-                {
-                  // This would require rebuilding the graph, for now just log
-                  Debug.Log("Would add node: " + node.id);
-                }
-              }
-            }
-          }, e => Debug.LogWarning("Failed to fetch cluster children: " + e));
-        }
-      }
-      
-      SetClusterCollapsed(cv, !cv.Collapsed);
+      string focusId = n.Dto.id;
       _menu.Show(false);
+      if (!cv.Collapsed) { SetClusterCollapsed(cv, true); return; }
+      SetClusterCollapsed(cv, false);
+      if (_bridge != null && !_mock)
+        _bridge.GetGraphWithFocus(focusId, 2, g => { if (g != null && g.nodes != null) MergeGraph(g); },
+          e => Say("Could not fetch more of the graph: " + e));
+    }
+
+    private void MergeGraph(GraphDto extra)
+    {
+      var haveN = new HashSet<string>(); foreach (var x in _graph.nodes) haveN.Add(x.id);
+      var haveE = new HashSet<string>(); foreach (var x in _graph.edges) haveE.Add(x.src + "|" + x.dst + "|" + x.kind);
+      int addedN = 0, addedE = 0;
+      foreach (var x in extra.nodes) if (haveN.Add(x.id)) { _graph.nodes.Add(x); addedN++; }
+      if (extra.edges != null)
+        foreach (var x in extra.edges) if (haveE.Add(x.src + "|" + x.dst + "|" + x.kind)) { _graph.edges.Add(x); addedE++; }
+      if (addedN + addedE == 0) { Say("Nothing more to expand here."); return; }
+      string sel = _selected;
+      LoadGraph(_graph);                                   // rebuilds; other clusters reopen expanded
+      if (!string.IsNullOrEmpty(sel) && _nodes.ContainsKey(sel)) Select(sel);
+      Log("expanded: +" + addedN + " nodes, +" + addedE + " edges");
     }
 
     private void SetClusterCollapsed(ClusterView cv, bool collapsed)
@@ -1882,6 +2008,11 @@ namespace JarvisVR
       {
         _progressAt = Time.unscaledTime + 1f;
         _bridge.GetProgress(_progressSeen, p => { foreach (var s in p.steps) { Log(s.agent + " working"); _progressSeen = s.i + 1; } });
+      }
+      if (Time.unscaledTime > _taskAt)
+      {
+        _taskAt = Time.unscaledTime + 2f;
+        _bridge.GetTask(t => { if (t != null) { _tasks = t.tasks; RefreshActivity(); } });
       }
     }
   }

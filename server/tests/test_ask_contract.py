@@ -66,6 +66,7 @@ def test_ask_response_contract():
             "test_results",
             "test_source",
             "evidence",
+            "unverified_evidence",
             "approval_type",  # Added for approval workflow
         }
         assert set(data.keys()) == expected_fields, f"Response has unexpected fields: {set(data.keys())}"

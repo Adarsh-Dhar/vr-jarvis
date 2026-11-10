@@ -574,24 +574,16 @@ def visualize_control_flow(
                 'message': 'Function not found in graph'
             }
 
-        # Resolve file path against repo root
-        file_path = node.get('file', '')
-        from pathlib import Path
-        if not Path(file_path).is_absolute():
-            from ai_agents import config
-            repo_root = getattr(config, 'REPOSITORY_DIR', None)
-            if repo_root:
-                file_path = str(repo_root / file_path)
-
-        # Read source
-        with open(file_path, 'r', encoding='utf-8') as f:
+        from ._common import abs_repo_path
+        rel_file = node.get('file', '')
+        with open(abs_repo_path(rel_file), 'r', encoding='utf-8') as f:
             source = f.read()
 
         # Build CFG using the service (qualname-aware lookup)
         symbol = {
             'id': node.get('id', function_id),
             'name': node.get('name', ''),
-            'file': file_path,
+            'file': rel_file,
             'source': source,
             'qualname': node.get('qualname', node.get('id', function_id))
         }
@@ -667,24 +659,16 @@ def visualize_unified_graph(
                 'message': 'Function not found in graph'
             }
 
-        # Resolve file path against repo root
-        file_path = node.get('file', '')
-        from pathlib import Path
-        if not Path(file_path).is_absolute():
-            from ai_agents import config
-            repo_root = getattr(config, 'REPOSITORY_DIR', None)
-            if repo_root:
-                file_path = str(repo_root / file_path)
-
-        # Read source
-        with open(file_path, 'r', encoding='utf-8') as f:
+        from ._common import abs_repo_path
+        rel_file = node.get('file', '')
+        with open(abs_repo_path(rel_file), 'r', encoding='utf-8') as f:
             source = f.read()
 
         # Build CFG using the service (qualname-aware lookup)
         symbol = {
             'id': node.get('id', function_id),
             'name': node.get('name', ''),
-            'file': file_path,
+            'file': rel_file,
             'source': source,
             'qualname': node.get('qualname', node.get('id', function_id))
         }
@@ -720,7 +704,7 @@ def visualize_unified_graph(
         facts = extractor.extract_function(
             artifact=cfg_artifact,
             source=source,
-            file_path=file_path
+            file_path=rel_file
         )
 
         # Build actual DFG from facts
@@ -931,7 +915,9 @@ def visualize_change_impact(
                      import_dependents=import_dependent_names,
                      passed_tests=passed,
                      failed_tests=failed,
-                     not_run_tests=not_run)
+                     not_run_tests=not_run,
+                     test_mapping=impact_result.get('test_mapping', ''),
+                     risk_basis=impact_result.get('risk_basis', ''))
 
         return {
             'status': 'ok',

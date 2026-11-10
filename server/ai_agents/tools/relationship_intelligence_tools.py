@@ -998,7 +998,9 @@ def calculate_change_impact(
             'total_affected': len(all_affected_ids) - 1,  # Exclude the element itself
             'covering_tests': covering_tests,
             'untested': not element_tested,
-            'risk_level': risk_level
+            'risk_level': risk_level,
+            'test_mapping': 'inferred from test names and call edges; not measured coverage',
+            'risk_basis': 'count of direct and indirect dependents; heuristic, not a verification result'
         }
     except Exception as e:
         return {

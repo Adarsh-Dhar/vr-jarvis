@@ -11,6 +11,8 @@ namespace JarvisVR
     bool Busy { get; }
     void Ask(string text, string selection, Action<AskResponse> ok, Action<string> fail);
     void Approve(bool approved, Action<ApproveResponse> ok, Action<string> fail);
+    void Promote(Action<PromoteResponse> ok, Action<string> fail);
+    void GetTask(Action<TaskResponse> ok);
     void GetSource(string nodeId, Action<SourceResponse> ok);
     void GetHealth(Action<HealthDto> ok, Action<string> fail);
     void GetGraph(Action<GraphDto> ok);
@@ -203,6 +205,16 @@ namespace JarvisVR
       StartCoroutine(After(0.6f, () => ok(approved
         ? new ApproveResponse { ok = true, branch = "jarvis/mock-sandbox", commit = "a1b2c3d" }
         : new ApproveResponse { ok = true, detail = "rejected" })));
+    }
+
+    public void Promote(Action<PromoteResponse> ok, Action<string> fail)
+    {
+      StartCoroutine(After(0.6f, () => ok(new PromoteResponse { ok = true, graph_refreshed = true, commit = "a1b2c3d", nodes = 7, edges = 6 })));
+    }
+
+    public void GetTask(Action<TaskResponse> ok)
+    {
+      StartCoroutine(After(0.05f, () => ok(new TaskResponse { busy = Busy, plan_summary = "", tasks = new TaskDto[0], agent_results = new AgentResultDto[0], findings = new string[0] })));
     }
 
     public void Ask(string text, string selection, Action<AskResponse> ok, Action<string> fail)

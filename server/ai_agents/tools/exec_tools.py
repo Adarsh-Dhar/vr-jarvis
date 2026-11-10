@@ -1,5 +1,8 @@
 import json
 import subprocess
+import time
+import xml.etree.ElementTree as ET
+from pathlib import Path
 
 from google.adk.tools import ToolContext
 
@@ -24,10 +27,57 @@ def _run(cmd, cwd, timeout=180):
         return 124, '', 'timeout'
 
 
+def _detect_runner(cwd):
+    p = Path(cwd)
+    if (p / 'package.json').is_file():
+        return 'jest'
+    if any((p / f).is_file() for f in ('pytest.ini', 'pyproject.toml', 'setup.cfg', 'conftest.py')):
+        return 'pytest'
+    return None
+
+
+def _jest(test_files, cwd):
+    cmd = ['npx', 'jest', '--json', *test_files]
+    code, out, err = _run(cmd, cwd)
+    try:
+        report = json.loads(out)
+    except json.JSONDecodeError:
+        return cmd, code, None, None, err[-2000:]
+    passed, failed = [], []
+    for suite in report.get('testResults', []):
+        for a in suite.get('assertionResults', []):
+            if a['status'] == 'passed':
+                passed.append(_test_id(a['fullName']))
+            else:
+                failed.append({'id': _test_id(a['fullName']),
+                               'message': ' '.join(a.get('failureMessages', []))[:500]})
+    return cmd, code, passed, failed, err[-500:]
+
+
+def _pytest(test_files, cwd):
+    xml_path = Path(cwd) / '.jarvis_junit.xml'
+    cmd = ['python', '-m', 'pytest', '-q', f'--junitxml={xml_path}', *test_files]
+    code, out, err = _run(cmd, cwd)
+    if not xml_path.is_file():
+        return cmd, code, None, None, (out + err)[-2000:]
+    passed, failed = [], []
+    for case in ET.parse(xml_path).getroot().iter('testcase'):
+        name = case.get('classname', '') + '::' + case.get('name', '')
+        bad = case.find('failure')
+        if bad is None:
+            bad = case.find('error')
+        if bad is not None:
+            failed.append({'id': name, 'message': (bad.get('message') or '')[:500]})
+        elif case.find('skipped') is None:
+            passed.append(name)
+    xml_path.unlink(missing_ok=True)   # must not end up in the commit (commit_worktree runs git add -A)
+    return cmd, code, passed, failed, ''
+
+
 @safe
 def run_tests(test_files: list[str], tool_context: ToolContext) -> dict:
-    '''Run only the given test files in the sandbox worktree and return per-test results.
-    status is passed, failed or error. Never guess a result; report exactly what ran.'''
+    '''Run the given test files in the sandbox worktree. status is passed, failed, unverified or error.
+    unverified means no test actually ran. Never guess a result; report exactly what ran.'''
     if USE_CACHED_TESTS:
         data = json.loads(CACHED_TESTS_PATH.read_text())
         tool_context.state['last_test_run'] = data
@@ -35,22 +85,21 @@ def run_tests(test_files: list[str], tool_context: ToolContext) -> dict:
     cwd = tool_context.state.get('worktree')
     if not cwd:
         return {'status': 'error', 'error': 'No sandbox worktree. Call create_worktree and apply the patch first.'}
-    code, out, err = _run(['npx', 'jest', '--json', *test_files], cwd)
-    try:
-        report = json.loads(out)
-    except json.JSONDecodeError:
-        return {'status': 'error', 'stderr': err[-2000:]}
-    passed, failed = [], []
-    for suite in report.get('testResults', []):
-        for a in suite.get('assertionResults', []):
-            if a['status'] == 'passed':
-                passed.append(_test_id(a['fullName']))
-            else:
-                failed.append({'id': _test_id(a['fullName']), 'message': ' '.join(a.get('failureMessages', []))[:500]})
-    if not passed and not failed:
-        return {'status': 'error', 'error': 'No tests were executed, so nothing can be reported as passed.'}
-    result = {'status': 'failed' if failed else 'passed', 'source': 'live',
-              'passed': passed, 'failed': failed}
+    runner = _detect_runner(cwd)
+    if runner is None:
+        result = {'status': 'unverified', 'source': 'live',
+                  'error': 'No supported test runner found (jest or pytest). Nothing was executed.'}
+        tool_context.state['last_test_run'] = result
+        return result
+    started = time.time()
+    cmd, code, passed, failed, err = (_jest if runner == 'jest' else _pytest)(test_files, cwd)
+    meta = {'source': 'live', 'runner': runner, 'command': ' '.join(cmd),
+            'exit_code': code, 'duration_s': round(time.time() - started, 1)}
+    if passed is None or (not passed and not failed):
+        result = {'status': 'unverified', **meta,
+                  'error': 'No tests were executed, so nothing can be reported as passed.', 'stderr': err}
+    else:
+        result = {'status': 'failed' if failed else 'passed', **meta, 'passed': passed, 'failed': failed}
     tool_context.state['last_test_run'] = result
     return result
 
@@ -63,9 +112,15 @@ def run_typecheck(tool_context: ToolContext) -> dict:
     cwd = tool_context.state.get('worktree')
     if not cwd:
         return {'status': 'error', 'error': 'No sandbox worktree. Call create_worktree first.'}
-    code, out, err = _run(['npx', 'tsc', '--noEmit'], cwd)
-    lines = (out + err).splitlines()[:40]
-    return {'status': 'ok', 'typecheck': 'passed' if code == 0 else 'failed', 'errors': lines}
+    if not (Path(cwd) / 'tsconfig.json').is_file():
+        res = {'status': 'ok', 'typecheck': 'not_applicable', 'source': 'live'}
+    else:
+        code, out, err = _run(['npx', 'tsc', '--noEmit'], cwd)
+        res = {'status': 'ok', 'typecheck': 'passed' if code == 0 else 'failed',
+               'command': 'npx tsc --noEmit', 'exit_code': code,
+               'errors': (out + err).splitlines()[:40], 'source': 'live'}
+    tool_context.state['last_typecheck'] = res
+    return res
 
 
 @safe

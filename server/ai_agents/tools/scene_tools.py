@@ -39,10 +39,12 @@ def show_ghost_diff(node_id: str, diff: str, tool_context: ToolContext) -> dict:
 
 
 def show_test_badges(passed_ids: list[str], failed_ids: list[str], not_run_ids: list[str],
-                     tool_context: ToolContext) -> dict:
-    '''Attach pass, fail and not-run badges to nodes.'''
+                     tool_context: ToolContext, failure_lines: list[str] = None) -> dict:
+    '''Attach pass, fail and not-run badges to nodes. failure_lines are "id: message" strings
+    shown under the test verdict so the user sees why a test failed.'''
     return _emit(tool_context, {'type': 'show_test_badges', 'passed': passed_ids,
-                                'failed': failed_ids, 'not_run': not_run_ids})
+                                'failed': failed_ids, 'not_run': not_run_ids,
+                                'failure_lines': failure_lines or []})
 
 
 def show_approval_prompt(summary: str, tool_context: ToolContext) -> dict:

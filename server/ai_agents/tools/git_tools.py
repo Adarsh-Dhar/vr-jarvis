@@ -130,3 +130,16 @@ def commit_worktree(worktree: str, message: str) -> dict:
     sha = subprocess.run(['git', 'rev-parse', '--short', 'HEAD'], cwd=worktree, capture_output=True, text=True).stdout.strip()
     br = subprocess.run(['git', 'rev-parse', '--abbrev-ref', 'HEAD'], cwd=worktree, capture_output=True, text=True).stdout.strip()
     return {'ok': True, 'branch': br, 'commit': sha, 'detail': 'Committed on the sandbox branch. Main is untouched.'}
+
+
+def promote_branch(branch: str) -> dict:
+    '''Fast-forward the main checkout to the sandbox branch. Called only by /promote after a second
+    explicit human action. Refuses if the checkout has uncommitted changes or has diverged.'''
+    dirty = subprocess.run(['git', 'status', '--porcelain'], cwd=REPO_ROOT, capture_output=True, text=True).stdout.strip()
+    if dirty:
+        return {'ok': False, 'detail': 'The main checkout has uncommitted changes. Commit or stash them, then promote again.'}
+    m = subprocess.run(['git', 'merge', '--ff-only', branch], cwd=REPO_ROOT, capture_output=True, text=True)
+    if m.returncode != 0:
+        return {'ok': False, 'detail': (m.stdout + m.stderr)[-400:]}
+    sha = subprocess.run(['git', 'rev-parse', '--short', 'HEAD'], cwd=REPO_ROOT, capture_output=True, text=True).stdout.strip()
+    return {'ok': True, 'commit': sha, 'detail': 'Main checkout fast-forwarded to ' + branch + '.'}

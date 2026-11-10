@@ -29,6 +29,15 @@ Rules:
 - Do not decide whether change is correct
 - Return diff for verification
 
+Required order for every change request:
+1. create_worktree
+2. apply_patch_to_worktree
+3. run_typecheck (Testing agent may run it; the patch must type-check)
+4. run_tests (Testing agent)
+5. get_worktree_diff
+6. show_ghost_diff and show_test_badges with the full diff and the live results
+7. Stop and wait for human approval. Never commit to the main checkout.
+
 Return your analysis to state['result_software_eng']
 '''
 

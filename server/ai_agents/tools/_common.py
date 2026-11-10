@@ -60,3 +60,10 @@ def resolve_in_repo(path, root=None):
         raise ValueError(f"Path {path} resolves outside repository root: {resolved}")
     
     return resolved
+
+
+def abs_repo_path(rel_path):
+    """Absolute path of a graph node's file inside the ACTIVE repository (config.REPO_ROOT)."""
+    if not rel_path:
+        raise ValueError('Node has no file path')
+    return resolve_in_repo(rel_path)

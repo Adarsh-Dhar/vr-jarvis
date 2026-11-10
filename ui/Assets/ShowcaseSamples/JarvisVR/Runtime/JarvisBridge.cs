@@ -12,7 +12,7 @@ namespace JarvisVR
   {
     public string type, color, node_id, src, dst, style, diff, summary, mode;
     public string repo, path, panel, state;
-    public string[] node_ids, keep_ids, passed, failed, not_run;
+    public string[] node_ids, keep_ids, passed, failed, not_run, failure_lines;
     public int depth, line;
     public float dx, dy, dz, value, azimuth, elevation, radius;
     public bool collapsed;
@@ -21,6 +21,7 @@ namespace JarvisVR
     public GraphEdgeDto[] edges;
     public string graph_type;
     public string title;
+    public string test_mapping, risk_basis;
     // Impact panel fields
     public string[] direct_callers, indirect_dependents, possible_callers, import_dependents;
     public string[] passed_tests, failed_tests, not_run_tests;
@@ -31,6 +32,7 @@ namespace JarvisVR
     public bool approved;
     public List<SceneCommand> scene_commands;
     public string[] evidence;
+    public string[] unverified_evidence;
   }
   [Serializable] public class ProgressStep { public int i; public string agent, kind; }
   [Serializable] public class ProgressDto { public bool busy; public List<ProgressStep> steps; }
@@ -38,9 +40,14 @@ namespace JarvisVR
   [Serializable] internal class TranscribeResponse { public string text, error; }
   [Serializable] public class SourceResponse { public string status, id, file, source, error; public int first_line; }
   [Serializable] public class ApproveResponse { public bool ok; public string branch, commit, detail; }
+  [Serializable] public class PromoteResponse { public bool ok, graph_refreshed; public string commit, detail; public int nodes, edges; }
+  [Serializable] internal class PromoteRequest { public string session_id; }
+  [Serializable] public class TaskDto { public string id, title, status; }
+  [Serializable] public class AgentResultDto { public string agent, summary, status; public float confidence; }
+  [Serializable] public class TaskResponse { public bool busy; public string plan_summary; public TaskDto[] tasks; public AgentResultDto[] agent_results; public string[] findings; }
   [Serializable] internal class SessionResponse { public string session_id; }
-  [Serializable] internal class AskRequest { public string session_id, text, selection; }
-  [Serializable] internal class ApproveRequest { public string session_id; public bool approved; }
+  [Serializable] internal class AskRequest { public string session_id, text, selection, repo; }
+  [Serializable] internal class ApproveRequest { public string session_id; public bool approved; public string repo; }
 
   // Field names match ai_agents/data/graph.json and the server's /health JSON.
   // Call-graph fields (callsite_id, resolution, confidence, ...) are optional:
@@ -106,6 +113,9 @@ namespace JarvisVR
     public int TimeoutSeconds = 180;   // keep above JARVIS_ASK_TIMEOUT (170) on the server
 
     private string _session;
+    /// <summary>Active repository name, kept in sync from /repos and /repos/select. Sent with ask/approve so the
+    /// server can reject calls made against a stale repository (409).</summary>
+    public string ActiveRepo = "";
     public bool Busy { get; private set; }
     private static JarvisServerSettings _settings;
     private static JarvisServerSettings Settings
@@ -146,7 +156,12 @@ namespace JarvisVR
       StartCoroutine(Send("GET", "/health", null, b => ok(JsonUtility.FromJson<HealthDto>(b)), fail));
 
     public void GetRepos(Action<ReposDto> ok, Action<string> fail) =>
-      StartCoroutine(Send("GET", "/repos", null, b => ok(JsonUtility.FromJson<ReposDto>(b)), fail));
+      StartCoroutine(Send("GET", "/repos", null, b =>
+      {
+        var r = JsonUtility.FromJson<ReposDto>(b);
+        if (r != null) ActiveRepo = r.active ?? "";
+        ok(r);
+      }, fail));
 
     public void GetTree(string repo, string path, Action<RepoTreeDto> ok, Action<string> fail)
     {
@@ -170,7 +185,8 @@ namespace JarvisVR
     }
 
     public void SelectRepo(string name, Action<bool> done) =>
-      StartCoroutine(Send("POST", "/repos/select", JsonUtility.ToJson(new RepoSelectRequest { name = name }), b => done(true),
+      StartCoroutine(Send("POST", "/repos/select", JsonUtility.ToJson(new RepoSelectRequest { name = name }),
+        b => { ActiveRepo = name; done(true); },
         e => { Debug.LogWarning("JARVIS select repo: " + e); done(false); }));
 
     /// <summary>Speech to text on the server. wav = 16 kHz mono 16-bit PCM WAV bytes.</summary>
@@ -212,7 +228,7 @@ namespace JarvisVR
       yield return EnsureSession(e => { failed = true; fail(e); });
       if (!failed)
       {
-        string json = JsonUtility.ToJson(new AskRequest { session_id = _session, text = text, selection = selection ?? "" });
+        string json = JsonUtility.ToJson(new AskRequest { session_id = _session, text = text, selection = selection ?? "", repo = ActiveRepo });
         yield return Send("POST", "/ask", json, b =>
         {
           try { ok(JsonUtility.FromJson<AskResponse>(b)); }
@@ -225,8 +241,25 @@ namespace JarvisVR
     private IEnumerator ApproveRoutine(bool approved, Action<ApproveResponse> ok, Action<string> fail)
     {
       if (string.IsNullOrEmpty(_session)) { fail("No active session."); yield break; }
-      string json = JsonUtility.ToJson(new ApproveRequest { session_id = _session, approved = approved });
+      string json = JsonUtility.ToJson(new ApproveRequest { session_id = _session, approved = approved, repo = ActiveRepo });
       yield return Send("POST", "/approve", json, b => ok(JsonUtility.FromJson<ApproveResponse>(b)), fail);
+    }
+
+    public void Promote(Action<PromoteResponse> ok, Action<string> fail) => StartCoroutine(PromoteRoutine(ok, fail));
+
+    private IEnumerator PromoteRoutine(Action<PromoteResponse> ok, Action<string> fail)
+    {
+      bool failed = false;
+      yield return EnsureSession(e => { failed = true; fail(e); });
+      if (failed) yield break;
+      string json = JsonUtility.ToJson(new PromoteRequest { session_id = _session });
+      yield return Send("POST", "/promote", json, b => ok(JsonUtility.FromJson<PromoteResponse>(b)), fail);
+    }
+
+    public void GetTask(Action<TaskResponse> ok)
+    {
+      if (string.IsNullOrEmpty(_session)) { ok(null); return; }
+      StartCoroutine(Send("GET", "/task/" + _session, null, b => ok(JsonUtility.FromJson<TaskResponse>(b)), e => { }));
     }
 
     private IEnumerator SourceRoutine(string nodeId, Action<SourceResponse> ok)
