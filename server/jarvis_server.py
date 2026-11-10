@@ -10,7 +10,7 @@ import hmac
 import time
 from collections import defaultdict
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
 from types import SimpleNamespace
 
@@ -675,6 +675,17 @@ async def promote(body: PromoteBody):
             return res
         g = await asyncio.to_thread(repository.activate, config.REPO_ROOT.name)   # re-index + clear caches
         await set_state(body.session_id, {'last_commit': {}, 'worktree': ''})
+        # The promoted change is the task that was in flight: mark it done.
+        plan = state.get('implementation_plan')
+        if isinstance(plan, dict) and plan.get('tasks'):
+            changed = False
+            for t in plan['tasks']:
+                if t.get('status') == 'running':
+                    t['status'] = 'done'
+                    changed = True
+            if changed:
+                await set_state(body.session_id, {'implementation_plan': plan})
+                await _persist_design(body.session_id)
         return {**res, 'graph_refreshed': True, 'nodes': len(g['nodes']), 'edges': len(g['edges'])}
 
 
@@ -699,8 +710,8 @@ async def get_task_state(session_id: str):
                 'status': value.get('status', 'unknown')
             })
 
-    # Extract plan summary and task list
-    plan = state.get('plan', {})
+    # Extract plan summary and task list (implementation plans from /plan/generate win over ad-hoc plans)
+    plan = state.get('implementation_plan') or state.get('plan') or {}
     plan_summary = plan.get('summary', '') if isinstance(plan, dict) else str(plan)
     raw_tasks = plan.get('tasks', []) if isinstance(plan, dict) else (plan if isinstance(plan, list) else [])
     tasks = []
@@ -708,9 +719,14 @@ async def get_task_state(session_id: str):
         if isinstance(t, dict):
             tasks.append({'id': str(t.get('id', i)),
                           'title': t.get('title') or t.get('summary', ''),
-                          'status': t.get('status', 'pending')})
+                          'status': t.get('status', 'pending'),
+                          'depends_on': [str(d) for d in (t.get('depends_on') or [])],
+                          'component_id': str(t.get('component_id') or ''),
+                          'acceptance': str(t.get('acceptance') or ''),
+                          'owner': str(t.get('owner') or '')})
         elif isinstance(t, str):
-            tasks.append({'id': str(i), 'title': t, 'status': 'pending'})
+            tasks.append({'id': str(i), 'title': t, 'status': 'pending',
+                          'depends_on': [], 'component_id': '', 'acceptance': '', 'owner': ''})
 
     # Extract findings as strings
     findings_raw = state.get('findings', [])
@@ -731,6 +747,314 @@ async def get_task_state(session_id: str):
         'agent_results': agent_results,
         'findings': findings
     }
+
+
+# ---------------------------------------------------------------------------
+# Architecture design workflow: idea -> requirements -> proposed architecture
+# -> repository comparison -> approved plan. Model output proposes; only an
+# explicit human call approves. Editing an approved architecture reverts it
+# to draft and invalidates any plan generated from it.
+
+from ai_agents.tools.architecture_tools import (
+    extract_requirements, propose_architecture, compare_to_repository,
+    generate_implementation_plan, _blank_architecture, save_design, load_design,
+)
+
+DESIGN_KEYS = ('design_requirements', 'design', 'design_compare', 'implementation_plan')
+
+
+def _disk_payload(session_id):
+    d = load_design(session_id)
+    return {
+        'requirements': d.get('requirements'),
+        'architecture': d.get('architecture'),
+        'compare': d.get('compare'),
+        'plan': d.get('plan'),
+    }
+
+
+async def _design_view(session_id):
+    """Merge live session state with the on-disk copy (state wins)."""
+    state = (await ensure(session_id)).state
+    disk = _disk_payload(session_id)
+    return {
+        'requirements': state.get('design_requirements') or disk['requirements'],
+        'architecture': state.get('design') or disk['architecture'],
+        'compare': state.get('design_compare') or disk['compare'],
+        'plan': state.get('implementation_plan') or disk['plan'],
+    }
+
+
+async def _persist_design(session_id):
+    view = await _design_view(session_id)
+    save_design(session_id, {
+        'requirements': view['requirements'],
+        'architecture': view['architecture'],
+        'compare': view['compare'],
+        'plan': view['plan'],
+    })
+
+
+class DesignIdeaBody(BaseModel):
+    session_id: str
+    idea_text: str = ''
+
+
+class DesignProposeBody(BaseModel):
+    session_id: str
+    idea_text: str = ''
+
+
+class DesignEditOp(BaseModel):
+    op: str
+    id: str = ''
+    src: str = ''
+    dst: str = ''
+    kind: str = ''
+    label: str = ''
+    name: str = ''
+    responsibility: str = ''
+    component_kind: str = ''
+    requirement_ids: list = []
+
+
+class DesignEditBody(BaseModel):
+    session_id: str
+    ops: List[DesignEditOp] = []
+
+
+class DesignApproveBody(BaseModel):
+    session_id: str
+    approved: bool = True
+    approved_by: str = 'user'
+
+
+class PlanGenerateBody(BaseModel):
+    session_id: str
+
+
+class PlanTaskPatch(BaseModel):
+    status: Optional[str] = None
+    title: Optional[str] = None
+
+
+def _next_id(prefix, items, key='id'):
+    used = {str(x.get(key)) for x in items}
+    i = 1
+    while '%s%d' % (prefix, i) in used:
+        i += 1
+    return '%s%d' % (prefix, i)
+
+
+def _apply_design_op(arch, op):
+    """Apply one edit op to a deep copy of the architecture. Returns (arch, error)."""
+    import copy
+    arch = copy.deepcopy(arch)
+    comps = arch.setdefault('components', [])
+    rels = arch.setdefault('relationships', [])
+    comp_ids = {c.get('id') for c in comps}
+    op_type = (op.op or '').strip()
+
+    if op_type == 'add_component':
+        if not op.name.strip():
+            return arch, 'add_component requires a name'
+        cid = op.id.strip() or _next_id('c', comps)
+        if cid in comp_ids:
+            return arch, 'component id already exists: ' + cid
+        comps.append({'id': cid, 'name': op.name.strip(),
+                      'responsibility': op.responsibility,
+                      'kind': op.component_kind or 'service',
+                      'requirement_ids': [str(x) for x in op.requirement_ids]})
+    elif op_type == 'remove_component':
+        if op.id not in comp_ids:
+            return arch, 'unknown component: ' + op.id
+        dangling = [r for r in rels if r.get('src') == op.id or r.get('dst') == op.id]
+        if dangling:
+            return arch, 'component %s has %d relationship(s); remove them first' % (op.id, len(dangling))
+        arch['components'] = [c for c in comps if c.get('id') != op.id]
+    elif op_type == 'update_component':
+        comp = next((c for c in comps if c.get('id') == op.id), None)
+        if comp is None:
+            return arch, 'unknown component: ' + op.id
+        for field, val in (('name', op.name), ('responsibility', op.responsibility), ('kind', op.component_kind)):
+            if val:
+                comp[field] = val
+        if op.requirement_ids:
+            comp['requirement_ids'] = [str(x) for x in op.requirement_ids]
+    elif op_type == 'add_relationship':
+        if op.src not in comp_ids or op.dst not in comp_ids:
+            return arch, 'relationship endpoints must be existing component ids'
+        if op.src == op.dst:
+            return arch, 'a component cannot relate to itself'
+        rid = op.id.strip() or _next_id('e', rels)
+        if any(r.get('id') == rid for r in rels):
+            return arch, 'relationship id already exists: ' + rid
+        rels.append({'id': rid, 'src': op.src, 'dst': op.dst,
+                     'kind': op.kind or 'calls', 'label': op.label})
+    elif op_type == 'remove_relationship':
+        before = len(rels)
+        arch['relationships'] = [r for r in rels
+                                 if r.get('id') != op.id
+                                 and not (op.src and op.dst and r.get('src') == op.src and r.get('dst') == op.dst)]
+        if len(arch['relationships']) == before:
+            return arch, 'relationship not found'
+    elif op_type == 'update_relationship':
+        rel = next((r for r in rels if r.get('id') == op.id), None)
+        if rel is None:
+            return arch, 'unknown relationship: ' + op.id
+        for field, val in (('kind', op.kind), ('label', op.label), ('src', op.src), ('dst', op.dst)):
+            if val:
+                rel[field] = val
+        comp_ids = {c.get('id') for c in arch['components']}
+        if rel.get('src') not in comp_ids or rel.get('dst') not in comp_ids:
+            return arch, 'relationship would dangle: unknown component id'
+    else:
+        return arch, 'unknown op: ' + op_type
+
+    # Final validation: no dangling relationships may survive any op sequence.
+    comp_ids = {c.get('id') for c in arch.get('components', [])}
+    for r in arch.get('relationships', []):
+        if r.get('src') not in comp_ids or r.get('dst') not in comp_ids:
+            return arch, 'dangling relationship: %s -> %s' % (r.get('src'), r.get('dst'))
+    return arch, None
+
+
+@app.post('/design/requirements', dependencies=[Depends(auth)])
+async def design_requirements(body: DesignIdeaBody):
+    res = await asyncio.to_thread(extract_requirements, body.idea_text)
+    await set_state(body.session_id, {'design_requirements': res['requirements']})
+    await _persist_design(body.session_id)
+    return res
+
+
+@app.post('/design/propose', dependencies=[Depends(auth)])
+async def design_propose(body: DesignProposeBody):
+    req = None
+    if body.idea_text.strip():
+        res = await asyncio.to_thread(extract_requirements, body.idea_text)
+        req = res['requirements']
+    else:
+        view = await _design_view(body.session_id)
+        req = view['requirements']
+    if not req or not any(req.get(k) for k in ('goals', 'functional')):
+        raise HTTPException(status_code=400, detail='No requirements: pass idea_text or call /design/requirements first.')
+
+    prop = await asyncio.to_thread(propose_architecture, req)
+    arch = _blank_architecture()
+    arch['components'] = prop['components']
+    arch['relationships'] = prop['relationships']
+    arch['open_questions'] = list(req.get('open_questions') or [])
+    arch['revision'] = 1
+    # A new proposal invalidates any previous comparison and plan.
+    await set_state(body.session_id, {'design_requirements': req, 'design': arch,
+                                      'design_compare': {}, 'implementation_plan': {}})
+    await _persist_design(body.session_id)
+    return {'status': 'ok', 'requirements': req, 'architecture': arch}
+
+
+@app.get('/design/{session_id}', dependencies=[Depends(auth)])
+async def design_get(session_id: str):
+    return await _design_view(session_id)
+
+
+@app.post('/design/{session_id}/edit', dependencies=[Depends(auth)])
+async def design_edit(session_id: str, body: DesignEditBody):
+    view = await _design_view(session_id)
+    arch = view['architecture']
+    if not arch:
+        raise HTTPException(status_code=404, detail='No architecture proposal for this session.')
+    import copy
+    working = copy.deepcopy(arch)
+    for op in body.ops:
+        working, err = _apply_design_op(working, op)
+        if err:
+            raise HTTPException(status_code=400, detail=err)
+    working['revision'] = int(arch.get('revision') or 1) + 1
+    if working.get('status') == 'approved':
+        # Editing an approved architecture reverts it to draft and invalidates its plan.
+        working['status'] = 'draft'
+        working['approved_by'] = ''
+        working['approved_version'] = 0
+    await set_state(session_id, {'design': working, 'implementation_plan': {}})
+    await _persist_design(session_id)
+    return {'ok': True, 'architecture': working}
+
+
+@app.post('/design/{session_id}/compare', dependencies=[Depends(auth)])
+async def design_compare(session_id: str):
+    view = await _design_view(session_id)
+    arch = view['architecture']
+    if not arch:
+        raise HTTPException(status_code=404, detail='No architecture proposal for this session.')
+    res = await asyncio.to_thread(compare_to_repository, {'architecture': arch})
+    await set_state(session_id, {'design_compare': res})
+    await _persist_design(session_id)
+    return res
+
+
+@app.post('/design/{session_id}/approve', dependencies=[Depends(auth)])
+async def design_approve(session_id: str, body: DesignApproveBody):
+    view = await _design_view(session_id)
+    arch = view['architecture']
+    if not arch:
+        raise HTTPException(status_code=404, detail='No architecture proposal for this session.')
+    if body.approved:
+        open_q = arch.get('open_questions') or []
+        comp_ids = {c.get('id') for c in arch.get('components', [])}
+        dangling = [r for r in arch.get('relationships', [])
+                    if r.get('src') not in comp_ids or r.get('dst') not in comp_ids]
+        if open_q or dangling:
+            raise HTTPException(status_code=409, detail='Cannot approve: unresolved open questions or dangling relationships.')
+        arch['status'] = 'approved'
+        arch['approved_by'] = body.approved_by
+        arch['approved_version'] = arch.get('version')
+    else:
+        arch['status'] = 'draft'
+        arch['approved_by'] = ''
+        arch['approved_version'] = 0
+    await set_state(session_id, {'design': arch})
+    await _persist_design(session_id)
+    return {'ok': True, 'architecture': arch}
+
+
+@app.post('/plan/generate', dependencies=[Depends(auth)])
+async def plan_generate(body: PlanGenerateBody):
+    view = await _design_view(body.session_id)
+    arch = view['architecture']
+    if not arch:
+        raise HTTPException(status_code=404, detail='No architecture proposal for this session.')
+    if arch.get('status') != 'approved':
+        raise HTTPException(status_code=409, detail='Architecture must be approved before generating a plan.')
+    res = await asyncio.to_thread(generate_implementation_plan, {'architecture': arch})
+    plan = {'architecture_version': arch.get('version'), 'status': 'active', 'tasks': res['tasks']}
+    await set_state(body.session_id, {'implementation_plan': plan})
+    await _persist_design(body.session_id)
+    return plan
+
+
+@app.patch('/plan/{session_id}/tasks/{task_id}', dependencies=[Depends(auth)])
+async def plan_update_task(session_id: str, task_id: str, body: PlanTaskPatch):
+    view = await _design_view(session_id)
+    plan = view['plan']
+    if not plan or not plan.get('tasks'):
+        raise HTTPException(status_code=404, detail='No implementation plan for this session.')
+    task = next((t for t in plan['tasks'] if str(t.get('id')) == task_id), None)
+    if task is None:
+        raise HTTPException(status_code=404, detail='Task not found: ' + task_id)
+    if body.title is not None:
+        task['title'] = body.title
+    if body.status is not None:
+        new_status = body.status.strip().lower()
+        if new_status in ('running', 'in_progress', 'in-progress'):
+            done = {t['id'] for t in plan['tasks'] if t.get('status') in ('done', 'completed')}
+            missing = [d for d in (task.get('depends_on') or []) if d not in done]
+            if missing:
+                raise HTTPException(status_code=409, detail='Task is blocked by unfinished dependencies: ' + ', '.join(missing))
+            new_status = 'running'
+        task['status'] = new_status
+    await set_state(session_id, {'implementation_plan': plan})
+    await _persist_design(session_id)
+    return {'ok': True, 'task': task, 'plan': plan}
 
 
 @app.get('/agents', dependencies=[Depends(auth)])

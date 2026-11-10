@@ -27,6 +27,7 @@ EXPECTED_AGENTS = [
     "software_engineering",
     "testing_verification",
     "visualization_spatial",
+    "architecture_design",
 ]
 
 # Default tool budgets and permission ceilings for each agent
@@ -40,6 +41,7 @@ DEFAULT_AGENT_CONFIG = {
     "software_engineering": {"tool_budget": 20, "permission_ceiling": "write"},
     "testing_verification": {"tool_budget": 25, "permission_ceiling": "execute"},
     "visualization_spatial": {"tool_budget": 20, "permission_ceiling": "read"},
+    "architecture_design": {"tool_budget": 20, "permission_ceiling": "read"},
 }
 
 
@@ -220,6 +222,14 @@ def initialize_agents() -> None:
     except ImportError as e:
         logger.error(f"✗ Failed to import orchestrator: {e}")
         raise ImportError(f"Failed to load agent orchestrator: {e}")
+
+    try:
+        from .architecture_design import architecture_design_agent
+        register_agent("architecture_design", architecture_design_agent)
+        logger.info("✓ Registered architecture_design")
+    except ImportError as e:
+        logger.error(f"✗ Failed to import architecture_design: {e}")
+        raise ImportError(f"Failed to load agent architecture_design: {e}")
     
     # Initialize AGENT_CONFIG with default configurations
     for agent_name, config in DEFAULT_AGENT_CONFIG.items():

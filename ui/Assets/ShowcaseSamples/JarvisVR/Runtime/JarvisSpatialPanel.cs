@@ -30,6 +30,8 @@ namespace JarvisVR
     /// normal OnClick is not fired.</summary>
     public Action OnPress, OnRelease;
     public float HoldSeconds;
+    /// <summary>When true the button stays hidden even after the panel is restored from minimized.</summary>
+    public bool ForceHidden;
     public Image Background, Fill, FocusRing;
     public Text Label;
     public Color Idle = new Color(0.1f, 0.15f, 0.24f, 1f), Hover = new Color(0.16f, 0.27f, 0.42f, 1f);
@@ -322,7 +324,9 @@ namespace JarvisVR
       foreach (Transform ch in transform)
       {
         bool content = ch.name == "Body" || (ch.name.StartsWith("Button ") && !_chrome.Contains(ch.gameObject));
-        if (content) ch.gameObject.SetActive(!m);
+        if (!content) continue;
+        var btn = ch.GetComponent<JarvisSpatialButton>();
+        ch.gameObject.SetActive(!m && (btn == null || !btn.ForceHidden));
       }
     }
 

@@ -42,7 +42,68 @@ namespace JarvisVR
   [Serializable] public class ApproveResponse { public bool ok; public string branch, commit, detail; }
   [Serializable] public class PromoteResponse { public bool ok, graph_refreshed; public string commit, detail; public int nodes, edges; }
   [Serializable] internal class PromoteRequest { public string session_id; }
-  [Serializable] public class TaskDto { public string id, title, status; }
+  [Serializable] public class TaskDto
+  {
+    public string id, title, status;
+    public string[] depends_on;
+    public string component_id, acceptance, owner;
+  }
+
+  // ---- architecture design workflow (server /design and /plan endpoints)
+  [Serializable] public class RequirementsDto
+  {
+    public string[] goals, functional, non_functional, constraints, assumptions, open_questions;
+  }
+  [Serializable] public class ComponentDto
+  {
+    public string id, name, responsibility, kind;
+    public string[] requirement_ids;
+  }
+  [Serializable] public class RelationshipDto { public string id, src, dst, kind, label; }
+  [Serializable] public class ArchitectureDto
+  {
+    public int version, revision, approved_version;
+    public string status, approved_by;
+    public ComponentDto[] components;
+    public RelationshipDto[] relationships;
+    public string[] open_questions;
+  }
+  [Serializable] public class CompareItemDto { public string id, name, node, evidence; }
+  [Serializable] public class CompareDto
+  {
+    public string status;
+    public CompareItemDto[] matched, missing, extra;
+  }
+  [Serializable] public class ImplementationPlanDto
+  {
+    public int architecture_version;
+    public string status;
+    public TaskDto[] tasks;
+  }
+  [Serializable] public class DesignStateDto
+  {
+    public RequirementsDto requirements;
+    public ArchitectureDto architecture;
+    public CompareDto compare;
+    public ImplementationPlanDto plan;
+  }
+  [Serializable] public class DesignProposeResponse
+  {
+    public string status, error;
+    public RequirementsDto requirements;
+    public ArchitectureDto architecture;
+  }
+  [Serializable] public class DesignEditResponse { public bool ok; public string detail; public ArchitectureDto architecture; }
+  [Serializable] public class DesignEditOpDto
+  {
+    public string op, id, src, dst, kind, label, name, responsibility, component_kind;
+    public string[] requirement_ids;
+  }
+  [Serializable] internal class DesignSessionRequest { public string session_id; public string idea_text; }
+  [Serializable] internal class DesignEditRequest { public string session_id; public DesignEditOpDto[] ops; }
+  [Serializable] internal class DesignApproveRequest { public string session_id; public bool approved; public string approved_by; }
+  [Serializable] internal class PlanSessionRequest { public string session_id; }
+  [Serializable] internal class PlanTaskPatchRequest { public string status, title; }
   [Serializable] public class AgentResultDto { public string agent, summary, status; public float confidence; }
   [Serializable] public class TaskResponse { public bool busy; public string plan_summary; public TaskDto[] tasks; public AgentResultDto[] agent_results; public string[] findings; }
   [Serializable] internal class SessionResponse { public string session_id; }
@@ -262,6 +323,92 @@ namespace JarvisVR
       StartCoroutine(Send("GET", "/task/" + _session, null, b => ok(JsonUtility.FromJson<TaskResponse>(b)), e => { }));
     }
 
+    // ---- architecture design workflow
+
+    public void DesignPropose(string ideaText, Action<DesignProposeResponse> ok, Action<string> fail) =>
+      StartCoroutine(DesignProposeRoutine(ideaText, ok, fail));
+
+    private IEnumerator DesignProposeRoutine(string ideaText, Action<DesignProposeResponse> ok, Action<string> fail)
+    {
+      bool failed = false;
+      yield return EnsureSession(e => { failed = true; fail(e); });
+      if (failed) yield break;
+      string json = JsonUtility.ToJson(new DesignSessionRequest { session_id = _session, idea_text = ideaText ?? "" });
+      yield return Send("POST", "/design/propose", json, b => ok(JsonUtility.FromJson<DesignProposeResponse>(b)), fail);
+    }
+
+    public void GetDesign(Action<DesignStateDto> ok, Action<string> fail) =>
+      StartCoroutine(DesignGetRoutine(ok, fail));
+
+    private IEnumerator DesignGetRoutine(Action<DesignStateDto> ok, Action<string> fail)
+    {
+      bool failed = false;
+      yield return EnsureSession(e => { failed = true; fail(e); });
+      if (failed) yield break;
+      yield return Send("GET", "/design/" + _session, null, b => ok(JsonUtility.FromJson<DesignStateDto>(b)), fail);
+    }
+
+    public void DesignEdit(DesignEditOpDto[] ops, Action<DesignEditResponse> ok, Action<string> fail) =>
+      StartCoroutine(DesignEditRoutine(ops, ok, fail));
+
+    private IEnumerator DesignEditRoutine(DesignEditOpDto[] ops, Action<DesignEditResponse> ok, Action<string> fail)
+    {
+      bool failed = false;
+      yield return EnsureSession(e => { failed = true; fail(e); });
+      if (failed) yield break;
+      string json = JsonUtility.ToJson(new DesignEditRequest { session_id = _session, ops = ops ?? new DesignEditOpDto[0] });
+      yield return Send("POST", "/design/" + _session + "/edit", json, b => ok(JsonUtility.FromJson<DesignEditResponse>(b)), fail);
+    }
+
+    public void DesignCompare(Action<CompareDto> ok, Action<string> fail) =>
+      StartCoroutine(DesignCompareRoutine(ok, fail));
+
+    private IEnumerator DesignCompareRoutine(Action<CompareDto> ok, Action<string> fail)
+    {
+      bool failed = false;
+      yield return EnsureSession(e => { failed = true; fail(e); });
+      if (failed) yield break;
+      yield return Send("POST", "/design/" + _session + "/compare", "{}", b => ok(JsonUtility.FromJson<CompareDto>(b)), fail);
+    }
+
+    public void DesignApprove(bool approved, Action<ArchitectureDto> ok, Action<string> fail) =>
+      StartCoroutine(DesignApproveRoutine(approved, ok, fail));
+
+    private IEnumerator DesignApproveRoutine(bool approved, Action<ArchitectureDto> ok, Action<string> fail)
+    {
+      bool failed = false;
+      yield return EnsureSession(e => { failed = true; fail(e); });
+      if (failed) yield break;
+      string json = JsonUtility.ToJson(new DesignApproveRequest { session_id = _session, approved = approved, approved_by = "quest-user" });
+      yield return Send("POST", "/design/" + _session + "/approve", json,
+        b => { var r = JsonUtility.FromJson<DesignEditResponse>(b); ok(r != null ? r.architecture : null); }, fail);
+    }
+
+    public void PlanGenerate(Action<ImplementationPlanDto> ok, Action<string> fail) =>
+      StartCoroutine(PlanGenerateRoutine(ok, fail));
+
+    private IEnumerator PlanGenerateRoutine(Action<ImplementationPlanDto> ok, Action<string> fail)
+    {
+      bool failed = false;
+      yield return EnsureSession(e => { failed = true; fail(e); });
+      if (failed) yield break;
+      string json = JsonUtility.ToJson(new PlanSessionRequest { session_id = _session });
+      yield return Send("POST", "/plan/generate", json, b => ok(JsonUtility.FromJson<ImplementationPlanDto>(b)), fail);
+    }
+
+    public void PlanUpdateTask(string taskId, string status, Action<bool> ok, Action<string> fail)
+    {
+      if (string.IsNullOrEmpty(_session)) { fail("No active session."); return; }
+      StartCoroutine(PlanUpdateRoutine(taskId, status, ok, fail));
+    }
+
+    private IEnumerator PlanUpdateRoutine(string taskId, string status, Action<bool> ok, Action<string> fail)
+    {
+      string json = JsonUtility.ToJson(new PlanTaskPatchRequest { status = status, title = null });
+      yield return Send("PATCH", "/plan/" + _session + "/tasks/" + UnityWebRequest.EscapeURL(taskId), json,
+        b => ok(true), fail);
+    }
+
     private IEnumerator SourceRoutine(string nodeId, Action<SourceResponse> ok)
     {
       yield return Send("GET", "/source/" + UnityWebRequest.EscapeURL(nodeId), null,
@@ -279,7 +426,16 @@ namespace JarvisVR
         req.timeout = TimeoutSeconds;
         yield return req.SendWebRequest();
         if (req.result != UnityWebRequest.Result.Success)
-          fail(req.responseCode == 401 ? "Unauthorized: the token must equal JARVIS_TOKEN on the server (Resources/JarvisServerSettings)." : "Cannot reach JARVIS at " + Url + " (" + req.error + ")");
+        {
+          string detail = req.downloadHandler != null && req.downloadHandler.text != null ? req.downloadHandler.text : "";
+          if (detail.Length > 300) detail = detail.Substring(0, 300);
+          if (req.responseCode == 401)
+            fail("Unauthorized: the token must equal JARVIS_TOKEN on the server (Resources/JarvisServerSettings).");
+          else if (req.responseCode >= 400)
+            fail("JARVIS " + req.responseCode + ": " + detail);
+          else
+            fail("Cannot reach JARVIS at " + Url + " (" + req.error + ")");
+        }
         else ok(req.downloadHandler.text);
       }
     }

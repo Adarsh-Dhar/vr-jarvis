@@ -1,0 +1,36 @@
+test_id: AG-ARCH-001
+agent: architecture_design
+scenario: requirements_extraction
+description: >
+  Verify that the agent extracts structured requirements from a raw idea
+  and surfaces assumptions instead of inventing scope.
+
+layer: layer2_responsibility
+severity: high
+
+fixture:
+  conversation_scenario: greenfield_feature
+  additional_context: {}
+
+user_request: >
+  I want a way for users to export their data as CSV. It should be fast and
+  work for accounts with a million rows.
+
+expected_behavior:
+  - Extract goals, functional and non-functional requirements
+  - Record the million-row constraint as non-functional or constraint
+  - Surface open questions rather than guessing export format details
+
+expected_results:
+  understood_intent: "extract_requirements"
+  status: ok
+  requirements:
+    goals:
+      - "Allow users to export their data as CSV"
+  open_questions_min: 0
+  status_field: ok
+
+must_not:
+  - "Write code"
+  - "Claim the architecture is approved"
+  - "Invent requirements not present in the idea"

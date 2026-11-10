@@ -23,6 +23,13 @@ namespace JarvisVR
     void SelectRepo(string name, Action<bool> done);
     void GetProgress(int since, Action<ProgressDto> ok);
     void Transcribe(byte[] wav, Action<string> ok, Action<string> fail);
+    void DesignPropose(string ideaText, Action<DesignProposeResponse> ok, Action<string> fail);
+    void GetDesign(Action<DesignStateDto> ok, Action<string> fail);
+    void DesignEdit(DesignEditOpDto[] ops, Action<DesignEditResponse> ok, Action<string> fail);
+    void DesignCompare(Action<CompareDto> ok, Action<string> fail);
+    void DesignApprove(bool approved, Action<ArchitectureDto> ok, Action<string> fail);
+    void PlanGenerate(Action<ImplementationPlanDto> ok, Action<string> fail);
+    void PlanUpdateTask(string taskId, string status, Action<bool> ok, Action<string> fail);
   }
 
   /// <summary>Local, network-free backend with scripted answers for UI development. Uses the ids of JarvisGraphModel.Sample().</summary>
@@ -214,7 +221,187 @@ namespace JarvisVR
 
     public void GetTask(Action<TaskResponse> ok)
     {
-      StartCoroutine(After(0.05f, () => ok(new TaskResponse { busy = Busy, plan_summary = "", tasks = new TaskDto[0], agent_results = new AgentResultDto[0], findings = new string[0] })));
+      StartCoroutine(After(0.05f, () => ok(new TaskResponse
+      {
+        busy = Busy, plan_summary = "", tasks = _designPlan != null ? _designPlan.tasks : new TaskDto[0],
+        agent_results = new AgentResultDto[0], findings = new string[0]
+      })));
+    }
+
+    // ---- scripted architecture design workflow
+
+    private ArchitectureDto _designArch;
+    private RequirementsDto _designReq;
+    private ImplementationPlanDto _designPlan;
+
+    private static ArchitectureDto SampleArchitecture()
+    {
+      return new ArchitectureDto
+      {
+        version = 3, revision = 1, status = "draft", approved_by = "", approved_version = 0,
+        open_questions = new[] { "Should export include archived accounts?" },
+        components = new[]
+        {
+          new ComponentDto { id = "c1", name = "Export API", responsibility = "Accept export requests and stream results", kind = "service" },
+          new ComponentDto { id = "c2", name = "Query Builder", responsibility = "Build filtered queries over user data", kind = "service" },
+          new ComponentDto { id = "c3", name = "CSV Writer", responsibility = "Serialize rows to CSV format", kind = "library" },
+        },
+        relationships = new[]
+        {
+          new RelationshipDto { id = "e1", src = "c1", dst = "c2", kind = "calls", label = "" },
+          new RelationshipDto { id = "e2", src = "c2", dst = "c3", kind = "calls", label = "" },
+        },
+      };
+    }
+
+    public void DesignPropose(string ideaText, Action<DesignProposeResponse> ok, Action<string> fail)
+    {
+      StartCoroutine(After(0.5f, () =>
+      {
+        _designReq = new RequirementsDto
+        {
+          goals = new[] { ideaText ?? "Export user data" },
+          functional = new[] { "Stream CSV export for large accounts" },
+          non_functional = new[] { "Must handle one million rows" },
+          constraints = new string[0], assumptions = new string[0],
+          open_questions = new[] { "Should export include archived accounts?" },
+        };
+        _designArch = SampleArchitecture();
+        _designArch.open_questions = _designReq.open_questions;
+        _designPlan = null;
+        ok(new DesignProposeResponse { status = "ok", requirements = _designReq, architecture = _designArch });
+      }));
+    }
+
+    public void GetDesign(Action<DesignStateDto> ok, Action<string> fail)
+    {
+      StartCoroutine(After(0.1f, () => ok(new DesignStateDto
+      {
+        requirements = _designReq, architecture = _designArch, compare = null, plan = _designPlan,
+      })));
+    }
+
+    public void DesignEdit(DesignEditOpDto[] ops, Action<DesignEditResponse> ok, Action<string> fail)
+    {
+      StartCoroutine(After(0.1f, () =>
+      {
+        if (_designArch == null) { fail("No architecture proposal."); return; }
+        var comps = new List<ComponentDto>(_designArch.components ?? new ComponentDto[0]);
+        var rels = new List<RelationshipDto>(_designArch.relationships ?? new RelationshipDto[0]);
+        string err = null;
+        foreach (DesignEditOpDto op in ops ?? new DesignEditOpDto[0])
+        {
+          switch (op.op)
+          {
+            case "add_component":
+              comps.Add(new ComponentDto { id = op.id ?? ("c" + (comps.Count + 1)), name = op.name, responsibility = op.responsibility, kind = op.component_kind ?? "service" });
+              break;
+            case "remove_component":
+              if (rels.Exists(r => r.src == op.id || r.dst == op.id)) { err = "component has relationships"; break; }
+              comps.RemoveAll(c => c.id == op.id);
+              break;
+            case "update_component":
+              foreach (ComponentDto c in comps)
+                if (c.id == op.id)
+                {
+                  if (!string.IsNullOrEmpty(op.name)) c.name = op.name;
+                  if (!string.IsNullOrEmpty(op.responsibility)) c.responsibility = op.responsibility;
+                  if (!string.IsNullOrEmpty(op.component_kind)) c.kind = op.component_kind;
+                }
+              break;
+            case "add_relationship":
+              if (!comps.Exists(c => c.id == op.src) || !comps.Exists(c => c.id == op.dst)) { err = "unknown component"; break; }
+              rels.Add(new RelationshipDto { id = op.id ?? ("e" + (rels.Count + 1)), src = op.src, dst = op.dst, kind = op.kind ?? "calls", label = op.label });
+              break;
+            case "remove_relationship":
+              rels.RemoveAll(r => r.id == op.id || (op.src == r.src && op.dst == r.dst));
+              break;
+            case "update_relationship":
+              foreach (RelationshipDto r in rels)
+                if (r.id == op.id)
+                {
+                  if (!string.IsNullOrEmpty(op.kind)) r.kind = op.kind;
+                  if (op.label != null) r.label = op.label;
+                }
+              break;
+            default: err = "unknown op: " + op.op; break;
+          }
+          if (err != null) break;
+        }
+        if (err != null) { fail(err); return; }
+        _designArch.components = comps.ToArray();
+        _designArch.relationships = rels.ToArray();
+        _designArch.revision++;
+        if (_designArch.status == "approved") { _designArch.status = "draft"; _designArch.approved_by = ""; _designArch.approved_version = 0; }
+        _designPlan = null;
+        ok(new DesignEditResponse { ok = true, architecture = _designArch });
+      }));
+    }
+
+    public void DesignCompare(Action<CompareDto> ok, Action<string> fail)
+    {
+      StartCoroutine(After(0.2f, () => ok(new CompareDto
+      {
+        status = "ok",
+        matched = new[] { new CompareItemDto { id = "c1", name = "Export API", node = "route.export", evidence = "routes/export.ts" } },
+        missing = new[] { new CompareItemDto { id = "c2", name = "Query Builder", node = "", evidence = "no graph node matches" } },
+        extra = new CompareItemDto[0],
+      })));
+    }
+
+    public void DesignApprove(bool approved, Action<ArchitectureDto> ok, Action<string> fail)
+    {
+      StartCoroutine(After(0.2f, () =>
+      {
+        if (_designArch == null) { fail("No architecture proposal."); return; }
+        if (approved && _designArch.open_questions != null && _designArch.open_questions.Length > 0)
+        { fail("Cannot approve: unresolved open questions."); return; }
+        _designArch.status = approved ? "approved" : "draft";
+        _designArch.approved_by = approved ? "quest-user" : "";
+        _designArch.approved_version = approved ? _designArch.version : 0;
+        ok(_designArch);
+      }));
+    }
+
+    public void PlanGenerate(Action<ImplementationPlanDto> ok, Action<string> fail)
+    {
+      StartCoroutine(After(0.2f, () =>
+      {
+        if (_designArch == null || _designArch.status != "approved") { fail("Architecture must be approved first."); return; }
+        _designPlan = new ImplementationPlanDto
+        {
+          architecture_version = _designArch.version, status = "active",
+          tasks = new[]
+          {
+            new TaskDto { id = "t1", title = "Implement Export API", status = "pending", component_id = "c1", depends_on = new string[0], acceptance = "Accept export requests and stream results", owner = "developer" },
+            new TaskDto { id = "t2", title = "Implement Query Builder", status = "pending", component_id = "c2", depends_on = new[] { "t1" }, acceptance = "Build filtered queries over user data", owner = "developer" },
+            new TaskDto { id = "t3", title = "Implement CSV Writer", status = "pending", component_id = "c3", depends_on = new[] { "t2" }, acceptance = "Serialize rows to CSV format", owner = "developer" },
+          },
+        };
+        ok(_designPlan);
+      }));
+    }
+
+    public void PlanUpdateTask(string taskId, string status, Action<bool> ok, Action<string> fail)
+    {
+      StartCoroutine(After(0.05f, () =>
+      {
+        if (_designPlan?.tasks == null) { fail("No plan."); return; }
+        foreach (TaskDto t in _designPlan.tasks)
+          if (t.id == taskId)
+          {
+            if (status == "running")
+            {
+              var done = new HashSet<string>();
+              foreach (TaskDto d in _designPlan.tasks) if (d.status == "done") done.Add(d.id);
+              if (t.depends_on != null && System.Array.Exists(t.depends_on, x => !done.Contains(x)))
+              { fail("Task is blocked by unfinished dependencies."); return; }
+            }
+            t.status = status;
+            ok(true); return;
+          }
+        fail("Task not found.");
+      }));
     }
 
     public void Ask(string text, string selection, Action<AskResponse> ok, Action<string> fail)

@@ -11,6 +11,7 @@ from typing import List, Dict
 
 # Permission ceilings for each agent
 PERMISSION_CEILINGS = {
+    "architecture_design": 'read',
     "code_understanding": 'read',
     "conversational": 'read',
     "data_flow_intelligence": 'read',
@@ -25,6 +26,11 @@ PERMISSION_CEILINGS = {
 # Tool permission levels - must contain every tool name in TOOLSETS
 TOOL_LEVELS = {
     "analyze_architecture_boundaries": "read",
+    "compare_to_repository": "read",
+    "extract_requirements": "read",
+    "generate_implementation_plan": "read",
+    "invoke_architecture_design": "read",
+    "propose_architecture": "read",
     "analyze_control_flow": "read",
     "analyze_dependencies_manifest": "read",
     "analyze_repository_structure": "read",
@@ -189,7 +195,8 @@ TOOL_LEVELS = {
 
 # Curated toolsets for each agent (using string names)
 TOOLSETS: Dict[str, List[str]] = {
-    "orchestrator": ['classify_request', 'understand_user_intent', 'create_investigation_plan', 'check_task_completion', 'merge_agent_results', 'resolve_conflicting_findings', 'invoke_repository_intelligence', 'invoke_code_understanding', 'invoke_relationship_intelligence', 'invoke_data_flow_intelligence', 'invoke_software_engineering', 'invoke_testing_verification', 'invoke_visualization_spatial', 'invoke_conversational', 'request_more_evidence', 'request_approval'],
+    "architecture_design": ['extract_requirements', 'propose_architecture', 'compare_to_repository', 'generate_implementation_plan'],
+    "orchestrator": ['classify_request', 'understand_user_intent', 'create_investigation_plan', 'check_task_completion', 'merge_agent_results', 'resolve_conflicting_findings', 'invoke_repository_intelligence', 'invoke_code_understanding', 'invoke_relationship_intelligence', 'invoke_data_flow_intelligence', 'invoke_software_engineering', 'invoke_testing_verification', 'invoke_visualization_spatial', 'invoke_conversational', 'invoke_architecture_design', 'request_more_evidence', 'request_approval'],
     "conversational": ['answer_code_question', 'explain_visualization', 'summarize_investigation', 'retrieve_conversation_context', 'retrieve_investigation_context', 'ask_clarifying_question', 'compare_code_elements', 'manage_conversation_preferences'],
     "repository_intelligence": ['index_repository', 'incremental_index_repository', 'detect_languages', 'detect_frameworks', 'detect_build_system', 'detect_project_type', 'detect_package_manager', 'analyze_repository_structure', 'identify_entry_points', 'identify_external_services', 'identify_generated_files', 'detect_repository_changes', 'analyze_dependencies_manifest', 'list_files', 'read_file', 'search_code', 'get_repository_metadata', 'get_changed_files'],
     "code_understanding": ['get_symbol_definition', 'get_symbol_references', 'get_symbol_hover_info', 'get_type_hierarchy', 'get_imports', 'get_exports', 'get_scope_information', 'parse_source_code', 'extract_symbols', 'resolve_types', 'explain_function', 'explain_class', 'explain_module', 'explain_condition', 'extract_function_contract', 'identify_side_effects', 'identify_hidden_assumptions', 'infer_code_intent', 'trace_function_logic', 'analyze_control_flow', 'read_file_range', 'record_finding', 'get_findings'],

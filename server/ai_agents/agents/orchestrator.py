@@ -100,6 +100,7 @@ def build_orchestrator_agent() -> LlmAgent:
         "invoke_testing_verification",
         "invoke_visualization_spatial",
         "invoke_conversational",
+        "invoke_architecture_design",
     ]
     
     # Combine tools

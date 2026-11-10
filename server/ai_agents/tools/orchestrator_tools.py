@@ -662,3 +662,29 @@ def invoke_conversational(
         'agent': 'conversational',
         'note': 'Task queued for agent invocation through main runner pipeline'
     }
+
+
+@safe
+def invoke_architecture_design(
+    task: str,
+    tool_context: ToolContext
+) -> dict:
+    """Invoke the Architecture Design agent."""
+    from ..agents.registry import get_agent
+
+    agent = get_agent("architecture_design")
+    if not agent:
+        return {
+            'status': 'error',
+            'error': 'Architecture Design agent not found'
+        }
+
+    state = tool_context.state
+    state['architecture_design_task'] = task
+
+    return {
+        'status': 'task_queued',
+        'task': task,
+        'agent': 'architecture_design',
+        'note': 'Task queued for agent invocation through main runner pipeline'
+    }

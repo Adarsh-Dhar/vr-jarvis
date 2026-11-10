@@ -1,0 +1,33 @@
+test_id: AG-ARCH-002
+agent: architecture_design
+scenario: architecture_proposal
+description: >
+  Verify that the proposed architecture has stable component ids and that
+  every relationship references existing components (no dangling edges).
+
+layer: layer2_responsibility
+severity: high
+
+fixture:
+  conversation_scenario: greenfield_feature
+  additional_context: {}
+
+user_request: >
+  Propose an architecture for the CSV export feature.
+
+expected_behavior:
+  - Return components with ids like c1, c2
+  - Return relationships whose src and dst are existing component ids
+  - Keep status draft; approval is a human action
+
+expected_results:
+  understood_intent: "propose_architecture"
+  status: ok
+  components_min: 1
+  relationships_valid: true
+  status_field: draft
+
+must_not:
+  - "Emit relationships to unknown component ids"
+  - "Mark the architecture approved"
+  - "Modify repository files"

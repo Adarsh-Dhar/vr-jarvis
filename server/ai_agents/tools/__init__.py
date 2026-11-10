@@ -49,6 +49,14 @@ from .orchestrator_tools import (
     invoke_testing_verification,
     invoke_visualization_spatial,
     invoke_conversational,
+    invoke_architecture_design,
+)
+
+from .architecture_tools import (
+    extract_requirements,
+    propose_architecture,
+    compare_to_repository,
+    generate_implementation_plan,
 )
 
 from .conversational_tools import (
