@@ -83,13 +83,6 @@ def parse_source_code(file_path: str, tool_context: ToolContext) -> dict:
             'error': str(e)
         }
 
-
-@safe
-def extract_ast(file_path: str, tool_context: ToolContext) -> dict:
-    """Extract abstract syntax trees."""
-    return parse_source_code(file_path, tool_context)
-
-
 @safe
 def extract_symbols(file_path: str, tool_context: ToolContext) -> dict:
     """Extract functions, classes, methods, fields and variables."""
@@ -163,7 +156,6 @@ def extract_symbols(file_path: str, tool_context: ToolContext) -> dict:
             'error': str(e)
         }
 
-
 @safe
 def resolve_types(file_path: str, tool_context: ToolContext) -> dict:
     """Resolve types and type relationships."""
@@ -227,7 +219,6 @@ def resolve_types(file_path: str, tool_context: ToolContext) -> dict:
             'error': str(e)
         }
 
-
 @safe
 def resolve_references(file_path: str, tool_context: ToolContext) -> dict:
     """Resolve references between code elements."""
@@ -284,7 +275,6 @@ def resolve_references(file_path: str, tool_context: ToolContext) -> dict:
             'status': 'error',
             'error': str(e)
         }
-
 
 @safe
 def analyze_control_flow(function_name: str, tool_context: ToolContext) -> dict:
@@ -404,61 +394,6 @@ def analyze_control_flow(function_name: str, tool_context: ToolContext) -> dict:
             'error': str(e)
         }
 
-
-@safe
-@safe
-def analyze_data_flow(function_name: str, file_path: str, tool_context: ToolContext) -> dict:
-    """Analyze data flow for a Python function."""
-    try:
-        from ai_agents.intelligence.dataflow.service import analyze_python_data_flow
-        from pathlib import Path
-        
-        # Resolve file path in repository
-        resolved_path = resolve_in_repo(file_path, tool_context)
-        if not resolved_path or not Path(resolved_path).exists():
-            return {
-                'status': 'error',
-                'error': f'File not found: {file_path}'
-            }
-        
-        # Read source code
-        with open(resolved_path, 'r', encoding='utf-8') as f:
-            source = f.read()
-        
-        # Parse AST to find function
-        tree = ast.parse(source)
-        func_node = None
-        for node in ast.walk(tree):
-            if isinstance(node, ast.FunctionDef) and node.name == function_name:
-                func_node = node
-                break
-        
-        if not func_node:
-            return {
-                'status': 'error',
-                'error': f'Function not found: {function_name}'
-            }
-        
-        # Build function ID
-        file_id = str(Path(resolved_path).relative_to(tool_context.repo_root))
-        function_id = f"{file_id}::{function_name}"
-        
-        # Call the real DFG service
-        from ai_agents.intelligence.dataflow.service import analyze_python_data_flow_simple
-        result = analyze_python_data_flow_simple(
-            function_name=function_name,
-            source=source,
-            file_path=file_id
-        )
-        
-        return result
-    except Exception as e:
-        return {
-            'status': 'error',
-            'error': str(e)
-        }
-
-
 @safe
 def analyze_dependencies(file_path: str, tool_context: ToolContext) -> dict:
     """Identify dependency relationships."""
@@ -489,7 +424,6 @@ def analyze_dependencies(file_path: str, tool_context: ToolContext) -> dict:
             'status': 'error',
             'error': str(e)
         }
-
 
 @safe
 def analyze_code_complexity(file_path: str, tool_context: ToolContext) -> dict:
@@ -530,274 +464,6 @@ def analyze_code_complexity(file_path: str, tool_context: ToolContext) -> dict:
                 'cognitive': cognitive,
                 'lines_of_code': lines_of_code
             }
-        }
-    except Exception as e:
-        return {
-            'status': 'error',
-            'error': str(e)
-        }
-
-
-@safe
-def analyze_repo_complexity(tool_context: ToolContext) -> dict:
-    """Calculate complexity ranking across the repository."""
-    try:
-        from ..intelligence.graph_engine.codegraph import codegraph
-        
-        graph = codegraph.load_current_graph()
-        
-        complexities = []
-        for node_id, node in graph._nodes.items():
-            if node.get('level') == 'function':
-                file_path = node.get('file', '')
-                complexity_result = analyze_code_complexity(file_path, tool_context)
-                if complexity_result.get('status') == 'ok':
-                    complexities.append({
-                        'id': node_id,
-                        'name': node.get('name'),
-                        'cyclomatic': complexity_result['complexity']['cyclomatic'],
-                        'lines_of_code': complexity_result['complexity']['lines_of_code']
-                    })
-        
-        # Sort by cyclomatic complexity
-        complexities.sort(key=lambda x: x['cyclomatic'], reverse=True)
-        
-        return {
-            'status': 'ok',
-            'complexities': complexities[:50],  # Top 50 most complex
-            'total_functions': len(complexities)
-        }
-    except Exception as e:
-        return {'status': 'error', 'error': str(e)}
-
-
-@safe
-def detect_code_duplication(tool_context: ToolContext, directory: Optional[str] = None) -> dict:
-    """Identify duplicate or similar code (repeated lines) inside one repository."""
-    try:
-        from pathlib import Path
-        from ._common import repo_root
-        root = Path(directory).resolve() if directory else repo_root()
-        skip = {'__pycache__', 'node_modules', 'venv', '.venv', 'target', 'dist', 'build'}
-        code_blocks = {}
-        duplicates = []
-        for file_path in sorted(root.rglob('*.py')):
-            parts = file_path.relative_to(root).parts
-            if any(p.startswith('.') or p in skip for p in parts):
-                continue
-            rel = str(Path(*parts))
-            for i, line in enumerate(file_path.read_text(errors='replace').splitlines()):
-                key = line.strip()
-                if len(key) <= 10:      # ignore short lines
-                    continue
-                code_blocks.setdefault(key, []).append({'file': rel, 'line': i + 1})
-                if len(code_blocks[key]) == 3:
-                    duplicates.append({'code': key[:100], 'occurrences': code_blocks[key]})
-        for d in duplicates:
-            d['count'] = len(d['occurrences'])
-        return {
-            'status': 'ok',
-            'duplicates': duplicates[:20],  # limit to 20
-            'note': 'Simple line-based detection - advanced detection requires diff algorithms'
-        }
-    except Exception as e:
-        return {
-            'status': 'error',
-            'error': str(e)
-        }
-
-
-@safe
-def detect_dead_code(file_path: str, tool_context: ToolContext) -> dict:
-    """Find potentially unused code."""
-    try:
-        from .navigation_tools import get_symbol_references
-        from .analysis_tools import extract_symbols
-        
-        symbols_result = extract_symbols(file_path, tool_context)
-        if symbols_result.get('status') != 'ok':
-            return symbols_result
-        
-        dead_code = []
-        
-        for symbol in symbols_result['symbols']:
-            if symbol['type'] in ['function', 'class']:
-                # Check if symbol has references
-                ref_result = get_symbol_references(symbol['name'], tool_context)
-                if ref_result.get('status') == 'ok' and len(ref_result['references']) == 0:
-                    dead_code.append({
-                        'symbol': symbol['name'],
-                        'line': symbol['line'],
-                        'reason': 'no references'
-                    })
-        
-        return {
-            'status': 'ok',
-            'file_path': file_path,
-            'dead_code': dead_code
-        }
-    except Exception as e:
-        return {
-            'status': 'error',
-            'error': str(e)
-        }
-
-
-@safe
-def analyze_exceptions(file_path: str, tool_context: ToolContext) -> dict:
-    """Identify exception paths and propagation."""
-    try:
-        path = Path(file_path)
-        if not path.is_absolute():
-            path = resolve_in_repo(path)
-        
-        if not path.exists():
-            return {
-                'status': 'error',
-                'error': f'File not found: {file_path}'
-            }
-        
-        exception_paths = []
-        
-        if _is_python_file(file_path):
-            tree = _parse_python_ast(file_path)
-            if tree:
-                for node in ast.walk(tree):
-                    if isinstance(node, ast.Raise):
-                        exc_name = 'unknown'
-                        if node.exc:
-                            if isinstance(node.exc, ast.Name):
-                                exc_name = node.exc.id
-                            elif isinstance(node.exc, ast.Call):
-                                if isinstance(node.exc.func, ast.Name):
-                                    exc_name = node.exc.func.id
-                        
-                        # Check if handled
-                        handled = False
-                        for parent in ast.walk(tree):
-                            if isinstance(parent, ast.ExceptHandler):
-                                if parent.type:
-                                    if isinstance(parent.type, ast.Name) and parent.type.id == exc_name:
-                                        handled = True
-                                    elif isinstance(parent.type, ast.Attribute) and parent.type.attr == exc_name:
-                                        handled = True
-                        
-                        exception_paths.append({
-                            'line': node.lineno,
-                            'exception': exc_name,
-                            'handled': handled
-                        })
-        
-        return {
-            'status': 'ok',
-            'file_path': file_path,
-            'exception_paths': exception_paths
-        }
-    except Exception as e:
-        return {
-            'status': 'error',
-            'error': str(e)
-        }
-
-
-@safe
-def analyze_annotations(file_path: str, tool_context: ToolContext) -> dict:
-    """Inspect decorators, attributes and annotations."""
-    try:
-        path = Path(file_path)
-        if not path.is_absolute():
-            path = resolve_in_repo(path)
-        
-        if not path.exists():
-            return {
-                'status': 'error',
-                'error': f'File not found: {file_path}'
-            }
-        
-        annotations = []
-        
-        if _is_python_file(file_path):
-            tree = _parse_python_ast(file_path)
-            if tree:
-                for node in ast.walk(tree):
-                    if isinstance(node, (ast.FunctionDef, ast.ClassDef)):
-                        for decorator in node.decorator_list:
-                            decorator_name = ast.unparse(decorator) if hasattr(ast, 'unparse') else str(decorator)
-                            annotations.append({
-                                'symbol': node.name,
-                                'decorator': f'@{decorator_name}',
-                                'line': node.lineno
-                            })
-        
-        return {
-            'status': 'ok',
-            'file_path': file_path,
-            'annotations': annotations
-        }
-    except Exception as e:
-        return {
-            'status': 'error',
-            'error': str(e)
-        }
-
-
-@safe
-def analyze_macros(file_path: str, tool_context: ToolContext) -> dict:
-    """Inspect macro usage where supported."""
-    try:
-        # Python doesn't have traditional macros
-        # This is for languages like C, Rust, Lisp
-        return {
-            'status': 'ok',
-            'file_path': file_path,
-            'macros': [],
-            'note': 'Macro analysis not applicable for Python'
-        }
-    except Exception as e:
-        return {
-            'status': 'error',
-            'error': str(e)
-        }
-
-
-@safe
-def analyze_generated_code(file_path: str, tool_context: ToolContext) -> dict:
-    """Connect generated code to its source or generator."""
-    try:
-        path = Path(file_path)
-        if not path.is_absolute():
-            path = resolve_in_repo(path)
-        
-        if not path.exists():
-            return {
-                'status': 'error',
-                'error': f'File not found: {file_path}'
-            }
-        
-        # Check for common generated code patterns
-        content = path.read_text(encoding='utf-8')
-        
-        generator = None
-        source = None
-        
-        # Check for common generated code markers
-        if 'DO NOT EDIT' in content or 'Auto-generated' in content:
-            generator = 'auto-detected'
-        
-        # Check for specific generators
-        if 'protobuf' in content.lower() or 'proto' in content:
-            generator = 'protoc'
-        elif 'swagger' in content.lower():
-            generator = 'swagger-codegen'
-        elif 'graphql' in content.lower():
-            generator = 'graphql-codegen'
-        
-        return {
-            'status': 'ok',
-            'file_path': file_path,
-            'generator': generator,
-            'source': source,
-            'is_generated': generator is not None
         }
     except Exception as e:
         return {

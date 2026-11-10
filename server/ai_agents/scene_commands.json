@@ -87,7 +87,7 @@
       "fields": [
         "mode"
       ],
-      "description": "Switch the workspace tab (REPOS, MAP, CODE, FLOW, ISSUES, TESTS, GIT, IMPACT, AGENT, RUNTIME)"
+      "description": "Switch the workspace tab (REPOS, MAP, CODE, FLOW, TESTS, IMPACT, AGENT)"
     },
     {
       "name": "show_approval_prompt",

@@ -9,9 +9,6 @@ This directory contains golden tasks for validating each agent's behavior.
   - `code_understanding/` - Code Understanding agent tests
   - `relationship/` - Relationship Intelligence agent tests
   - `data_flow/` - Data Flow Intelligence agent tests
-  - `runtime/` - Runtime Intelligence agent tests
-  - `debugging/` - Debugging Intelligence agent tests
-  - `security/` - Security and Quality agent tests
   - `software_engineering/` - Software Engineering agent tests
   - `testing/` - Testing and Verification agent tests
   - `visualization/` - Visualization and Spatial Intelligence agent tests

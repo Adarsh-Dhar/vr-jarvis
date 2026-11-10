@@ -27,7 +27,7 @@ namespace JarvisVR
       E("route.delete", "service.delete", "confirmed", "routes/account.ts", 16);
       E("service.delete", "db.repo", "confirmed", "services/account.ts", 42);
       E("db.repo", "db.delete", "inferred", "db/users.repo.ts", 8);
-      E("test.own-account", "route.delete", "runtime", "tests/account.test.ts", 23);
+      E("test.own-account", "route.delete", "ambiguous", "tests/account.test.ts", 23);
       return g;
     }
 

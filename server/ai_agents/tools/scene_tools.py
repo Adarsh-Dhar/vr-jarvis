@@ -29,7 +29,7 @@ def open_code_panel(node_id: str, tool_context: ToolContext) -> dict:
 
 
 def set_edge_style(src: str, dst: str, style: str, tool_context: ToolContext) -> dict:
-    '''Set an edge style: solid for parser-confirmed, dashed for AI-inferred, runtime for observed.'''
+    '''Set an edge style: solid for parser-confirmed, dashed for AI-inferred, dotted for ambiguous.'''
     return _emit(tool_context, {'type': 'set_edge_style', 'src': src, 'dst': dst, 'style': style})
 
 
@@ -50,14 +50,13 @@ def show_approval_prompt(summary: str, tool_context: ToolContext) -> dict:
     return _emit(tool_context, {'type': 'show_approval_prompt', 'summary': summary})
 
 
-VALID_MODES = ('REPOS', 'MAP', 'CODE', 'FLOW', 'ISSUES', 'TESTS', 'GIT', 'IMPACT', 'AGENT', 'RUNTIME')
+VALID_MODES = ('REPOS', 'MAP', 'CODE', 'FLOW', 'TESTS', 'IMPACT', 'AGENT')
 
 
 def set_mode(mode: str, tool_context: ToolContext) -> dict:
     '''Switch the VR workspace to a mode tab. Modes: MAP (graph overview), CODE (source viewer),
-    FLOW (control/data flow), ISSUES (security findings), TESTS (test results), GIT (history),
-    IMPACT (change impact), AGENT (agent activity and proposed diff), RUNTIME (execution traces),
-    REPOS (repository picker).'''
+    FLOW (control/data flow), TESTS (test results), IMPACT (change impact),
+    AGENT (agent activity and proposed diff), REPOS (repository picker).'''
     m = (mode or '').strip().upper()
     if m not in VALID_MODES:
         return {'status': 'error', 'reason': 'Unknown mode %r. Valid modes: %s' % (mode, ', '.join(VALID_MODES))}
@@ -130,7 +129,7 @@ _DIRECTIONS = {'left': (-1, 0, 0), 'right': (1, 0, 0), 'up': (0, 1, 0), 'down': 
 
 # 'approval' is deliberately absent: the agent must never move, hide or resize the approve/reject panel.
 CONTROLLABLE_PANELS = ('status', 'repo', 'code', 'evidence', 'tests', 'activity', 'legend', 'ghost',
-                       'security', 'history', 'history_detail', 'impact', 'runtime', 'caption', 'nav')
+                       'impact', 'caption', 'nav')
 _ALWAYS_VISIBLE = ('nav', 'status', 'caption')
 PANEL_STATES = ('show', 'hide', 'pin', 'unpin', 'minimize', 'restore')
 

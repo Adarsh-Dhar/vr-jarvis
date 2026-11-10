@@ -11,7 +11,6 @@ import tempfile
 import shutil
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent.parent / 'server'))
 
-
 class TestRepositoryScale:
     """
     Stress category: Repository scale
@@ -88,7 +87,6 @@ class TestRepositoryScale:
         assert result['status'] in ['ok', 'error']
         # Measure actual duration for baseline
 
-
 class TestGraphComplexity:
     """
     Stress category: Graph complexity
@@ -141,7 +139,6 @@ class TestGraphComplexity:
         )
         assert result['status'] in ['ok', 'error']
 
-
 class TestConcurrentAgents:
     """
     Stress category: Concurrent agents
@@ -166,36 +163,6 @@ class TestConcurrentAgents:
         # Test with 10, 50, 100, 250 concurrent agents
         # Measure success rate, queue time, execution time
         pass
-
-
-class TestRuntimeVolume:
-    """
-    Stress category: Runtime volume
-    
-    Test: Large traces, logs, metrics and execution events
-    """
-    
-    def test_large_trace_processing(self):
-        """Test: Process large execution traces"""
-        from ai_agents.tools.runtime_intelligence_tools import collect_execution_trace
-        
-        result = collect_execution_trace(
-            application_id='app_123',
-            duration=300,  # 5 minutes of tracing
-            tool_context=None
-        )
-        assert result['status'] in ['ok', 'error']
-    
-    def test_high_volume_logs(self):
-        """Test: Handle high volume of application logs"""
-        from ai_agents.tools.runtime_intelligence_tools import capture_application_logs
-        
-        result = capture_application_logs(
-            application_id='app_123',
-            tool_context=None
-        )
-        assert result['status'] in ['ok', 'error']
-
 
 class TestFailureInjection:
     """
@@ -239,7 +206,6 @@ class TestFailureInjection:
         # Simulate concurrent changes
         pass
 
-
 class TestLongRunningTasks:
     """
     Stress category: Long-running tasks
@@ -256,7 +222,6 @@ class TestLongRunningTasks:
         """Test: Preserve task state across long durations"""
         # Verify state doesn't degrade over time
         pass
-
 
 class TestResourceLimits:
     """
@@ -284,7 +249,6 @@ class TestResourceLimits:
         """Test: System behavior under network constraints"""
         # Test with limited bandwidth
         pass
-
 
 class TestEdgeCases:
     """

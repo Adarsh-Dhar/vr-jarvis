@@ -234,7 +234,7 @@ namespace JarvisVR
       legend.SetBody(
         "<color=#" + Hex(pal.Cyan) + ">solid</color>  static (parser fact)\n" +
         "<color=#" + Hex(pal.Violet) + ">dashed</color>  AI-inferred\n" +
-        "<color=#" + Hex(pal.Green) + ">dotted</color>  seen at runtime\n" +
+        "<color=#" + Hex(pal.Green) + ">dotted</color>  ambiguous\n" +
         "<color=#" + Hex(pal.Amber) + ">amber</color>  change path");
 
       JarvisSpatialPanel ghost = AddPanel("ghost", "Ghost diff (proposed)", 560, 520, 1.18f, 0.20f, pal.Amber);
@@ -426,7 +426,7 @@ namespace JarvisVR
       RefreshEdgeVisibility();
     }
 
-    // ---- edges: solid = static, dashed = inferred, dotted = runtime
+    // ---- edges: solid = static, dashed = inferred, dotted = ambiguous
     private static Texture2D _dashTex, _dotTex;
     // One shared material per edge style instead of one instance per edge: fewer materials and draw-call state changes on Quest.
     private static readonly Dictionary<string, Material> _edgeMats = new Dictionary<string, Material>();
@@ -626,7 +626,7 @@ namespace JarvisVR
       string style;
       if (etype == "may_call" || kind == "possible" || resolution == "polymorphic") style = "dashed";
       else if (kind == "ambiguous" || resolution == "ambiguous") style = "dotted";
-      else style = kind == "inferred" || kind == "heuristic" || kind == "dashed" ? "dashed" : kind == "runtime" || kind == "dotted" ? "dotted" : "solid";
+      else style = kind == "inferred" || kind == "heuristic" || kind == "dashed" ? "dashed" : "solid";
       ev.Style = style;
       ev.Base = style == "dashed" ? pal.Violet : style == "dotted" ? pal.Green : pal.Cyan;
       LineRenderer l = ev.Line;
@@ -1518,9 +1518,9 @@ namespace JarvisVR
         sb.Append(n.Dto.file).Append("  L").Append(n.Dto.start).Append("-").Append(n.Dto.end).Append('\n');
         sb.Append("<color=#").Append(Hex(pal.Cyan)).Append(">[static]</color> ").Append(n.In).Append(" callers, ").Append(n.Out).Append(" callees\n");
         int inferred = _edges.Count(e => (e.From == n || e.To == n) && e.Style == "dashed");
-        int runtime = _edges.Count(e => (e.From == n || e.To == n) && e.Style == "dotted");
+        int dotted = _edges.Count(e => (e.From == n || e.To == n) && e.Style == "dotted");
         if (inferred > 0) sb.Append("<color=#").Append(Hex(pal.Violet)).Append(">[inferred]</color> ").Append(inferred).Append(" links\n");
-        if (runtime > 0) sb.Append("<color=#").Append(Hex(pal.Green)).Append(">[runtime]</color> ").Append(runtime).Append(" links\n");
+        if (dotted > 0) sb.Append("<color=#").Append(Hex(pal.Green)).Append(">[ambiguous]</color> ").Append(dotted).Append(" links\n");
         if (_hot.Contains(n.Dto.id)) sb.Append("<color=#").Append(Hex(pal.Amber)).Append(">[change path]</color> on the highlighted path\n");
       }
       if (haveAgent) AppendAgentEvidence(sb, pal);

@@ -13,7 +13,6 @@ Verified answer: {verified_answer}
 Impact report (may be empty): {impact_report}
 Proposed patch (may be empty): {proposed_patch}
 Test results (may be empty): {test_results}
-Briefing (may be empty): {briefing}
 
 Steps, skipping any that do not apply:
 1. Collect the node ids from the verified claims and call highlight_vr_path with them.
@@ -43,7 +42,7 @@ Findings so far: {findings}
 Steps, skipping any that do not apply:
 1. Call highlight_vr_path with the node ids named in the result (color red for risks, amber otherwise).
 2. Call dim_unrelated with those ids plus cited neighbours.
-3. Call set_edge_style: dashed for inferred links, runtime for observed ones.
+3. Call set_edge_style: dashed for inferred links, dotted for ambiguous ones.
 4. Call open_code_panel and focus_camera for the single most important node.
 5. If the result contains a diff, call show_ghost_diff. If it contains test results, call show_test_badges.
 6. Call set_mode once with the matching tab (FLOW data flow, TESTS testing, AGENT engineering
