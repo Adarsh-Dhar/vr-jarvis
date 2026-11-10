@@ -101,6 +101,10 @@ namespace JarvisVR
     private string _designLinkFrom, _menuEdgeKey;
     private bool _designDeleteArmed, _designRequested;
     private string _kbOp, _kbOpId;
+    private int _taskSel, _questionSel = -1;
+    private string[] _planCircular;
+    private JarvisSpatialButton _qPrevBtn, _qNextBtn, _qResolveBtn, _qEditBtn;
+    private JarvisSpatialButton _taskPrevBtn, _taskNextBtn, _taskStartBtn, _taskDoneBtn, _taskWorkBtn;
 
     public void Initialize(Camera cam)
     {
@@ -279,16 +283,25 @@ namespace JarvisVR
       _impactPanel.SetBody("No impact analysis yet. Select a function and ask about change impact.");
 
       _designReqPanel = AddPanel("design_req", "Requirements", 440, 520, -1.12f, 0.20f, pal.Violet);
-      _designReqPanel.SetBodyBox(60, 420); _designReqPanel.Body.fontSize = 18;
+      _designReqPanel.SetBodyBox(60, 400); _designReqPanel.Body.fontSize = 18;
+      _qPrevBtn = _designReqPanel.AddButton("Q <", 20, 468, 95, 44, () => CycleQuestion(-1), 0f, pal.Violet);
+      _qNextBtn = _designReqPanel.AddButton("Q >", 121, 468, 95, 44, () => CycleQuestion(+1), 0f, pal.Violet);
+      _qResolveBtn = _designReqPanel.AddButton("RESOLVE", 222, 468, 95, 44, ResolveQuestion, 0f, pal.Green);
+      _qEditBtn = _designReqPanel.AddButton("EDIT Q", 323, 468, 97, 44, EditQuestion, 0f, pal.Amber);
 
       _designCmpPanel = AddPanel("design_cmp", "Component", 560, 330, 1.18f, 0.20f, pal.Violet);
       _designCmpPanel.SetBodyBox(60, 200); _designCmpPanel.Body.fontSize = 20;
 
       _designActPanel = AddPanel("design_act", "Architecture", 560, 330, 1.18f, -0.46f, pal.Cyan);
-      _designActPanel.SetBodyBox(60, 140); _designActPanel.Body.fontSize = 20;
-      _designActPanel.AddButton("COMPARE", 20, 190, 160, 50, DesignCompare);
-      _designActPanel.AddButton("APPROVE", 190, 190, 160, 50, () => DesignApprove(true));
-      _designActPanel.AddButton("GENERATE PLAN", 360, 190, 180, 50, DesignPlanGenerate);
+      _designActPanel.SetBodyBox(60, 120); _designActPanel.Body.fontSize = 20;
+      _designActPanel.AddButton("COMPARE", 20, 132, 160, 50, DesignCompare);
+      _designActPanel.AddButton("APPROVE", 190, 132, 160, 50, () => DesignApprove(true));
+      _designActPanel.AddButton("GENERATE PLAN", 360, 132, 180, 50, DesignPlanGenerate);
+      _taskPrevBtn = _designActPanel.AddButton("TASK <", 20, 192, 100, 50, () => CycleTask(-1), 0f, pal.Cyan);
+      _taskNextBtn = _designActPanel.AddButton("TASK >", 126, 192, 100, 50, () => CycleTask(+1), 0f, pal.Cyan);
+      _taskStartBtn = _designActPanel.AddButton("START", 232, 192, 100, 50, () => TaskSetStatus("running"), 0f, pal.Green);
+      _taskDoneBtn = _designActPanel.AddButton("DONE", 338, 192, 100, 50, () => TaskSetStatus("done"), 0f, pal.Green);
+      _taskWorkBtn = _designActPanel.AddButton("WORK ON IT", 444, 192, 116, 50, WorkOnTask, 0f, pal.Amber);
 
       JarvisSpatialPanel caption = AddPanel("caption", "JARVIS", 980, 190, 0.15f, -0.52f, pal.Cyan);
       caption.SetBodyBox(54, 70); caption.Body.fontSize = 26;
@@ -886,6 +899,13 @@ namespace JarvisVR
     {
       if (_bridge == null || string.IsNullOrEmpty(text)) return;
       if (_mode == "DESIGN") { DesignPropose(text); return; }
+      AskAgent(text);
+    }
+
+    /// <summary>Send a message to the agent pipeline regardless of the current mode
+    /// (used by WORK ON IT so implementation tasks are not treated as design ideas).</summary>
+    private void AskAgent(string text)
+    {
       _progressSeen = 0;
       Say("Thinking…");
       Log("ask: " + text);
@@ -1001,10 +1021,110 @@ namespace JarvisVR
       _bridge.PlanGenerate(p =>
       {
         if (_design != null) _design.plan = p;
-        _bridge.GetTask(t => { if (t != null) { _tasks = t.tasks; RefreshActivity(); } });
+        RefreshTasks();
         RefreshAll();
         Say(p != null ? "Plan generated: " + (p.tasks != null ? p.tasks.Length : 0) + " tasks." : "Plan generation failed.");
       }, err => Say(err));
+    }
+
+    // ---- open questions (they block approval until resolved) ----
+
+    private string[] DesignQuestions()
+    {
+      if (_design?.architecture?.open_questions != null && _design.architecture.open_questions.Length > 0)
+        return _design.architecture.open_questions;
+      return _design?.requirements?.open_questions;
+    }
+
+    private string SelectedQuestion()
+    {
+      string[] qs = DesignQuestions();
+      if (qs == null || qs.Length == 0) return null;
+      _questionSel = Mathf.Clamp(_questionSel < 0 ? 0 : _questionSel, 0, qs.Length - 1);
+      return qs[_questionSel];
+    }
+
+    private void CycleQuestion(int d)
+    {
+      string[] qs = DesignQuestions();
+      if (qs == null || qs.Length == 0) { Say("No open questions."); return; }
+      _questionSel = (_questionSel + d + qs.Length) % qs.Length;
+      RefreshDesignReq();
+    }
+
+    private void ResolveQuestion()
+    {
+      string q = SelectedQuestion();
+      if (q == null) { Say("No open questions to resolve."); return; }
+      _questionSel = -1;
+      SendDesignEdit(new[] { new DesignEditOpDto { op = "resolve_question", question = q } }, "Resolved question");
+    }
+
+    private void EditQuestion()
+    {
+      string q = SelectedQuestion();
+      if (q == null) { Say("No open questions to edit."); return; }
+      _kbOp = "update_question"; _kbOpId = q;
+      OpenKeyboard();
+    }
+
+    // ---- implementation plan tasks (lifecycle + hand-off to the coding workflow) ----
+
+    private TaskDto SelectedTask()
+    {
+      if (_tasks == null || _tasks.Length == 0) return null;
+      _taskSel = Mathf.Clamp(_taskSel, 0, _tasks.Length - 1);
+      return _tasks[_taskSel];
+    }
+
+    private void CycleTask(int d)
+    {
+      if (_tasks == null || _tasks.Length == 0) { Say("No tasks yet. Approve the architecture and GENERATE PLAN."); return; }
+      _taskSel = (_taskSel + d + _tasks.Length) % _tasks.Length;
+      RefreshActivity(); RefreshDesignAct();
+    }
+
+    private void RefreshTasks()
+    {
+      _bridge.GetTask(tr =>
+      {
+        if (tr == null) return;
+        _tasks = tr.tasks;
+        _planCircular = tr.circular;
+        if (_tasks != null && _tasks.Length > 0) _taskSel = Mathf.Clamp(_taskSel, 0, _tasks.Length - 1);
+        else _taskSel = 0;
+        RefreshActivity(); RefreshDesignAct();
+      });
+    }
+
+    private void TaskSetStatus(string status)
+    {
+      TaskDto t = SelectedTask();
+      if (t == null) { Say("No task selected. Generate a plan first."); return; }
+      _bridge.PlanUpdateTask(t.id, status, ok =>
+      {
+        if (!ok) { Say("Task update rejected."); return; }
+        RefreshTasks();
+        Say("Task " + t.id + " -> " + status + ".");
+      }, err => Say(err));
+    }
+
+    /// <summary>Mark the selected task running and hand it to the agent pipeline as a
+    /// code-change request, so generated tasks drive the same worktree/test/approve flow.</summary>
+    private void WorkOnTask()
+    {
+      TaskDto t = SelectedTask();
+      if (t == null) { Say("No task selected. Generate a plan first."); return; }
+      if (t.status == "done" || t.status == "completed") { Say("Task " + t.id + " is already done."); return; }
+      if (_bridge == null || _bridge.Busy) { Say("JARVIS is still working on the previous request."); return; }
+      string prompt = "Implement this approved architecture task in the codebase: " + (t.title ?? t.id) +
+        ". Acceptance criteria: " + (string.IsNullOrEmpty(t.acceptance) ? "none given" : t.acceptance) +
+        ". This is component " + (string.IsNullOrEmpty(t.component_id) ? "?" : t.component_id) +
+        " of the approved design. Find the relevant repository files, make the change, " +
+        "run the relevant tests, and propose the patch for my approval.";
+      if (t.status != "running")
+        _bridge.PlanUpdateTask(t.id, "running", ok => { if (ok) RefreshTasks(); }, e => { });
+      AskAgent(prompt);
     }
 
     private void SendDesignEdit(DesignEditOpDto[] ops, string what)
@@ -1019,15 +1139,17 @@ namespace JarvisVR
       }, err => Say(err));
     }
 
-    /// <summary>Text typed for a design edit (rename / responsibility) instead of a chat message.</summary>
+    /// <summary>Text typed for a design edit (rename / responsibility / question) instead of a chat message.</summary>
     private void ApplyDesignTextOp(string text)
     {
       if (string.IsNullOrEmpty(_kbOpId) || string.IsNullOrEmpty(text)) { Say("Nothing to send."); return; }
       var op = new DesignEditOpDto { op = "update_component", id = _kbOpId };
-      if (_kbOp == "rename") op.name = text;
-      else if (_kbOp == "responsibility") op.responsibility = text;
+      string what;
+      if (_kbOp == "rename") { op.name = text; what = "Renamed component"; }
+      else if (_kbOp == "responsibility") { op.responsibility = text; what = "Updated responsibility"; }
+      else if (_kbOp == "update_question") { op.op = "update_question"; op.question = _kbOpId; op.new_question = text; what = "Updated question"; }
       else { Say("Unknown edit."); return; }
-      SendDesignEdit(new[] { op }, _kbOp == "rename" ? "Renamed component" : "Updated responsibility");
+      SendDesignEdit(new[] { op }, what);
     }
 
     private string DesignCompId(string nodeId)
@@ -1046,15 +1168,47 @@ namespace JarvisVR
     {
       if (_designReqPanel == null || !_panels.ContainsKey("design_req")) return;
       RequirementsDto r = _design != null ? _design.requirements : null;
-      if (r == null) { _designReqPanel.SetBody("No requirements yet.\nType an idea in DESIGN mode or use voice."); return; }
+      string[] questions = DesignQuestions();
+      bool hasQuestions = questions != null && questions.Length > 0;
+      if (_qPrevBtn != null) _qPrevBtn.Interactable = hasQuestions;
+      if (_qNextBtn != null) _qNextBtn.Interactable = hasQuestions;
+      if (_qResolveBtn != null) _qResolveBtn.Interactable = hasQuestions;
+      if (_qEditBtn != null) _qEditBtn.Interactable = hasQuestions;
+      if (r == null && !hasQuestions) { _designReqPanel.SetBody("No requirements yet.\nType an idea in DESIGN mode or use voice."); return; }
       var sb = new StringBuilder();
-      AppendReqList(sb, "GOALS", r.goals);
-      AppendReqList(sb, "FUNCTIONAL", r.functional);
-      AppendReqList(sb, "NON-FUNCTIONAL", r.non_functional);
-      AppendReqList(sb, "CONSTRAINTS", r.constraints);
-      AppendReqList(sb, "ASSUMPTIONS", r.assumptions);
-      AppendReqList(sb, "OPEN QUESTIONS", r.open_questions);
+      if (r != null)
+      {
+        AppendReqList(sb, "GOALS", r.goals);
+        AppendReqList(sb, "FUNCTIONAL", r.functional);
+        AppendReqList(sb, "NON-FUNCTIONAL", r.non_functional);
+        AppendReqList(sb, "CONSTRAINTS", r.constraints);
+        AppendReqList(sb, "ASSUMPTIONS", r.assumptions);
+      }
+      if (hasQuestions)
+      {
+        sb.Append("<b>OPEN QUESTIONS</b>  <color=#").Append(Hex(JarvisPalette.Current.TextMuted))
+          .Append(">selected Q</color> ").Append(SelectedQuestionIndex() + 1).Append('/').Append(questions.Length).Append('\n');
+        for (int i = 0; i < questions.Length; i++)
+        {
+          if (i == SelectedQuestionIndex())
+            sb.Append("<color=#").Append(Hex(JarvisPalette.Current.Amber)).Append(">» ").Append(questions[i]).Append(" «</color>\n");
+          else
+            sb.Append("  ").Append(questions[i]).Append('\n');
+        }
+        sb.Append('\n');
+      }
+      else if (r != null)
+      {
+        AppendReqList(sb, "OPEN QUESTIONS", r.open_questions);
+      }
       _designReqPanel.SetBody(sb.Length > 0 ? sb.ToString() : "No requirements extracted.");
+    }
+
+    private int SelectedQuestionIndex()
+    {
+      string[] qs = DesignQuestions();
+      if (qs == null || qs.Length == 0) return 0;
+      return Mathf.Clamp(_questionSel < 0 ? 0 : _questionSel, 0, qs.Length - 1);
     }
 
     private static void AppendReqList(StringBuilder sb, string label, string[] items)
@@ -1102,7 +1256,23 @@ namespace JarvisVR
         sb.Append("<color=#").Append(Hex(JarvisPalette.Current.Amber)).Append(">").Append(a.open_questions.Length).Append(" open questions block approval</color>\n");
       if (_design?.plan?.tasks != null && _design.plan.tasks.Length > 0)
         sb.Append("Plan: ").Append(_design.plan.tasks.Length).Append(" tasks (see activity panel)\n");
+      TaskDto sel = SelectedTask();
+      if (sel != null)
+      {
+        sb.Append("\n<b>Task ").Append(sel.id).Append("</b>  ").Append(sel.status ?? "pending").Append('\n');
+        if (!string.IsNullOrEmpty(sel.title)) sb.Append(sel.title).Append('\n');
+      }
+      string[] circ = _planCircular ?? (_design?.plan?.circular);
+      if (circ != null && circ.Length > 0)
+        sb.Append("<color=#").Append(Hex(JarvisPalette.Current.Amber)).Append(">circular dependencies: ")
+          .Append(string.Join(", ", circ)).Append("</color>\n");
       _designActPanel.SetBody(sb.ToString());
+      bool hasTasks = _tasks != null && _tasks.Length > 0;
+      if (_taskPrevBtn != null) _taskPrevBtn.Interactable = hasTasks;
+      if (_taskNextBtn != null) _taskNextBtn.Interactable = hasTasks;
+      if (_taskStartBtn != null) _taskStartBtn.Interactable = hasTasks;
+      if (_taskDoneBtn != null) _taskDoneBtn.Interactable = hasTasks;
+      if (_taskWorkBtn != null) _taskWorkBtn.Interactable = hasTasks && sel != null && sel.status != "done" && sel.status != "completed";
     }
 
     private void RefreshDesign()
@@ -1855,6 +2025,7 @@ namespace JarvisVR
         var doneIds = new HashSet<string>();
         foreach (TaskDto t in _tasks)
           if (t.status == "done" || t.status == "completed") doneIds.Add(t.id);
+        TaskDto sel = SelectedTask();
         foreach (TaskDto t in _tasks)
         {
           bool done = doneIds.Contains(t.id);
@@ -1863,10 +2034,16 @@ namespace JarvisVR
             System.Array.Exists(t.depends_on, d => !doneIds.Contains(d));
           string mark = done ? "[x]" : running ? "[~]" : blocked ? "[!]" : "[ ]";
           string state = done ? "done" : running ? "in progress" : blocked ? "blocked" : "ready";
-          sb.Append(mark).Append(' ').Append(t.title ?? "").Append("  ").Append(state);
+          bool isSel = sel != null && sel.id == t.id;
+          sb.Append(isSel ? "<color=#" + Hex(JarvisPalette.Current.Amber) + ">" : "")
+            .Append(mark).Append(' ').Append(isSel ? "» " : "").Append(t.title ?? "").Append("  ").Append(state);
           if (!string.IsNullOrEmpty(t.owner)) sb.Append(" · ").Append(t.owner);
+          if (isSel) sb.Append("</color>");
           sb.Append('\n');
         }
+        if (_planCircular != null && _planCircular.Length > 0)
+          sb.Append("<color=#").Append(Hex(JarvisPalette.Current.Amber)).Append(">circular deps: ")
+            .Append(string.Join(", ", _planCircular)).Append("</color>\n");
         sb.Append('\n');
       }
       sb.Append(string.Join("\n", _log));
@@ -2469,7 +2646,7 @@ namespace JarvisVR
       if (Time.unscaledTime > _taskAt)
       {
         _taskAt = Time.unscaledTime + 2f;
-        _bridge.GetTask(t => { if (t != null) { _tasks = t.tasks; RefreshActivity(); } });
+        RefreshTasks();
       }
     }
   }

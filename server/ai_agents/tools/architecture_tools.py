@@ -238,23 +238,31 @@ def generate_implementation_plan(architecture, tool_context: ToolContext = None)
     # dependency: src depends on dst (src calls/reads dst -> dst first)
     deps = {c['id']: set() for c in comps}
     for r in rels:
-        if r.get('src') in deps and r.get('dst') in deps:
-            deps[r['src']].add(r['dst'])
+        src, dst = r.get('src'), r.get('dst')
+        if src in deps and dst in deps and src != dst:
+            deps[src].add(dst)
 
-    order, seen = [], set()
-
-    def visit(cid, stack):
-        if cid in seen or cid in stack:
-            return
-        stack.add(cid)
-        for d in sorted(deps.get(cid, ())):
-            visit(d, stack)
-        stack.discard(cid)
-        seen.add(cid)
+    # Kahn's algorithm: a component can be scheduled once every component it
+    # depends on is already scheduled. Whatever remains has a circular
+    # dependency — it is reported in `circular` instead of being silently
+    # dropped from the ordering.
+    remaining = {cid: set(d) for cid, d in deps.items()}
+    order, ready = [], sorted(cid for cid, d in remaining.items() if not d)
+    while ready:
+        cid = ready.pop(0)
+        if cid in order:
+            continue
         order.append(cid)
+        for other, ds in remaining.items():
+            if cid in ds:
+                ds.discard(cid)
+                if not ds and other not in order and other not in ready:
+                    ready.append(other)
+        ready.sort()
 
-    for c in comps:
-        visit(c['id'], set())
+    cyclic = sorted(cid for cid in remaining if cid not in order)
+    cyclic_set = set(cyclic)
+    order = order + cyclic   # cyclic components still get tasks, scheduled last
 
     task_of = {}
     tasks = []
@@ -264,14 +272,17 @@ def generate_implementation_plan(architecture, tool_context: ToolContext = None)
             continue
         tid = 't%d' % i
         task_of[cid] = tid
-        # order is topological: every dependency already has a task id
+        # Only dependencies that are already scheduled produce valid task
+        # edges; edges inside a cycle are dropped (reported via `circular`).
+        depends = [d for d in sorted(deps.get(cid, ()))
+                   if d in task_of and not (cid in cyclic_set and d in cyclic_set)]
         tasks.append({'id': tid, 'title': 'Implement ' + comp.get('name', cid),
                       'status': 'pending', 'component_id': cid,
-                      'depends_on': [task_of[d] for d in sorted(deps.get(cid, ())) if d in task_of],
+                      'depends_on': [task_of[d] for d in depends],
                       'acceptance': comp.get('responsibility') or '',
                       'owner': 'developer'})
 
-    return {'status': 'ok', 'tasks': tasks}
+    return {'status': 'ok', 'tasks': tasks, 'circular': cyclic}
 
 
 # ---------------------------------------------------------------------------

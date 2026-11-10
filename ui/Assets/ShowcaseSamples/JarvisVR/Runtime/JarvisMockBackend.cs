@@ -288,11 +288,36 @@ namespace JarvisVR
         if (_designArch == null) { fail("No architecture proposal."); return; }
         var comps = new List<ComponentDto>(_designArch.components ?? new ComponentDto[0]);
         var rels = new List<RelationshipDto>(_designArch.relationships ?? new RelationshipDto[0]);
+        var questions = new List<string>(_designArch.open_questions ?? new string[0]);
+        bool questionsChanged = false;
         string err = null;
         foreach (DesignEditOpDto op in ops ?? new DesignEditOpDto[0])
         {
           switch (op.op)
           {
+            case "resolve_question":
+            case "update_question":
+            case "add_question":
+            {
+              string text = op.op == "add_question" ? (op.question ?? op.new_question) : op.question;
+              int qi = questions.FindIndex(q => q == text || q.Equals(text ?? "", StringComparison.OrdinalIgnoreCase));
+              if (qi < 0 && !string.IsNullOrEmpty(text))
+                qi = questions.FindIndex(q => (q ?? "").IndexOf(text, StringComparison.OrdinalIgnoreCase) >= 0);
+              if (op.op == "add_question")
+              {
+                if (string.IsNullOrEmpty(text)) { err = "add_question requires question text"; break; }
+                if (!questions.Contains(text)) questions.Add(text);
+                questionsChanged = true;
+              }
+              else if (qi < 0) { err = "open question not found: " + text; }
+              else if (op.op == "resolve_question") { questions.RemoveAt(qi); questionsChanged = true; }
+              else
+              {
+                if (string.IsNullOrEmpty(op.new_question)) { err = "update_question requires new_question text"; break; }
+                questions[qi] = op.new_question; questionsChanged = true;
+              }
+              break;
+            }
             case "add_component":
               comps.Add(new ComponentDto { id = op.id ?? ("c" + (comps.Count + 1)), name = op.name, responsibility = op.responsibility, kind = op.component_kind ?? "service" });
               break;
@@ -331,6 +356,11 @@ namespace JarvisVR
         if (err != null) { fail(err); return; }
         _designArch.components = comps.ToArray();
         _designArch.relationships = rels.ToArray();
+        if (questionsChanged)
+        {
+          _designArch.open_questions = questions.ToArray();
+          if (_designReq != null) _designReq.open_questions = questions.ToArray();
+        }
         _designArch.revision++;
         if (_designArch.status == "approved") { _designArch.status = "draft"; _designArch.approved_by = ""; _designArch.approved_version = 0; }
         _designPlan = null;

@@ -744,6 +744,7 @@ async def get_task_state(session_id: str):
         'busy': locks[session_id].locked(),
         'plan_summary': plan_summary,
         'tasks': tasks,
+        'circular': [str(c) for c in (plan.get('circular') or [])] if isinstance(plan, dict) else [],
         'agent_results': agent_results,
         'findings': findings
     }
@@ -774,15 +775,22 @@ def _disk_payload(session_id):
 
 
 async def _design_view(session_id):
-    """Merge live session state with the on-disk copy (state wins)."""
+    """Merge live session state with the on-disk copy.
+
+    A key present in session state wins even when its value is empty
+    ({} / []): the endpoints use empty values to *invalidate* a plan,
+    comparison or proposal, and falling back to disk in that case would
+    resurrect stale data that was deliberately cleared.
+    """
     state = (await ensure(session_id)).state
     disk = _disk_payload(session_id)
-    return {
-        'requirements': state.get('design_requirements') or disk['requirements'],
-        'architecture': state.get('design') or disk['architecture'],
-        'compare': state.get('design_compare') or disk['compare'],
-        'plan': state.get('implementation_plan') or disk['plan'],
-    }
+    view = {}
+    for state_key, disk_key in (('design_requirements', 'requirements'),
+                                ('design', 'architecture'),
+                                ('design_compare', 'compare'),
+                                ('implementation_plan', 'plan')):
+        view[disk_key] = state[state_key] if state_key in state else disk[disk_key]
+    return view
 
 
 async def _persist_design(session_id):
@@ -816,6 +824,8 @@ class DesignEditOp(BaseModel):
     responsibility: str = ''
     component_kind: str = ''
     requirement_ids: list = []
+    question: str = ''        # open-question text (resolve/update/add ops)
+    new_question: str = ''    # replacement text for update_question
 
 
 class DesignEditBody(BaseModel):
@@ -844,6 +854,21 @@ def _next_id(prefix, items, key='id'):
     while '%s%d' % (prefix, i) in used:
         i += 1
     return '%s%d' % (prefix, i)
+
+
+def _question_matches(questions, text):
+    """Indexes of open questions matching `text`: exact, then case-insensitive,
+    then substring. Empty text matches nothing."""
+    if not text:
+        return []
+    exact = [i for i, q in enumerate(questions) if q == text]
+    if exact:
+        return exact
+    low = text.lower()
+    ci = [i for i, q in enumerate(questions) if q.lower() == low]
+    if ci:
+        return ci
+    return [i for i, q in enumerate(questions) if low in q.lower()]
 
 
 def _apply_design_op(arch, op):
@@ -908,6 +933,28 @@ def _apply_design_op(arch, op):
         comp_ids = {c.get('id') for c in arch['components']}
         if rel.get('src') not in comp_ids or rel.get('dst') not in comp_ids:
             return arch, 'relationship would dangle: unknown component id'
+    elif op_type == 'resolve_question':
+        questions = arch.setdefault('open_questions', [])
+        idx = _question_matches(questions, op.question)
+        if not idx:
+            return arch, 'open question not found: ' + (op.question or '<empty>')
+        for i in sorted(idx, reverse=True):
+            questions.pop(i)
+    elif op_type == 'update_question':
+        questions = arch.setdefault('open_questions', [])
+        idx = _question_matches(questions, op.question)
+        if not idx:
+            return arch, 'open question not found: ' + (op.question or '<empty>')
+        if not op.new_question.strip():
+            return arch, 'update_question requires new_question text'
+        questions[idx[0]] = op.new_question.strip()
+    elif op_type == 'add_question':
+        text = (op.question or op.new_question).strip()
+        if not text:
+            return arch, 'add_question requires question text'
+        questions = arch.setdefault('open_questions', [])
+        if text not in questions:
+            questions.append(text)
     else:
         return arch, 'unknown op: ' + op_type
 
@@ -965,17 +1012,26 @@ async def design_edit(session_id: str, body: DesignEditBody):
         raise HTTPException(status_code=404, detail='No architecture proposal for this session.')
     import copy
     working = copy.deepcopy(arch)
+    question_ops = {'resolve_question', 'update_question', 'add_question'}
+    touched_questions = False
     for op in body.ops:
         working, err = _apply_design_op(working, op)
         if err:
             raise HTTPException(status_code=400, detail=err)
+        touched_questions = touched_questions or (op.op or '').strip() in question_ops
     working['revision'] = int(arch.get('revision') or 1) + 1
     if working.get('status') == 'approved':
         # Editing an approved architecture reverts it to draft and invalidates its plan.
         working['status'] = 'draft'
         working['approved_by'] = ''
         working['approved_version'] = 0
-    await set_state(session_id, {'design': working, 'implementation_plan': {}})
+    delta = {'design': working, 'implementation_plan': {}}
+    if touched_questions and isinstance(view.get('requirements'), dict):
+        # Keep the requirements document in step: its open_questions mirror the architecture's.
+        req = copy.deepcopy(view['requirements'])
+        req['open_questions'] = list(working.get('open_questions') or [])
+        delta['design_requirements'] = req
+    await set_state(session_id, delta)
     await _persist_design(session_id)
     return {'ok': True, 'architecture': working}
 
@@ -1026,7 +1082,8 @@ async def plan_generate(body: PlanGenerateBody):
     if arch.get('status') != 'approved':
         raise HTTPException(status_code=409, detail='Architecture must be approved before generating a plan.')
     res = await asyncio.to_thread(generate_implementation_plan, {'architecture': arch})
-    plan = {'architecture_version': arch.get('version'), 'status': 'active', 'tasks': res['tasks']}
+    plan = {'architecture_version': arch.get('version'), 'status': 'active',
+            'tasks': res['tasks'], 'circular': res.get('circular') or []}
     await set_state(body.session_id, {'implementation_plan': plan})
     await _persist_design(body.session_id)
     return plan

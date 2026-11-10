@@ -79,6 +79,7 @@ namespace JarvisVR
     public int architecture_version;
     public string status;
     public TaskDto[] tasks;
+    public string[] circular;   // component ids whose dependencies form a cycle
   }
   [Serializable] public class DesignStateDto
   {
@@ -98,6 +99,7 @@ namespace JarvisVR
   {
     public string op, id, src, dst, kind, label, name, responsibility, component_kind;
     public string[] requirement_ids;
+    public string question, new_question;   // open-question ops: resolve/update/add
   }
   [Serializable] internal class DesignSessionRequest { public string session_id; public string idea_text; }
   [Serializable] internal class DesignEditRequest { public string session_id; public DesignEditOpDto[] ops; }
@@ -105,7 +107,7 @@ namespace JarvisVR
   [Serializable] internal class PlanSessionRequest { public string session_id; }
   [Serializable] internal class PlanTaskPatchRequest { public string status, title; }
   [Serializable] public class AgentResultDto { public string agent, summary, status; public float confidence; }
-  [Serializable] public class TaskResponse { public bool busy; public string plan_summary; public TaskDto[] tasks; public AgentResultDto[] agent_results; public string[] findings; }
+  [Serializable] public class TaskResponse { public bool busy; public string plan_summary; public TaskDto[] tasks; public string[] circular; public AgentResultDto[] agent_results; public string[] findings; }
   [Serializable] internal class SessionResponse { public string session_id; }
   [Serializable] internal class AskRequest { public string session_id, text, selection, repo; }
   [Serializable] internal class ApproveRequest { public string session_id; public bool approved; public string repo; }
