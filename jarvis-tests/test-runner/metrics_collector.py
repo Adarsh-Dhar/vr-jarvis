@@ -70,9 +70,6 @@ class MetricsCollector:
         # Metric 14: Resource Consumption
         metrics['metrics']['resource_consumption'] = self.collect_resource_consumption()
 
-        # Metric 15: Failure Recovery
-        metrics['metrics']['failure_recovery'] = self.collect_failure_recovery()
-
         return metrics
 
     def collect_tool_correctness(self) -> Dict:
@@ -420,34 +417,6 @@ class MetricsCollector:
                 'source': 'performance_monitor.py'
             }
 
-    def collect_failure_recovery(self) -> Dict:
-        """Metric 15: Failure recovery time"""
-        try:
-            from chaos_controller import ChaosController
-            chaos = ChaosController(self.test_root)
-            
-            chaos_file = self.test_root / 'test-reports' / 'chaos' / 'latest.json'
-            if chaos_file.exists():
-                with open(chaos_file, 'r') as f:
-                    chaos_data = json.load(f)
-                recovery_time = chaos_data.get('avg_recovery_time_seconds', 0)
-            else:
-                recovery_time = 0.0
-            
-            return {
-                'value': recovery_time,
-                'target': 30,  # seconds
-                'status': 'pass' if recovery_time <= 30 else 'fail',
-                'source': 'chaos_controller.py'
-            }
-        except Exception as e:
-            return {
-                'value': 0.0,
-                'target': 30,
-                'status': 'error',
-                'error': str(e),
-                'source': 'chaos_controller.py'
-            }
 
     def save_metrics(self, metrics: Dict):
         """Save metrics to file"""

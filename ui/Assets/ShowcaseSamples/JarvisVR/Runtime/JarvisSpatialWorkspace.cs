@@ -1058,14 +1058,6 @@ namespace JarvisVR
         case "select_node":
           if (!string.IsNullOrEmpty(c.node_id) && _nodes.ContainsKey(c.node_id)) Select(c.node_id);
           return true;
-        case "move_cluster":
-          if (!string.IsNullOrEmpty(c.node_id) && _nodes.TryGetValue(c.node_id, out NodeView mcNode))
-          {
-            Vector3 delta = new Vector3(c.dx, c.dy, c.dz);          // graph-local units, same space DragCluster uses
-            foreach (NodeView m in mcNode.Cluster.Members) m.Root.localPosition += delta;
-            _edgesDirty = true;
-          }
-          return false;
         case "move_graph":
           _graphRoot.localPosition = Vector3.ClampMagnitude(_graphRoot.localPosition + new Vector3(c.dx, c.dy, c.dz), 3f);
           return false;
@@ -1093,10 +1085,6 @@ namespace JarvisVR
               case "restore": psPanel.SetMinimized(false); break;
             }
           }
-          return false;
-        case "set_cluster_collapsed":
-          if (!string.IsNullOrEmpty(c.node_id) && _nodes.TryGetValue(c.node_id, out NodeView scNode))
-            SetClusterCollapsed(scNode.Cluster, c.collapsed);
           return false;
         case "highlight_callers":
           if (!string.IsNullOrEmpty(c.node_id)) HighlightCallers(c.node_id);

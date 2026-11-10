@@ -163,15 +163,6 @@ def _bad_number(name):
     return {'status': 'error', 'reason': '%s must be a number.' % name}
 
 
-def move_cluster(node_id: str, direction: str, tool_context: ToolContext, distance: float = 0.3) -> dict:
-    '''Move the whole cluster that contains node_id. direction: left, right, up, down, toward_user or
-    away. distance is in scene units, 0.05 to 1.0 (default 0.3).'''
-    off = _offset(direction, distance, 1.0)
-    if off is None:
-        return _bad_direction(direction) if (direction or '').strip().lower() not in _DIRECTIONS else _bad_number('distance')
-    return _emit(tool_context, {'type': 'move_cluster', 'node_id': node_id, 'dx': off[0], 'dy': off[1], 'dz': off[2]})
-
-
 def move_graph(direction: str, tool_context: ToolContext, distance: float = 0.3) -> dict:
     '''Move the entire graph. direction: left, right, up, down, toward_user or away. distance 0.05 to 2.0.'''
     off = _offset(direction, distance, 2.0)
@@ -224,11 +215,6 @@ def set_panel_state(panel: str, state: str, tool_context: ToolContext) -> dict:
     if state == 'hide' and panel in _ALWAYS_VISIBLE:
         return {'status': 'error', 'reason': '%s cannot be hidden.' % panel}
     return _emit(tool_context, {'type': 'panel_state', 'panel': panel, 'state': state})
-
-
-def set_cluster_collapsed(node_id: str, collapsed: bool, tool_context: ToolContext) -> dict:
-    '''Collapse a whole cluster down to its anchor node, or expand it again. node_id is any node in it.'''
-    return _emit(tool_context, {'type': 'set_cluster_collapsed', 'node_id': node_id, 'collapsed': bool(collapsed)})
 
 
 def highlight_callers(node_id: str, tool_context: ToolContext) -> dict:

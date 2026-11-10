@@ -54,8 +54,6 @@ class GroundTruthEngine:
             result = self._compare_relationship(tool_output, manifest, tool_name)
         elif tool_name in ['extract_symbols', 'list_files']:
             result = self._compare_symbols(tool_output, manifest, tool_name)
-        elif tool_name in ['scan_secrets', 'scan_vulnerabilities']:
-            result = self._compare_security(tool_output, manifest, tool_name)
         else:
             # Generic comparison
             result = self._compare_generic(tool_output, manifest, tool_name)
@@ -157,49 +155,6 @@ class GroundTruthEngine:
         
         return result
     
-    def _compare_security(self, output: Dict, manifest: Dict, tool_name: str) -> Dict:
-        """Compare security tool output against manifest"""
-        result = {
-            'precision': 0.0,
-            'recall': 0.0,
-            'true_positives': [],
-            'false_positives': [],
-            'false_negatives': [],
-            'f1_score': 0.0
-        }
-        
-        # Get expected from manifest
-        expected_vulns = set(manifest.get('expected_vulnerabilities', []))
-        expected_secrets = set(manifest.get('expected_secrets', []))
-        
-        # Extract actual from output
-        actual_vulns = set(output.get('vulnerabilities', []))
-        actual_secrets = set(output.get('secrets', []))
-        
-        # Combine both types
-        expected_all = expected_vulns | expected_secrets
-        actual_all = actual_vulns | actual_secrets
-        
-        # Calculate TP, FP, FN
-        true_positives = actual_all & expected_all
-        false_positives = actual_all - expected_all
-        false_negatives = expected_all - actual_all
-        
-        result['true_positives'] = list(true_positives)
-        result['false_positives'] = list(false_positives)
-        result['false_negatives'] = list(false_negatives)
-        
-        # Calculate precision and recall
-        if actual_all:
-            result['precision'] = len(true_positives) / len(actual_all)
-        if expected_all:
-            result['recall'] = len(true_positives) / len(expected_all)
-        
-        # Calculate F1 score
-        if result['precision'] + result['recall'] > 0:
-            result['f1_score'] = 2 * (result['precision'] * result['recall']) / (result['precision'] + result['recall'])
-        
-        return result
     
     def _compare_generic(self, output: Dict, manifest: Dict, tool_name: str) -> Dict:
         """Generic comparison for other tools"""

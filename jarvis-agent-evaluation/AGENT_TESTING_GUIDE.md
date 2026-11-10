@@ -68,9 +68,9 @@ Agent tests are located in: `/Users/adarsh/Documents/vr-agent/jarvis-agent-evalu
 - 3 tests
 
 ### Total Test Coverage
-- **41 test cases** across 6 layers (Layer 5 pending)
-- **15 fixtures** (6 types: repository, runtime, security, bug, conversation, multi-agent)
-- **12 agents** with specifications
+- **38 test cases** across 6 layers (Layer 5 pending)
+- **13 fixtures** (4 types: repository, bug, conversation, multi-agent)
+- **9 agents** with specifications
 
 ## Execution
 
@@ -167,16 +167,10 @@ Critical violations block release regardless of aggregate score.
 
 ## Fixtures
 
-### 15 Fixtures Across 6 Types
+### 13 Fixtures Across 4 Types
 
 **Repository Fixtures (5)**
 - simple-python, complex-typescript, monorepo-java-microservices, react-frontend, python-api-with-tests
-
-**Runtime Trace Fixtures (3)**
-- Linear execution, async execution, parallel execution
-
-**Security Case Fixtures (4)**
-- SQL injection, XSS, command injection, path traversal
 
 **Bug Scenario Fixtures (4)**
 - Race condition, memory leak, null pointer, off-by-one
@@ -189,7 +183,7 @@ Critical violations block release regardless of aggregate score.
 
 ## Agent Specifications
 
-### 12 Agent Specifications
+### 9 Agent Specifications
 
 All agents have formal contracts in `agent-specifications/`:
 
@@ -199,12 +193,9 @@ All agents have formal contracts in `agent-specifications/`:
 4. **Code Understanding** - Function/class comprehension
 5. **Relationship Intelligence** - Direct/indirect relationships
 6. **Data Flow Intelligence** - Source-to-sink tracing
-7. **Runtime Intelligence** - Trace collection, timeline reconstruction
-8. **Debugging Intelligence** - Error interpretation, root cause
-9. **Security & Quality** - Vulnerability detection
-10. **Software Engineering** - Code generation, modification
-11. **Testing & Verification** - Test generation, coverage
-12. **Visualization** - Graph construction, filtering
+7. **Software Engineering** - Code generation, modification
+8. **Testing & Verification** - Test generation, coverage
+9. **Visualization** - Graph construction, filtering
 
 Each specification includes:
 - Responsibilities

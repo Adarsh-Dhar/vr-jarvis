@@ -27,8 +27,6 @@ expected:
   - trace_variable_origin
   - trace_variable_modifications
   - trace_transformations
-  - trace_database_writes
-  - identify_data_sinks
 layer: 4
 name: Data Flow Intelligence Agent - Trace Variable
 severity: critical

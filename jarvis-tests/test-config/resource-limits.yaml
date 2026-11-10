@@ -100,18 +100,10 @@ tool_limits:
     analyze_code_complexity:
       max_timeout_ms: 15000
 
-  runtime_tools:
-    collect_execution_trace:
-      max_trace_size_mb: 100
-      max_timeout_ms: 60000
-    record_function_calls:
-      max_timeout_ms: 30000
-
   software_engineering_tools:
-    execute_command:
-      max_timeout_ms: 60000
-    run_build:
-      max_timeout_ms: 600000
+    edit_file:
+      max_file_size_mb: 5
+      max_timeout_ms: 30000
 
   visualization_tools:
     create_graph:
@@ -138,16 +130,6 @@ agent_limits:
     max_graph_depth: 5
     max_nodes_analyzed: 1000
     max_timeout_ms: 120000
-
-  runtime_intelligence:
-    max_trace_size_mb: 500
-    max_events_analyzed: 10000
-    max_timeout_ms: 180000
-
-  debugging_intelligence:
-    max_breakpoints: 100
-    max_stack_depth: 50
-    max_timeout_ms: 300000
 
   software_engineering:
     max_files_modified: 50

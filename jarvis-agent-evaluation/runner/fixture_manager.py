@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Fixture Manager
-Manages test fixtures including repositories, runtime traces, security cases, and scenarios
+Manages test fixtures including repositories and scenarios
 """
 
 import json
@@ -16,8 +16,6 @@ class FixtureManager:
     def __init__(self, fixtures_dir: Path):
         self.fixtures_dir = fixtures_dir
         self.repositories_dir = fixtures_dir / 'repositories'
-        self.runtime_traces_dir = fixtures_dir / 'runtime-traces'
-        self.security_cases_dir = fixtures_dir / 'security-cases'
         self.bug_scenarios_dir = fixtures_dir / 'bug-scenarios'
         self.conversation_scenarios_dir = fixtures_dir / 'conversation-scenarios'
         self.multi_agent_scenarios_dir = fixtures_dir / 'multi-agent-scenarios'
@@ -39,39 +37,7 @@ class FixtureManager:
         with open(fixture_path) as f:
             return yaml.safe_load(f)
 
-    def load_runtime_trace_fixture(self, fixture_name: str) -> Optional[Dict[str, Any]]:
-        """
-        Load a runtime trace fixture.
 
-        Args:
-            fixture_name: Name of the runtime trace fixture
-
-        Returns:
-            Fixture data or None if not found
-        """
-        fixture_path = self.runtime_traces_dir / f'{fixture_name}.yaml'
-        if not fixture_path.exists():
-            return None
-
-        with open(fixture_path) as f:
-            return yaml.safe_load(f)
-
-    def load_security_case_fixture(self, fixture_name: str) -> Optional[Dict[str, Any]]:
-        """
-        Load a security case fixture.
-
-        Args:
-            fixture_name: Name of the security case fixture
-
-        Returns:
-            Fixture data or None if not found
-        """
-        fixture_path = self.security_cases_dir / f'{fixture_name}.yaml'
-        if not fixture_path.exists():
-            return None
-
-        with open(fixture_path) as f:
-            return yaml.safe_load(f)
 
     def load_bug_scenario_fixture(self, fixture_name: str) -> Optional[Dict[str, Any]]:
         """
@@ -130,17 +96,7 @@ class FixtureManager:
             return []
         return [d.name for d in self.repositories_dir.iterdir() if d.is_dir()]
 
-    def list_runtime_trace_fixtures(self) -> List[str]:
-        """List all available runtime trace fixtures."""
-        if not self.runtime_traces_dir.exists():
-            return []
-        return [f.stem for f in self.runtime_traces_dir.glob('*.yaml')]
 
-    def list_security_case_fixtures(self) -> List[str]:
-        """List all available security case fixtures."""
-        if not self.security_cases_dir.exists():
-            return []
-        return [f.stem for f in self.security_cases_dir.glob('*.yaml')]
 
     def validate_fixture(self, fixture_data: Dict[str, Any], fixture_type: str) -> bool:
         """
@@ -148,15 +104,13 @@ class FixtureManager:
 
         Args:
             fixture_data: Fixture data to validate
-            fixture_type: Type of fixture (repository, trace, security, bug, conversation, multi_agent)
+            fixture_type: Type of fixture (repository, bug, conversation, multi_agent)
 
         Returns:
             True if valid, False otherwise
         """
         required_fields = {
             'repository': ['name', 'description', 'languages', 'ground_truth'],
-            'trace': ['name', 'description', 'events'],
-            'security': ['name', 'description', 'vulnerability_type', 'location'],
             'bug': ['name', 'description', 'root_cause', 'expected_fix'],
             'conversation': ['name', 'description', 'messages'],
             'multi_agent': ['name', 'description', 'agents', 'expected_sequence']
@@ -179,8 +133,6 @@ class FixtureRegistry:
         self.fixture_manager = fixture_manager
         self.registry = {
             'repositories': {},
-            'runtime_traces': {},
-            'security_cases': {},
             'bug_scenarios': {},
             'conversation_scenarios': {},
             'multi_agent_scenarios': {}
@@ -198,26 +150,6 @@ class FixtureRegistry:
                     'description': fixture.get('description'),
                     'languages': fixture.get('languages', []),
                     'has_ground_truth': 'ground_truth' in fixture
-                }
-
-        # Runtime trace fixtures
-        for trace_name in self.fixture_manager.list_runtime_trace_fixtures():
-            fixture = self.fixture_manager.load_runtime_trace_fixture(trace_name)
-            if fixture:
-                self.registry['runtime_traces'][trace_name] = {
-                    'name': fixture.get('name'),
-                    'description': fixture.get('description'),
-                    'event_count': len(fixture.get('events', []))
-                }
-
-        # Security case fixtures
-        for security_name in self.fixture_manager.list_security_case_fixtures():
-            fixture = self.fixture_manager.load_security_case_fixture(security_name)
-            if fixture:
-                self.registry['security_cases'][security_name] = {
-                    'name': fixture.get('name'),
-                    'description': fixture.get('description'),
-                    'vulnerability_type': fixture.get('vulnerability_type')
                 }
 
         # Bug scenario fixtures
@@ -248,11 +180,6 @@ class FixtureRegistry:
         for name, meta in self.registry['repositories'].items():
             if tag in meta.get('languages', []):
                 matching_fixtures.append(f'repository:{name}')
-
-        # Search in security cases
-        for name, meta in self.registry['security_cases'].items():
-            if tag in meta.get('vulnerability_type', '').lower():
-                matching_fixtures.append(f'security:{name}')
 
         return matching_fixtures
 

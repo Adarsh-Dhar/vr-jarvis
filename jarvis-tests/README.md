@@ -1,7 +1,7 @@
 # JARVIS Comprehensive Testing Suite
 
 ## Overview
-This is a comprehensive 7-layer testing framework for the JARVIS AI software engineering platform, designed to validate 534 tools across unit, integration, agent capability, multi-agent coordination, end-to-end investigations, and system stress testing.
+This is a comprehensive 7-layer testing framework for the JARVIS AI software engineering platform, designed to validate the 161-tool MVP surface across unit, integration, agent capability, multi-agent coordination, end-to-end investigations, and system stress testing.
 
 ## Quick Start
 
@@ -38,50 +38,46 @@ python3 ground_truth_validator.py simple-python
 - Happy path, input validation, output validation
 - Empty input, boundary conditions, large input
 - Complex input, malformed input, dependency failure
-- 3,096 tests across 344 tools
+- 1,035 tests across the retained MVP tools
 
 **Layer 2: Edge Cases (T10-T15)**
 - Timeout, concurrency, security, performance
 - Regression, recovery
-- 2,064 tests across 344 tools
+- 684 tests across the retained MVP tools
 
 **Layer 3: Integration Tests**
-- Real infrastructure (databases, APIs, Git repositories)
-- 12 integration tests
+- Real infrastructure (Git repositories)
+- 2 integration test specs
 
 **Layer 4: Agent Capabilities**
-- Tests for 12 JARVIS agents
-- 5 agent capability tests
+- Tests for the 9 JARVIS agents
+- 3 agent capability specs
 
 **Layer 5: Multi-Agent Coordination**
 - Agent delegation, parallel execution, context sharing
-- 4 multi-agent scenarios
+- Multi-agent coordination specs
 
 **Layer 6: End-to-End Investigations**
-- Real developer scenarios (understand repo, investigate function, trace API)
-- 3 end-to-end tests
+- Real developer scenarios (understand repo, investigate function)
+- 3 end-to-end specs
 
 **Layer 7: Stress Tests**
 - Repository scale, concurrent agents, failure injection
-- Resource limits, long-running tasks, runtime volume
-- 9 stress tests
+- Resource limits, long-running tasks
+- 9 stress specs
 
 ## Test Coverage
 
-### Tools by Priority
-- **Priority 1**: 67 tools (Analysis, Data Flow, Relationship, Repository Intelligence, Code Understanding) - 100% covered
-- **Priority 2**: 52 tools (API/Database, Documentation, Git) - 100% covered
-- **Priority 3**: 106 tools (Infrastructure, External Integrations, Language Adapters) - 100% covered
-- **Priority 4**: 119 tools (Software Engineering, Testing, Visualization, VR, etc.) - Representative subset covered
-
-### Total Tests: 5,208
-- Layer 1: 3,096
-- Layer 2: 2,064
-- Layer 3: 12
-- Layer 4: 5
-- Layer 5: 4
+### Test Inventory
+- **Total specs**: ~1,980 YAML test specifications across all layers
+- Layer 1: 1,035
+- Layer 2: 684
+- Layer 3: 2
+- Layer 4: 3
+- Layer 5: multi-agent coordination specs
 - Layer 6: 3
 - Layer 7: 9
+- Additional suites: real-input (194), verified (3), core-tools (10), phase2 core (14), unit/integration/end-to-end/stress pytest files
 
 ## Fixture Repositories
 
@@ -122,10 +118,6 @@ Java Spring Boot application with:
 ### Git
 - Test repository with multiple branches
 - Complex commit history
-
-### Runtime
-- Synchronous Python application
-- Async Python application with worker pool
 
 ## CI/CD Integration
 
@@ -182,7 +174,6 @@ Java Spring Boot application with:
 jarvis-tests/
 ├── .github/workflows/          # CI/CD workflows
 ├── test-runner/               # Test execution infrastructure
-│   ├── test_spec_generator.py
 │   ├── test_registry.py
 │   ├── test_orchestrator.py
 │   ├── test_fixture_manager.py
@@ -190,7 +181,6 @@ jarvis-tests/
 │   ├── report_generator.py
 │   ├── regression_detector.py
 │   ├── test_dashboard.py
-│   └── generate_*.py
 ├── fixtures/                   # Test fixtures
 │   ├── repositories/           # Code repositories
 │   └── integration-test-infrastructure/
@@ -210,7 +200,7 @@ jarvis-tests/
 ## Success Metrics
 
 ### Coverage
-- **Tool Coverage**: 64.4% (344 of 534 tools)
+- **Tool Coverage**: specs cover the retained 161-tool MVP registry
 - **Layer Coverage**: 100% (all 7 layers implemented)
 - **Test Type Coverage**: 100% (all T01-T15 + agent + integration + stress tests)
 
@@ -231,8 +221,8 @@ jarvis-tests/
 ## Maintenance
 
 ### Adding New Tool Tests
-1. Add tool to appropriate priority list in `generate_*.py`
-2. Run the generator script
+1. Add a YAML spec under the appropriate `tests/layer*` directory
+2. Validate against `test-runner/spec_schema.json`
 3. Validate ground truth if needed
 4. Commit changes
 

@@ -80,7 +80,6 @@ dependencies:
     - repository_intelligence
     - code_understanding
     - testing_verification
-    - security_quality
   services:
     - build_service
     - test_service

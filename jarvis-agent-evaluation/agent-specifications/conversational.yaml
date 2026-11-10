@@ -130,9 +130,6 @@ dependencies:
     - code_understanding
     - relationship_intelligence
     - data_flow
-    - runtime_intelligence
-    - debugging
-    - security_quality
     - visualization
   services:
     - context_service

@@ -11,18 +11,11 @@ from typing import Tuple
 # Mapping of files to their Path.cwd() counts (from the patch list)
 FILE_COUNTS = {
     'software_engineering_tools.py': 30,
-    'api_database_toolkit.py': 15,
     'testing_verification_tools.py': 13,
     'repository_tools.py': 11,
     'repository_intelligence_tools.py': 11,
     'analysis_tools.py': 8,
-    'language_adapters.py': 4,
     'navigation_tools.py': 2,
-    'git_history_toolkit.py': 1,
-    'documentation_toolkit.py': 3,
-    'security_quality_tools.py': 2,
-    'runtime_intelligence_tools.py': 1,
-    'infrastructure_services.py': 2,
     'code_understanding_tools.py': 1,
     '_common.py': 1,
 }

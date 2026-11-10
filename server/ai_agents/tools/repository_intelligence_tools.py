@@ -332,19 +332,6 @@ def detect_project_type(repository_path: str, tool_context: ToolContext) -> dict
 
 
 @safe
-def analyze_monorepo(repository_path: str, tool_context: ToolContext) -> dict:
-    """Analyze monorepo structure."""
-    try:
-        from .repository_tools import list_files
-        return list_files(repository_path, tool_context)
-    except Exception as e:
-        return {
-            'status': 'error',
-            'error': str(e)
-        }
-
-
-@safe
 def analyze_project_configuration(repository_path: str, tool_context: ToolContext) -> dict:
     """Analyze project configuration."""
     try:

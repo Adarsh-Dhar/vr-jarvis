@@ -122,16 +122,6 @@
       "description": "Open a file in the code viewer at a line"
     },
     {
-      "name": "move_cluster",
-      "fields": [
-        "node_id",
-        "dx",
-        "dy",
-        "dz"
-      ],
-      "description": "Move a whole cluster by a graph-local offset"
-    },
-    {
       "name": "move_graph",
       "fields": [
         "dx",
@@ -172,14 +162,6 @@
         "state"
       ],
       "description": "show, hide, pin, unpin, minimize or restore a panel"
-    },
-    {
-      "name": "set_cluster_collapsed",
-      "fields": [
-        "node_id",
-        "collapsed"
-      ],
-      "description": "Collapse or expand a cluster"
     },
     {
       "name": "highlight_callers",

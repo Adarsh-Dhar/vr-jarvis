@@ -1,9 +1,9 @@
 from google.adk.agents import LlmAgent
 
 from ..config import LITE_MODEL
-from ..tools.scene_tools import (browse_vr_folder, highlight_callers, list_vr_repositories, move_cluster,
+from ..tools.scene_tools import (browse_vr_folder, highlight_callers, list_vr_repositories,
                                  move_graph, move_panel, open_vr_file, open_vr_repository,
-                                 recenter_workspace, reset_layout, scale_panel, set_cluster_collapsed,
+                                 recenter_workspace, reset_layout, scale_panel,
                                  set_mode, set_panel_state, zoom_graph)
 from ..callbacks import permission_guard, evidence_collector
 
@@ -20,7 +20,7 @@ Rules:
 4. If a tool returns an error, say so in one sentence and offer the closest valid name. Never guess paths.
 5. To rearrange the workspace: move_panel places a panel on the dome around the user (left wall is
    azimuth -65, right wall 65, ahead 0, behind 180; elevation 0 is eye level). scale_panel resizes.
-   set_panel_state shows, hides, pins, unpins, minimizes or restores. move_cluster and move_graph shift
+   set_panel_state shows, hides, pins, unpins, minimizes or restores. move_graph shifts
    things by direction. zoom_graph sets zoom. recenter_workspace pulls everything back in front of the
    user. reset_layout undoes every move. You cannot touch the approval panel.
 6. Relative requests like "a bit more to the left" mean a small step: call the tool again with a small
@@ -39,8 +39,8 @@ def make_navigator() -> LlmAgent:
                      'and recenters workspace elements. Does not analyse code.'),
         instruction=INSTRUCTION,
         tools=[list_vr_repositories, open_vr_repository, browse_vr_folder, open_vr_file, set_mode,
-               move_cluster, move_graph, zoom_graph, move_panel, scale_panel, set_panel_state,
-               set_cluster_collapsed, highlight_callers, recenter_workspace, reset_layout],
+               move_graph, zoom_graph, move_panel, scale_panel, set_panel_state,
+               highlight_callers, recenter_workspace, reset_layout],
         before_tool_callback=permission_guard,
         after_tool_callback=evidence_collector,
     )

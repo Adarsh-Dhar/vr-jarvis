@@ -54,7 +54,7 @@ namespace JarvisVR
     // Control-flow and data-flow metadata (optional)
     public string node_kind, variable, expression, ast_kind, function_id;
     public int column;
-    // Security metadata (optional)
+    // Graph-analysis metadata (optional)
     public string severity, confidence, evidence;
     public int line;
   }

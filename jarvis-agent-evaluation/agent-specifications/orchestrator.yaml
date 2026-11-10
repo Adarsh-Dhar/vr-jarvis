@@ -135,9 +135,6 @@ dependencies:
     - code_understanding
     - relationship_intelligence
     - data_flow
-    - runtime_intelligence
-    - debugging
-    - security_quality
     - software_engineering
     - testing_verification
     - visualization
