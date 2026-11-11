@@ -188,3 +188,106 @@ class TestRepoSwitching:
         r = client.post('/repos/select', json={'name': names[0]}, headers=self.H)
         if r.status_code == 200:
             assert r.json()['session_reset_required'] is True
+
+
+# --------------------------------------------------------------------------- navigator repository switching
+class TestNavigatorRepoSwitch:
+    @pytest.fixture
+    def scene_tools(self, monkeypatch):
+        from types import SimpleNamespace
+        from ai_agents.tools import scene_tools as st
+        fake_store = SimpleNamespace(
+            list_repos=lambda: ['repoA', 'repoB'],
+            activate=lambda name: pytest.fail('open_vr_repository must not activate a repository'),
+            info=lambda n: {'name': n})
+        fake_config = SimpleNamespace(REPO_ROOT=SimpleNamespace(name='repoA'))
+        monkeypatch.setattr(st, '_repo_api', lambda: (fake_config, fake_store))
+        return st
+
+    @staticmethod
+    def _ctx(state=None):
+        from types import SimpleNamespace
+        return SimpleNamespace(state=dict(state or {}))
+
+    def test_requests_switch_without_activating(self, scene_tools):
+        ctx = self._ctx()
+        res = scene_tools.open_vr_repository('repoB', ctx)
+        assert res['status'] == 'ok' and res['switch_requested'] == 'repoB'
+        assert res['active'] == 'repoA'                      # still the old repo until Unity confirms
+        assert ctx.state['scene_commands'] == [{'type': 'open_repo', 'repo': 'repoB'}]
+
+    def test_unknown_repo_is_an_error(self, scene_tools):
+        res = scene_tools.open_vr_repository('nope', self._ctx())
+        assert res['status'] == 'error'
+
+    @pytest.mark.parametrize('state', [
+        {'pending_approval': 'commit it'},
+        {'worktree': '/tmp/wt'},
+        {'last_commit': {'branch': 'jarvis/x', 'commit': 'abc'}},
+    ])
+    def test_unfinished_session_is_blocked(self, scene_tools, state):
+        ctx = self._ctx(state)
+        res = scene_tools.open_vr_repository('repoB', ctx)
+        assert res['status'] == 'blocked'
+        assert 'scene_commands' not in ctx.state
+
+
+# --------------------------------------------------------------------------- type check gate
+def _ts_typecheck(worktree, **over):
+    tc = {'typecheck': 'passed', 'source': 'live', **exec_tools._worktree_fingerprint(str(worktree))}
+    tc.update(over)
+    return tc
+
+
+class TestTypecheckGate:
+    @pytest.fixture
+    def ts_worktree(self, worktree):
+        (worktree / 'tsconfig.json').write_text('{}')
+        return worktree
+
+    @staticmethod
+    def _why(worktree, tc):
+        state = {'last_test_run': _good(worktree)}
+        if tc is not None:
+            state['last_typecheck'] = tc
+        return ' '.join(verification_blockers(state, str(worktree)))
+
+    def test_good_typecheck_has_no_blockers(self, ts_worktree):
+        assert verification_blockers(
+            {'last_test_run': _good(ts_worktree), 'last_typecheck': _ts_typecheck(ts_worktree)},
+            str(ts_worktree)) == []
+
+    def test_no_tsconfig_means_no_typecheck_required(self, worktree):
+        assert verification_blockers(
+            {'last_test_run': _good(worktree)}, str(worktree)) == []
+
+    def test_missing_typecheck_blocks(self, ts_worktree):
+        assert 'No type check is recorded' in self._why(ts_worktree, None)
+
+    @pytest.mark.parametrize('over,needle', [
+        ({'typecheck': 'failed'}, 'Type check failed'),
+        ({'typecheck': 'not_applicable'}, 'has not passed'),
+        ({'source': 'cached'}, 'cached, not live'),
+        ({'diff_hash': ''}, 'no patch fingerprint'),
+        ({'head': ''}, 'no worktree HEAD'),
+        ({'diff_hash': 'deadbeefdeadbeef'}, 'patch changed'),
+        ({'head': '0' * 40}, 'HEAD moved'),
+    ])
+    def test_each_defect_blocks(self, ts_worktree, over, needle):
+        assert needle in self._why(ts_worktree, _ts_typecheck(ts_worktree, **over))
+
+    def test_prompt_matches_approval(self, ts_worktree):
+        import asyncio
+        import jarvis_server
+        cases = [None,
+                 _ts_typecheck(ts_worktree, diff_hash=''),
+                 _ts_typecheck(ts_worktree, head=''),
+                 _ts_typecheck(ts_worktree, diff_hash='deadbeefdeadbeef'),
+                 _ts_typecheck(ts_worktree, head='0' * 40),
+                 _ts_typecheck(ts_worktree, source='cached')]
+        for tc in cases:
+            state = {'last_test_run': _good(ts_worktree), 'worktree': str(ts_worktree),
+                     'proposed_patch': 'diff --git a/x b/x', 'pending_approval': ''}
+            if tc is not None:
+                state['last_typecheck'] = tc
+            assert asyncio.run(jarvis_server._maybe_prompt_commit('sid-tc', state, '')) == ''

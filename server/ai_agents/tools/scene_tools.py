@@ -79,20 +79,23 @@ def list_vr_repositories(tool_context: ToolContext) -> dict:
 
 
 def open_vr_repository(name: str, tool_context: ToolContext) -> dict:
-    '''Open a repository in the VR workspace and make it the active one. Use the exact name from
-    list_vr_repositories. Call it once and make no node-level scene changes after it in the same turn.'''
+    '''Ask the VR workspace to switch to a repository. Use the exact name from list_vr_repositories.
+    This only REQUESTS the switch: the workspace performs it through the protected repository switch and
+    may refuse it if work is unfinished. Call it once and make no other scene change after it.'''
     config, store = _repo_api()
-    if tool_context.state.get('pending_approval'):
-        return {'status': 'blocked', 'reason': 'A change is waiting for approval. Resolve it before switching repository.'}
     repos = store.list_repos()
     if name not in repos:
         return {'status': 'error', 'reason': 'Unknown repository %r. Available: %s' % (name, ', '.join(repos))}
-    try:
-        store.activate(name)       # same call /repos/select makes, so the agent's own tools now see this repo
-    except Exception as exc:
-        return {'status': 'error', 'reason': 'Could not open %s: %s' % (name, exc)}
+    st = tool_context.state
+    if st.get('pending_approval') or st.get('worktree') or \
+            (isinstance(st.get('last_commit'), dict) and st['last_commit'].get('branch')):
+        return {'status': 'blocked',
+                'reason': 'This session has an unfinished change (approval, sandbox or unpromoted commit). '
+                          'Finish, promote or reject it before switching repository.'}
+    # NO store.activate() here. /repos/select is the only place the active repository changes.
     result = _emit(tool_context, {'type': 'open_repo', 'repo': name})
-    result['active'] = name
+    result['active'] = config.REPO_ROOT.name        # still the OLD repo until the workspace confirms
+    result['switch_requested'] = name
     return result
 
 

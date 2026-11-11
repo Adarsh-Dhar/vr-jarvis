@@ -844,18 +844,6 @@ async def approve(body: ApproveBody):
         last = state.get('last_test_run') or {}
         fp = _worktree_fingerprint(worktree)
         tc = state.get('last_typecheck') or {}
-        if tc.get('typecheck') == 'failed':
-            return {'ok': False, 'action': 'commit', 'detail': 'Type check failed. Fix it before committing.'}
-        if tc.get('source') == 'cached' and os.getenv('JARVIS_ALLOW_CACHED_APPROVAL') != '1':
-            return {'ok': False, 'action': 'commit',
-                    'detail': 'Type check results are cached, not live. Re-run it before committing.'}
-        # A tsconfig.json means a type check is expected: missing is not a pass.
-        if (Path(worktree) / 'tsconfig.json').is_file() and tc.get('typecheck') != 'passed':
-            return {'ok': False, 'action': 'commit',
-                    'detail': 'Type check has not passed for this patch. Run it before committing.'}
-        if tc.get('diff_hash') and tc.get('diff_hash') != fp['diff_hash']:
-            return {'ok': False, 'action': 'commit',
-                    'detail': 'The patch changed after the type check ran. Re-run it.'}
 
         result = await asyncio.to_thread(commit_worktree, worktree, 'JARVIS: ' + str(pending)[:120])
         if result.get('ok'):

@@ -65,6 +65,28 @@ def verification_blockers(state, worktree, allow_cached=False):
         why.append('The patch changed after the tests ran. Re-run the tests.')
     if last.get('head') and fp.get('head') and last['head'] != fp['head']:
         why.append('The worktree HEAD moved after the tests ran. Re-run the tests.')
+    # ---- type check (TypeScript projects) -------------------------------------------------------
+    tc = state.get('last_typecheck') or {}
+    if tc.get('typecheck') == 'failed':
+        why.append('Type check failed. Fix it before committing.')
+    needs_tc = bool(worktree) and (Path(worktree) / 'tsconfig.json').is_file()
+    if needs_tc:
+        if not tc:
+            why.append('No type check is recorded for this patch. Run it before committing.')
+        else:
+            if tc.get('typecheck') not in ('passed', 'failed'):
+                why.append('Type check has not passed for this patch (status: %s).' % tc.get('typecheck'))
+            if not allow_cached:
+                if tc.get('source') != 'live':
+                    why.append('Type check results are cached, not live. Re-run it before committing.')
+                if not tc.get('diff_hash'):
+                    why.append('The type check has no patch fingerprint. Re-run it.')
+                if not tc.get('head'):
+                    why.append('The type check has no worktree HEAD record. Re-run it.')
+            if tc.get('diff_hash') and tc['diff_hash'] != fp['diff_hash']:
+                why.append('The patch changed after the type check ran. Re-run it.')
+            if tc.get('head') and fp.get('head') and tc['head'] != fp['head']:
+                why.append('The worktree HEAD moved after the type check ran. Re-run it.')
     return why
 
 

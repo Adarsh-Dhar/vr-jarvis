@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -1999,11 +2000,9 @@ namespace JarvisVR
           ResetLayout();
           return false;
         case "open_repo":
-          if (!string.IsNullOrEmpty(c.repo) && !_switching && _bridge != null)
-          {
-            if (_repos != null && _repos.active == c.repo) OpenRepo(c.repo);   // already loaded: just show its root
-            else OnRepoActivated(c.repo);                                      // server already switched it
-          }
+          // The server no longer switches on its own. Go through OpenRepo -> SelectRepo -> /repos/select,
+          // which is guarded server-side and calls ResetSession() on success.
+          if (!string.IsNullOrEmpty(c.repo) && _bridge != null) StartCoroutine(OpenRepoWhenIdle(c.repo));
           return false;
         case "browse_folder":
           if (!string.IsNullOrEmpty(c.repo)) _browserRepo = c.repo;
@@ -2211,6 +2210,14 @@ namespace JarvisVR
         if (!ok) { Say("Could not open repository " + name + ". Check the server log."); return; }
         OnRepoActivated(name);
       });
+    }
+
+    // Scene commands arrive inside the ask callback while the bridge is still Busy; SelectRepo refuses then.
+    private IEnumerator OpenRepoWhenIdle(string name)
+    {
+      float until = Time.unscaledTime + 10f;
+      while (_bridge != null && (_bridge.Busy || _switching) && Time.unscaledTime < until) yield return null;
+      OpenRepo(name);
     }
 
     /// <summary>Everything that happens once the server has made `name` its active repository.</summary>
