@@ -27,7 +27,7 @@ from ai_agents import config, repository
 from ai_agents.config import USE_CACHED_TESTS
 from ai_agents import llm
 from ai_agents.tools.git_tools import commit_worktree, promote_branch
-from ai_agents.tools.exec_tools import _worktree_fingerprint
+from ai_agents.tools.exec_tools import _worktree_fingerprint, verification_blockers
 from ai_agents.tools.graph_tools import get_source
 from ai_agents.agents.registry import initialize_agents
 
@@ -188,28 +188,49 @@ async def ensure(session_id):
     return session
 
 
-# Tracks per-session flags that make a repository switch unsafe. Updated by
-# set_state whenever a session gains/loses a worktree, pending approval or a
-# commit awaiting promotion.
-_session_flags = {}
-
-
-def _track_session_flags(session_id, delta):
-    flags = _session_flags.setdefault(session_id, {})
-    for key in ('worktree', 'pending_approval', 'last_commit'):
-        if key in delta:
-            flags[key] = bool(delta[key])
-    # last_commit is a dict; cleared to {} means done
-    if 'last_commit' in delta:
-        flags['last_commit'] = bool((delta.get('last_commit') or {}).get('branch')
-                                    if isinstance(delta.get('last_commit'), dict)
-                                    else delta.get('last_commit'))
-
-
 async def set_state(session_id, delta):
     session = await ensure(session_id)
-    _track_session_flags(session_id, delta or {})
     await sessions.append_event(session, Event(author='user', actions=EventActions(state_delta=delta)))
+
+
+async def _sessions_blocking_switch():
+    """Sessions that make a repository switch unsafe, derived from the REAL session state (which agent
+    tools write directly) and from live locks, never from a side table that set_state() alone feeds.
+    Returns a list of (session_id, reason)."""
+    out = []
+    for sid in list(session_last_used):
+        if locks[sid].locked():
+            out.append((sid, 'an agent request is running'))
+            continue
+        sess = await sessions.get_session(app_name=APP, user_id=USER, session_id=sid)
+        if sess is None:
+            continue
+        st = sess.state
+        wt = st.get('worktree')
+        if wt and Path(str(wt)).is_dir():
+            out.append((sid, 'a sandbox worktree exists'))
+        elif st.get('pending_approval'):
+            out.append((sid, 'an approval is pending'))
+        elif isinstance(st.get('last_commit'), dict) and st['last_commit'].get('branch'):
+            out.append((sid, 'a committed change is not promoted'))
+    return out
+
+
+def _refuse_if_switching():
+    if repo_lock.locked():
+        raise HTTPException(status_code=409, detail='A repository switch is in progress. Retry in a moment.')
+
+
+@app.on_event('startup')
+async def _register_persisted_sessions():
+    """Sessions persisted in the database survive a restart, but session_last_used does not. Re-register
+    them so the repo-switch guard sees their worktrees / pending approvals / unpromoted commits."""
+    try:
+        resp = await sessions.list_sessions(app_name=APP, user_id=USER)
+        for sess in (getattr(resp, 'sessions', None) or []):
+            session_last_used.setdefault(sess.id, time.time())
+    except Exception as exc:   # in-memory service or empty DB
+        logging.getLogger('uvicorn.error').info('no persisted sessions registered: %s', exc)
 
 
 # ---------------------------------------------------------------------------
@@ -459,20 +480,22 @@ async def repos():
 
 @app.post('/repos/select', dependencies=[Depends(auth)])
 async def select_repo(body: RepoBody):
-    # One active repository per server process: refuse to switch while any
-    # session has work in flight (worktree, pending approval or unpromoted commit).
-    busy = [sid for sid, f in _session_flags.items()
-            if f.get('worktree') or f.get('pending_approval') or f.get('last_commit')]
-    if busy:
-        raise HTTPException(status_code=409,
-            detail='Cannot switch repository: a session has a worktree, pending '
-                   'approval or unpromoted commit. Finish or reject it first.')
-    try:
-        async with repo_lock:
+    # One active repository per server process. The check and the switch happen under repo_lock so no
+    # request can slip in between them (asks refuse while repo_lock is held).
+    async with repo_lock:
+        blockers = await _sessions_blocking_switch()
+        if blockers:
+            raise HTTPException(status_code=409,
+                detail='Cannot switch repository: ' + '; '.join(
+                    '%s (%s)' % (sid[:8], why) for sid, why in blockers[:5])
+                    + '. Finish, promote or reject it first.')
+        try:
             g = await asyncio.to_thread(repository.activate, body.name)
-    except KeyError:
-        raise HTTPException(status_code=404, detail='unknown repository: ' + body.name)
-    return {'active': body.name, 'nodes': len(g['nodes']), 'edges': len(g['edges'])}
+        except KeyError:
+            raise HTTPException(status_code=404, detail='unknown repository: ' + body.name)
+    # Sessions are bound to the repository they were created for; the client must open a new one.
+    return {'active': body.name, 'nodes': len(g['nodes']), 'edges': len(g['edges']),
+            'session_reset_required': True}
 
 
 @app.get('/repos/{repo_name}/tree', dependencies=[Depends(auth)])
@@ -602,6 +625,7 @@ async def _run_turn_streaming(body):
 @app.post('/ask/stream', dependencies=[Depends(auth)])
 async def ask_stream(body: AskBody):
     """Stream agent progress as Server-Sent Events."""
+    _refuse_if_switching()
     _require_active_repo(body.repo)
     await _check_session_repo(body.session_id)
     async def gen():
@@ -633,16 +657,9 @@ async def ask_stream(body: AskBody):
             # Build and send final response using the same logic as /ask
             state = (await ensure(body.session_id)).state
 
-            # Auto-generate commit approval prompt if conditions are met
-            last = state.get('last_test_run') or {}
-            pending = _s(state.get('pending_approval'))
-            has_patch = state.get('proposed_patch') or state.get('result_software_eng')
-            if (not pending and not error and has_patch and state.get('worktree')
-                    and isinstance(last, dict) and last.get('status') == 'passed'):
-                pending = 'Commit the verified patch to a sandbox branch'
-                commands = list(state.get('scene_commands', []))
-                commands.append({'type': 'show_approval_prompt', 'summary': pending})
-                await set_state(body.session_id, {'pending_approval': pending, 'approved': False, 'approval_type': 'commit'})
+            # Offer commit approval only when the same evidence /approve requires is present
+            await _maybe_prompt_commit(body.session_id, state, error)
+            state = (await ensure(body.session_id)).state
 
             # Send final state response
             final_response = _build_ask_response(reply, error, state)
@@ -715,6 +732,22 @@ def _build_ask_response(reply: str, error: str, state: dict) -> dict:
     }
 
 
+async def _maybe_prompt_commit(session_id, state, error):
+    """Offer the commit approval only when the recorded evidence would pass /approve. Returns the prompt
+    text, or '' when nothing is offered. Same gate as /approve: no evidence, no prompt."""
+    if error or _s(state.get('pending_approval')):
+        return ''
+    if not (state.get('proposed_patch') or state.get('result_software_eng')) or not state.get('worktree'):
+        return ''
+    allow_cached = os.getenv('JARVIS_ALLOW_CACHED_APPROVAL') == '1'
+    why = await asyncio.to_thread(verification_blockers, state, state.get('worktree'), allow_cached)
+    if why:
+        return ''
+    pending = 'Commit the verified patch to a sandbox branch'
+    await set_state(session_id, {'pending_approval': pending, 'approved': False, 'approval_type': 'commit'})
+    return pending
+
+
 async def _seen_request(session_id, request_id):
     """True when this client request id was already handled for the session;
     records it otherwise. Prevents retry storms from double-patching."""
@@ -731,6 +764,7 @@ async def _seen_request(session_id, request_id):
 @app.post('/ask', dependencies=[Depends(auth)])
 async def ask(body: AskBody):
     """Non-streaming endpoint for compatibility."""
+    _refuse_if_switching()
     _require_active_repo(body.repo)
     await _check_session_repo(body.session_id)
     error = ''
@@ -752,16 +786,9 @@ async def ask(body: AskBody):
             error = f'{type(exc).__name__}: {str(exc)[:200]}'
         state = (await ensure(body.session_id)).state
 
-        # Auto-generate commit approval prompt if conditions are met
-        last = state.get('last_test_run') or {}
-        pending = _s(state.get('pending_approval'))
-        has_patch = state.get('proposed_patch') or state.get('result_software_eng')
-        if (not pending and not error and has_patch and state.get('worktree')
-                and isinstance(last, dict) and last.get('status') == 'passed'):
-            pending = 'Commit the verified patch to a sandbox branch'
-            commands = list(state.get('scene_commands', []))
-            commands.append({'type': 'show_approval_prompt', 'summary': pending})
-            await set_state(body.session_id, {'pending_approval': pending, 'approved': False, 'approval_type': 'commit'})
+        # Offer commit approval only when the same evidence /approve requires is present
+        await _maybe_prompt_commit(body.session_id, state, error)
+        state = (await ensure(body.session_id)).state
 
     logger = logging.getLogger('uvicorn.error')
     logger.info('ask: %d model calls, %s', llm.stats['requests'] - calls_before, 'error' if error else 'ok')
@@ -772,6 +799,7 @@ async def ask(body: AskBody):
 
 @app.post('/approve', dependencies=[Depends(auth)])
 async def approve(body: ApproveBody):
+    _refuse_if_switching()
     _require_active_repo(body.repo)
     await _check_session_repo(body.session_id)
     if await _seen_request(body.session_id, body.request_id):
@@ -806,22 +834,15 @@ async def approve(body: ApproveBody):
         # Commit path: every check runs BEFORE anything is cleared, so a refusal leaves the proposal pending.
         if not worktree:
             return {'ok': False, 'action': 'commit', 'detail': 'No sandbox worktree to commit.'}
-        last = state.get('last_test_run', {})
-        if not isinstance(last, dict) or last.get('status') != 'passed':
-            return {'ok': False, 'action': 'commit', 'detail': 'Tests must pass before committing.'}
-        # Cached or stale results never verify the current patch.
-        if last.get('source') != 'live':
-            if os.getenv('JARVIS_ALLOW_CACHED_APPROVAL') == '1':
-                logging.getLogger('uvicorn.error').warning(
-                    'approve: accepting CACHED test results (JARVIS_ALLOW_CACHED_APPROVAL=1)')
-            else:
-                return {'ok': False, 'action': 'commit',
-                        'detail': 'Test results are not from a live run of this patch. '
-                                  'Re-run the tests before committing.'}
+        allow_cached = os.getenv('JARVIS_ALLOW_CACHED_APPROVAL') == '1'
+        if allow_cached:
+            logging.getLogger('uvicorn.error').warning(
+                'approve: accepting CACHED test results (JARVIS_ALLOW_CACHED_APPROVAL=1)')
+        blockers = await asyncio.to_thread(verification_blockers, state, worktree, allow_cached)
+        if blockers:
+            return {'ok': False, 'action': 'commit', 'detail': ' '.join(blockers), 'blockers': blockers}
+        last = state.get('last_test_run') or {}
         fp = _worktree_fingerprint(worktree)
-        if last.get('diff_hash') and last.get('diff_hash') != fp['diff_hash']:
-            return {'ok': False, 'action': 'commit',
-                    'detail': 'The patch changed after the tests ran. Re-run the tests.'}
         tc = state.get('last_typecheck') or {}
         if tc.get('typecheck') == 'failed':
             return {'ok': False, 'action': 'commit', 'detail': 'Type check failed. Fix it before committing.'}
@@ -861,6 +882,7 @@ class PromoteBody(BaseModel):
 
 @app.post('/promote', dependencies=[Depends(auth)])
 async def promote(body: PromoteBody):
+    _refuse_if_switching()
     _require_active_repo(body.repo)
     await _check_session_repo(body.session_id)
     async with locks[body.session_id]:

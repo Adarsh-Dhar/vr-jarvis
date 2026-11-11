@@ -14,6 +14,22 @@ from ._safe import safe
 from ._common import repo_root, resolve_in_repo
 
 
+def _safe_worktree_path(file_path, worktree):
+    """Resolve file_path inside the sandbox worktree. Rejects escapes, .git, and node_modules (which is a
+    symlink to the MAIN checkout's node_modules, so a write there would leave the sandbox)."""
+    path = resolve_in_repo(file_path, root=Path(worktree))
+    rel = path.resolve().relative_to(Path(worktree).resolve())
+    if rel.parts and rel.parts[0] in ('.git', 'node_modules'):
+        raise ValueError('Path is not writable in the sandbox: ' + str(file_path))
+    return path
+
+
+def _verification_stale(tool_context):
+    """Any change to the worktree invalidates earlier test/typecheck evidence."""
+    tool_context.state['last_test_run'] = {}
+    tool_context.state['last_typecheck'] = {}
+
+
 # File Editing Tools
 
 @safe
@@ -32,7 +48,7 @@ def edit_file(
                 'reason': 'Create a sandbox worktree first with create_worktree.'
             }
         
-        path = resolve_in_repo(file_path, root=Path(worktree))
+        path = _safe_worktree_path(file_path, worktree)
         
         if not path.exists():
             return {
@@ -51,6 +67,7 @@ def edit_file(
         # Replace content
         updated_content = current_content.replace(old_content, new_content, 1)
         path.write_text(updated_content, encoding='utf-8')
+        _verification_stale(tool_context)
         
         return {
             'status': 'ok',
@@ -78,39 +95,26 @@ def apply_patch(
                 'reason': 'Create a sandbox worktree first with create_worktree.'
             }
         
-        # Try git apply first
+        from .git_tools import _bad_diff_path
+        bad = _bad_diff_path(patch_content)
+        if bad:
+            return {'status': 'error', 'error': 'Patch touches a path that is not allowed: ' + bad}
         result = subprocess.run(
-            ['git', 'apply', '-'],
+            ['git', 'apply', '--whitespace=nowarn', '-'],
             input=patch_content,
             capture_output=True,
             text=True,
             cwd=worktree
         )
-        
         if result.returncode == 0:
+            _verification_stale(tool_context)
             return {
                 'status': 'ok',
                 'patch_length': len(patch_content),
                 'applied': True,
                 'method': 'git_apply'
             }
-        
-        # Fallback to patch command
-        result = subprocess.run(
-            ['patch', '-p1'],
-            input=patch_content,
-            capture_output=True,
-            text=True,
-            cwd=worktree
-        )
-        
-        if result.returncode == 0:
-            return {
-                'status': 'ok',
-                'patch_length': len(patch_content),
-                'applied': True,
-                'method': 'patch'
-            }
+        # No `patch -p1` fallback: it applies hunks partially and bypasses the path check.
         
         return {
             'status': 'error',
@@ -144,8 +148,17 @@ def search_and_replace(
         files_affected = 0
         total_replacements = 0
         
+        if Path(file_pattern).is_absolute() or '..' in Path(file_pattern).parts:
+            return {'status': 'error', 'error': 'file_pattern must be relative and stay inside the worktree.'}
+        root = cwd.resolve()
         for file_path in cwd.rglob(file_pattern):
-            if file_path.is_file():
+            if file_path.is_file() and not file_path.is_symlink():
+                try:
+                    rel = file_path.resolve().relative_to(root)
+                except ValueError:
+                    continue
+                if rel.parts and rel.parts[0] in ('.git', 'node_modules'):
+                    continue
                 try:
                     content = file_path.read_text(encoding='utf-8')
                     new_content = content.replace(search, replace)
@@ -158,6 +171,8 @@ def search_and_replace(
                 except Exception:
                     continue
         
+        if files_affected:
+            _verification_stale(tool_context)
         return {
             'status': 'ok',
             'file_pattern': file_pattern,
@@ -185,7 +200,7 @@ def format_code(
                 'reason': 'Create a sandbox worktree first with create_worktree.'
             }
         
-        path = resolve_in_repo(file_path, root=Path(worktree))
+        path = _safe_worktree_path(file_path, worktree)
         
         if not path.exists():
             return {
@@ -210,6 +225,7 @@ def format_code(
         if formatter == 'black':
             result = subprocess.run(['black', str(path)], capture_output=True, text=True)
             if result.returncode == 0:
+                _verification_stale(tool_context)
                 return {
                     'status': 'ok',
                     'file_path': str(path),
@@ -244,7 +260,7 @@ def organize_imports(
                 'reason': 'Create a sandbox worktree first with create_worktree.'
             }
         
-        path = resolve_in_repo(file_path, root=Path(worktree))
+        path = _safe_worktree_path(file_path, worktree)
         
         if not path.exists():
             return {
@@ -256,6 +272,7 @@ def organize_imports(
         if path.suffix == '.py':
             result = subprocess.run(['isort', str(path)], capture_output=True, text=True)
             if result.returncode == 0:
+                _verification_stale(tool_context)
                 return {
                     'status': 'ok',
                     'file_path': str(path),

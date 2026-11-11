@@ -66,6 +66,14 @@ def log_agent_start(callback_context):
 # If you add them later, this guard already protects them.
 TIER2_TOOLS = {'commit_changes', 'merge_branch'}
 
+# Write tools that can only touch the sandbox worktree (or session bookkeeping). The human gate for
+# these changes is the commit approval in /approve, not a hold gesture per tool call; commit_changes
+# and merge_branch stay in TIER2_TOOLS.
+SANDBOX_WRITE_TOOLS = {
+    'create_worktree', 'apply_patch_to_worktree', 'record_task_targets', 'edit_file', 'apply_patch',
+    'search_and_replace', 'format_code', 'organize_imports',
+}
+
 # Permission levels for tools
 PERMISSION_LEVELS = {
     "read": 0,
@@ -242,6 +250,8 @@ def permission_guard(tool, args, tool_context):
                 'reason': f'Agent {calling_agent} exceeded concurrent call limit of {concurrent_limit}'
             }
 
+    tool_perm = TOOL_PERMISSIONS.get(name, 'read')   # also defined when there is no calling agent
+
     # Original tier2 checks
     if name in TIER2_TOOLS and not tool_context.state.get('approved'):
         outcome = 'blocked_tier2'
@@ -255,6 +265,15 @@ def permission_guard(tool, args, tool_context):
 
     # NEW: Approval workflow for write tools
     # If tool requires write permission, check if it's been approved via hold gesture
+    if tool_perm == 'write' and name in SANDBOX_WRITE_TOOLS:
+        # Sandbox-only write: allowed once the ceiling/budget checks above passed.
+        if name != 'create_worktree' and not tool_context.state.get('worktree') \
+                and name != 'record_task_targets':
+            return {'status': 'blocked', 'reason': 'Create a sandbox worktree first.'}
+        if calling_agent:
+            _record_grant(tool_context.state, calling_agent, name)
+        _log_authorization(calling_agent, name, redacted_args, 'granted_sandbox', time.time() - start_time)
+        return None
     if tool_perm == 'write':
         # Check if this call was previously approved
         if validate_approval(name, args, tool_context):

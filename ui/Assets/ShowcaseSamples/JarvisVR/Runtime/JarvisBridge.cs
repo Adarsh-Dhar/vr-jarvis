@@ -107,7 +107,7 @@ namespace JarvisVR
   [Serializable] public class ArchitectureDto
   {
     public int version, revision, approved_version, approved_revision;
-    public string status, approved_by, provenance;
+    public string status, approved_by, provenance, requirements_source;   // 'model' | 'heuristic' | 'unknown' | 'stored'
     public bool edited_by_user;
     public ComponentDto[] components;
     public RelationshipDto[] relationships;
@@ -149,7 +149,7 @@ namespace JarvisVR
   }
   [Serializable] public class DesignProposeResponse
   {
-    public string status, error;
+    public string status, error, provenance, requirements_source, warning;
     public RequirementsDto requirements;
     public ArchitectureDto architecture;
   }
@@ -224,6 +224,7 @@ namespace JarvisVR
   }
 
   [Serializable] internal class RepoSelectRequest { public string name; }
+  [Serializable] internal class RepoSelectResponse { public string active; public bool session_reset_required; }
   [Serializable] public class HealthDto { public bool ok, cached_tests; public string repo, branch; public int changed; }
 
   /// <summary>HTTP client for server/jarvis_server.py. On a Quest, 127.0.0.1 is the headset itself:
@@ -308,10 +309,22 @@ namespace JarvisVR
       }, fail));
     }
 
-    public void SelectRepo(string name, Action<bool> done) =>
+    /// <summary>Sessions are bound to one repository on the server. Drop ours so the next call opens a fresh
+    /// session for the active repository instead of failing with HTTP 409.</summary>
+    public void ResetSession() { _session = null; }
+
+    public void SelectRepo(string name, Action<bool> done)
+    {
+      if (Busy) { Debug.LogWarning("JARVIS select repo: an ask is running."); done(false); return; }
       StartCoroutine(Send("POST", "/repos/select", JsonUtility.ToJson(new RepoSelectRequest { name = name }),
-        b => { ActiveRepo = name; done(true); },
+        b =>
+        {
+          ActiveRepo = name;
+          ResetSession();   // the server refused the switch if work was unfinished, so this one is safe to drop
+          done(true);
+        },
         e => { Debug.LogWarning("JARVIS select repo: " + e); done(false); }));
+    }
 
     /// <summary>Speech to text on the server. wav = 16 kHz mono 16-bit PCM WAV bytes.</summary>
     public void Transcribe(byte[] wav, Action<string> ok, Action<string> fail)

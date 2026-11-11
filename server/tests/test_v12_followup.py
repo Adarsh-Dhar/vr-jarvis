@@ -41,6 +41,15 @@ def _approve(client, sid):
     return client.post('/approve', json={'session_id': sid, 'approved': True}, headers=H).json()
 
 
+def _full_run(fp, **over):
+    """A test run that satisfies the strict approval gate; override fields to break one condition."""
+    run = {'status': 'passed', 'source': 'live', 'exit_code': 0, 'passed': ['t::a'], 'failed': [],
+           'skipped': [], 'checks_not_run': [], 'diff_hash': fp['diff_hash'], 'head': fp['head'],
+           'command': 'pytest'}
+    run.update(over)
+    return run
+
+
 def _pending(sid, worktree, last_test_run, last_typecheck=None):
     delta = {'pending_approval': 'change', 'approval_type': 'commit',
              'worktree': str(worktree), 'last_test_run': last_test_run}
@@ -69,7 +78,7 @@ class TestApprovalGates:
         (worktree / 'tsconfig.json').write_text('{}')
         sid = _sid(client)
         fp = jarvis_server._worktree_fingerprint(str(worktree))
-        _pending(sid, worktree, {'status': 'passed', 'source': 'live', 'diff_hash': fp['diff_hash']})
+        _pending(sid, worktree, _full_run(fp))
         r = _approve(client, sid)
         assert r['ok'] is False
         assert 'Type check' in r['detail']
@@ -77,8 +86,7 @@ class TestApprovalGates:
     def test_live_passing_run_commits_and_records_validation(self, client, worktree):
         sid = _sid(client)
         fp = jarvis_server._worktree_fingerprint(str(worktree))
-        _pending(sid, worktree, {'status': 'passed', 'source': 'live', 'diff_hash': fp['diff_hash'],
-                                 'command': 'pytest', 'exit_code': 0})
+        _pending(sid, worktree, _full_run(fp))
         r = _approve(client, sid)
         # An empty worktree has nothing to commit; the gates must still have been passed.
         assert 'Tests must pass' not in r.get('detail', '')

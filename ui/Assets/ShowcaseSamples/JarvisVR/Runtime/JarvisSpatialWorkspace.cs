@@ -107,6 +107,7 @@ namespace JarvisVR
     private readonly Dictionary<string, string> _cycleReasons = new Dictionary<string, string>();
     private string _cycleStatus, _cycleEvidence;
     private string _lastTaskError;
+    private string _designWarning;   // server's fallback warning from /design/propose
     private TestRunDto _lastTestRun;
     private JarvisSpatialButton _qPrevBtn, _qNextBtn, _qSecBtn, _qResolveBtn, _qEditBtn, _qDeferBtn, _qReopenBtn;
     private JarvisSpatialButton _cmpAmbPrev, _cmpAmbNext, _cmpCandPrev, _cmpCandNext, _cmpAssignBtn;
@@ -950,6 +951,10 @@ namespace JarvisVR
           return;
         }
         _design = new DesignStateDto { requirements = r.requirements, architecture = r.architecture };
+        // The response carries the provenance outside the architecture body too; keep both.
+        if (string.IsNullOrEmpty(r.architecture.provenance)) r.architecture.provenance = r.provenance;
+        if (string.IsNullOrEmpty(r.architecture.requirements_source)) r.architecture.requirements_source = r.requirements_source;
+        _designWarning = r.warning;
         _compareStatus.Clear();
         _compareOverrides.Clear();
         _cmpAmbSel = -1; _cmpCandSel = 0;
@@ -1615,6 +1620,20 @@ namespace JarvisVR
       _designCmpPanel.SetBody(sb.ToString());
     }
 
+    /// <summary>One provenance line. 'model' is green, 'heuristic' amber, anything else muted. Never rendered as
+    /// "AI" unless the server said so.</summary>
+    private static void AppendProvenance(StringBuilder sb, string what, string source)
+    {
+      JarvisPalette pal = JarvisPalette.Current;
+      string src = string.IsNullOrEmpty(source) ? "unknown" : source;
+      string label, col;
+      if (src == "model") { label = "AI model"; col = Hex(pal.Green); }
+      else if (src == "heuristic") { label = "heuristic fallback (not AI)"; col = Hex(pal.Amber); }
+      else if (src == "stored") { label = "stored (origin not recorded)"; col = Hex(pal.TextMuted); }
+      else { label = src; col = Hex(pal.TextMuted); }
+      sb.Append(what).Append(": <color=#").Append(col).Append('>').Append(label).Append("</color>\n");
+    }
+
     private void RefreshDesignAct()
     {
       if (_designActPanel == null) return;
@@ -1626,12 +1645,13 @@ namespace JarvisVR
       }
       var sb = new StringBuilder();
       // Provenance banner: a heuristic fallback is never shown as an AI design.
-      string prov = a.provenance ?? "unknown";
-      if (prov == "heuristic")
-        sb.Append("<color=#").Append(Hex(JarvisPalette.Current.Amber))
-          .Append(">Heuristic fallback (not AI)</color>\n");
-      else if (prov == "model")
-        sb.Append("<color=#").Append(Hex(JarvisPalette.Current.Green)).Append(">AI model</color>\n");
+      AppendProvenance(sb, "Architecture", a.provenance);
+      AppendProvenance(sb, "Requirements", a.requirements_source);
+      string warn = _designWarning;
+      if (string.IsNullOrEmpty(warn) && (a.provenance == "heuristic" || a.requirements_source == "heuristic"))
+        warn = "Part of this proposal came from the heuristic fallback, not the AI model. Review it before relying on it.";
+      if (!string.IsNullOrEmpty(warn))
+        sb.Append("<color=#").Append(Hex(JarvisPalette.Current.Amber)).Append(">! ").Append(warn).Append("</color>\n");
       if (a.edited_by_user) sb.Append("<color=#").Append(Hex(JarvisPalette.Current.TextMuted)).Append(">Edited by you</color>\n");
       sb.Append("v").Append(a.version).Append(" rev ").Append(a.revision).Append("  ")
         .Append(a.status == "approved"
@@ -1662,6 +1682,23 @@ namespace JarvisVR
           sb.Append(sel.description).Append('\n');
         if (sel.files != null && sel.files.Length > 0)
           sb.Append("files: ").Append(string.Join(", ", sel.files)).Append('\n');
+        if (sel.symbols != null && sel.symbols.Length > 0)
+        {
+          sb.Append("symbols: ");
+          for (int si = 0; si < sel.symbols.Length && si < 6; si++)
+            sb.Append(si > 0 ? ", " : "").Append(string.IsNullOrEmpty(sel.symbols[si].name) ? sel.symbols[si].id : sel.symbols[si].name);
+          if (sel.symbols.Length > 6) sb.Append(" +").Append(sel.symbols.Length - 6);
+          sb.Append('\n');
+        }
+        if (sel.confirmed_targets != null && sel.confirmed_targets.Length > 0)
+          sb.Append("confirmed: ").Append(string.Join(", ", sel.confirmed_targets)).Append('\n');
+        if (sel.rejected_targets != null && sel.rejected_targets.Length > 0)
+        {
+          sb.Append("rejected: ");
+          for (int ri = 0; ri < sel.rejected_targets.Length; ri++)
+            sb.Append(ri > 0 ? "; " : "").Append(sel.rejected_targets[ri].file).Append(" (").Append(sel.rejected_targets[ri].reason).Append(')');
+          sb.Append('\n');
+        }
         if (sel.acceptance_criteria != null && sel.acceptance_criteria.Length > 0)
           sb.Append("criteria: ").Append(string.Join(" | ", sel.acceptance_criteria)).Append('\n');
         if (!string.IsNullOrEmpty(sel.repo_match)) sb.Append("repo match: ").Append(sel.repo_match).Append('\n');
@@ -2180,6 +2217,9 @@ namespace JarvisVR
     private void OnRepoActivated(string name)
     {
       if (_repos != null) _repos.active = name;
+      // Design, plan and tasks belong to the previous repository's session: drop them so DESIGN reloads
+      // for the new session instead of showing (and acting on) stale data.
+      _design = null; _designRequested = false; _tasks = null; _designWarning = null; _lastTaskError = null;
       _browserRepo = name;
       _browserPath = "";
       _browserPage = 0;

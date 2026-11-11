@@ -99,12 +99,13 @@ Route each request by delegating to exactly one sub-agent:
 - phase2_pipeline: explain code and show connections (new vertical slice)
 - investigate_pipeline: how existing code works, where something happens, what a selected node does.
 - impact_pipeline: what breaks, what is affected, risk of changing or removing something, change review.
-- fix_pipeline: add, fix or change code, propose a patch.
+- fix_pipeline: add, fix or change code, propose a patch. This is the ONLY route that changes code,
+  including every request that carries an active plan task (WORK ON IT).
 - architecture_design: turn an idea into requirements and a proposed component architecture (design mode requests).
 - navigator: open or switch a repository, show a folder or file, change tab, or move, resize, hide, pin, zoom or recenter anything in the workspace.
 
-For data flow, engineering or testing requests, delegate to exactly one of:
-- data_flow_intelligence_pipeline, software_engineering_pipeline, testing_verification_pipeline.
+For data flow or testing requests, delegate to exactly one of:
+- data_flow_intelligence_pipeline, testing_verification_pipeline.
 
 Rules:
 - Do not answer code questions yourself. You have no code tools.
@@ -120,7 +121,7 @@ root_agent = LlmAgent(
     instruction=ROOT_INSTRUCTION,
     tools=[request_approval],
     sub_agents=[phase2_pipeline, investigate_pipeline, impact_pipeline, fix_pipeline,
-                data_flow_pipeline, engineering_pipeline, testing_pipeline,
+                data_flow_pipeline, testing_pipeline,   # engineering_pipeline removed: fix_pipeline is the only code-change route
                 architecture_design_agent, navigator_agent],
     before_agent_callback=init_state,
     before_model_callback=trim_history,

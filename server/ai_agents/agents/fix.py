@@ -7,6 +7,7 @@ from ..tools.exec_tools import read_test_results, run_tests, run_typecheck
 from ..tools.git_tools import apply_patch_to_worktree, create_worktree, get_worktree_diff
 from ..tools.graph_tools import find_tests_for_node, get_callers, get_source, search_graph_symbols
 from ..tools.repository_tools import (list_files, read_file, search_code, search_symbols as repo_search_symbols)
+from ..tools.software_engineering_tools import record_task_targets
 from ..tools.navigation_tools import (get_symbol_definition, get_symbol_references, get_symbol_hover_info,
                                        get_call_hierarchy)
 
@@ -19,17 +20,28 @@ patch_agent = LlmAgent(
 You write a small, safe patch for the user's request.
 Selected node (may be empty): {selection}
 Impact context from the last impact analysis (may be empty): {impact_context}
+Active plan task (empty unless the request came from WORK ON IT): {active_task}
+
+When active_task is not empty it is the authoritative task record (id, title, description,
+files, symbols, acceptance_criteria, depends_on). Its files and symbols are SUGGESTIONS only.
 
 Process:
-1. Locate the code to change with search_graph_symbols, repo_search_symbols or the selected node.
-2. Read it and its neighbours with get_source, read_file and get_callers so you follow the repo's conventions.
-3. Use navigation tools (get_symbol_definition, get_symbol_references) to understand the code structure.
-4. Call create_worktree, then write a minimal unified diff that includes a regression test, and
+1. If active_task is present: read EVERY file in active_task.files with read_file, and look up every
+   entry in active_task.symbols with get_source or search_graph_symbols, BEFORE writing any diff.
+2. Otherwise locate the code to change with search_graph_symbols, repo_search_symbols or the selected node.
+3. Read neighbours with get_source, read_file and get_callers so you follow the repo's conventions.
+4. Use navigation tools (get_symbol_definition, get_symbol_references) to understand the code structure.
+5. If active_task is present, call record_task_targets ONCE, before editing, with confirmed_targets
+   (files you will really modify) and rejected_targets (suggested files you will not touch, each
+   {file, reason}). Do not edit a file that is not in confirmed_targets.
+6. Call create_worktree, then write a minimal unified diff that includes a regression test, and
    apply it with apply_patch_to_worktree. If applying fails, fix the diff and retry once.
-5. Call get_worktree_diff to get the diff that was actually applied.
+7. Call get_worktree_diff to get the diff that was actually applied.
 
 Rules:
 - Touch only what the request needs. Never commit or merge.
+- If active_task is present, the patch must satisfy every item in active_task.acceptance_criteria;
+  the regression test must exercise them. List each criterion and how it is met in assumptions.
 - State any assumption you made.
 
 Return a JSON object with keys: summary, files (list of paths), diff (from get_worktree_diff),
@@ -37,7 +49,7 @@ tests_added (list of test file paths), assumptions (list), claims (list of objec
 confidence).
 ''',
     tools=[search_graph_symbols, get_source, get_callers, find_tests_for_node,
-           create_worktree, apply_patch_to_worktree, get_worktree_diff,
+           record_task_targets, create_worktree, apply_patch_to_worktree, get_worktree_diff,
            list_files, read_file, search_code, repo_search_symbols,
            get_symbol_definition, get_symbol_references, get_symbol_hover_info,
            get_call_hierarchy],

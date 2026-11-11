@@ -42,6 +42,10 @@ DEFAULT_AGENT_CONFIG = {
     "testing_verification": {"tool_budget": 25, "permission_ceiling": "execute"},
     "visualization_spatial": {"tool_budget": 20, "permission_ceiling": "read"},
     "architecture_design": {"tool_budget": 20, "permission_ceiling": "read"},
+    # fix_pipeline agents; patch_agent reads several files before it edits
+    "patch_agent": {"tool_budget": 40, "permission_ceiling": "write"},
+    "patch_repair_agent": {"tool_budget": 20, "permission_ceiling": "write"},
+    "verifier_agent": {"tool_budget": 12, "permission_ceiling": "execute"},
 }
 
 
