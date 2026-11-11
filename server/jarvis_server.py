@@ -319,7 +319,6 @@ def _turn_state(body, session_state=None):
         'selection': body.selection,
         'user_request': body.text,
         'repo_path': str(config.REPO_ROOT),
-        'repo': config.REPO_ROOT.name,
         'available_agents': ', '.join(list_agents()),
         'session_id': body.session_id,
         # Links this turn's code change back to its plan task so /promote
@@ -351,6 +350,7 @@ class ApproveBody(BaseModel):
 async def new_session():
     session_id = uuid.uuid4().hex
     await ensure(session_id)
+    await set_state(session_id, {'repo': config.REPO_ROOT.name})   # bound for the session's life
     return {'session_id': session_id}
 
 
@@ -369,7 +369,10 @@ async def _check_session_repo(session_id):
     to the wrong codebase."""
     state = (await ensure(session_id)).state
     sess_repo = state.get('repo')
-    if sess_repo and sess_repo != config.REPO_ROOT.name:
+    if not sess_repo:
+        await set_state(session_id, {'repo': config.REPO_ROOT.name})
+        return
+    if sess_repo != config.REPO_ROOT.name:
         raise HTTPException(status_code=409,
             detail=f'Session repository is {sess_repo}, but the active repository '
                    f'is {config.REPO_ROOT.name}. Start a new session.')
@@ -600,6 +603,7 @@ async def _run_turn_streaming(body):
 async def ask_stream(body: AskBody):
     """Stream agent progress as Server-Sent Events."""
     _require_active_repo(body.repo)
+    await _check_session_repo(body.session_id)
     async def gen():
         async with locks[body.session_id]:      # hold the lock for the whole stream
             session = await ensure(body.session_id)
@@ -728,6 +732,7 @@ async def _seen_request(session_id, request_id):
 async def ask(body: AskBody):
     """Non-streaming endpoint for compatibility."""
     _require_active_repo(body.repo)
+    await _check_session_repo(body.session_id)
     error = ''
     if await _seen_request(body.session_id, body.request_id):
         return {'reply': '', 'error': '', 'duplicate': True,
@@ -768,6 +773,7 @@ async def ask(body: AskBody):
 @app.post('/approve', dependencies=[Depends(auth)])
 async def approve(body: ApproveBody):
     _require_active_repo(body.repo)
+    await _check_session_repo(body.session_id)
     if await _seen_request(body.session_id, body.request_id):
         return {'ok': True, 'duplicate': True, 'detail': 'Request already handled.'}
     async with locks[body.session_id]:
@@ -856,6 +862,7 @@ class PromoteBody(BaseModel):
 @app.post('/promote', dependencies=[Depends(auth)])
 async def promote(body: PromoteBody):
     _require_active_repo(body.repo)
+    await _check_session_repo(body.session_id)
     async with locks[body.session_id]:
         state = (await ensure(body.session_id)).state
         last = state.get('last_commit') or {}
@@ -932,19 +939,25 @@ async def get_task_state(session_id: str):
     tasks = []
     for i, t in enumerate(raw_tasks if isinstance(raw_tasks, list) else []):
         if isinstance(t, dict):
-            tasks.append({'id': str(t.get('id', i)),
-                          'title': t.get('title') or t.get('summary', ''),
-                          'status': t.get('status', 'pending'),
-                          'depends_on': [str(d) for d in (t.get('depends_on') or [])],
-                          'component_id': str(t.get('component_id') or ''),
-                          'acceptance': str(t.get('acceptance') or ''),
-                          'acceptance_criteria': [str(c) for c in (t.get('acceptance_criteria') or [])],
-                          'files': [str(f) for f in (t.get('files') or [])],
-                          'symbols': t.get('symbols') or [],
-                          'repo_match': str(t.get('repo_match') or ''),
-                          'owner': str(t.get('owner') or ''),
-                          'evidence': str(t.get('evidence') or ''),
-                          'evidence_check': t.get('evidence_check')})
+            # Keep every field the plan stored (description, suggested_files,
+            # confirmed_targets, rejected_targets, new_files, modifies_existing,
+            # needs_investigation, design_revision, cycle_*, completion, ...) and
+            # normalise the ones Unity reads by type.
+            rec = dict(t)
+            rec.update({'id': str(t.get('id', i)),
+                        'title': t.get('title') or t.get('summary', ''),
+                        'status': t.get('status', 'pending'),
+                        'depends_on': [str(d) for d in (t.get('depends_on') or [])],
+                        'component_id': str(t.get('component_id') or ''),
+                        'acceptance': str(t.get('acceptance') or ''),
+                        'acceptance_criteria': [str(c) for c in (t.get('acceptance_criteria') or [])],
+                        'files': [str(f) for f in (t.get('files') or [])],
+                        'symbols': t.get('symbols') or [],
+                        'repo_match': str(t.get('repo_match') or ''),
+                        'owner': str(t.get('owner') or ''),
+                        'evidence': str(t.get('evidence') or ''),
+                        'evidence_check': t.get('evidence_check')})
+            tasks.append(rec)
         elif isinstance(t, str):
             tasks.append({'id': str(i), 'title': t, 'status': 'pending',
                           'depends_on': [], 'component_id': '', 'acceptance': '', 'owner': ''})
@@ -1278,6 +1291,7 @@ def _apply_design_op(arch, op):
 
 @app.post('/design/requirements', dependencies=[Depends(auth)])
 async def design_requirements(body: DesignIdeaBody):
+    await _check_session_repo(body.session_id)
     res = await asyncio.to_thread(extract_requirements, body.idea_text)
     await set_state(body.session_id, {'design_requirements': res['requirements']})
     await _persist_design(body.session_id)
@@ -1291,13 +1305,18 @@ async def design_requirements(body: DesignIdeaBody):
 
 @app.post('/design/propose', dependencies=[Depends(auth)])
 async def design_propose(body: DesignProposeBody):
+    await _check_session_repo(body.session_id)
     req = None
+    req_source = 'unknown'
     if body.idea_text.strip():
         res = await asyncio.to_thread(extract_requirements, body.idea_text)
         req = res['requirements']
+        req_source = res.get('source') or 'unknown'
     else:
         view = await _design_view(body.session_id)
         req = view['requirements']
+        req_source = ((view.get('architecture') or {}).get('requirements_source')
+                      or 'stored')
     if not req or not any(req.get(k) for k in ('goals', 'functional')):
         raise HTTPException(status_code=400, detail='No requirements: pass idea_text or call /design/requirements first.')
 
@@ -1310,13 +1329,19 @@ async def design_propose(body: DesignProposeBody):
     # 'unknown' = caller did not report a source. The UI must label these
     # differently — a fallback proposal is not an AI design.
     arch['provenance'] = prop.get('source') or 'unknown'
+    arch['requirements_source'] = req_source
     arch['revision'] = 1
     # A new proposal invalidates any previous comparison and plan.
     await set_state(body.session_id, {'design_requirements': req, 'design': arch,
                                       'design_compare': {}, 'implementation_plan': {}})
     await _persist_design(body.session_id)
-    return {'status': 'ok', 'provenance': arch['provenance'],
-            'requirements': req, 'architecture': arch}
+    out = {'status': 'ok', 'provenance': arch['provenance'],
+           'requirements_source': req_source,
+           'requirements': req, 'architecture': arch}
+    if 'heuristic' in (arch['provenance'], req_source):
+        out['warning'] = ('Part of this proposal came from the heuristic fallback, '
+                          'not the AI model. Review it before relying on it.')
+    return out
 
 
 @app.get('/design/{session_id}', dependencies=[Depends(auth)])

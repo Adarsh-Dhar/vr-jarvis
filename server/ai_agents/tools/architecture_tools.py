@@ -29,6 +29,25 @@ COMPONENT_KINDS = ('service', 'library', 'ui', 'data', 'external')
 RELATIONSHIP_KINDS = ('calls', 'reads', 'publishes')
 
 
+def _put_design(tool_context, **values):
+    """Write tool results into the SAME session keys the /design endpoints use
+    (design_requirements, design, design_compare, implementation_plan) and
+    persist them, so the root agent and the VR UI share one design state.
+    No-op when called without a tool context (the endpoints call the tools
+    directly and persist on their own)."""
+    state = getattr(tool_context, 'state', None)
+    if state is None:
+        return
+    for key, value in values.items():
+        state[key] = value
+    sid = state.get('session_id')
+    if sid:
+        save_design(sid, {'requirements': state.get('design_requirements'),
+                          'architecture': state.get('design'),
+                          'compare': state.get('design_compare'),
+                          'plan': state.get('implementation_plan')})
+
+
 def _blank_requirements() -> Dict[str, List[str]]:
     return {k: [] for k in REQUIREMENT_KEYS}
 
@@ -104,6 +123,7 @@ def extract_requirements(idea_text: str, tool_context: ToolContext = None) -> di
     if not any(req.values()):
         req = heuristic()
         source = 'heuristic'   # model replied with nothing usable
+    _put_design(tool_context, design_requirements=req)
     return {'status': 'ok', 'source': source, 'requirements': req}
 
 
@@ -212,6 +232,15 @@ def propose_architecture(requirements, tool_context: ToolContext = None) -> dict
         h = heuristic()
         comps, rels = h['components'], h['relationships']
         source = 'heuristic'   # model output had no usable components
+    arch = _blank_architecture()
+    arch['components'] = comps
+    arch['relationships'] = rels
+    arch['open_questions'] = list(req.get('open_questions') or [])
+    arch['provenance'] = source
+    arch['revision'] = 1
+    # A new proposal invalidates any earlier comparison and plan.
+    _put_design(tool_context, design_requirements=req, design=arch,
+                design_compare={}, implementation_plan={})
     return {'status': 'ok', 'source': source,
             'components': comps, 'relationships': rels}
 
@@ -540,9 +569,11 @@ def compare_to_repository(architecture, tool_context: ToolContext = None,
              for n in nodes
              if (n.get('id') or n.get('name')) not in used_nodes
              and n.get('level') not in ('module', 'file')]
-    return {'status': 'ok', 'matched': matched, 'missing': missing,
-            'ambiguous': ambiguous, 'extra': extra[:50], 'relationships': rel_results,
-            'design_revision': arch.get('revision'), 'repo': repo}
+    result = {'status': 'ok', 'matched': matched, 'missing': missing,
+              'ambiguous': ambiguous, 'extra': extra[:50], 'relationships': rel_results,
+              'design_revision': arch.get('revision'), 'repo': repo}
+    _put_design(tool_context, design_compare=result)
+    return result
 
 
 def generate_implementation_plan(architecture, tool_context: ToolContext = None,
@@ -556,6 +587,10 @@ def generate_implementation_plan(architecture, tool_context: ToolContext = None,
     Returns {tasks: [...]} with depends_on, component_id, acceptance,
     files, symbols and owner on every task.
     """
+    shared = (getattr(tool_context, 'state', None) or {}).get('design')
+    if shared is not None and shared.get('status') != 'approved':
+        return {'status': 'error', 'tasks': [], 'circular': [],
+                'error': 'Architecture must be approved by the developer before a plan is generated.'}
     arch = architecture.get('architecture', architecture) if isinstance(architecture, dict) else {}
     comps = arch.get('components') or []
     rels = arch.get('relationships') or []
@@ -666,8 +701,15 @@ def generate_implementation_plan(architecture, tool_context: ToolContext = None,
                  'owner': 'developer'}
             tasks.append(t)
 
-    return {'status': 'ok', 'tasks': tasks, 'circular': cyclic,
-            'cycle_paths': cycle_paths}
+    result = {'status': 'ok', 'tasks': tasks, 'circular': cyclic,
+              'cycle_paths': cycle_paths}
+    if shared is not None:
+        _put_design(tool_context, implementation_plan={
+            'architecture_version': shared.get('version'),
+            'architecture_revision': shared.get('revision'),
+            'repo': config.REPO_ROOT.name, 'status': 'active',
+            'tasks': tasks, 'circular': cyclic, 'cycle_paths': cycle_paths})
+    return result
 
 
 def _cycle_paths(deps, cyclic_set):
