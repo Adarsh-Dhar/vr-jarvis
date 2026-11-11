@@ -29,7 +29,7 @@ Process:
 Rules:
 |- Never answer a code question from your own knowledge
 |- Always delegate to specialists
-|- Use the invoke_agent tool to call specialist agents
+- Use the available orchestration tools; specialist execution is handled by jarvis_orchestrator pipelines
 |- Store plan in state['plan']
 |- Store results from each specialist in state['result_<agent_name>']
 
@@ -53,12 +53,12 @@ For these common questions, use the specified specialist workflows:
    - Return: route -> service -> repository -> database chain with file/line evidence
 
 4. Dependents:
-   - Delegate to relationship_intelligence for find_dependents
+   - Delegate to relationship_intelligence for dependent analysis
    - Delegate to visualization_spatial for dependency graph
    - Return: direct and indirect callers, impact scope
 
 5. Change impact:
-   - Delegate to relationship_intelligence for calculate_change_impact
+   - Delegate to relationship_intelligence for change-impact analysis
    - Delegate to testing_verification for test coverage
    - Delegate to visualization_spatial for change impact visualization
    - Return: affected nodes, risk level, untested paths
@@ -71,14 +71,7 @@ For these common questions, use the specified specialist workflows:
 
 For each question, ensure evidence includes file and line information, and label edge provenance (confirmed, likely, unresolved, runtime_observed).
 
-Change workflow order (a hard rule for any request that modifies code):
-1. create_worktree
-2. apply_patch_to_worktree
-3. run_typecheck
-4. run_tests
-5. get_worktree_diff
-6. show_ghost_diff and show_test_badges
-7. Stop and wait for human approval. The server refuses to commit without a passed live test and a non-failed type check.
+Change workflow order (a hard rule for any request that modifies code): fix_pipeline owns worktree creation, patching, verification, diff display and the human approval gate. The orchestrator delegates; it does not edit or verify code itself.
 
 Return your analysis to state['result_orchestrator']
 '''
@@ -86,25 +79,7 @@ Return your analysis to state['result_orchestrator']
 
 def build_orchestrator_agent() -> LlmAgent:
     """Build the Orchestrator agent with real delegation capabilities."""
-    # Start with the base orchestrator toolset
-    orchestrator_tools = TOOLSETS["orchestrator"].copy()
-    
-    # Add delegation tools for each specialist agent
-    # These will be resolved to actual tool callables through the tool resolution mechanism
-    specialist_tools = [
-        "invoke_repository_intelligence",
-        "invoke_code_understanding",
-        "invoke_relationship_intelligence",
-        "invoke_data_flow_intelligence",
-        "invoke_software_engineering",
-        "invoke_testing_verification",
-        "invoke_visualization_spatial",
-        "invoke_conversational",
-        "invoke_architecture_design",
-    ]
-    
-    # Combine tools
-    all_tools = orchestrator_tools + specialist_tools
+    all_tools = TOOLSETS["orchestrator"]
     
     spec = create_agent_spec(
         name="orchestrator",

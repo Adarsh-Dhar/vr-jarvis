@@ -67,13 +67,18 @@ def parse_source_code(file_path: str, tool_context: ToolContext) -> dict:
                     'language': 'python',
                     'ast': _ast_to_dict(tree)
                 }
+            return {
+                'status': 'error',
+                'file_path': file_path,
+                'language': 'python',
+                'error': 'Could not parse Python source'
+            }
         
-        # For other languages, return basic info
-        content = path.read_text(encoding='utf-8')
         return {
-            'status': 'ok',
+            'status': 'unsupported_language',
             'file_path': file_path,
-            'language': 'unknown',
+            'language': path.suffix.lstrip('.').lower() or 'unknown',
+            'supported': ['py'],
             'ast': None,
             'note': 'AST parsing only implemented for Python'
         }

@@ -173,3 +173,29 @@ def promote_branch(branch: str) -> dict:
         return {'ok': False, 'detail': (m.stdout + m.stderr)[-400:]}
     sha = subprocess.run(['git', 'rev-parse', '--short', 'HEAD'], cwd=REPO_ROOT, capture_output=True, text=True).stdout.strip()
     return {'ok': True, 'commit': sha, 'detail': 'Main checkout fast-forwarded to ' + branch + '.'}
+
+
+@safe
+def get_recent_commits(tool_context: ToolContext, limit: int = 10, path: str = '') -> dict:
+    limit = max(1, min(int(limit), 50))
+    cwd = tool_context.state.get('worktree') or str(REPO_ROOT)
+    fmt = '%x1e%H%x1f%an%x1f%aI%x1f%s'
+    cmd = ['git', 'log', '-n%d' % limit, '--pretty=format:' + fmt, '--name-only']
+    if path:
+        resolve_in_repo(path)
+        cmd += ['--', path]
+    proc = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=15)
+    if proc.returncode != 0:
+        return {'status': 'error', 'error': proc.stderr.strip()[:300]}
+    commits = []
+    for rec in proc.stdout.split(chr(30)):
+        lines = rec.strip().splitlines()
+        if not lines:
+            continue
+        head = lines[0].split(chr(31))
+        if len(head) < 4:
+            continue
+        commits.append({'hash': head[0], 'author': head[1], 'date': head[2], 'message': head[3],
+                        'files': [ln for ln in lines[1:] if ln.strip()],
+                        'source': 'jarvis' if head[3].startswith('JARVIS:') else 'other'})
+    return {'status': 'ok', 'commits': commits}

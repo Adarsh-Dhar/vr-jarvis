@@ -1,3 +1,5 @@
+import functools
+
 MAX_EVIDENCE = 500
 
 
@@ -67,3 +69,16 @@ def abs_repo_path(rel_path):
     if not rel_path:
         raise ValueError('Node has no file path')
     return resolve_in_repo(rel_path)
+
+
+def heuristic(note):
+    def deco(fn):
+        @functools.wraps(fn)
+        def wrapper(*args, **kwargs):
+            result = fn(*args, **kwargs)
+            if isinstance(result, dict):
+                result.setdefault('analysis_level', 'heuristic')
+                result.setdefault('limitations', note)
+            return result
+        return wrapper
+    return deco

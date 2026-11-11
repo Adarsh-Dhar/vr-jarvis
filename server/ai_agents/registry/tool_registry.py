@@ -1,7 +1,21 @@
 """Tool registry for managing tool specifications."""
+import inspect
 from typing import List, Dict
 from ..contracts.tool import ToolSpec
 from ..agents.toolsets import TOOL_LEVELS
+
+
+def _input_schema(fn):
+    props, required = {}, []
+    for name, p in inspect.signature(fn).parameters.items():
+        if name == 'tool_context':
+            continue
+        ann = p.annotation
+        props[name] = {'type': {str: 'string', int: 'integer', float: 'number', bool: 'boolean',
+                                list: 'array', dict: 'object'}.get(ann, 'string')}
+        if p.default is inspect.Parameter.empty:
+            required.append(name)
+    return {'type': 'object', 'properties': props, 'required': required}
 
 
 class ToolRegistry:
@@ -32,11 +46,15 @@ class ToolRegistry:
             else:
                 group = 'general'
             
+            from .. import tools as tools_module
+            fn = getattr(tools_module, tool_name, None)
             self._tools[tool_name] = ToolSpec(
                 name=tool_name,
                 group=group,
                 level=level,
-                owner_agents=[]
+                owner_agents=[],
+                input_schema=_input_schema(fn) if callable(fn) else None,
+                output_schema={'status': 'string'}
             )
     
     def get(self, tool_name: str) -> ToolSpec:

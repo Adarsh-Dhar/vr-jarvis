@@ -35,3 +35,19 @@ def test_all_exported_tools_have_permission_levels():
             f"{sorted(missing_levels)}. Add them to TOOL_LEVELS in toolsets.py with appropriate "
             f"permission levels ('read', 'execute', or 'write')."
         )
+
+
+def test_instructions_only_name_available_tools():
+    from ai_agents.agents import (software_engineering, data_flow, testing_verification,
+                                  code_understanding, relationship_intelligence,
+                                  repository_intelligence)
+    from ai_agents.agents.toolsets import validate_instruction_tools
+    errors = validate_instruction_tools({
+        'software_engineering': software_engineering.INSTRUCTION,
+        'data_flow_intelligence': data_flow.INSTRUCTION,
+        'testing_verification': testing_verification.INSTRUCTION,
+        'code_understanding': code_understanding.INSTRUCTION,
+        'relationship_intelligence': relationship_intelligence.INSTRUCTION,
+        'repository_intelligence': repository_intelligence.INSTRUCTION,
+    })
+    assert errors == []

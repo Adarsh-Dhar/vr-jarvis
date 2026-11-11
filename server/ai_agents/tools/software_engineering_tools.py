@@ -11,7 +11,7 @@ import shutil
 import time
 from google.adk.tools import ToolContext
 from ._safe import safe
-from ._common import repo_root, resolve_in_repo
+from ._common import heuristic, repo_root, resolve_in_repo
 
 
 def _safe_worktree_path(file_path, worktree):
@@ -429,6 +429,7 @@ def git_branch(
         }
 
 @safe
+@heuristic('Skeleton only, not a behaviour-grounded implementation.')
 def generate_function(
     description: str,
     tool_context: ToolContext,
@@ -470,6 +471,7 @@ def generate_function(
         }
 
 @safe
+@heuristic('Skeleton only, not a behaviour-grounded implementation.')
 def generate_class(
     description: str,
     tool_context: ToolContext,
@@ -514,6 +516,7 @@ def generate_class(
         }
 
 @safe
+@heuristic('Produces a plan; does not perform the refactor.')
 def extract_function(
     code_range: Dict,
     function_name: str,
@@ -568,6 +571,7 @@ def extract_function(
         }
 
 @safe
+@heuristic('Produces a plan; does not perform the refactor.')
 def rename_symbol(
     old_name: str,
     new_name: str,

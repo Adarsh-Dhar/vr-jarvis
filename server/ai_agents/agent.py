@@ -1,7 +1,7 @@
 from google.adk.agents import LlmAgent, LoopAgent, ParallelAgent, SequentialAgent
 
 from .agents.critic import make_critic
-from .agents.fix import code_reviewer, patch_agent, patch_repair, verifier
+from .agents.fix import code_reviewer, patch_agent, patch_repair, make_patch_review_repair, make_review_verifier, verifier
 from .agents.impact import change_loader, impact_synthesizer, static_impact, test_mapper
 from .agents.investigator import investigator
 from .agents.navigator import make_navigator
@@ -10,7 +10,7 @@ from .agents.scene_director import make_scene_director, make_result_scene_direct
 from .agents.repository_intelligence import repository_intelligence_agent
 from .agents.code_understanding import code_understanding_agent
 from .agents.relationship_intelligence import relationship_intelligence_agent
-from .agents.data_flow import data_flow_intelligence_agent
+from .agents.data_flow import data_flow_intelligence_agent, build_data_flow_agent
 from .agents.software_engineering import software_engineering_agent
 from .agents.testing_verification import testing_verification_agent
 from .agents.visualization import visualization_agent
@@ -61,11 +61,18 @@ verify_loop = LoopAgent(
     max_iterations=3,
 )
 
+review_loop = LoopAgent(
+    name='review_loop',
+    description='Reviews the patch and repairs requested changes, up to two rounds.',
+    sub_agents=[code_reviewer, make_patch_review_repair(), make_review_verifier()],
+    max_iterations=2,
+)
+
 fix_pipeline = SequentialAgent(
     name='fix_pipeline',
     description=('Proposes a code change with a test in a sandbox, verifies it, and shows the result '
                  'as a reviewable diff. Use for add, fix or change requests.'),
-    sub_agents=[patch_agent, verify_loop, code_reviewer,
+    sub_agents=[patch_agent, verify_loop, review_loop,
                 make_critic('fix_critic', 'proposed_patch'),
                 make_scene_director('fix_scene')],
 )
@@ -74,7 +81,7 @@ fix_pipeline = SequentialAgent(
 phase2_specialists = ParallelAgent(
     name='phase2_specialists',
     description='Run Repository, Code Understanding, and Relationship in parallel',
-    sub_agents=[repository_intelligence_agent, code_understanding_agent, relationship_intelligence_agent],
+    sub_agents=[repository_intelligence_agent, code_understanding_agent, relationship_intelligence_agent, build_data_flow_agent()],
 )
 
 phase2_pipeline = SequentialAgent(
@@ -102,6 +109,8 @@ Route each request by delegating to exactly one sub-agent:
 - fix_pipeline: add, fix or change code, propose a patch. This is the ONLY route that changes code,
   including every request that carries an active plan task (WORK ON IT).
 - architecture_design: turn an idea into requirements and a proposed component architecture (design mode requests).
+- For error, stack trace or 'why does X fail' requests: run investigator, then pass its findings to relationship_intelligence and data_flow_intelligence via findings; call fix_pipeline only if the developer asks for a fix. The final answer must contain likely cause, evidence references, proposed correction and explanation.
+- For broad 'how does this project work' questions, use phase2_pipeline.
 - navigator: open or switch a repository, show a folder or file, change tab, or move, resize, hide, pin, zoom or recenter anything in the workspace.
 
 For data flow or testing requests, delegate to exactly one of:

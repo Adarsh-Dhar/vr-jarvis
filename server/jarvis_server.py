@@ -711,7 +711,9 @@ def _code_review_summary(state):
                 if isinstance(f, dict) and str(f.get('severity') or '').lower() == 'blocker']
     return {'verdict': cr.get('verdict'), 'summary': str(cr.get('summary') or '')[:300],
             'blockers': len(blockers),
-            'suggested_tests': [str(t)[:120] for t in (cr.get('suggested_tests') or [])[:10]]}
+            'suggested_tests': [str(t)[:120] for t in (cr.get('suggested_tests') or [])[:10]],
+            'security': cr.get('security') or {'status': 'not_analysed'},
+            'security_note': 'Model review only. No dedicated security scanner is integrated.'}
 
 
 def _build_ask_response(reply: str, error: str, state: dict) -> dict:
@@ -1054,6 +1056,7 @@ from ai_agents.tools.architecture_tools import (
     generate_implementation_plan, verify_task_evidence,
     _blank_architecture, save_design, load_design,
 )
+from ai_agents.tools.design_ops import apply_design_op, finalize_edit
 
 DESIGN_KEYS = ('design_requirements', 'design', 'design_compare', 'implementation_plan')
 
@@ -1094,6 +1097,10 @@ async def _design_view(session_id):
                                 ('design_compare', 'compare'),
                                 ('implementation_plan', 'plan')):
         view[disk_key] = state[state_key] if state_key in state else disk[disk_key]
+    plan_stale = bool(state.get('plan_stale')) or (
+        bool(view.get('plan')) and bool(view.get('architecture')) and
+        (view['architecture'].get('revision') != (view['plan'].get('architecture_revision') or 0)))
+    view['plan_stale'] = plan_stale
     # A comparison is only valid for the revision it was computed against.
     # Edits already clear it; this marks any survivor explicitly stale.
     cmp_ = view.get('compare')
@@ -1199,155 +1206,6 @@ def _question_matches(questions, text):
     return [i for i, q in enumerate(questions) if low in q.lower()]
 
 
-def _apply_design_op(arch, op):
-    """Apply one edit op to a deep copy of the architecture. Returns (arch, error)."""
-    import copy
-    arch = copy.deepcopy(arch)
-    comps = arch.setdefault('components', [])
-    rels = arch.setdefault('relationships', [])
-    comp_ids = {c.get('id') for c in comps}
-    op_type = (op.op or '').strip()
-
-    if op_type == 'add_component':
-        if not op.name.strip():
-            return arch, 'add_component requires a name'
-        cid = op.id.strip() or _next_id('c', comps)
-        if not _valid_design_id(cid):
-            return arch, 'invalid component id: ' + cid
-        if cid in comp_ids:
-            return arch, 'component id already exists: ' + cid
-        kind = op.component_kind or 'service'
-        if kind not in COMPONENT_KINDS:
-            return arch, 'invalid component kind: ' + kind
-        comps.append({'id': cid, 'name': op.name.strip(),
-                      'responsibility': op.responsibility,
-                      'kind': kind,
-                      'requirement_ids': [str(x) for x in op.requirement_ids]})
-    elif op_type == 'remove_component':
-        if op.id not in comp_ids:
-            return arch, 'unknown component: ' + op.id
-        dangling = [r for r in rels if r.get('src') == op.id or r.get('dst') == op.id]
-        if dangling:
-            return arch, 'component %s has %d relationship(s); remove them first' % (op.id, len(dangling))
-        arch['components'] = [c for c in comps if c.get('id') != op.id]
-    elif op_type == 'update_component':
-        comp = next((c for c in comps if c.get('id') == op.id), None)
-        if comp is None:
-            return arch, 'unknown component: ' + op.id
-        for field, val in (('name', op.name), ('responsibility', op.responsibility), ('kind', op.component_kind)):
-            if val:
-                if field == 'kind' and val not in COMPONENT_KINDS:
-                    return arch, 'invalid component kind: ' + val
-                comp[field] = val
-        if op.requirement_ids:
-            comp['requirement_ids'] = [str(x) for x in op.requirement_ids]
-    elif op_type == 'add_relationship':
-        if op.src not in comp_ids or op.dst not in comp_ids:
-            return arch, 'relationship endpoints must be existing component ids'
-        if op.src == op.dst:
-            return arch, 'a component cannot relate to itself'
-        rid = op.id.strip() or _next_id('e', rels)
-        if not _valid_design_id(rid):
-            return arch, 'invalid relationship id: ' + rid
-        if any(r.get('id') == rid for r in rels):
-            return arch, 'relationship id already exists: ' + rid
-        kind = op.kind or 'calls'
-        if kind not in RELATIONSHIP_KINDS:
-            return arch, 'invalid relationship kind: ' + kind
-        rels.append({'id': rid, 'src': op.src, 'dst': op.dst,
-                     'kind': kind, 'label': op.label})
-    elif op_type == 'remove_relationship':
-        before = len(rels)
-        arch['relationships'] = [r for r in rels
-                                 if r.get('id') != op.id
-                                 and not (op.src and op.dst and r.get('src') == op.src and r.get('dst') == op.dst)]
-        if len(arch['relationships']) == before:
-            return arch, 'relationship not found'
-    elif op_type == 'update_relationship':
-        rel = next((r for r in rels if r.get('id') == op.id), None)
-        if rel is None:
-            return arch, 'unknown relationship: ' + op.id
-        for field, val in (('kind', op.kind), ('label', op.label), ('src', op.src), ('dst', op.dst)):
-            if val:
-                if field == 'kind' and val not in RELATIONSHIP_KINDS:
-                    return arch, 'invalid relationship kind: ' + val
-                rel[field] = val
-        comp_ids = {c.get('id') for c in arch['components']}
-        if rel.get('src') not in comp_ids or rel.get('dst') not in comp_ids:
-            return arch, 'relationship would dangle: unknown component id'
-    elif op_type == 'resolve_question':
-        questions = arch.setdefault('open_questions', [])
-        idx = _question_matches(questions, op.question)
-        if not idx:
-            return arch, 'open question not found: ' + (op.question or '<empty>')
-        answer = (op.answer or '').strip()
-        if not answer:
-            return arch, ('resolve_question requires a non-empty answer. '
-                          'Pass the developer\'s resolution in "answer", or use '
-                          'op "defer_question" with a reason to postpone it.')
-        resolved = arch.setdefault('resolved_questions', [])
-        for i in sorted(idx, reverse=True):
-            # Keep the decision on record: the question, the developer's
-            # answer/rationale and the revision it resolved at.
-            resolved.append({'question': questions[i], 'answer': answer,
-                             'revision': int(arch.get('revision') or 0) + 1})
-            questions.pop(i)
-    elif op_type == 'defer_question':
-        # Explicit decision to postpone a question: it leaves the approval
-        # gate but stays on record with the reason it was deferred.
-        questions = arch.setdefault('open_questions', [])
-        idx = _question_matches(questions, op.question)
-        if not idx:
-            return arch, 'open question not found: ' + (op.question or '<empty>')
-        reason = (op.answer or op.label or '').strip()
-        if not reason:
-            return arch, 'defer_question requires a reason in "answer"'
-        deferred = arch.setdefault('deferred_questions', [])
-        for i in sorted(idx, reverse=True):
-            deferred.append({'question': questions[i], 'reason': reason,
-                             'revision': int(arch.get('revision') or 0) + 1})
-            questions.pop(i)
-    elif op_type == 'reopen_question':
-        # Move a deferred or resolved question back to open_questions so it
-        # blocks approval again.
-        questions = arch.setdefault('open_questions', [])
-        for key in ('deferred_questions', 'resolved_questions'):
-            entries = arch.get(key) or []
-            hit = next((e for e in entries
-                        if _question_matches([e.get('question', '')], op.question)), None)
-            if hit is not None:
-                entries.remove(hit)
-                text = hit.get('question', '')
-                if text and text not in questions:
-                    questions.append(text)
-                return arch, None
-        return arch, 'no deferred or resolved question matches: ' + (op.question or '<empty>')
-    elif op_type == 'update_question':
-        questions = arch.setdefault('open_questions', [])
-        idx = _question_matches(questions, op.question)
-        if not idx:
-            return arch, 'open question not found: ' + (op.question or '<empty>')
-        if not op.new_question.strip():
-            return arch, 'update_question requires new_question text'
-        questions[idx[0]] = op.new_question.strip()
-    elif op_type == 'add_question':
-        text = (op.question or op.new_question).strip()
-        if not text:
-            return arch, 'add_question requires question text'
-        questions = arch.setdefault('open_questions', [])
-        if text not in questions:
-            questions.append(text)
-    else:
-        return arch, 'unknown op: ' + op_type
-
-    # Final validation: no dangling relationships may survive any op sequence.
-    comp_ids = {c.get('id') for c in arch.get('components', [])}
-    for r in arch.get('relationships', []):
-        if r.get('src') not in comp_ids or r.get('dst') not in comp_ids:
-            return arch, 'dangling relationship: %s -> %s' % (r.get('src'), r.get('dst'))
-    return arch, None
-
-
 @app.post('/design/requirements', dependencies=[Depends(auth)])
 async def design_requirements(body: DesignIdeaBody):
     await _check_session_repo(body.session_id)
@@ -1421,24 +1279,15 @@ async def design_edit(session_id: str, body: DesignEditBody):
                     'defer_question', 'reopen_question'}
     touched_questions = False
     for op in body.ops:
-        working, err = _apply_design_op(working, op)
+        working, err = apply_design_op(working, op)
         if err:
             raise HTTPException(status_code=400, detail=err)
         touched_questions = touched_questions or (op.op or '').strip() in question_ops
-    working['revision'] = int(arch.get('revision') or 1) + 1
-    # Provenance survives edits: a hand-edited model design is still 'model';
-    # a heuristic fallback stays 'heuristic' even after edits. The flag lets
-    # the UI say "edited by you" without lying about the origin.
-    working['edited_by_user'] = True
-    if working.get('status') == 'approved':
-        # Editing an approved architecture reverts it to draft and invalidates its plan.
-        working['status'] = 'draft'
-        working['approved_by'] = ''
-        working['approved_version'] = 0
-        working['approved_revision'] = 0
+    had_plan = bool(view.get('plan'))
+    working = finalize_edit(arch, working, 'edited_by_user')
     # Editing the design invalidates the implementation plan AND any
     # repository comparison computed against the previous revision.
-    delta = {'design': working, 'implementation_plan': {}, 'design_compare': {}}
+    delta = {'design': working, 'implementation_plan': {}, 'design_compare': {}, 'plan_stale': had_plan}
     if touched_questions and isinstance(view.get('requirements'), dict):
         # Keep the requirements document in step: its open_questions mirror the architecture's.
         req = copy.deepcopy(view['requirements'])
@@ -1533,7 +1382,7 @@ async def design_approve(session_id: str, body: DesignApproveBody):
                 'status': 'active',
                 'tasks': res['tasks'], 'circular': res.get('circular') or [],
                 'cycle_paths': res.get('cycle_paths') or []}
-        await set_state(session_id, {'implementation_plan': plan})
+        await set_state(session_id, {'implementation_plan': plan, 'plan_stale': False})
     await _persist_design(session_id)
     out = {'ok': True, 'architecture': arch}
     if plan is not None:
@@ -1562,7 +1411,7 @@ async def plan_generate(body: PlanGenerateBody):
             'status': 'active',
             'tasks': res['tasks'], 'circular': res.get('circular') or [],
             'cycle_paths': res.get('cycle_paths') or []}
-    await set_state(body.session_id, {'implementation_plan': plan})
+    await set_state(body.session_id, {'implementation_plan': plan, 'plan_stale': False})
     await _persist_design(body.session_id)
     return plan
 

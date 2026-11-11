@@ -9,7 +9,7 @@ import subprocess
 import re
 import xml.etree.ElementTree as ET
 from google.adk.tools import ToolContext
-from ._common import resolve_in_repo
+from ._common import heuristic, resolve_in_repo
 from ._safe import safe
 
 
@@ -90,7 +90,9 @@ def discover_tests(
             try:
                 import json as _json
                 blob = _json.dumps(_json.loads(pkg.read_text(errors='ignore'))).lower()
-                if 'jest' in blob or 'vitest' in blob:
+                if 'vitest' in blob:
+                    detected = 'vitest'
+                elif 'jest' in blob:
                     detected = 'jest'
             except Exception:
                 pass
@@ -113,6 +115,7 @@ def discover_tests(
 
 
 @safe
+@heuristic('pytest only.')
 def run_unit_tests(
     tool_context: ToolContext,
     test_files: Optional[List[str]] = None
@@ -218,6 +221,7 @@ def run_unit_tests(
 
 
 @safe
+@heuristic('pytest only.')
 def run_integration_tests(
     tool_context: ToolContext,
     test_files: Optional[List[str]] = None
@@ -276,6 +280,7 @@ def run_integration_tests(
 
 
 @safe
+@heuristic('pytest only.')
 def run_regression_tests(
     tool_context: ToolContext,
     test_files: Optional[List[str]] = None
@@ -381,6 +386,7 @@ def run_regression_tests(
 
 
 @safe
+@heuristic('pytest only.')
 def measure_test_coverage(
     repository_path: str,
     tool_context: ToolContext
@@ -498,7 +504,7 @@ def map_tests_to_functions(
                     continue
                 if not node.name.startswith('test'):
                     continue
-                called, guessed = set(), set()
+                called = set()
                 for sub in ast.walk(node):
                     if isinstance(sub, ast.Call):
                         f = sub.func
@@ -506,26 +512,27 @@ def map_tests_to_functions(
                             called.add(f.id)
                         elif isinstance(f, ast.Attribute):
                             called.add(f.attr)
-                for name in called:
+                test_out = []
+                for name in sorted(called):
                     if name.startswith('test') or name in ('assert', 'print', 'len', 'str',
                                                          'int', 'list', 'dict', 'set', 'open',
                                                          'isinstance', 'getattr', 'setattr',
                                                          'super', 'range', 'enumerate', 'zip'):
                         continue
                     target = module_imports.get(name, name)
-                    out.append({'test': node.name, 'function': target,
-                                'file': str(test_file.relative_to(path)),
-                                'confidence': 'high',
-                                'evidence': 'called or imported inside the test'})
-                # Name-derived guess, only when nothing was actually called.
-                if not out:
+                    test_out.append({'test': node.name, 'function': target,
+                                     'file': str(test_file.relative_to(path)),
+                                     'confidence': 'high',
+                                     'evidence': 'called or imported inside the test'})
+                if not test_out:
                     leaf = node.name[5:] if node.name.startswith('test_') else node.name[4:]
                     leaf = leaf.lstrip('_')
                     if leaf:
-                        out.append({'test': node.name, 'function': leaf,
-                                    'file': str(test_file.relative_to(path)),
-                                    'confidence': 'low',
-                                    'evidence': 'derived from the test name only'})
+                        test_out.append({'test': node.name, 'function': leaf,
+                                         'file': str(test_file.relative_to(path)),
+                                         'confidence': 'low',
+                                         'evidence': 'derived from the test name only'})
+                out.extend(test_out)
             return out
 
         def _js_mapping(test_file):
@@ -565,6 +572,7 @@ def map_tests_to_functions(
 
 
 @safe
+@heuristic('File-level coverage threshold; not per-CFG-path.')
 def identify_untested_paths(
     repository_path: str,
     tool_context: ToolContext

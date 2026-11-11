@@ -41,15 +41,6 @@ from .orchestrator_tools import (
     resolve_conflicting_findings,
     request_more_evidence,
     check_task_completion,
-    invoke_repository_intelligence,
-    invoke_code_understanding,
-    invoke_relationship_intelligence,
-    invoke_data_flow_intelligence,
-    invoke_software_engineering,
-    invoke_testing_verification,
-    invoke_visualization_spatial,
-    invoke_conversational,
-    invoke_architecture_design,
 )
 
 from .architecture_tools import (
@@ -195,11 +186,17 @@ from .exec_tools import (
     read_test_results,
 )
 
+from .architecture_edit_tools import (
+    add_component, remove_component, update_component, add_relationship,
+    remove_relationship, update_relationship, get_proposed_architecture, validate_architecture,
+)
+
 from .git_tools import (
     create_worktree,
     apply_patch_to_worktree,
     get_worktree_diff,
     read_worktree_file,
+    get_recent_commits,
 )
 
 from .scene_tools import (

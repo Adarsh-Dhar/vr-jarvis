@@ -1,4 +1,5 @@
 """
+Secondary agent. The active code-change route is fix_pipeline (patch_agent, patch_repair_agent).
 Software Engineering Agent
 Writes and changes code in the worktree.
 """
@@ -40,11 +41,9 @@ Rules:
 Required order for every change request:
 1. create_worktree
 2. apply_patch_to_worktree
-3. run_typecheck (Testing agent may run it; the patch must type-check)
-4. run_tests (Testing agent)
-5. get_worktree_diff
-6. show_ghost_diff and show_test_badges with the full diff and the live results
-7. Stop and wait for human approval. Never commit to the main checkout.
+3. get_worktree_diff
+4. Stop and return the diff. Type checking, tests and the ghost-diff display are done by
+   the Testing and Visualization agents after you. Never commit to the main checkout.
 
 Return your analysis to state['result_software_eng']
 '''

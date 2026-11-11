@@ -9,6 +9,8 @@ and an approved architecture reverts to draft on any edit.
 
 import json
 import logging
+import os
+from collections import Counter
 import math
 import re
 import subprocess
@@ -494,12 +496,12 @@ def _assign_matches(comps, nodes, override_matches=None):
     matched, missing, ambiguous = [], [], []
     for i, c in enumerate(comps):
         cid = str(c.get('id'))
-        cands = [{'node': n.get('id') or n.get('name'), 'score': round(s, 3)}
+        cands = [{'node': n.get('id') or n.get('name'), 'file': n.get('file') or '', 'score': round(s, 3)}
                  for n, s, _how in cand_lists[i][:5]]
         if cid in ambiguous_ids and cid not in node_of:
             ambiguous.append({'id': cid, 'name': str(c.get('name') or ''),
                               'node': '', 'score': 0.0,
-                              'confidence': 'low', 'ambiguous': True,
+                              'confidence': 'low', 'ambiguous': True, 'match': 'ambiguous',
                               'candidates': cands,
                               'evidence': 'top candidates are too close to auto-assign; '
                                           'resolve with override_matches'})
@@ -510,7 +512,7 @@ def _assign_matches(comps, nodes, override_matches=None):
                             'score': round(s, 3),
                             'confidence': ('high' if s >= 0.9 else
                                            'medium' if s >= 0.5 else 'low'),
-                            'ambiguous': False,
+                            'ambiguous': False, 'match': 'repository',
                             'candidates': cands,
                             'evidence': '%s (%s) [%s]' % (nid, n.get('file') or '?', how)})
         else:
@@ -519,7 +521,7 @@ def _assign_matches(comps, nodes, override_matches=None):
                    % (best[0].get('id') if best else 'none'))
             missing.append({'id': cid, 'name': str(c.get('name') or ''),
                             'node': '', 'score': 0.0, 'confidence': 'none',
-                            'ambiguous': False, 'candidates': cands,
+                            'ambiguous': False, 'match': 'unmatched', 'candidates': cands,
                             'evidence': 'no unclaimed graph node matches (%s)' % why})
     return node_of, matched, missing, ambiguous
 
@@ -649,6 +651,41 @@ def compare_to_repository(architecture, tool_context: ToolContext = None,
     return result
 
 
+_SOURCE_SUFFIXES = ('.py', '.ts', '.tsx', '.js', '.jsx', '.go', '.rs', '.java', '.cs')
+_LAYOUT_SKIP = {'.git', 'node_modules', '__pycache__', '.venv', 'venv', 'dist', 'build', 'tests', 'test'}
+
+
+def _source_layout(root):
+    suffixes, dirs = Counter(), {}
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [d for d in dirnames if d not in _LAYOUT_SKIP and not d.startswith('.')]
+        for fn in filenames:
+            ext = os.path.splitext(fn)[1]
+            if ext in _SOURCE_SUFFIXES and not fn.startswith('test_') and '.test.' not in fn and '.spec.' not in fn:
+                suffixes[ext] += 1
+                dirs.setdefault(ext, Counter())[os.path.relpath(dirpath, root)] += 1
+    if not suffixes:
+        return '.py', ''
+    ext = suffixes.most_common(1)[0][0]
+    top = dirs[ext].most_common(1)[0][0]
+    return ext, ('' if top == '.' else top.replace(os.sep, '/') + '/')
+
+
+def _suggest_new_files(comp, grounding, layout, root, taken):
+    if grounding.get('match') != 'unmatched':
+        return []
+    slug = re.sub(r'[^a-z0-9]+', '_', str(comp.get('name') or comp.get('id') or '').lower()).strip('_')
+    if not slug:
+        return []
+    ext, prefix = layout
+    path, n = prefix + slug + ext, 2
+    while path in taken or os.path.exists(os.path.join(root, path)):
+        path = '%s%s_%d%s' % (prefix, slug, n, ext)
+        n += 1
+    taken.add(path)
+    return [path]
+
+
 def generate_implementation_plan(architecture, tool_context: ToolContext = None,
                                  graph_path=None) -> dict:
     """Turn an approved architecture into a dependency-ordered task list.
@@ -705,6 +742,9 @@ def generate_implementation_plan(architecture, tool_context: ToolContext = None,
     # Ground every task in the repository: which files implement the component
     # and which symbols are the likely edit points. Loaded once for all tasks.
     grounding = _repo_grounding(comps, graph_path=graph_path)
+    root = str(config.REPO_ROOT)
+    layout = _source_layout(root)
+    taken = set()
 
     def _subtasks(cid, comp, g):
         """Split a component into several tasks when its responsibility lists
@@ -740,6 +780,7 @@ def generate_implementation_plan(architecture, tool_context: ToolContext = None,
             continue
         g = grounding.get(cid) or {'files': [], 'symbols': [], 'match': 'unmatched'}
         unmatched = g['match'] == 'unmatched'
+        comp_new_files = _suggest_new_files(comp, g, layout, root, taken)
         # Dependencies resolve to the LAST task of each dependency component
         # (a component is only "done" when its final subtask is). Computed once:
         # every dependency is already scheduled because `order` is topological.
@@ -754,6 +795,7 @@ def generate_implementation_plan(architecture, tool_context: ToolContext = None,
             # later subtasks chain off the previous subtask so split work is
             # ordered instead of leaving intra-component dependencies implicit.
             depends_on = list(dep_tasks) if prev_tid is None else [prev_tid]
+            first = prev_tid is None
             prev_tid = tid
             criteria = []
             if resp:
@@ -763,6 +805,24 @@ def generate_implementation_plan(architecture, tool_context: ToolContext = None,
             if symbols:
                 criteria.append('Primary symbols: ' + ', '.join(
                     s['name'] for s in symbols))
+            if first and comp_new_files:
+                criteria.append('Creates new file(s): ' + ', '.join(comp_new_files))
+            if comp.get('requirement_ids'):
+                state = getattr(tool_context, 'state', None) or {}
+                reqs = state.get('design_requirements') or {}
+                req_texts = []
+                if isinstance(reqs, dict):
+                    for key in REQUIREMENT_KEYS:
+                        vals = reqs.get(key) or []
+                        req_texts.extend(str(v) for v in (vals if isinstance(vals, list) else [vals]) if v)
+                req_by_id = {'r%d' % i: text for i, text in enumerate(req_texts, 1)}
+                for rid in comp.get('requirement_ids') or []:
+                    rid = str(rid)
+                    if rid in req_by_id:
+                        criteria.append('Requirement: ' + req_by_id[rid])
+                    elif isinstance(reqs, dict) and isinstance(reqs.get(rid), list):
+                        for text in reqs[rid]:
+                            criteria.append('Requirement: ' + str(text))
             if unmatched:
                 criteria.append('No repository component matched; identify the '
                                 'target files during investigation and record them.')
@@ -781,7 +841,7 @@ def generate_implementation_plan(architecture, tool_context: ToolContext = None,
                  'repo_match': g['match'],
                  'needs_investigation': unmatched,
                  'modifies_existing': g['match'] == 'repository',
-                 'new_files': [],
+                 'new_files': comp_new_files if first else [],
                  'design_revision': arch.get('revision'),
                  'cycle_accepted': False,
                  'cycle_rationale': '',

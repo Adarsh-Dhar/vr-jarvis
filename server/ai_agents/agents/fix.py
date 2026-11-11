@@ -120,9 +120,10 @@ Rules:
 - Cite file and approximate line for every finding.
 
 Return a JSON object with keys: verdict (approve|changes_requested), summary,
-findings (list of {severity: blocker|warning|info, file, line, issue, suggestion}),
+findings (list of {severity: blocker|warning|info, category: logic|error_handling|security|quality|tests, file, line, issue, suggestion}),
+security ({status: 'reviewed_by_model_only', findings: list of the category=security findings}),
 acceptance (list of {criterion, status: met|not_met|unknown, note}),
-suggested_tests (list of strings).
+suggested_tests (list of strings). The security block is a model review of the diff, not a vulnerability scan. Say so in summary when you report a security finding, and never claim the code is secure.
 ''',
     tools=[get_worktree_diff, read_worktree_file, read_file, read_file_range,
            search_code, get_source, find_tests_for_node],
@@ -137,9 +138,10 @@ patch_repair = LlmAgent(
     include_contents='none',
     description='Repairs a failing patch using the test failure output.',
     instruction='''
-The tests did not all pass. Repair the patch.
+Review verdict: {code_review}
 Current patch: {proposed_patch}
 Latest test results: {test_results}
+If the review verdict is approve and tests passed, make no changes and return the current patch unchanged.
 
 Process:
 1. Read the failure messages. Call get_source on the node involved.
@@ -155,3 +157,32 @@ assumptions, claims), with diff taken from get_worktree_diff and summary updated
     after_tool_callback=evidence_collector,
     output_key='proposed_patch',
 )
+
+
+
+def make_patch_review_repair():
+    return LlmAgent(
+        name='patch_review_repair_agent',
+        model=MODEL,
+        include_contents='none',
+        description='Repairs a patch after independent review requests changes.',
+        instruction=patch_repair.instruction,
+        tools=patch_repair.tools,
+        before_tool_callback=permission_guard,
+        after_tool_callback=evidence_collector,
+        output_key='proposed_patch',
+    )
+
+
+def make_review_verifier():
+    return LlmAgent(
+        name='review_verifier_agent',
+        model=MODEL,
+        include_contents='none',
+        description='Re-runs tests and type check after review-driven repair.',
+        instruction=verifier.instruction,
+        tools=verifier.tools,
+        before_tool_callback=permission_guard,
+        after_tool_callback=evidence_collector,
+        output_key='test_results',
+    )

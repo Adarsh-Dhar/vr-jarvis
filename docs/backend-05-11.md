@@ -123,8 +123,10 @@ client: `select_node`, `expand_node`, `collapse_node`, `show_graph`,
 
 - **In-memory state.** Sessions and per-session task state live in memory;
   everything is lost on restart.
-- **Parser depth.** Python has the richest analysis (AST, CFG, DFG); other
-  indexed languages get shallower tree-sitter-based extraction.
+- **Parser depth.** Call resolution covers Python, JavaScript and TypeScript.
+  CFG and DFG are Python-only and intra-function only; `parse_source_code`
+  returns `unsupported_language` for non-Python files. Other indexed languages
+  get shallower tree-sitter-based extraction.
 - **Frontend coverage.** Unity does not use `/ask/stream`, `/task`, `/agents`,
   `/tools`, `/actions` or `/skills`.
 - **Cost per question.** One question can cost many model calls (orchestrator

@@ -42,7 +42,7 @@ def _worktree_fingerprint(cwd):
     return {'diff_hash': _hl.sha256(diff.encode()).hexdigest()[:16], 'head': head}
 
 
-def verification_blockers(state, worktree, allow_cached=False):
+def verification_blockers(state, worktree, allow_cached=False, require_review=True):
     """Every reason the recorded test/typecheck evidence cannot approve the CURRENT patch.
     Empty list means the evidence is acceptable. Used by /approve and by the auto approval prompt."""
     why = []
@@ -92,7 +92,7 @@ def verification_blockers(state, worktree, allow_cached=False):
             if tc.get('head') and fp.get('head') and tc['head'] != fp['head']:
                 why.append('The worktree HEAD moved after the type check ran. Re-run it.')
     # Independent code review of the diff: an explicit rejection blocks commit.
-    why.extend(review_blockers(state))
+    why.extend(review_blockers(state, require_review))
     return why
 
 
@@ -105,6 +105,7 @@ def _clear_verification(state):
 
 
 _REVIEW_REJECT = {'changes_requested', 'rejected', 'request_changes', 'fail', 'failed', 'block'}
+_REVIEW_APPROVE = {'approve', 'approved', 'pass', 'passed', 'lgtm'}
 
 
 def _review_verdict(state):
@@ -122,24 +123,28 @@ def _review_verdict(state):
     return cr if isinstance(cr, dict) and cr else None
 
 
-def review_blockers(state):
-    """Reasons the recorded independent code review cannot approve the CURRENT patch.
-    Empty list means the review (when present) does not object. A missing review is
-    not a blocker here: non-fix flows never produce one."""
+def review_blockers(state, require_review=True):
+    """Reasons the recorded independent code review cannot approve the current patch."""
     cr = _review_verdict(state)
     if cr is None:
+        if require_review:
+            return ['No independent code review is recorded for this patch. Run the code reviewer before committing.']
         return []
     verdict = str(cr.get('verdict') or '').strip().lower()
+    if not verdict:
+        return ['The code review has no verdict. Re-run the reviewer.']
+    blockers = []
     if verdict in _REVIEW_REJECT:
-        blockers = ['Code review requested changes before commit (verdict: %s).' % verdict]
-        for f in (cr.get('findings') or [])[:5]:
-            if isinstance(f, dict):
-                blockers.append('  - %s: %s' % (f.get('file') or '?',
-                                                str(f.get('issue') or '')[:160]))
-        return blockers
-    if verdict and verdict not in ('approve', 'approved', 'pass', 'passed', 'lgtm'):
-        return ['Code review verdict is not an approval (verdict: %s).' % verdict]
-    return []
+        blockers.append('Code review requested changes before commit (verdict: %s).' % verdict)
+    elif verdict not in _REVIEW_APPROVE:
+        blockers.append('Code review verdict is not an approval (verdict: %s).' % verdict)
+    for f in (cr.get('findings') or []):
+        if isinstance(f, dict) and str(f.get('severity') or '').lower() == 'blocker':
+            blockers.append('  - blocker in %s: %s' % (f.get('file') or '?', str(f.get('issue') or '')[:160]))
+    for a in (cr.get('acceptance') or []):
+        if isinstance(a, dict) and str(a.get('status') or '').lower() == 'not_met':
+            blockers.append('  - acceptance criterion not met: %s' % str(a.get('criterion') or '')[:160])
+    return blockers[:8]
 
 
 # Directories never worth walking when probing a worktree for tests, Python
@@ -211,6 +216,8 @@ def _detect_runner(cwd):
             deps.update(pkg.get(k) or {})
         # Serialise values only — a literal 'jest' key name must not count.
         blob = json.dumps([deps, pkg.get('scripts') or {}, pkg.get('jest')])
+        if 'vitest' in blob:
+            return 'vitest'
         uses_jest = 'jest' in blob
         if uses_jest:
             return 'jest'
@@ -224,8 +231,9 @@ def _detect_runner(cwd):
     return None
 
 
-def _jest(test_files, cwd):
-    cmd = ['npx', 'jest', '--json', *test_files]
+def _jest(test_files, cwd, runner='jest'):
+    cmd = (['npx', 'vitest', 'run', '--reporter=json', *test_files] if runner == 'vitest'
+           else ['npx', 'jest', '--json', *test_files])
     code, out, err = _run(cmd, cwd)
     try:
         report = json.loads(out)
@@ -338,11 +346,12 @@ def run_tests(test_files: list[str], tool_context: ToolContext) -> dict:
     runner = _detect_runner(cwd)
     if runner is None:
         result = {'status': 'unverified', 'source': 'live',
-                  'error': 'No supported test runner found (jest or pytest). Nothing was executed.'}
+                  'error': 'No supported test runner found (vitest, jest or pytest). Nothing was executed.'}
         tool_context.state['last_test_run'] = result
         return result
     started = time.time()
-    cmd, code, passed, failed, skipped, err, not_run = (_jest if runner == 'jest' else _pytest)(test_files, cwd)
+    outcome = _jest(test_files, cwd, runner) if runner in ('jest', 'vitest') else _pytest(test_files, cwd)
+    cmd, code, passed, failed, skipped, err, not_run = outcome
     meta = {'source': 'live', 'runner': runner, 'command': ' '.join(cmd),
             'exit_code': code, 'duration_s': round(time.time() - started, 1)}
     meta.update(_worktree_fingerprint(cwd))

@@ -5,8 +5,9 @@ Understand how data moves through the entire application.
 
 from typing import Optional, List, Dict, Any
 from google.adk.tools import ToolContext
+from ._common import heuristic
 from ._safe import safe
-from ._common import abs_repo_path
+from ._common import abs_repo_path, heuristic
 import ast
 
 
@@ -86,6 +87,15 @@ class DefUseAnalyzer(ast.NodeVisitor):
         self.generic_visit(node)
 
 
+
+def _split_variable_id(variable_id):
+    vid = str(variable_id or '').strip()
+    sep = '#' if '#' in vid else ':'
+    function_name, _, variable_name = vid.rpartition(sep)
+    if not function_name or not variable_name:
+        return None
+    return function_name, variable_name
+
 @safe
 def trace_variable_origin(variable_id: str, tool_context: ToolContext) -> dict:
     """Find where a variable's value originates using def-use analysis."""
@@ -93,13 +103,13 @@ def trace_variable_origin(variable_id: str, tool_context: ToolContext) -> dict:
         from ..intelligence.graph_engine.codegraph import codegraph
         
         # Parse variable_id as function:variable
-        if ':' not in variable_id:
+        parts = _split_variable_id(variable_id)
+        if parts is None:
             return {
                 'status': 'error',
                 'error': 'Variable ID must be in format function:variable'
             }
-        
-        function_name, variable_name = variable_id.split('#', 1)
+        function_name, variable_name = parts
         
         # Use CodeGraph to resolve the function
         graph = codegraph.load_current_graph()
@@ -192,13 +202,13 @@ def trace_variable_usage(variable_id: str, tool_context: ToolContext) -> dict:
     try:
         from ..intelligence.graph_engine.codegraph import codegraph
         
-        if ':' not in variable_id:
+        parts = _split_variable_id(variable_id)
+        if parts is None:
             return {
                 'status': 'error',
                 'error': 'Variable ID must be in format function:variable'
             }
-        
-        function_name, variable_name = variable_id.split('#', 1)
+        function_name, variable_name = parts
         
         # Use CodeGraph to resolve the function
         graph = codegraph.load_current_graph()
@@ -314,6 +324,7 @@ def visualize_data_flow(function_id: str, tool_context: ToolContext) -> dict:
 
 
 @safe
+@heuristic('Returns symbol references, not a full modification analysis.')
 def trace_variable_modifications(
     variable_id: str,
     tool_context: ToolContext
@@ -330,6 +341,7 @@ def trace_variable_modifications(
 
 
 @safe
+@heuristic('Text and indentation search, not AST-based.')
 def trace_parameter_flow(
     function_id: str,
     parameter: str,
@@ -394,6 +406,7 @@ def trace_parameter_flow(
 
 
 @safe
+@heuristic('Finds call sites only; does not follow the returned value.')
 def trace_return_value_flow(
     function_id: str,
     tool_context: ToolContext
@@ -433,6 +446,7 @@ def trace_return_value_flow(
 
 
 @safe
+@heuristic('Matches common call patterns; order not guaranteed.')
 def trace_transformations(
     variable_id: str,
     tool_context: ToolContext
@@ -482,6 +496,7 @@ def trace_transformations(
 
 
 @safe
+@heuristic('Simplified symbol-reference search; no interprocedural def-use edges.')
 def trace_cross_function_flow(
     variable_id: str,
     tool_context: ToolContext
@@ -524,6 +539,7 @@ def trace_cross_function_flow(
 
 
 @safe
+@heuristic('Pattern search; no data provenance.')
 def trace_file_operations(
     file_path: str,
     tool_context: ToolContext
@@ -574,6 +590,7 @@ def trace_file_operations(
 
 
 @safe
+@heuristic('Pattern search; incomplete state tracking.')
 def trace_state_changes(
     component_id: str,
     tool_context: ToolContext

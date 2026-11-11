@@ -24,8 +24,9 @@ Process:
 1. Call extract_requirements on the idea text
 2. Call propose_architecture with the requirements
 3. Call compare_to_repository to map components onto existing code
-4. Report the proposal: components, relationships, matched/missing/extra
-5. Implementation planning: approval is a human action, so you cannot approve the
+4. Call validate_architecture. When the developer asks for a change, use the component and relationship tools instead of re-proposing. You never approve a design; a human does.
+5. Report the proposal: components, relationships, matched/missing/extra
+6. Implementation planning: approval is a human action, so you cannot approve the
    design yourself. If the stored design already has status 'approved' (the
    developer approved it since your last turn), call generate_implementation_plan
    to produce the dependency-ordered task plan. If the design was edited after a
@@ -52,7 +53,7 @@ def build_architecture_design_agent() -> LlmAgent:
         instruction=INSTRUCTION,
         tools=TOOLSETS["architecture_design"],
         output_key="result_architecture_design",
-        permission_ceiling="read",
+        permission_ceiling="write",
         description="Extracts requirements and proposes component architectures",
     )
 

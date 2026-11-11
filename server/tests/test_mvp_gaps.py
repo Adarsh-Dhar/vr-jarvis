@@ -56,8 +56,8 @@ class TestCodeReviewGate:
                  'code_review': {'verdict': 'approve', 'findings': []}}
         assert verification_blockers(state, str(worktree)) == []
 
-    def test_missing_review_does_not_block_non_fix_flows(self, worktree):
-        assert verification_blockers({'last_test_run': _good(worktree)}, str(worktree)) == []
+    def test_missing_review_blocks_commit(self, worktree):
+        assert verification_blockers({'last_test_run': _good(worktree)}, str(worktree))
 
     def test_patch_change_clears_review(self, worktree):
         state = {'last_test_run': {}, 'last_typecheck': {}, 'code_review': {'verdict': 'approve'}}
@@ -68,9 +68,10 @@ class TestCodeReviewGate:
         import ai_agents.agent as ag
         fix = next(s for s in ag.root_agent.sub_agents if s.name == 'fix_pipeline')
         names = [getattr(s, 'name', '') for s in fix.sub_agents]
-        assert 'code_reviewer' in names
-        # reviewer runs after the verify loop, before the critic
-        assert names.index('code_reviewer') > names.index('verify_loop')
+        assert 'review_loop' in names
+        review = next(s for s in fix.sub_agents if s.name == 'review_loop')
+        assert 'code_reviewer' in [getattr(s, 'name', '') for s in review.sub_agents]
+        assert names.index('review_loop') > names.index('verify_loop')
 
     def test_reviewer_output_key_and_tools(self):
         from ai_agents.agents.fix import code_reviewer
@@ -305,3 +306,78 @@ class TestPlannerWorkflow:
     def test_architecture_agent_instruction_covers_planning(self):
         from ai_agents.agents.architecture_design import INSTRUCTION
         assert 'generate_implementation_plan' in INSTRUCTION
+
+
+class TestMvpPatchAdditions:
+    def test_variable_id_accepts_hash_and_colon(self):
+        from ai_agents.tools.data_flow_intelligence_tools import _split_variable_id
+        assert _split_variable_id('process:value') == ('process', 'value')
+        assert _split_variable_id('process#value') == ('process', 'value')
+
+    def test_vitest_detection(self, tmp_path):
+        import json
+        from ai_agents.tools import exec_tools
+        from ai_agents.tools import testing_verification_tools as tvt
+        (tmp_path / 'package.json').write_text(json.dumps({'devDependencies': {'vitest': '^1'}}))
+        assert exec_tools._detect_runner(str(tmp_path)) == 'vitest'
+        class Ctx:
+            state = {}
+        res = tvt.discover_tests(str(tmp_path), Ctx())
+        assert res['test_framework'] == 'vitest'
+
+    def test_python_mapping_fallback_is_per_test(self, tmp_path):
+        from ai_agents.tools import testing_verification_tools as tvt
+        (tmp_path / 'test_x.py').write_text('''def foo():
+    pass
+
+def test_a():
+    foo()
+
+def test_b():
+    assert True
+''')
+        class Ctx:
+            state = {}
+        res = tvt.map_tests_to_functions(str(tmp_path), Ctx())
+        by_test = {m['test']: m for m in res['test_mapping']}
+        assert by_test['test_a']['confidence'] == 'high'
+        assert by_test['test_b']['confidence'] == 'low'
+
+    def test_planner_suggests_new_file_for_unmatched_component(self, tmp_path, monkeypatch):
+        from ai_agents import config
+        from ai_agents.tools import architecture_tools as at
+        monkeypatch.setattr(config, 'REPO_ROOT', tmp_path)
+        (tmp_path / 'pkg').mkdir()
+        (tmp_path / 'pkg' / 'mod.py').write_text('x = 1\n')
+        arch = {'components': [{'id': 'c1', 'name': 'Novel Service', 'kind': 'service',
+                                'responsibility': 'do novel work', 'requirement_ids': []}],
+                'relationships': []}
+        res = at.generate_implementation_plan(arch, graph_path=str(tmp_path / 'missing.json'))
+        assert res['tasks'][0]['new_files']
+        assert not (tmp_path / res['tasks'][0]['new_files'][0]).exists()
+
+    def test_architecture_edit_tools_round_trip(self):
+        from types import SimpleNamespace
+        from ai_agents.tools import architecture_edit_tools as aet
+        arch = {'version': 3, 'revision': 1, 'status': 'approved', 'components': [],
+                'relationships': [], 'approved_by': 'u', 'approved_version': 3,
+                'approved_revision': 1, 'open_questions': []}
+        ctx = SimpleNamespace(state={'design': arch, 'session_id': ''})
+        res = aet.add_component('Payments', 'Handle payments', 'service', ctx)
+        assert res['status'] == 'ok'
+        got = aet.get_proposed_architecture(ctx)
+        assert got['architecture']['components'][0]['name'] == 'Payments'
+        assert got['architecture']['revision'] == 2
+        assert got['architecture']['status'] == 'draft'
+        assert ctx.state['implementation_plan'] == {}
+
+    def test_recent_commits(self, tmp_path):
+        import subprocess
+        from types import SimpleNamespace
+        from ai_agents.tools import git_tools
+        subprocess.run(['git', 'init', '-q'], cwd=tmp_path, check=True)
+        (tmp_path / 'a.py').write_text('x=1\n')
+        subprocess.run(['git', 'add', 'a.py'], cwd=tmp_path, check=True)
+        subprocess.run(['git', '-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '-m', 'JARVIS: first'], cwd=tmp_path, check=True)
+        res = git_tools.get_recent_commits(SimpleNamespace(state={'worktree': str(tmp_path)}), limit=1)
+        assert res['status'] == 'ok' and res['commits'][0]['source'] == 'jarvis'

@@ -7,11 +7,12 @@ Uses string names for tools to avoid slow imports. Tools are resolved
 when needed by calling get_toolset().
 """
 
+import re
 from typing import List, Dict
 
 # Permission ceilings for each agent
 PERMISSION_CEILINGS = {
-    "architecture_design": 'read',
+    "architecture_design": 'write',
     "code_understanding": 'read',
     "conversational": 'read',
     "data_flow_intelligence": 'read',
@@ -35,7 +36,6 @@ TOOL_LEVELS = {
     "compare_to_repository": "read",
     "extract_requirements": "read",
     "generate_implementation_plan": "read",
-    "invoke_architecture_design": "read",
     "propose_architecture": "read",
     "verify_task_evidence": "read",
     "analyze_control_flow": "read",
@@ -44,6 +44,8 @@ TOOL_LEVELS = {
     "answer_code_question": "read",
     "apply_patch": "write",
     "apply_patch_to_worktree": "write",
+    "add_component": "write",
+    "add_relationship": "write",
     "ask_clarifying_question": "read",
     "browse_vr_folder": "read",
     "build_call_graph": "read",
@@ -93,6 +95,8 @@ TOOL_LEVELS = {
     "generate_class": "write",
     "generate_function": "write",
     "get_call_sites": "read",
+    "get_proposed_architecture": "read",
+    "get_recent_commits": "read",
     "get_changed_files": "read",
     "get_current_selection": "read",
     "get_current_spatial_context": "read",
@@ -121,14 +125,6 @@ TOOL_LEVELS = {
     "incremental_index_repository": "read",
     "index_repository": "read",
     "infer_code_intent": "read",
-    "invoke_code_understanding": "read",
-    "invoke_conversational": "read",
-    "invoke_data_flow_intelligence": "read",
-    "invoke_relationship_intelligence": "read",
-    "invoke_repository_intelligence": "read",
-    "invoke_software_engineering": "read",
-    "invoke_testing_verification": "read",
-    "invoke_visualization_spatial": "read",
     "isolate_subgraph": "read",
     "list_files": "read",
     "list_vr_repositories": "read",
@@ -136,6 +132,8 @@ TOOL_LEVELS = {
     "map_tests_to_functions": "read",
     "measure_test_coverage": "read",
     "merge_agent_results": "read",
+    "remove_component": "write",
+    "remove_relationship": "write",
     "move_graph": "read",
     "move_panel": "read",
     "navigate_to_code_element": "read",
@@ -189,6 +187,9 @@ TOOL_LEVELS = {
     "trace_variable_origin": "read",
     "trace_variable_usage": "read",
     "understand_user_intent": "read",
+    "update_component": "write",
+    "update_relationship": "write",
+    "validate_architecture": "read",
     "verify_citations": "read",
     "verify_compilation": "read",
     "verify_lint": "read",
@@ -205,15 +206,15 @@ TOOL_LEVELS = {
 
 # Curated toolsets for each agent (using string names)
 TOOLSETS: Dict[str, List[str]] = {
-    "architecture_design": ['extract_requirements', 'propose_architecture', 'compare_to_repository', 'generate_implementation_plan'],
-    "orchestrator": ['classify_request', 'understand_user_intent', 'create_investigation_plan', 'check_task_completion', 'merge_agent_results', 'resolve_conflicting_findings', 'invoke_repository_intelligence', 'invoke_code_understanding', 'invoke_relationship_intelligence', 'invoke_data_flow_intelligence', 'invoke_software_engineering', 'invoke_testing_verification', 'invoke_visualization_spatial', 'invoke_conversational', 'invoke_architecture_design', 'request_more_evidence', 'request_approval'],
+    "architecture_design": ['extract_requirements', 'propose_architecture', 'compare_to_repository', 'generate_implementation_plan', 'get_proposed_architecture', 'validate_architecture', 'add_component', 'remove_component', 'update_component', 'add_relationship', 'remove_relationship', 'update_relationship'],
+    "orchestrator": ['classify_request', 'understand_user_intent', 'create_investigation_plan', 'check_task_completion', 'merge_agent_results', 'resolve_conflicting_findings', 'request_more_evidence', 'request_approval'],
     "conversational": ['answer_code_question', 'explain_visualization', 'summarize_investigation', 'retrieve_conversation_context', 'retrieve_investigation_context', 'ask_clarifying_question', 'compare_code_elements', 'manage_conversation_preferences'],
-    "repository_intelligence": ['index_repository', 'incremental_index_repository', 'detect_languages', 'detect_frameworks', 'detect_build_system', 'detect_project_type', 'detect_package_manager', 'analyze_repository_structure', 'identify_entry_points', 'identify_external_services', 'identify_generated_files', 'detect_repository_changes', 'analyze_dependencies_manifest', 'list_files', 'read_file', 'search_code', 'get_repository_metadata', 'get_changed_files'],
+    "repository_intelligence": ['index_repository', 'incremental_index_repository', 'detect_languages', 'detect_frameworks', 'detect_build_system', 'detect_project_type', 'detect_package_manager', 'analyze_repository_structure', 'identify_entry_points', 'identify_external_services', 'identify_generated_files', 'detect_repository_changes', 'analyze_dependencies_manifest', 'list_files', 'read_file', 'search_code', 'get_repository_metadata', 'get_changed_files', 'get_recent_commits', 'record_finding', 'get_findings'],
     "code_understanding": ['get_symbol_definition', 'get_symbol_references', 'get_symbol_hover_info', 'get_type_hierarchy', 'get_imports', 'get_exports', 'get_scope_information', 'parse_source_code', 'extract_symbols', 'resolve_types', 'explain_function', 'explain_class', 'explain_module', 'explain_condition', 'extract_function_contract', 'identify_side_effects', 'identify_hidden_assumptions', 'infer_code_intent', 'trace_function_logic', 'analyze_control_flow', 'read_file_range', 'record_finding', 'get_findings'],
-    "relationship_intelligence": ['find_callers', 'find_callees', 'find_indirect_callers', 'trace_call_chain', 'get_call_sites', 'explain_call_resolution', 'build_call_graph', 'build_dependency_graph', 'find_dependents', 'find_all_paths_between_symbols', 'find_circular_dependencies', 'analyze_architecture_boundaries', 'calculate_change_impact', 'find_interface_implementations', 'trace_cross_module_relationships'],
-    "data_flow_intelligence": ['trace_variable_origin', 'trace_variable_usage', 'trace_variable_modifications', 'trace_parameter_flow', 'trace_return_value_flow', 'trace_transformations', 'trace_cross_function_flow', 'trace_file_operations', 'trace_state_changes', 'build_data_flow_graph'],
-    "software_engineering": ['create_worktree', 'apply_patch_to_worktree', 'get_worktree_diff', 'edit_file', 'apply_patch', 'search_and_replace', 'organize_imports', 'format_code', 'git_status', 'git_branch', 'git_diff', 'read_file', 'search_code', 'record_task_targets'],
-    "testing_verification": ['discover_tests', 'map_tests_to_functions', 'identify_untested_paths', 'run_unit_tests', 'run_integration_tests', 'run_regression_tests', 'measure_test_coverage', 'verify_compilation', 'verify_lint', 'verify_types', 'compare_before_after', 'run_tests', 'run_typecheck', 'read_test_results'],
+    "relationship_intelligence": ['find_callers', 'find_callees', 'find_indirect_callers', 'trace_call_chain', 'get_call_sites', 'explain_call_resolution', 'build_call_graph', 'build_dependency_graph', 'find_dependents', 'find_all_paths_between_symbols', 'find_circular_dependencies', 'analyze_architecture_boundaries', 'calculate_change_impact', 'find_interface_implementations', 'trace_cross_module_relationships', 'record_finding', 'get_findings'],
+    "data_flow_intelligence": ['trace_variable_origin', 'trace_variable_usage', 'trace_variable_modifications', 'trace_parameter_flow', 'trace_return_value_flow', 'trace_transformations', 'trace_cross_function_flow', 'trace_file_operations', 'trace_state_changes', 'build_data_flow_graph', 'record_finding', 'get_findings'],
+    "software_engineering": ['create_worktree', 'apply_patch_to_worktree', 'get_worktree_diff', 'edit_file', 'apply_patch', 'search_and_replace', 'organize_imports', 'format_code', 'git_status', 'git_branch', 'git_diff', 'read_file', 'search_code', 'record_task_targets', 'get_recent_commits'],
+    "testing_verification": ['discover_tests', 'map_tests_to_functions', 'identify_untested_paths', 'run_unit_tests', 'run_integration_tests', 'run_regression_tests', 'measure_test_coverage', 'verify_compilation', 'verify_lint', 'verify_types', 'compare_before_after', 'run_tests', 'run_typecheck', 'read_test_results', 'record_finding', 'get_findings'],
     "visualization_spatial": ['highlight_vr_path', 'dim_unrelated', 'focus_camera', 'open_code_panel', 'list_vr_repositories', 'open_vr_repository', 'browse_vr_folder', 'open_vr_file', 'move_graph', 'zoom_graph', 'move_panel', 'scale_panel', 'set_panel_state', 'highlight_callers', 'recenter_workspace', 'reset_layout', 'set_mode', 'set_edge_style', 'show_ghost_diff', 'show_test_badges', 'create_graph', 'visualize_call_graph', 'visualize_change_impact', 'visualize_data_flow', 'visualize_architecture', 'visualize_dependency_graph', 'visualize_control_flow', 'visualize_unified_graph', 'explain_graph_edge', 'query_graph_path', 'expand_graph_neighborhood', 'expand_graph_node', 'collapse_graph_node', 'isolate_subgraph', 'summarize_graph', 'get_current_selection', 'verify_citations', 'focus_on_graph_node', 'navigate_to_code_element', 'navigate_to_relationship', 'get_selected_node_details', 'get_current_spatial_context', 'focus_on_code_element'],
 }
 
@@ -293,3 +294,14 @@ def validate_toolsets():
 
     print(f"Toolset validation passed: {len(all_tool_names)} tools have permission levels")
     return True
+
+
+def validate_instruction_tools(instructions):
+    errors = []
+    for agent, text in instructions.items():
+        allowed = set(TOOLSETS.get(agent, []))
+        for name in sorted(TOOL_LEVELS):
+            pattern = r'(?<![A-Za-z0-9_])%s(?![A-Za-z0-9_])' % re.escape(name)
+            if re.search(pattern, text) and name not in allowed:
+                errors.append('%s: instruction mentions %s but its toolset lacks it' % (agent, name))
+    return errors

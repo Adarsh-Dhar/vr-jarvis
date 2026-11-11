@@ -148,7 +148,7 @@ class TestPythonTypecheck:
         ctx = self._ctx(worktree)
         tc = exec_tools.run_typecheck(ctx)
         assert verification_blockers(
-            {'last_test_run': _good(worktree), 'last_typecheck': tc},
+            {'last_test_run': _good(worktree), 'last_typecheck': tc, 'code_review': _review_approve()},
             str(worktree)) == []
 
     def test_no_sources_is_not_applicable(self, worktree):
@@ -165,6 +165,10 @@ def worktree(tmp_path):
     return tmp_path
 
 
+def _review_approve():
+    return {'verdict': 'approve', 'findings': [], 'acceptance': []}
+
+
 def _good(worktree):
     fp = exec_tools._worktree_fingerprint(str(worktree))
     return {'status': 'passed', 'source': 'live', 'exit_code': 0, 'passed': ['t::a'], 'failed': [],
@@ -173,7 +177,7 @@ def _good(worktree):
 
 class TestVerificationBlockers:
     def test_good_run_has_no_blockers(self, worktree):
-        assert verification_blockers({'last_test_run': _good(worktree)}, str(worktree)) == []
+        assert verification_blockers({'last_test_run': _good(worktree), 'code_review': _review_approve()}, str(worktree)) == []
 
     @pytest.mark.parametrize('field,value,needle', [
         ('exit_code', 1, 'exit 0'),
@@ -186,11 +190,11 @@ class TestVerificationBlockers:
     def test_each_defect_blocks(self, worktree, field, value, needle):
         run = _good(worktree)
         run[field] = value
-        why = ' '.join(verification_blockers({'last_test_run': run}, str(worktree)))
+        why = ' '.join(verification_blockers({'last_test_run': run, 'code_review': _review_approve()}, str(worktree)))
         assert needle in why
 
     def test_no_run_at_all_blocks(self, worktree):
-        assert verification_blockers({}, str(worktree))
+        assert verification_blockers({'code_review': _review_approve()}, str(worktree))
 
 
 # --------------------------------------------------------------------------- permissions for fix_pipeline
@@ -358,19 +362,19 @@ class TestTypecheckGate:
 
     @staticmethod
     def _why(worktree, tc):
-        state = {'last_test_run': _good(worktree)}
+        state = {'last_test_run': _good(worktree), 'code_review': _review_approve()}
         if tc is not None:
             state['last_typecheck'] = tc
         return ' '.join(verification_blockers(state, str(worktree)))
 
     def test_good_typecheck_has_no_blockers(self, ts_worktree):
         assert verification_blockers(
-            {'last_test_run': _good(ts_worktree), 'last_typecheck': _ts_typecheck(ts_worktree)},
+            {'last_test_run': _good(ts_worktree), 'last_typecheck': _ts_typecheck(ts_worktree), 'code_review': _review_approve()},
             str(ts_worktree)) == []
 
     def test_no_tsconfig_means_no_typecheck_required(self, worktree):
         assert verification_blockers(
-            {'last_test_run': _good(worktree)}, str(worktree)) == []
+            {'last_test_run': _good(worktree), 'code_review': _review_approve()}, str(worktree)) == []
 
     def test_missing_typecheck_blocks(self, ts_worktree):
         assert 'Type check has not been run' in self._why(ts_worktree, None)
@@ -397,8 +401,28 @@ class TestTypecheckGate:
                  _ts_typecheck(ts_worktree, head='0' * 40),
                  _ts_typecheck(ts_worktree, source='cached')]
         for tc in cases:
-            state = {'last_test_run': _good(ts_worktree), 'worktree': str(ts_worktree),
+            state = {'last_test_run': _good(ts_worktree), 'code_review': _review_approve(), 'worktree': str(ts_worktree),
                      'proposed_patch': 'diff --git a/x b/x', 'pending_approval': ''}
             if tc is not None:
                 state['last_typecheck'] = tc
             assert asyncio.run(jarvis_server._maybe_prompt_commit('sid-tc', state, '')) == ''
+
+
+class TestMandatoryReview:
+    def test_missing_review_blocks(self, worktree):
+        state = {'last_test_run': _good(worktree)}
+        state.pop('code_review', None)
+        assert any('code review' in w.lower() for w in verification_blockers(state, str(worktree)))
+
+    def test_unparseable_review_blocks(self, worktree):
+        state = {'last_test_run': _good(worktree), 'code_review': 'not json'}
+        assert verification_blockers(state, str(worktree))
+
+    def test_review_without_verdict_blocks(self, worktree):
+        state = {'last_test_run': _good(worktree), 'code_review': {'summary': 'x'}}
+        assert verification_blockers(state, str(worktree))
+
+    def test_approve_with_blocker_finding_blocks(self, worktree):
+        cr = {'verdict': 'approve', 'findings': [{'severity': 'blocker', 'file': 'a.py', 'issue': 'bad'}]}
+        state = {'last_test_run': _good(worktree), 'code_review': cr}
+        assert verification_blockers(state, str(worktree))
