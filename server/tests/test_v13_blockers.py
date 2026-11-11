@@ -78,6 +78,84 @@ class TestPytestParsing:
         assert classify_run(code, passed, failed, skipped, not_run)[0] != 'passed'
 
 
+# --------------------------------------------------------------------------- runner + python typecheck detection
+class TestDetectRunner:
+    def test_pytest_layout_without_config_is_detected(self, tmp_path):
+        # the rp fixture shape: tests/test_pipeline.py + requirements.txt, no pytest.ini
+        (tmp_path / 'tests').mkdir()
+        (tmp_path / 'tests' / 'test_pipeline.py').write_text('def test_a():\n    assert True\n')
+        (tmp_path / 'requirements.txt').write_text('pandas\n')
+        assert exec_tools._detect_runner(str(tmp_path)) == 'pytest'
+
+    def test_pytest_declared_via_requirements(self, tmp_path):
+        (tmp_path / 'requirements.txt').write_text('pytest\n')
+        (tmp_path / 'pkg').mkdir()
+        (tmp_path / 'pkg' / 'mod.py').write_text('x = 1\n')
+        assert exec_tools._detect_runner(str(tmp_path)) == 'pytest'
+
+    def test_jest_requires_package_json_to_reference_it(self, tmp_path):
+        (tmp_path / 'package.json').write_text('{"devDependencies": {"jest": "^29"}}')
+        assert exec_tools._detect_runner(str(tmp_path)) == 'jest'
+
+    def test_package_json_without_jest_and_no_python_tests_is_unverified_jest(self, tmp_path):
+        (tmp_path / 'package.json').write_text('{"scripts": {"build": "tsc"}}')
+        # falls back to jest so the run reports 'unverified' rather than
+        # silently skipping verification
+        assert exec_tools._detect_runner(str(tmp_path)) == 'jest'
+
+    def test_package_json_without_jest_yields_to_python_tests(self, tmp_path):
+        (tmp_path / 'package.json').write_text('{"scripts": {"build": "tsc"}}')
+        (tmp_path / 'tests').mkdir()
+        (tmp_path / 'tests' / 'test_x.py').write_text('def test_a():\n    assert True\n')
+        assert exec_tools._detect_runner(str(tmp_path)) == 'pytest'
+
+    def test_empty_tree_has_no_runner(self, tmp_path):
+        assert exec_tools._detect_runner(str(tmp_path)) is None
+
+    def test_node_modules_test_files_are_ignored(self, tmp_path):
+        nm = tmp_path / 'node_modules' / 'pkg'
+        nm.mkdir(parents=True)
+        (nm / 'test_fake.py').write_text('def test_a():\n    assert True\n')
+        assert exec_tools._detect_runner(str(tmp_path)) is None
+
+
+class TestPythonTypecheck:
+    @staticmethod
+    def _ctx(worktree):
+        from types import SimpleNamespace
+        return SimpleNamespace(state={'worktree': str(worktree)})
+
+    def test_python_worktree_gets_ast_check(self, worktree):
+        (worktree / 'mod.py').write_text('def f():\n    return 1\n')
+        res = exec_tools.run_typecheck(self._ctx(worktree))
+        assert res['typecheck'] == 'passed'
+        assert res['checker'] == 'ast'
+        assert res['source'] == 'live'
+
+    def test_python_syntax_error_fails(self, worktree):
+        (worktree / 'bad.py').write_text('def broken(:\n')
+        res = exec_tools.run_typecheck(self._ctx(worktree))
+        assert res['typecheck'] == 'failed'
+        assert res['errors']
+
+    def test_python_worktree_requires_typecheck_before_approval(self, worktree):
+        (worktree / 'mod.py').write_text('x = 1\n')
+        assert 'Type check has not been run' in ' '.join(
+            verification_blockers({'last_test_run': _good(worktree)}, str(worktree)))
+
+    def test_python_typecheck_result_satisfies_gate(self, worktree):
+        (worktree / 'mod.py').write_text('x = 1\n')
+        ctx = self._ctx(worktree)
+        tc = exec_tools.run_typecheck(ctx)
+        assert verification_blockers(
+            {'last_test_run': _good(worktree), 'last_typecheck': tc},
+            str(worktree)) == []
+
+    def test_no_sources_is_not_applicable(self, worktree):
+        res = exec_tools.run_typecheck(self._ctx(worktree))
+        assert res['typecheck'] == 'not_applicable'
+
+
 # --------------------------------------------------------------------------- approval evidence
 @pytest.fixture
 def worktree(tmp_path):

@@ -1,5 +1,8 @@
 import hashlib
+import importlib.util
 import json
+import os
+import shutil
 import subprocess
 import sys
 import time
@@ -66,11 +69,11 @@ def verification_blockers(state, worktree, allow_cached=False):
         why.append('The patch changed after the tests ran. Re-run the tests.')
     if last.get('head') and fp.get('head') and last['head'] != fp['head']:
         why.append('The worktree HEAD moved after the tests ran. Re-run the tests.')
-    # ---- type check (TypeScript projects) -------------------------------------------------------
+    # ---- type check (TypeScript and Python projects) -----------------------------------------
     tc = state.get('last_typecheck') or {}
     if tc.get('typecheck') == 'failed':
         why.append('Type check failed. Fix it before committing.')
-    needs_tc = bool(worktree) and (Path(worktree) / 'tsconfig.json').is_file()
+    needs_tc = bool(worktree) and _typecheck_kind(worktree) is not None
     if needs_tc:
         if not tc:
             why.append('Type check has not been run for this patch. Run it before committing.')
@@ -98,12 +101,85 @@ def _clear_verification(state):
         state['last_typecheck'] = {}
 
 
+# Directories never worth walking when probing a worktree for tests, Python
+# sources or type-check targets (vendored trees can be enormous).
+_SKIP_WALK_DIRS = {
+    '.git', 'node_modules', '__pycache__', '.venv', 'venv', 'env',
+    '.tox', '.nox', 'build', 'dist', '.pytest_cache', '.mypy_cache',
+    '.ruff_cache', '.next', '.nuxt', 'target', 'vendor',
+}
+
+
+def _iter_files(root, suffix, limit=4000):
+    """Yield paths ending in `suffix` under `root`, pruning vendored and
+    hidden directories. Bounded by `limit` matches."""
+    count = 0
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [d for d in dirnames
+                       if d not in _SKIP_WALK_DIRS and not d.startswith('.')]
+        for fn in filenames:
+            if fn.endswith(suffix):
+                yield os.path.join(dirpath, fn)
+                count += 1
+                if count >= limit:
+                    return
+
+
+def _python_layout(root):
+    """(has_tests, has_sources, pytest_declared) for a Python-ish tree.
+
+    pytest_declared covers the classic markers plus requirements/setup files
+    that mention pytest; has_tests covers test_*.py / *_test.py modules even
+    when the project ships no pytest configuration at all (the rp fixture is
+    exactly this shape: tests/test_pipeline.py + requirements.txt)."""
+    p = Path(root)
+    pytest_declared = any((p / f).is_file()
+                          for f in ('pytest.ini', 'pyproject.toml', 'setup.cfg',
+                                    'tox.ini', 'conftest.py'))
+    if not pytest_declared:
+        for name in ('requirements.txt', 'requirements-dev.txt', 'setup.py', 'Pipfile'):
+            f = p / name
+            if f.is_file():
+                try:
+                    if 'pytest' in f.read_text(errors='ignore').lower():
+                        pytest_declared = True
+                        break
+                except OSError:
+                    pass
+    has_tests = has_sources = False
+    for fp in _iter_files(root, '.py', limit=20000):
+        has_sources = True
+        base = os.path.basename(fp)
+        if base.startswith('test_') or base.endswith('_test.py'):
+            has_tests = True
+            break          # a test module is itself a source: both flags set
+    return has_tests, has_sources, pytest_declared
+
+
 def _detect_runner(cwd):
     p = Path(cwd)
-    if (p / 'package.json').is_file():
-        return 'jest'
-    if any((p / f).is_file() for f in ('pytest.ini', 'pyproject.toml', 'setup.cfg', 'conftest.py')):
+    has_pkg = (p / 'package.json').is_file()
+    uses_jest = False
+    if has_pkg:
+        try:
+            pkg = json.loads((p / 'package.json').read_text())
+        except Exception:
+            pkg = {}
+        deps = {}
+        for k in ('dependencies', 'devDependencies', 'peerDependencies'):
+            deps.update(pkg.get(k) or {})
+        # Serialise values only — a literal 'jest' key name must not count.
+        blob = json.dumps([deps, pkg.get('scripts') or {}, pkg.get('jest')])
+        uses_jest = 'jest' in blob
+        if uses_jest:
+            return 'jest'
+    has_tests, _src, pytest_declared = _python_layout(cwd)
+    if pytest_declared or has_tests:
         return 'pytest'
+    if has_pkg:
+        # Preserve the previous behaviour for JS projects: attempt jest and let
+        # the run report 'unverified' if the project cannot actually execute it.
+        return 'jest'
     return None
 
 
@@ -245,9 +321,114 @@ def run_tests(test_files: list[str], tool_context: ToolContext) -> dict:
     return result
 
 
+def _typecheck_kind(worktree):
+    """Which verification gate applies to this worktree: 'typescript'
+    (tsconfig.json), 'python' (any .py source outside vendored dirs), or None."""
+    p = Path(worktree)
+    if (p / 'tsconfig.json').is_file():
+        return 'typescript'
+    for _ in _iter_files(worktree, '.py', limit=1):
+        return 'python'
+    return None
+
+
+_PY_AST_CHECK = (
+    "import ast, os, sys\n"
+    "skip = {'.git', 'node_modules', '__pycache__', '.venv', 'venv', 'env',\n"
+    "        '.tox', '.nox', 'build', 'dist', '.pytest_cache', '.mypy_cache',\n"
+    "        '.ruff_cache', 'target', 'vendor'}\n"
+    "bad = []\n"
+    "for dp, dn, fn in os.walk(sys.argv[1]):\n"
+    "    dn[:] = [d for d in dn if d not in skip and not d.startswith('.')]\n"
+    "    for f in fn:\n"
+    "        if not f.endswith('.py'):\n"
+    "            continue\n"
+    "        path = os.path.join(dp, f)\n"
+    "        try:\n"
+    "            with open(path, encoding='utf-8', errors='replace') as fh:\n"
+    "                ast.parse(fh.read(), filename=path)\n"
+    "        except SyntaxError as exc:\n"
+    "            bad.append('%s:%s: %s' % (path, exc.lineno, exc.msg))\n"
+    "        except Exception as exc:\n"
+    "            bad.append('%s: %s' % (path, exc))\n"
+    "for line in bad[:40]:\n"
+    "    print(line)\n"
+    "sys.exit(1 if bad else 0)\n"
+)
+
+
+def _mypy_configured(p):
+    """True when the project opts into mypy via a config file."""
+    if any((p / f).is_file() for f in ('mypy.ini', '.mypy.ini')):
+        return True
+    for name, marker in (('setup.cfg', '[mypy'), ('pyproject.toml', '[tool.mypy')):
+        f = p / name
+        if f.is_file():
+            try:
+                if marker in f.read_text(errors='ignore'):
+                    return True
+            except OSError:
+                pass
+    return False
+
+
+def _mypy_argv():
+    """argv for a real mypy run, or None when no mypy is installed."""
+    try:
+        if importlib.util.find_spec('mypy'):
+            return [sys.executable, '-m', 'mypy', '.']
+    except Exception:
+        pass
+    exe = shutil.which('mypy')
+    return [exe, '.'] if exe else None
+
+
+def _pyright_argv():
+    for name in ('pyright', 'basedpyright'):
+        exe = shutil.which(name)
+        if exe:
+            return [exe]
+    return None
+
+
+def _python_typecheck(cwd):
+    """Strongest available Python check for the worktree.
+
+    A real mypy/pyright run only happens when the project configures one —
+    running mypy on an unconfigured legacy tree would fail on missing imports
+    and block valid patches. Otherwise every .py file is AST-parsed so syntax
+    errors still gate the patch. The chosen checker is reported in 'checker'
+    so the result is never mistaken for a full type check."""
+    p = Path(cwd)
+    if _mypy_configured(p):
+        argv = _mypy_argv()
+        if argv:
+            code, out, err = _run(argv, cwd)
+            return {'typecheck': 'passed' if code == 0 else 'failed',
+                    'command': ' '.join(argv), 'exit_code': code,
+                    'checker': 'mypy', 'language': 'python',
+                    'errors': (out + err).splitlines()[:40]}
+    if (p / 'pyrightconfig.json').is_file():
+        argv = _pyright_argv()
+        if argv:
+            code, out, err = _run(argv, cwd)
+            return {'typecheck': 'passed' if code == 0 else 'failed',
+                    'command': ' '.join(argv), 'exit_code': code,
+                    'checker': 'pyright', 'language': 'python',
+                    'errors': (out + err).splitlines()[:40]}
+    code, out, err = _run([sys.executable, '-c', _PY_AST_CHECK, '.'], cwd)
+    return {'typecheck': 'passed' if code == 0 else 'failed',
+            'command': 'python -c <ast parse check>', 'exit_code': code,
+            'checker': 'ast', 'language': 'python',
+            'errors': (out + err).splitlines()[:40]}
+
+
 @safe
 def run_typecheck(tool_context: ToolContext) -> dict:
-    '''Run the TypeScript type check in the sandbox worktree. Returns the first 40 lines of errors.'''
+    '''Run the type/syntax check for the sandbox worktree: tsc --noEmit for
+    TypeScript (tsconfig.json), mypy/pyright when a Python project configures
+    them, an AST parse check for other Python projects. not_applicable when
+    the worktree has neither.'''
     if USE_CACHED_TESTS:
         res = {'status': 'ok', 'typecheck': 'passed', 'source': 'cached'}
         tool_context.state['last_typecheck'] = res
@@ -255,13 +436,19 @@ def run_typecheck(tool_context: ToolContext) -> dict:
     cwd = tool_context.state.get('worktree')
     if not cwd:
         return {'status': 'error', 'error': 'No sandbox worktree. Call create_worktree first.'}
-    if not (Path(cwd) / 'tsconfig.json').is_file():
-        res = {'status': 'ok', 'typecheck': 'not_applicable', 'source': 'live'}
-    else:
+    kind = _typecheck_kind(cwd)
+    if kind == 'typescript':
         code, out, err = _run(['npx', 'tsc', '--noEmit'], cwd)
         res = {'status': 'ok', 'typecheck': 'passed' if code == 0 else 'failed',
                'command': 'npx tsc --noEmit', 'exit_code': code,
-               'errors': (out + err).splitlines()[:40], 'source': 'live'}
+               'language': 'typescript', 'source': 'live',
+               'errors': (out + err).splitlines()[:40]}
+    elif kind == 'python':
+        res = {'status': 'ok', 'source': 'live'}
+        res.update(_python_typecheck(cwd))
+    else:
+        res = {'status': 'ok', 'typecheck': 'not_applicable', 'source': 'live'}
+    if res.get('typecheck') != 'not_applicable':
         res.update(_worktree_fingerprint(cwd))
     tool_context.state['last_typecheck'] = res
     return res

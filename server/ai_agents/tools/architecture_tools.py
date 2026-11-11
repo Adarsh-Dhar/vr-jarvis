@@ -9,6 +9,7 @@ and an approved architecture reverts to draft on any edit.
 
 import json
 import logging
+import math
 import re
 import subprocess
 from pathlib import Path
@@ -245,9 +246,32 @@ def propose_architecture(requirements, tool_context: ToolContext = None) -> dict
             'components': comps, 'relationships': rels}
 
 
+def _stem_variants(t):
+    """Cheap suffix variants so 'handler'/'handling'/'handled' can meet
+    'handle'. Emits at most a few extra forms per token; approximate by
+    design — exact and module/file matches still outrank everything here."""
+    out = set()
+    if len(t) > 5 and t.endswith('ing'):
+        stem = t[:-3]
+        out.update(x for x in (stem, stem + 'e') if len(x) > 2)
+    if len(t) > 4 and t.endswith('ed'):
+        stem = t[:-2]
+        out.update(x for x in (stem, stem + 'e') if len(x) > 2)
+    if len(t) > 5 and t.endswith('ies'):
+        out.add(t[:-3] + 'y')
+    if len(t) > 5 and t.endswith('er'):
+        out.add(t[:-2] + 'e')          # handler -> handle, manager -> manage
+    if len(t) > 6 and t.endswith('ation'):
+        out.add(t[:-5] + 'ate')       # authentication -> authenticate
+    if len(t) > 4 and t.endswith('ly'):
+        out.add(t[:-2])
+    return out
+
+
 def _tokens(s: str) -> set:
     """Word tokens for fuzzy matching: splits snake/kebab/camel case and paths.
-    Adds a naive singular (services -> service) so plurals still match."""
+    Adds a naive singular (services -> service), light suffix stems, and
+    common morphological variants so plurals/inflections still match."""
     s = re.sub(r'([a-z0-9])([A-Z])', r'\1 \2', s or '')
     out = set()
     for t in re.split(r'[^A-Za-z0-9]+', s.lower()):
@@ -256,6 +280,7 @@ def _tokens(s: str) -> set:
         out.add(t)
         if len(t) > 3 and t.endswith('s') and not t.endswith('ss'):
             out.add(t[:-1])
+        out |= _stem_variants(t)
     return out
 
 
@@ -289,54 +314,96 @@ def _node_tokens(n) -> set:
     return toks
 
 
+def _component_token_weights(comp):
+    """token -> weight. Name tokens count double responsibility tokens so a
+    component called 'Auth' is not diluted by a long responsibility paragraph."""
+    w = {}
+    for t in _tokens(str(comp.get('name') or '')):
+        w[t] = max(w.get(t, 0.0), 2.0)
+    for t in _tokens(str(comp.get('responsibility') or '')):
+        w[t] = max(w.get(t, 0.0), 1.0)
+    return w
+
+
+def _node_token_weights(n):
+    """token -> weight. Declared names/qualnames count double path and module
+    tokens, which are shared by every symbol in the same file."""
+    w = {}
+    for key, mult in (('name', 2.0), ('qualname', 2.0),
+                      ('id', 1.0), ('file', 1.0), ('module', 1.0)):
+        for t in _tokens(str(n.get(key) or '')):
+            w[t] = max(w.get(t, 0.0), mult)
+    return w
+
+
+def _token_idf(nodes):
+    """Inverse document frequency over node token sets. Ubiquitous tokens
+    ('service', 'utils', 'test') carry almost no signal; rare tokens dominate
+    both the jaccard and the coverage score."""
+    df = {}
+    for n in nodes:
+        for t in _node_token_weights(n):
+            df[t] = df.get(t, 0) + 1
+    n_nodes = max(1, len(nodes))
+    return {t: math.log((n_nodes + 1.0) / (c + 0.5)) for t, c in df.items()}
+
+
 _LEVEL_RANK = {'module': 0, 'file': 1, 'class': 2, 'function': 3}
 
 
-def _component_tokens(comp):
-    """Tokens describing a component: name plus responsibility text."""
-    toks = _tokens(str(comp.get('name') or ''))
-    toks |= _tokens(str(comp.get('responsibility') or ''))
-    return toks
-
-
-def _match_candidates(comp, nodes, limit=8):
+def _match_candidates(comp, entries, idf, limit=8):
     """Ranked repository-node candidates for a component.
+
+    `entries` is [(node, weighted_tokens, token_weight_total), ...] built once
+    per comparison; `idf` maps token -> inverse document frequency so common
+    words stop dominating the overlap score.
 
     Returns [(node, score, how), ...] best-first. Scoring tiers:
       1.00  exact normalised equality with name/id/qualname
       0.90  the component name equals a module or file name/path stem
-      jaccard  token overlap between component and node tokens (>= 0.34)
+      token  weighted jaccard + coverage over idf-scaled token weights
       0.25  normalised containment either way (weak, reported as fuzzy)
     """
     name = str(comp.get('name') or '')
     nn = _norm(name)
     if not nn:
         return []
-    ctoks = _component_tokens(comp) or _tokens(name)
+    cw = _component_token_weights(comp) or {t: 1.0 for t in _tokens(name)}
+    cw = {t: m * idf.get(t, 1.0) for t, m in cw.items()}
+    ctot = sum(cw.values())
     scored = []
-    for n in nodes:
-        ntoks = _node_tokens(n)
-        if not ntoks:
+    for n, nw, ntot in entries:
+        if not nw or not ctot:
             continue
-        inter = len(ctoks & ntoks)
-        jaccard = inter / len(ctoks | ntoks) if ctoks else 0.0
+        inter = sum(min(cw[t], nw[t]) for t in cw.keys() & nw.keys())
+        union = ctot + ntot - inter
+        jaccard = inter / union if union else 0.0
+        coverage = inter / ctot
+        # Weighted jaccard penalises nodes with many unrelated tokens; the
+        # coverage term rewards a node that explains most of the component's
+        # weighted tokens even when the node itself is broad. The bonus is
+        # capped below the 'medium confidence' line so it can propose but
+        # never silently auto-assign on token evidence alone.
+        tok = jaccard
+        if coverage >= 0.6:
+            tok = max(tok, min(0.49, 0.55 * coverage))
+        # A component named like a module/file ("auth", "account service")
+        # should match that container, not an arbitrary symbol inside it.
         keys = [_norm(n.get(k)) for k in ('name', 'id', 'qualname')]
         if nn in keys:
             scored.append((n, 1.0, 'exact name match'))
             continue
-        # A component named like a module/file ("auth", "account service")
-        # should match that container, not an arbitrary symbol inside it.
         file_stem = _norm(str(n.get('file') or '').rsplit('/', 1)[-1].rsplit('.', 1)[0])
         if n.get('level') in ('module', 'file') and nn and nn == file_stem:
             scored.append((n, 0.9, 'module/file name match'))
             continue
-        if jaccard >= 0.5:
-            scored.append((n, jaccard, 'token overlap %.2f' % jaccard))
-        elif jaccard >= 0.34:
-            scored.append((n, jaccard * 0.8, 'weak token overlap %.2f' % jaccard))
+        if tok >= 0.5:
+            scored.append((n, tok, 'token overlap %.2f' % tok))
+        elif tok >= 0.34:
+            scored.append((n, tok * 0.8, 'weak token overlap %.2f' % tok))
     # Fuzzy containment as a last resort, below every scored candidate.
     fuzzy = []
-    for n in nodes:
+    for n, _nw, _ntot in entries:
         for key in ('name', 'id', 'qualname', 'file'):
             k = _norm(n.get(key))
             if k and len(k) >= 4 and (nn in k or k in nn):
@@ -370,12 +437,18 @@ def _assign_matches(comps, nodes, override_matches=None):
     (compare_to_repository accepts override_matches for that)."""
     AMBIGUITY_MARGIN = 0.12
     override_matches = override_matches or {}
+    # Precompute idf-scaled token weights once for the whole comparison.
+    idf = _token_idf(nodes)
+    entries = []
+    for n in nodes:
+        nw = {t: m * idf.get(t, 1.0) for t, m in _node_token_weights(n).items()}
+        entries.append((n, nw, sum(nw.values())))
     cand_lists = []
     flat = []
     ambiguous_ids = set()
     for i, c in enumerate(comps):
         cid = str(c.get('id'))
-        cands = _match_candidates(c, nodes)
+        cands = _match_candidates(c, entries, idf)
         cand_lists.append(cands)
         # Explicit developer override wins over scoring entirely.
         if cid in override_matches:
@@ -639,8 +712,15 @@ def generate_implementation_plan(architecture, tool_context: ToolContext = None,
         actions = [s.strip() for s in re.split(r'[;\n]|\.\s+',
                     str(comp.get('responsibility') or '')) if s.strip()]
         files = list(g['files'])
-        n = max(1, min(3, len(actions) if len(actions) > 1 else 0,
-                      (len(files) + 1) // 2 if len(files) > 2 else 1))
+        # Split when the responsibility lists several actions OR grounding
+        # found several files. (The old formula ANDed the two signals through
+        # a zero, so file-driven splits could never trigger.)
+        signals = []
+        if len(actions) > 1:
+            signals.append(len(actions))
+        if len(files) > 2:
+            signals.append((len(files) + 1) // 2)
+        n = max(1, min(3, max(signals) if signals else 1))
         if n <= 1:
             return [(comp.get('name', cid), comp.get('responsibility') or '', files, g['symbols'])]
         out = []

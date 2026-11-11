@@ -419,6 +419,11 @@ async def health():
                 'typescript': {'structure': True, 'calls': True, 'cfg': False, 'dfg': False},
                 'javascript': {'structure': True, 'calls': True, 'cfg': False, 'dfg': False},
                 'other': {'structure': True, 'calls': False, 'cfg': False, 'dfg': False}},
+            'verification': {
+                'test_runner': 'auto-detected (jest when package.json uses it, '
+                               'pytest for Python test layouts)',
+                'typescript': 'npx tsc --noEmit when tsconfig.json exists',
+                'python': 'mypy/pyright when configured, else AST parse check'},
             'persistence_warnings': list(_PERSIST_WARNINGS)}
 
 
