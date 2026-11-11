@@ -150,6 +150,7 @@ from .software_engineering_tools import (
 from .testing_verification_tools import (
     discover_tests,
     run_unit_tests,
+    run_integration_tests,
     run_regression_tests,
     measure_test_coverage,
     map_tests_to_functions,
@@ -198,6 +199,7 @@ from .git_tools import (
     create_worktree,
     apply_patch_to_worktree,
     get_worktree_diff,
+    read_worktree_file,
 )
 
 from .scene_tools import (

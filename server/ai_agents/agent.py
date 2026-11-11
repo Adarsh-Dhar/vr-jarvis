@@ -1,7 +1,7 @@
 from google.adk.agents import LlmAgent, LoopAgent, ParallelAgent, SequentialAgent
 
 from .agents.critic import make_critic
-from .agents.fix import patch_agent, patch_repair, verifier
+from .agents.fix import code_reviewer, patch_agent, patch_repair, verifier
 from .agents.impact import change_loader, impact_synthesizer, static_impact, test_mapper
 from .agents.investigator import investigator
 from .agents.navigator import make_navigator
@@ -65,7 +65,7 @@ fix_pipeline = SequentialAgent(
     name='fix_pipeline',
     description=('Proposes a code change with a test in a sandbox, verifies it, and shows the result '
                  'as a reviewable diff. Use for add, fix or change requests.'),
-    sub_agents=[patch_agent, verify_loop,
+    sub_agents=[patch_agent, verify_loop, code_reviewer,
                 make_critic('fix_critic', 'proposed_patch'),
                 make_scene_director('fix_scene')],
 )

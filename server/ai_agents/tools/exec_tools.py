@@ -91,6 +91,8 @@ def verification_blockers(state, worktree, allow_cached=False):
                 why.append('The patch changed after the type check ran. Re-run it.')
             if tc.get('head') and fp.get('head') and tc['head'] != fp['head']:
                 why.append('The worktree HEAD moved after the type check ran. Re-run it.')
+    # Independent code review of the diff: an explicit rejection blocks commit.
+    why.extend(review_blockers(state))
     return why
 
 
@@ -99,6 +101,45 @@ def _clear_verification(state):
     if state is not None:
         state['last_test_run'] = {}
         state['last_typecheck'] = {}
+        state['code_review'] = {}
+
+
+_REVIEW_REJECT = {'changes_requested', 'rejected', 'request_changes', 'fail', 'failed', 'block'}
+
+
+def _review_verdict(state):
+    """Normalise state['code_review'] (dict or JSON string from the reviewer agent)
+    into a dict, or None when no usable review was recorded."""
+    cr = state.get('code_review')
+    if isinstance(cr, str):
+        cr = cr.strip()
+        if not cr:
+            return None
+        try:
+            cr = json.loads(cr)
+        except Exception:
+            return None
+    return cr if isinstance(cr, dict) and cr else None
+
+
+def review_blockers(state):
+    """Reasons the recorded independent code review cannot approve the CURRENT patch.
+    Empty list means the review (when present) does not object. A missing review is
+    not a blocker here: non-fix flows never produce one."""
+    cr = _review_verdict(state)
+    if cr is None:
+        return []
+    verdict = str(cr.get('verdict') or '').strip().lower()
+    if verdict in _REVIEW_REJECT:
+        blockers = ['Code review requested changes before commit (verdict: %s).' % verdict]
+        for f in (cr.get('findings') or [])[:5]:
+            if isinstance(f, dict):
+                blockers.append('  - %s: %s' % (f.get('file') or '?',
+                                                str(f.get('issue') or '')[:160]))
+        return blockers
+    if verdict and verdict not in ('approve', 'approved', 'pass', 'passed', 'lgtm'):
+        return ['Code review verdict is not an approval (verdict: %s).' % verdict]
+    return []
 
 
 # Directories never worth walking when probing a worktree for tests, Python
@@ -406,7 +447,7 @@ def _python_typecheck(cwd):
             code, out, err = _run(argv, cwd)
             return {'typecheck': 'passed' if code == 0 else 'failed',
                     'command': ' '.join(argv), 'exit_code': code,
-                    'checker': 'mypy', 'language': 'python',
+                    'checker': 'mypy', 'language': 'python', 'semantic': True,
                     'errors': (out + err).splitlines()[:40]}
     if (p / 'pyrightconfig.json').is_file():
         argv = _pyright_argv()
@@ -414,12 +455,14 @@ def _python_typecheck(cwd):
             code, out, err = _run(argv, cwd)
             return {'typecheck': 'passed' if code == 0 else 'failed',
                     'command': ' '.join(argv), 'exit_code': code,
-                    'checker': 'pyright', 'language': 'python',
+                    'checker': 'pyright', 'language': 'python', 'semantic': True,
                     'errors': (out + err).splitlines()[:40]}
     code, out, err = _run([sys.executable, '-c', _PY_AST_CHECK, '.'], cwd)
     return {'typecheck': 'passed' if code == 0 else 'failed',
             'command': 'python -c <ast parse check>', 'exit_code': code,
-            'checker': 'ast', 'language': 'python',
+            'checker': 'ast', 'language': 'python', 'semantic': False,
+            'note': 'Syntax check only (AST parse). This is NOT a semantic type check; '
+                    'configure mypy or pyright for real type verification.',
             'errors': (out + err).splitlines()[:40]}
 
 
@@ -441,7 +484,7 @@ def run_typecheck(tool_context: ToolContext) -> dict:
         code, out, err = _run(['npx', 'tsc', '--noEmit'], cwd)
         res = {'status': 'ok', 'typecheck': 'passed' if code == 0 else 'failed',
                'command': 'npx tsc --noEmit', 'exit_code': code,
-               'language': 'typescript', 'source': 'live',
+               'language': 'typescript', 'semantic': True, 'source': 'live',
                'errors': (out + err).splitlines()[:40]}
     elif kind == 'python':
         res = {'status': 'ok', 'source': 'live'}

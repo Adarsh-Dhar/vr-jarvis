@@ -4,9 +4,11 @@ from ..callbacks import permission_guard, evidence_collector
 from ..config import MODEL
 from ..tools.control_tools import exit_loop
 from ..tools.exec_tools import read_test_results, run_tests, run_typecheck
-from ..tools.git_tools import apply_patch_to_worktree, create_worktree, get_worktree_diff
+from ..tools.git_tools import (apply_patch_to_worktree, create_worktree, get_worktree_diff,
+                               read_worktree_file)
 from ..tools.graph_tools import find_tests_for_node, get_callers, get_source, search_graph_symbols
-from ..tools.repository_tools import (list_files, read_file, search_code, search_symbols as repo_search_symbols)
+from ..tools.repository_tools import (list_files, read_file, read_file_range, search_code,
+                                      search_symbols as repo_search_symbols)
 from ..tools.software_engineering_tools import record_task_targets
 from ..tools.navigation_tools import (get_symbol_definition, get_symbol_references, get_symbol_hover_info,
                                        get_call_hierarchy)
@@ -83,6 +85,50 @@ objects with id and message), not_run (list), typecheck (passed, failed or not_r
     before_tool_callback=permission_guard,
     after_tool_callback=evidence_collector,
     output_key='test_results',
+)
+
+code_reviewer = LlmAgent(
+    name='code_reviewer',
+    model=MODEL,
+    include_contents='none',
+    description='Independently reviews the proposed diff for logic, error handling and acceptance criteria before commit.',
+    instruction='''
+You are the independent Code Reviewer. You review the patch that is about to be committed.
+This review is separate from test execution: passing tests do not excuse logic or
+error-handling defects, and test results are context, not your verdict.
+
+Patch under review: {proposed_patch}
+Test results (context only): {test_results}
+Active plan task (may be empty): {active_task}
+
+Process:
+1. Call get_worktree_diff to see the exact diff that will be committed.
+2. For every changed file call read_worktree_file to see the post-patch content in
+   context; use read_file, read_file_range, search_code or get_source for unchanged
+   surrounding code and callers.
+3. Inspect the diff for: incorrect or risky logic, missing error handling on new
+   failure paths, swallowed exceptions, debug leftovers, unrelated or accidental
+   changes, and missing regression tests for the new behaviour.
+4. If active_task is present, check every item in active_task.acceptance_criteria
+   against the diff and report each as met, not_met or unknown.
+5. If changed behaviour lacks test coverage, list concrete test cases to add.
+
+Rules:
+- You only review. Never modify files, never run tests, never commit.
+- verdict is 'approve' only when you find no blocking issue; use 'changes_requested'
+  when any blocker or unmet acceptance criterion exists.
+- Cite file and approximate line for every finding.
+
+Return a JSON object with keys: verdict (approve|changes_requested), summary,
+findings (list of {severity: blocker|warning|info, file, line, issue, suggestion}),
+acceptance (list of {criterion, status: met|not_met|unknown, note}),
+suggested_tests (list of strings).
+''',
+    tools=[get_worktree_diff, read_worktree_file, read_file, read_file_range,
+           search_code, get_source, find_tests_for_node],
+    before_tool_callback=permission_guard,
+    after_tool_callback=evidence_collector,
+    output_key='code_review',
 )
 
 patch_repair = LlmAgent(

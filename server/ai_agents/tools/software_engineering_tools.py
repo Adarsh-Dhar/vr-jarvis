@@ -25,9 +25,10 @@ def _safe_worktree_path(file_path, worktree):
 
 
 def _verification_stale(tool_context):
-    """Any change to the worktree invalidates earlier test/typecheck evidence."""
+    """Any change to the worktree invalidates earlier test/typecheck/review evidence."""
     tool_context.state['last_test_run'] = {}
     tool_context.state['last_typecheck'] = {}
+    tool_context.state['code_review'] = {}
 
 
 # File Editing Tools

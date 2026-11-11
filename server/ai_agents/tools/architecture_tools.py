@@ -740,14 +740,21 @@ def generate_implementation_plan(architecture, tool_context: ToolContext = None,
             continue
         g = grounding.get(cid) or {'files': [], 'symbols': [], 'match': 'unmatched'}
         unmatched = g['match'] == 'unmatched'
+        # Dependencies resolve to the LAST task of each dependency component
+        # (a component is only "done" when its final subtask is). Computed once:
+        # every dependency is already scheduled because `order` is topological.
+        dep_tasks = [task_of[d] for d in sorted(deps.get(cid, ()))
+                     if d in task_of and not (cid in cyclic_set and d in cyclic_set)]
+        prev_tid = None
         for title, resp, files, symbols in _subtasks(cid, comp, g):
             seq += 1
             tid = 't%d' % seq
             task_of[cid] = tid   # last subtask owns dependency edges
-            # Only dependencies that are already scheduled produce valid task
-            # edges; edges inside a cycle are dropped (reported via cycle_paths).
-            depends = [d for d in sorted(deps.get(cid, ()))
-                       if d in task_of and not (cid in cyclic_set and d in cyclic_set)]
+            # First subtask waits on the dependency components' final tasks;
+            # later subtasks chain off the previous subtask so split work is
+            # ordered instead of leaving intra-component dependencies implicit.
+            depends_on = list(dep_tasks) if prev_tid is None else [prev_tid]
+            prev_tid = tid
             criteria = []
             if resp:
                 criteria.append('Responsibility: ' + str(resp))
@@ -762,7 +769,7 @@ def generate_implementation_plan(architecture, tool_context: ToolContext = None,
             t = {'id': tid,
                  'title': ('Investigate ' if unmatched else 'Implement ') + title,
                  'status': 'pending', 'component_id': cid,
-                 'depends_on': [task_of[d] for d in depends],
+                 'depends_on': depends_on,
                  'description': str(comp.get('responsibility') or ''),
                  'acceptance': resp,
                  'acceptance_criteria': criteria,

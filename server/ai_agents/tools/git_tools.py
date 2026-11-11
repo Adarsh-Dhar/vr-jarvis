@@ -105,9 +105,10 @@ def apply_patch_to_worktree(diff: str, tool_context: ToolContext) -> dict:
                           input=diff, cwd=wt, capture_output=True, text=True)
     if proc.returncode != 0:
         return {'status': 'error', 'stderr': proc.stderr[-1500:]}
-    # The patch changed: earlier test/typecheck results no longer describe it.
+    # The patch changed: earlier test/typecheck/review results no longer describe it.
     tool_context.state['last_test_run'] = {}
     tool_context.state['last_typecheck'] = {}
+    tool_context.state['code_review'] = {}
     tool_context.state['last_patch_task_id'] = str(tool_context.state.get('active_task_id') or '')
     return {'status': 'ok', 'applied': True,
             'task_id': tool_context.state.get('active_task_id') or ''}
@@ -122,6 +123,28 @@ def get_worktree_diff(tool_context: ToolContext) -> dict:
     subprocess.run(['git', 'add', '-N', '.'], cwd=wt, capture_output=True, text=True)
     proc = subprocess.run(['git', 'diff', 'HEAD'], cwd=wt, capture_output=True, text=True)
     return {'status': 'ok', 'diff': proc.stdout}
+
+
+@safe
+def read_worktree_file(file_path: str, tool_context: ToolContext) -> dict:
+    '''Read a file as it exists AFTER the patch, inside the sandbox worktree.
+    Use this (not read_file) when reviewing or verifying applied changes: read_file
+    always shows the pre-patch repository content.'''
+    wt = tool_context.state.get('worktree')
+    if not wt:
+        return {'status': 'error', 'error': 'No worktree yet.'}
+    from .software_engineering_tools import _safe_worktree_path
+    try:
+        path = _safe_worktree_path(file_path, wt)
+    except ValueError as exc:
+        return {'status': 'error', 'error': str(exc)}
+    if not path.is_file():
+        return {'status': 'error', 'error': 'File not found in worktree: ' + str(file_path)}
+    try:
+        text = path.read_text(encoding='utf-8', errors='replace')
+    except OSError as exc:
+        return {'status': 'error', 'error': str(exc)}
+    return {'status': 'ok', 'file': str(file_path), 'content': text}
 
 
 def commit_worktree(worktree: str, message: str) -> dict:

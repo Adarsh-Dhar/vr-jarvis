@@ -64,6 +64,7 @@ def test_ask_response_contract():
             "pending_approval",
             "approved",
             "test_results",
+            "code_review",
             "test_source",
             "evidence",
             "unverified_evidence",

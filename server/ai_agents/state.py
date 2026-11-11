@@ -9,6 +9,7 @@ KEYS = [
     'answer_draft',     # investigator output
     'proposed_patch',   # patch_agent / patch_repair output
     'test_results',     # verifier output
+    'code_review',      # code_reviewer verdict on the proposed diff
     'verified_answer',  # critic output
     'worktree',         # path of the sandbox worktree
     'last_test_run',    # raw test data for read_test_results

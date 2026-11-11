@@ -26,6 +26,7 @@ PERMISSION_CEILINGS = {
     "patch_agent": 'write',
     "patch_repair_agent": 'write',
     "verifier_agent": 'execute',
+    "code_reviewer": 'read',
 }
 
 # Tool permission levels - must contain every tool name in TOOLSETS
@@ -148,6 +149,7 @@ TOOL_LEVELS = {
     "read_file": "read",
     "read_file_range": "read",
     "read_test_results": "read",
+    "read_worktree_file": "read",
     "record_task_targets": "write",
     "recenter_workspace": "read",
     "record_finding": "read",
@@ -159,6 +161,7 @@ TOOL_LEVELS = {
     "resolve_types": "read",
     "retrieve_conversation_context": "read",
     "retrieve_investigation_context": "read",
+    "run_integration_tests": "execute",
     "run_regression_tests": "execute",
     "run_tests": "execute",
     "run_typecheck": "execute",
@@ -210,7 +213,7 @@ TOOLSETS: Dict[str, List[str]] = {
     "relationship_intelligence": ['find_callers', 'find_callees', 'find_indirect_callers', 'trace_call_chain', 'get_call_sites', 'explain_call_resolution', 'build_call_graph', 'build_dependency_graph', 'find_dependents', 'find_all_paths_between_symbols', 'find_circular_dependencies', 'analyze_architecture_boundaries', 'calculate_change_impact', 'find_interface_implementations', 'trace_cross_module_relationships'],
     "data_flow_intelligence": ['trace_variable_origin', 'trace_variable_usage', 'trace_variable_modifications', 'trace_parameter_flow', 'trace_return_value_flow', 'trace_transformations', 'trace_cross_function_flow', 'trace_file_operations', 'trace_state_changes', 'build_data_flow_graph'],
     "software_engineering": ['create_worktree', 'apply_patch_to_worktree', 'get_worktree_diff', 'edit_file', 'apply_patch', 'search_and_replace', 'organize_imports', 'format_code', 'git_status', 'git_branch', 'git_diff', 'read_file', 'search_code', 'record_task_targets'],
-    "testing_verification": ['discover_tests', 'map_tests_to_functions', 'identify_untested_paths', 'run_unit_tests', 'run_regression_tests', 'measure_test_coverage', 'verify_compilation', 'verify_lint', 'verify_types', 'compare_before_after', 'run_tests', 'run_typecheck', 'read_test_results'],
+    "testing_verification": ['discover_tests', 'map_tests_to_functions', 'identify_untested_paths', 'run_unit_tests', 'run_integration_tests', 'run_regression_tests', 'measure_test_coverage', 'verify_compilation', 'verify_lint', 'verify_types', 'compare_before_after', 'run_tests', 'run_typecheck', 'read_test_results'],
     "visualization_spatial": ['highlight_vr_path', 'dim_unrelated', 'focus_camera', 'open_code_panel', 'list_vr_repositories', 'open_vr_repository', 'browse_vr_folder', 'open_vr_file', 'move_graph', 'zoom_graph', 'move_panel', 'scale_panel', 'set_panel_state', 'highlight_callers', 'recenter_workspace', 'reset_layout', 'set_mode', 'set_edge_style', 'show_ghost_diff', 'show_test_badges', 'create_graph', 'visualize_call_graph', 'visualize_change_impact', 'visualize_data_flow', 'visualize_architecture', 'visualize_dependency_graph', 'visualize_control_flow', 'visualize_unified_graph', 'explain_graph_edge', 'query_graph_path', 'expand_graph_neighborhood', 'expand_graph_node', 'collapse_graph_node', 'isolate_subgraph', 'summarize_graph', 'get_current_selection', 'verify_citations', 'focus_on_graph_node', 'navigate_to_code_element', 'navigate_to_relationship', 'get_selected_node_details', 'get_current_spatial_context', 'focus_on_code_element'],
 }
 

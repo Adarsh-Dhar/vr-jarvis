@@ -13,6 +13,7 @@ Verified answer: {verified_answer}
 Impact report (may be empty): {impact_report}
 Proposed patch (may be empty): {proposed_patch}
 Test results (may be empty): {test_results}
+Code review verdict (may be empty): {code_review}
 
 Steps, skipping any that do not apply:
 1. Collect the node ids from the verified claims and call highlight_vr_path with them.

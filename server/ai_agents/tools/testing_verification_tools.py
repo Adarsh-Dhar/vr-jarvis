@@ -9,8 +9,20 @@ import subprocess
 import re
 import xml.etree.ElementTree as ET
 from google.adk.tools import ToolContext
-from ._common import repo_root, resolve_in_repo
+from ._common import resolve_in_repo
 from ._safe import safe
+
+
+def _run_status(returncode, passed, failed, skipped):
+    """Classify a pytest run. 'ok' requires exit 0 AND at least one real pass AND
+    no failures. A zero-exit run where nothing passed (all skipped, or nothing
+    collected) is 'unverified', never 'ok'. A non-zero exit with parsed results
+    is 'failed'; a non-zero exit that produced nothing is 'unverified'."""
+    if failed or (returncode != 0 and (passed or skipped)):
+        return 'failed'
+    if returncode != 0 or not passed:
+        return 'unverified'
+    return 'ok'
 
 
 @safe
@@ -32,31 +44,65 @@ def discover_tests(
             }
         
         tests_found = []
-        
-        # Detect test framework and find test files
-        if test_framework == 'auto':
-            # Check for common test directories
-            test_dirs = ['tests', 'test', '__tests__', 'spec']
-            for test_dir in test_dirs:
-                test_path = path / test_dir
-                if test_path.exists():
-                    for test_file in test_path.rglob('test_*.py'):
-                        tests_found.append({
-                            'file': str(test_file.relative_to(path)),
-                            'name': test_file.stem,
-                            'type': 'unit'
-                        })
-                    for test_file in test_path.rglob('*_test.py'):
-                        tests_found.append({
-                            'file': str(test_file.relative_to(path)),
-                            'name': test_file.stem,
-                            'type': 'unit'
-                        })
-        
+        seen = set()
+
+        def _add(test_file, kind):
+            rel = str(test_file.relative_to(path))
+            if rel in seen:
+                return
+            seen.add(rel)
+            tests_found.append({'file': rel, 'name': test_file.stem, 'type': kind})
+
+        # Check for common test directories
+        test_dirs = ['tests', 'test', '__tests__', 'spec', 'specs']
+        js_suffixes = ('.test.js', '.test.jsx', '.test.ts', '.test.tsx',
+                       '.spec.js', '.spec.jsx', '.spec.ts', '.spec.tsx')
+        for test_dir in test_dirs:
+            test_path = path / test_dir
+            if not test_path.is_dir():
+                continue
+            for test_file in test_path.rglob('*'):
+                if not test_file.is_file():
+                    continue
+                name = test_file.name
+                if name.startswith('test_') and name.endswith('.py') or name.endswith('_test.py'):
+                    _add(test_file, 'unit')
+                elif name.endswith(js_suffixes):
+                    _add(test_file, 'unit')
+
+        # Jest also keeps tests next to sources outside the classic test dirs.
+        if (path / 'package.json').is_file():
+            for test_file in path.rglob('*'):
+                if test_file.is_file() and test_file.name.endswith(js_suffixes):
+                    try:
+                        test_file.relative_to(path)
+                    except ValueError:
+                        continue
+                    parts = set(test_file.relative_to(path).parts)
+                    if parts & {'node_modules', '.git'}:
+                        continue
+                    _add(test_file, 'unit')
+
+        # Report the detected framework so callers know what can execute them.
+        detected = 'unknown'
+        pkg = path / 'package.json'
+        if pkg.is_file():
+            try:
+                import json as _json
+                blob = _json.dumps(_json.loads(pkg.read_text(errors='ignore'))).lower()
+                if 'jest' in blob or 'vitest' in blob:
+                    detected = 'jest'
+            except Exception:
+                pass
+        if detected == 'unknown' and any(t['file'].endswith('.py') for t in tests_found):
+            detected = 'pytest'
+        if test_framework != 'auto':
+            detected = test_framework
+
         return {
             'status': 'ok',
             'repository_path': str(path),
-            'test_framework': test_framework,
+            'test_framework': detected,
             'tests_found': tests_found
         }
     except Exception as e:
@@ -150,7 +196,7 @@ def run_unit_tests(
                     skipped += 1
         
         return {
-            'status': 'ok' if result.returncode == 0 else 'failed',
+            'status': _run_status(result.returncode, passed, failed, skipped),
             'test_type': 'unit',
             'passed': passed,
             'failed': failed,
@@ -176,10 +222,17 @@ def run_integration_tests(
     tool_context: ToolContext,
     test_files: Optional[List[str]] = None
 ) -> dict:
-    """Execute integration tests."""
+    """Execute integration tests inside the sandbox worktree."""
     try:
-        cwd = repo_root()
-        
+        worktree = tool_context.state.get('worktree')
+        if not worktree:
+            return {
+                'status': 'blocked',
+                'reason': 'Create a sandbox worktree first with create_worktree.'
+            }
+
+        cwd = Path(worktree)
+
         cmd = ['python3', '-m', 'pytest', '-v', '-m', 'integration']
         if test_files:
             cmd.extend(test_files)
@@ -201,7 +254,7 @@ def run_integration_tests(
                 skipped += 1
         
         return {
-            'status': 'ok' if result.returncode == 0 else 'failed',
+            'status': _run_status(result.returncode, passed, failed, skipped),
             'test_type': 'integration',
             'passed': passed,
             'failed': failed,
@@ -306,7 +359,7 @@ def run_regression_tests(
                     skipped += 1
         
         return {
-            'status': 'ok' if result.returncode == 0 else 'failed',
+            'status': _run_status(result.returncode, passed, failed, skipped),
             'test_type': 'regression',
             'passed': passed,
             'failed': failed,
@@ -391,15 +444,6 @@ def measure_test_coverage(
             'error': str(e),
             'repository_path': str(path)
         }
-        return {
-            'status': 'error',
-            'error': 'Coverage measurement timed out'
-        }
-    except Exception as e:
-        return {
-            'status': 'error',
-            'error': str(e)
-        }
 
 
 @safe
@@ -407,35 +451,107 @@ def map_tests_to_functions(
     repository_path: str,
     tool_context: ToolContext
 ) -> dict:
-    """Connect tests to functions."""
+    """Connect tests to the functions they actually exercise.
+
+    Python test files are parsed with ast: for every test_* function we collect
+    the names it calls and the names it imports from project modules, so the
+    mapping reflects real references instead of only the test's own name. JS/TS
+    test files get a regex-based pass over test()/it() bodies. Every entry is
+    tagged with a confidence: 'high' when the target is called or imported in
+    the test body, 'low' when it is only a name-derived guess."""
     try:
-        # This is a heuristic implementation
-        # Real implementation would use AST analysis of test files
+        import ast
         path = Path(repository_path)
         if not path.is_absolute():
             path = resolve_in_repo(path)
-        
-        test_mapping = []
-        
-        for test_file in path.rglob('test_*.py'):
-            try:
-                content = test_file.read_text(encoding='utf-8')
-                
-                # Extract function names from test file
-                import re
-                test_funcs = re.findall(r'def (test_\w+)', content)
-                
-                for test_func in test_funcs:
-                    # Extract target function name from test name
-                    target = test_func.replace('test_', '').replace('_test', '')
-                    test_mapping.append({
-                        'test': test_func,
-                        'function': target,
-                        'file': str(test_file.relative_to(path))
-                    })
-            except:
+
+        skip_dirs = {'.git', 'node_modules', '__pycache__', '.venv', 'venv'}
+        test_files = []
+        for test_file in path.rglob('*'):
+            if not test_file.is_file():
                 continue
-        
+            rel_parts = test_file.relative_to(path).parts
+            if set(rel_parts) & skip_dirs:
+                continue
+            name = test_file.name
+            if (name.startswith('test_') and name.endswith('.py')) or name.endswith('_test.py') \
+                    or name.endswith(('.test.js', '.test.jsx', '.test.ts', '.test.tsx',
+                                      '.spec.js', '.spec.jsx', '.spec.ts', '.spec.tsx')):
+                test_files.append(test_file)
+
+        def _py_mapping(test_file):
+            try:
+                tree = ast.parse(test_file.read_text(encoding='utf-8', errors='replace'))
+            except Exception:
+                return []
+            module_imports = {}   # local name -> imported qualified name
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ImportFrom) and node.module:
+                    for a in node.names:
+                        module_imports[a.asname or a.name] = node.module + '.' + a.name
+                elif isinstance(node, ast.Import):
+                    for a in node.names:
+                        module_imports[a.asname or a.name.split('.')[0]] = a.name
+            out = []
+            for node in ast.walk(tree):
+                if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    continue
+                if not node.name.startswith('test'):
+                    continue
+                called, guessed = set(), set()
+                for sub in ast.walk(node):
+                    if isinstance(sub, ast.Call):
+                        f = sub.func
+                        if isinstance(f, ast.Name):
+                            called.add(f.id)
+                        elif isinstance(f, ast.Attribute):
+                            called.add(f.attr)
+                for name in called:
+                    if name.startswith('test') or name in ('assert', 'print', 'len', 'str',
+                                                         'int', 'list', 'dict', 'set', 'open',
+                                                         'isinstance', 'getattr', 'setattr',
+                                                         'super', 'range', 'enumerate', 'zip'):
+                        continue
+                    target = module_imports.get(name, name)
+                    out.append({'test': node.name, 'function': target,
+                                'file': str(test_file.relative_to(path)),
+                                'confidence': 'high',
+                                'evidence': 'called or imported inside the test'})
+                # Name-derived guess, only when nothing was actually called.
+                if not out:
+                    leaf = node.name[5:] if node.name.startswith('test_') else node.name[4:]
+                    leaf = leaf.lstrip('_')
+                    if leaf:
+                        out.append({'test': node.name, 'function': leaf,
+                                    'file': str(test_file.relative_to(path)),
+                                    'confidence': 'low',
+                                    'evidence': 'derived from the test name only'})
+            return out
+
+        def _js_mapping(test_file):
+            try:
+                content = test_file.read_text(encoding='utf-8', errors='replace')
+            except Exception:
+                return []
+            out = []
+            for m in re.finditer(r'(?:test|it)\(\s*[\'"`]([^\'"`]+)[\'"`]', content):
+                title = m.group(1)
+                leaf = re.sub(r'[^A-Za-z0-9]+', '_', title).strip('_').lower()
+                if not leaf:
+                    continue
+                out.append({'test': title, 'function': leaf,
+                            'file': str(test_file.relative_to(path)),
+                            'confidence': 'low',
+                            'evidence': 'derived from the test title only'})
+            return out
+
+        test_mapping = []
+        for test_file in test_files:
+            if test_file.suffix == '.py':
+                test_mapping.extend(_py_mapping(test_file))
+            else:
+                test_mapping.extend(_js_mapping(test_file))
+
         return {
             'status': 'ok',
             'repository_path': str(path),
@@ -589,19 +705,47 @@ def verify_lint(
             }
         
         result = subprocess.run([linter, str(path)], capture_output=True, text=True, timeout=60)
-        
+
+        # Diagnostics can appear on either stream (pylint reports on stdout,
+        # many linters report on stderr). A non-zero exit with NO diagnostic
+        # lines means the linter itself failed — that is an error, not a pass.
+        diag_re = re.compile(r'^\s*(?:\S+[/\\])?\S+\.(?:py|pyi|js|jsx|ts|tsx|go|rs|java|cs|cpp|c|h):\d+')
+        all_lines = (result.stdout + '\n' + result.stderr).splitlines()
         warnings = []
-        for line in result.stdout.splitlines():
-            if line.strip():
-                warnings.append(line[:200])
-        
+        for line in all_lines:
+            stripped = line.strip()
+            if stripped and (diag_re.match(stripped) or re.match(r'^\S+\[\w\]', stripped)):
+                warnings.append(stripped[:200])
+
+        # pylint-style severity bits: fatal=1, error=2, warning=4, refactor=8,
+        # convention=16, usage error=32. For other linters the bitmask is a
+        # best-effort hint only; the diagnostic-line check above is authoritative.
+        rc = result.returncode
+        if rc != 0 and not warnings:
+            return {
+                'status': 'error',
+                'repository_path': str(path),
+                'linter': linter,
+                'lint_check': 'error',
+                'error': ('Linter exited with code %s and produced no diagnostics; '
+                          'the lint run itself failed.') % rc,
+                'output': (result.stderr or result.stdout)[-1000:],
+                'exit_code': rc
+            }
+        if rc & 0b00011 or rc & 32:
+            lint_check = 'failed'
+        elif warnings or rc:
+            lint_check = 'warning'
+        else:
+            lint_check = 'success'
+
         return {
             'status': 'ok',
             'repository_path': str(path),
             'linter': linter,
-            'lint_check': 'warning' if warnings else 'success',
+            'lint_check': lint_check,
             'warnings': warnings[:20],
-            'exit_code': result.returncode
+            'exit_code': rc
         }
     except subprocess.TimeoutExpired:
         return {
@@ -667,10 +811,6 @@ def compare_before_after(
             'note': 'String comparison - full snapshot comparison requires test result management'
         }
     except Exception as e:
-        return {
-            'status': 'error',
-            'error': str(e)
-        }
         return {
             'status': 'error',
             'error': str(e)

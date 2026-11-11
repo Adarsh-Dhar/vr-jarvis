@@ -699,6 +699,21 @@ def _unverified_evidence(state: dict) -> list:
     return [i for i in state.get('evidence', []) if i not in nodes]
 
 
+def _code_review_summary(state):
+    """Compact verdict + blocker count from the independent code review, for the
+    validation record. None when no review ran this turn."""
+    from ai_agents.tools.exec_tools import _review_verdict
+    cr = _review_verdict(state)
+    if cr is None:
+        return None
+    findings = cr.get('findings') or []
+    blockers = [f for f in findings
+                if isinstance(f, dict) and str(f.get('severity') or '').lower() == 'blocker']
+    return {'verdict': cr.get('verdict'), 'summary': str(cr.get('summary') or '')[:300],
+            'blockers': len(blockers),
+            'suggested_tests': [str(t)[:120] for t in (cr.get('suggested_tests') or [])[:10]]}
+
+
 def _build_ask_response(reply: str, error: str, state: dict) -> dict:
     """Build the standardized response for /ask and /ask/stream endpoints.
 
@@ -734,6 +749,7 @@ def _build_ask_response(reply: str, error: str, state: dict) -> dict:
         'approval_type': approval_type,
         'approved': bool(state.get('approved', False)),
         'test_results': _s(state.get('test_results')),
+        'code_review': _s(state.get('code_review')),
         'test_source': last.get('source', '') if isinstance(last, dict) else '',
         'test_run': last if isinstance(last, dict) else {},
         'evidence': list(state.get('evidence', [])),
@@ -882,6 +898,7 @@ async def approve(body: ApproveBody):
                                    'passed': last.get('passed'), 'failed': last.get('failed'),
                                    'skipped': last.get('skipped'), 'source': last.get('source')},
                       'typecheck': tc.get('typecheck'), 'source_tc': tc.get('source'),
+                      'code_review': _code_review_summary(state),
                       'checks_not_run': last.get('checks_not_run') or []}
             await set_state(body.session_id, {**cleared, 'approved': True,
                             'last_commit': {'branch': result['branch'], 'commit': result['commit']},
@@ -1500,8 +1517,28 @@ async def design_approve(session_id: str, body: DesignApproveBody):
         arch['approved_version'] = 0
         arch['approved_revision'] = 0
     await set_state(session_id, {'design': arch})
+    plan = None
+    if body.approved:
+        # Approving completes the design workflow: generate the implementation
+        # plan immediately so the developer does not need a second manual step.
+        # Ground tasks in the same repository the comparison ran against.
+        repo_name = (view.get('compare') or {}).get('repo')
+        gpath = _graph_path_for_repo(repo_name)
+        res = await asyncio.to_thread(generate_implementation_plan,
+                                      {'architecture': arch}, None,
+                                      str(gpath) if gpath else None)
+        plan = {'architecture_version': arch.get('version'),
+                'architecture_revision': arch.get('revision'),
+                'repo': repo_name or config.REPO_ROOT.name,
+                'status': 'active',
+                'tasks': res['tasks'], 'circular': res.get('circular') or [],
+                'cycle_paths': res.get('cycle_paths') or []}
+        await set_state(session_id, {'implementation_plan': plan})
     await _persist_design(session_id)
-    return {'ok': True, 'architecture': arch}
+    out = {'ok': True, 'architecture': arch}
+    if plan is not None:
+        out['plan'] = plan
+    return out
 
 
 @app.post('/plan/generate', dependencies=[Depends(auth)])
