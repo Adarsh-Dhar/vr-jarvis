@@ -49,7 +49,8 @@ def _agent_instructions():
                                   implementation_planning, conversational,
                                   visualization, orchestrator, navigator)
     from ai_agents.agents.fix import (patch_agent, verifier, code_reviewer,
-                                      patch_repair)
+                                      patch_repair, make_patch_review_repair,
+                                      make_review_verifier)
     from ai_agents.agents.navigator import make_navigator
     navigator_agent_tools = make_navigator().tools
     from ai_agents.agents.critic import TEMPLATE as CRITIC_TEMPLATE
@@ -73,6 +74,8 @@ def _agent_instructions():
         'verifier_agent': verifier.instruction,
         'code_reviewer': code_reviewer.instruction,
         'patch_repair_agent': patch_repair.instruction,
+        'patch_review_repair_agent': make_patch_review_repair().instruction,
+        'review_verifier_agent': make_review_verifier().instruction,
         'jarvis_orchestrator': ROOT_INSTRUCTION,
         'critic': CRITIC_TEMPLATE,
         'scene_director': SCENE_INSTRUCTION,
@@ -85,6 +88,9 @@ def _agent_instructions():
         'verifier_agent': {getattr(t, '__name__', '') for t in verifier.tools},
         'code_reviewer': {getattr(t, '__name__', '') for t in code_reviewer.tools},
         'patch_repair_agent': {getattr(t, '__name__', '') for t in patch_repair.tools},
+        'patch_review_repair_agent': {getattr(t, '__name__', '') for t in make_patch_review_repair().tools},
+        'review_verifier_agent': ({getattr(t, '__name__', '') for t in make_review_verifier().tools}
+                                  | {'exit_loop'}),  # named only to forbid it
         'navigator': {getattr(t, '__name__', '') for t in navigator_agent_tools},
         'critic': {'verify_citations', 'get_node'},
         'scene_director': {'highlight_vr_path', 'dim_unrelated', 'focus_camera',

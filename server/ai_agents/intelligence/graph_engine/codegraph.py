@@ -426,6 +426,10 @@ class CodeGraph:
         """Return the recorded call-site dict (schema v3) if present."""
         return self._call_sites.get(callsite_id)
     
+    def nodes_in_file(self, file_path: str) -> List[Dict[str, Any]]:
+        """All graph nodes whose ``file`` equals ``file_path``."""
+        return [n for n in self._nodes.values() if n.get('file') == file_path]
+
     def edges_between(self, src: str, dst: str) -> List[Dict[str, Any]]:
         """
         Get all edges between two nodes (handles parallel call sites).

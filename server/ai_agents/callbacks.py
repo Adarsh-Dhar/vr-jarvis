@@ -185,6 +185,8 @@ def permission_guard(tool, args, tool_context):
 
     # Tool-contract validation: arguments must satisfy the registered input
     # schema before permission checks run. This is additive to permissions.
+    # Fail closed: if validation itself cannot run, the call is blocked rather
+    # than silently allowed past the contract.
     try:
         from .registry.tool_registry import get_tool_registry
         arg_errors = get_tool_registry().validate_arguments(name, args or {})
@@ -193,8 +195,12 @@ def permission_guard(tool, args, tool_context):
             _log_authorization(tool_context.agent_name, name, redacted_args, outcome, time.time() - start_time)
             return {'status': 'error', 'error': 'Invalid arguments for %s: %s' % (name, '; '.join(arg_errors)),
                     'validation': 'input_schema'}
-    except Exception:
-        pass  # contract validation must never break tool dispatch
+    except Exception as exc:
+        outcome = 'blocked_contract'
+        _log_authorization(tool_context.agent_name, name, redacted_args, outcome, time.time() - start_time)
+        return {'status': 'error',
+                'error': 'Argument validation unavailable for %s: %s' % (name, exc),
+                'validation': 'input_schema_unavailable'}
 
     # Use tool_context.agent_name (from ADK) instead of state['calling_agent']
     calling_agent = tool_context.agent_name
@@ -399,6 +405,8 @@ def evidence_collector(tool, args, tool_context, tool_response):
 
     # Tool-contract validation: results must satisfy the registered output
     # schema. A violation replaces the response with a structured error.
+    # Fail closed: a validation failure replaces the result rather than
+    # passing an unverified response downstream.
     try:
         from .registry.tool_registry import get_tool_registry
         output_errors = get_tool_registry().validate_result(tool.name, tool_response)
@@ -406,8 +414,10 @@ def evidence_collector(tool, args, tool_context, tool_response):
             return {'status': 'error',
                     'error': 'Tool %s returned an invalid result: %s' % (tool.name, '; '.join(output_errors)),
                     'validation': 'output_schema'}
-    except Exception:
-        pass
+    except Exception as exc:
+        return {'status': 'error',
+                'error': 'Result validation unavailable for %s: %s' % (tool.name, exc),
+                'validation': 'output_schema_unavailable'}
 
     return None
 

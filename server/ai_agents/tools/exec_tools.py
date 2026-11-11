@@ -141,9 +141,16 @@ def review_blockers(state, require_review=True):
     for f in (cr.get('findings') or []):
         if isinstance(f, dict) and str(f.get('severity') or '').lower() == 'blocker':
             blockers.append('  - blocker in %s: %s' % (f.get('file') or '?', str(f.get('issue') or '')[:160]))
+    # Only an explicit 'met' clears an acceptance criterion. 'unknown', 'not_met',
+    # a missing or invalid status and non-object entries all block the commit.
     for a in (cr.get('acceptance') or []):
-        if isinstance(a, dict) and str(a.get('status') or '').lower() == 'not_met':
-            blockers.append('  - acceptance criterion not met: %s' % str(a.get('criterion') or '')[:160])
+        if not isinstance(a, dict):
+            blockers.append('  - acceptance entry is not an object; re-run the reviewer.')
+            continue
+        status = str(a.get('status') or '').strip().lower()
+        if status != 'met':
+            blockers.append('  - acceptance criterion not met (status: %s): %s'
+                            % (status or 'missing', str(a.get('criterion') or '')[:160]))
     return blockers[:8]
 
 

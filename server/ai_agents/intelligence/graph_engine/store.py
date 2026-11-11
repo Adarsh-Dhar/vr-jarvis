@@ -56,6 +56,12 @@ def activate(name):
     # Clear CodeGraph cache
     from ... import codegraph
     codegraph.clear_cache()
+    # Per-function data-flow facts are keyed on repo/graph/source; drop them too.
+    try:
+        from ...tools.data_flow_intelligence_tools import clear_facts_cache
+        clear_facts_cache()
+    except Exception:
+        pass
     return graph
 
 

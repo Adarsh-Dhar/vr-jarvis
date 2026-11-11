@@ -473,6 +473,33 @@ class RecursiveExpressionEvaluator:
             diagnostics=[]
         )
     
+    @staticmethod
+    def _callee_dotted_name(func_node: ast.AST) -> Optional[str]:
+        """Dotted callee name for a call's func expression (Name/Attribute chain)."""
+        parts = []
+        node = func_node
+        while isinstance(node, ast.Attribute):
+            parts.append(node.attr)
+            node = node.value
+        if isinstance(node, ast.Name):
+            parts.append(node.id)
+            return '.'.join(reversed(parts))
+        return None
+
+    @staticmethod
+    def _arg_shape(result: 'ExpressionResult', kind: str, name=None,
+                   starred: bool = False) -> Dict[str, Any]:
+        """Structured record of one call argument: which uses/operations it
+        contributes, so callers can bind arguments to parameters by position
+        or keyword instead of guessing from a flat use list."""
+        return {
+            'kind': kind,
+            'name': name,
+            'starred': starred,
+            'use_ids': list(result.direct_input_use_ids),
+            'operation_id': result.root_operation_id,
+        }
+
     def _evaluate_call(self, node: ast.Call) -> ExpressionResult:
         """Evaluate a function call with source order preservation for all argument types."""
         # M5.7: Preserve source evaluation order for all argument types
@@ -480,15 +507,37 @@ class RecursiveExpressionEvaluator:
 
         # Evaluate function and arguments
         func = self.evaluate(node.func)
-        args = [self.evaluate(a) for a in node.args]
-        kwargs = [self.evaluate(k.value) for k in node.keywords if k.value]
+        arg_results = []
+        positional = []
+        for a in node.args:
+            starred = isinstance(a, ast.Starred)
+            target = a.value if starred else a
+            res = self.evaluate(target)
+            arg_results.append(res)
+            positional.append(self._arg_shape(res, 'positional', starred=starred))
+        keywords = []
+        for k in node.keywords:
+            if k.value is None:
+                continue
+            res = self.evaluate(k.value)
+            arg_results.append(res)
+            kw_starred = k.arg is None
+            keywords.append(self._arg_shape(
+                res, 'keyword', name=k.arg, starred=kw_starred))
+        args = arg_results[:len(node.args)]
+        kwargs = arg_results[len(node.args):]
 
         # Determine if this is a known mutation
         known_mutations = ['append', 'extend', 'insert', 'remove', 'pop', 'clear', 'sort', 'reverse', 'update', 'add', 'discard']
         metadata = {
             'side_effect': 'unknown',
             'confidence': 'low',
-            'arg_count': len(node.args) + len(node.keywords)
+            'arg_count': len(node.args) + len(node.keywords),
+            'call_shape': {
+                'callee': self._callee_dotted_name(node.func),
+                'positional': positional,
+                'keywords': keywords,
+            },
         }
 
         if isinstance(node.func, ast.Attribute):

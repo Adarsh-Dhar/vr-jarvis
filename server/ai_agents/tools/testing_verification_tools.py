@@ -773,7 +773,8 @@ def identify_untested_paths(
                 continue
             if fp.suffix != '.py':
                 unsupported.append({'file': file_path, 'coverage': cov_value,
-                                    'status': 'unverified',
+                                    'language': fp.suffix.lstrip('.') or 'unknown',
+                                    'status': 'unsupported_language',
                                     'reason': 'per-path coverage not implemented for this language'})
                 continue
             missing = set(missing_lines.get(file_path, []))
@@ -807,6 +808,7 @@ def identify_untested_paths(
                     'function': fn.name,
                     'line': fn.lineno,
                     'coverage': cov_value,
+                    'coverage_kind': 'lines',
                     'uncovered_lines': uncovered[:50],
                     'uncovered_line_count': len(uncovered),
                     'decision_points': decision_points,
@@ -948,16 +950,25 @@ def verify_lint(
                     'message': 'No supported linter for the detected languages (Python, JavaScript/TypeScript)'
                 }
         
-        # Check if linter is available
-        check_result = subprocess.run(['which', linter], capture_output=True, text=True)
-        if check_result.returncode != 0:
+        # Check if linter is available: a repo-local binary
+        # (node_modules/.bin/<linter>) wins over PATH so the project's own
+        # pinned version is used instead of whatever is globally installed.
+        local_bin = path / 'node_modules' / '.bin' / linter
+        linter_cmd = None
+        if local_bin.is_file():
+            linter_cmd = [str(local_bin)]
+        else:
+            check_result = subprocess.run(['which', linter], capture_output=True, text=True)
+            if check_result.returncode == 0:
+                linter_cmd = [linter]
+        if linter_cmd is None:
             return {
                 'status': 'unavailable',
                 'reason': f'Linter {linter} not found',
                 'hint': f'Install with: pip install {linter}'
             }
-        
-        result = subprocess.run([linter, str(path)], capture_output=True, text=True, timeout=60)
+
+        result = subprocess.run(linter_cmd + [str(path)], capture_output=True, text=True, timeout=60)
 
         # Diagnostics can appear on either stream (pylint reports on stdout,
         # many linters report on stderr). A non-zero exit with NO diagnostic

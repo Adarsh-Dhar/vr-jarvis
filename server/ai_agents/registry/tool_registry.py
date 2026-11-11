@@ -179,17 +179,78 @@ class ToolRegistry:
     # ------------------------------------------------------------------
     # Runtime contract validation
     # ------------------------------------------------------------------
+    @staticmethod
+    def _type_errors(value, schema, path):
+        """Recursive JSON-schema subset check. Returns error strings.
+
+        Handles type (incl. union lists), enum, anyOf/oneOf, nested
+        properties/additionalProperties and array items — the shapes the
+        registry actually emits from type hints."""
+        if not isinstance(schema, dict) or not schema:
+            return []
+        errors = []
+
+        expected = schema.get('type')
+        type_map = {'string': str, 'integer': int, 'number': (int, float),
+                    'boolean': bool, 'array': (list, tuple), 'object': dict,
+                    'null': type(None)}
+        if expected:
+            types = expected if isinstance(expected, list) else [expected]
+            ok = False
+            for t in types:
+                py = type_map.get(t)
+                if py is None:
+                    continue
+                # bool is a subclass of int; keep 'integer' honest.
+                if t == 'integer' and isinstance(value, bool):
+                    continue
+                if isinstance(value, py):
+                    ok = True
+                    break
+            if not ok:
+                errors.append('%s must be %s, got %s' % (path, '/'.join(types), type(value).__name__))
+                return errors  # deeper checks are meaningless on a type miss
+
+        if 'enum' in schema and value not in schema['enum']:
+            errors.append('%s must be one of %r' % (path, schema['enum']))
+
+        for key in ('anyOf', 'oneOf'):
+            branches = schema.get(key)
+            if branches:
+                branch_errors = [ToolRegistry._type_errors(value, b, path) for b in branches]
+                if not any(not e for e in branch_errors):
+                    errors.append('%s does not match any allowed %s' % (path, key))
+                return errors
+
+        if isinstance(value, dict):
+            props = schema.get('properties') or {}
+            for req in schema.get('required', []):
+                if req not in value or value[req] is None:
+                    errors.append('%s.%s is required' % (path, req))
+            addl = schema.get('additionalProperties')
+            for k, v in value.items():
+                if k in props:
+                    errors.extend(ToolRegistry._type_errors(v, props[k], '%s.%s' % (path, k)))
+                elif isinstance(addl, dict):
+                    errors.extend(ToolRegistry._type_errors(v, addl, '%s.%s' % (path, k)))
+        elif isinstance(value, (list, tuple)):
+            items = schema.get('items')
+            if isinstance(items, dict):
+                for i, item in enumerate(value):
+                    errors.extend(ToolRegistry._type_errors(item, items, '%s[%d]' % (path, i)))
+        return errors
+
     def validate_arguments(self, tool_name: str, args: Dict[str, Any]) -> List[str]:
         """Validate call arguments against the tool's input schema.
         Returns a list of error strings; empty means valid."""
         spec = self._tools.get(tool_name)
         if spec is None or spec.input_schema is None:
             return []
-        errors = []
         schema = spec.input_schema
         props = schema.get('properties', {})
+        errors = []
         for req in schema.get('required', []):
-            if req not in args or args[req] is None:
+            if req not in (args or {}) or args[req] is None:
                 errors.append('missing required argument: %s' % req)
         for key, value in (args or {}).items():
             if key == 'tool_context' or value is None:
@@ -197,19 +258,7 @@ class ToolRegistry:
             pschema = props.get(key)
             if not pschema:
                 continue  # additionalProperties allowed
-            expected = pschema.get('type')
-            if expected == 'string' and not isinstance(value, str):
-                errors.append('argument %s must be a string, got %s' % (key, type(value).__name__))
-            elif expected == 'integer' and not isinstance(value, int):
-                errors.append('argument %s must be an integer, got %s' % (key, type(value).__name__))
-            elif expected == 'number' and not isinstance(value, (int, float)):
-                errors.append('argument %s must be a number, got %s' % (key, type(value).__name__))
-            elif expected == 'boolean' and not isinstance(value, bool):
-                errors.append('argument %s must be a boolean, got %s' % (key, type(value).__name__))
-            elif expected == 'array' and not isinstance(value, (list, tuple)):
-                errors.append('argument %s must be an array, got %s' % (key, type(value).__name__))
-            elif expected == 'object' and not isinstance(value, dict):
-                errors.append('argument %s must be an object, got %s' % (key, type(value).__name__))
+            errors.extend(self._type_errors(value, pschema, 'argument %s' % key))
         return errors
 
     def validate_result(self, tool_name: str, result: Any) -> List[str]:

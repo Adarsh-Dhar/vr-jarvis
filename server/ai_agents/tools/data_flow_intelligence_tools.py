@@ -9,6 +9,7 @@ from ._common import heuristic
 from ._safe import safe
 from ._common import abs_repo_path, heuristic
 import ast
+import hashlib
 import re
 from pathlib import Path
 
@@ -107,7 +108,29 @@ def _split_variable_id(variable_id):
 # reaching-definitions analysis in intelligence/dataflow/. Nothing here is a
 # text search or a name guess; unresolved relationships are reported as such.
 
+# The facts cache is keyed by everything that can change the analysis result:
+# repository root, graph path and mtime, function id, file and a sha256 of the
+# source. A stale entry can therefore never be served after a re-index, a
+# repository switch or an edit.
 _FACTS_CACHE = {}
+_FACTS_CACHE_LIMIT = 500
+
+
+def clear_facts_cache():
+    """Drop every cached per-function analysis. Called when the active
+    repository or its graph changes (store.activate, re-index, promotion)."""
+    _FACTS_CACHE.clear()
+
+
+def _facts_cache_key(ctx):
+    from .. import config
+    graph_path = getattr(config, 'GRAPH_PATH', None)
+    graph_path = Path(graph_path) if graph_path else None
+    mtime = graph_path.stat().st_mtime if graph_path and graph_path.exists() else 0.0
+    source = ctx.get('source') or ''
+    return (str(config.REPO_ROOT), str(graph_path), mtime,
+            ctx['node'].get('id'), ctx['file'],
+            hashlib.sha256(source.encode('utf-8')).hexdigest())
 
 
 def _resolve_python_function(function_id):
@@ -154,11 +177,12 @@ def _function_facts(function_id, use_cache=True):
     Returns (ctx, error). ctx carries facts, analysis, cfg, func_ast, file,
     source, node and function_id.
     """
-    if use_cache and function_id in _FACTS_CACHE:
-        return _FACTS_CACHE[function_id], None
     ctx, err = _resolve_python_function(function_id)
     if err:
         return None, err
+    cache_key = _facts_cache_key(ctx) if use_cache else None
+    if cache_key is not None and cache_key in _FACTS_CACHE:
+        return _FACTS_CACHE[cache_key], None
     from ..intelligence.controlflow.python_cfg import PythonCFGBuilder
     from ..intelligence.dataflow.python_extractor import PythonDefUseExtractor
     from ..intelligence.dataflow.reaching_definitions import ReachingDefinitionsAnalyzer
@@ -175,8 +199,10 @@ def _function_facts(function_id, use_cache=True):
                       'error': analysis['error']}
     ctx.update({'facts': facts, 'analysis': analysis, 'cfg': artifact.graph,
                 'function_id': fid})
-    if use_cache:
-        _FACTS_CACHE[function_id] = ctx
+    if cache_key is not None:
+        if len(_FACTS_CACHE) >= _FACTS_CACHE_LIMIT:
+            _FACTS_CACHE.clear()
+        _FACTS_CACHE[cache_key] = ctx
     return ctx, None
 
 
@@ -234,81 +260,100 @@ def _return_flows(ctx):
     return out
 
 
-def _caller_result_flows(ctx):
-    """For every call site of this function in the repo, find what the caller
-    does with the return value: the assigned variable and its later uses, or
-    'unused'/'returned'/'unresolved'. Python only; other call shapes are
-    reported unresolved rather than guessed."""
-    from ._common import repo_root
-    from .navigation_tools import _python_call_sites
+def _find_call_node(func_ast, line, column=None):
+    """The ast.Call node at (line, column) inside a function AST, or None."""
+    candidates = [n for n in ast.walk(func_ast)
+                  if isinstance(n, ast.Call) and n.lineno == line]
+    if not candidates:
+        return None
+    if column is not None:
+        exact = [n for n in candidates if n.col_offset == column]
+        if exact:
+            return exact[0]
+    return candidates[0] if len(candidates) == 1 else None
 
-    node = ctx['node']
-    simple = node.get('name') or ctx['func_ast'].name
-    sites = _python_call_sites(simple, repo_root())
-    results = []
-    unresolved = []
-    for site in sites:
-        entry = {'file': site['file'], 'line': site['line'], 'caller': site['caller']}
-        caller = site['caller']
-        if not caller or caller == '<module>':
-            unresolved.append({**entry, 'reason': 'call site is at module level'})
+
+def _innermost_statement(func_ast, call_node):
+    """The innermost statement (Assign/AnnAssign/AugAssign/Return/Expr/...) that
+    contains call_node, or None."""
+    best = None
+    for node in ast.walk(func_ast):
+        if node is call_node:
             continue
-        try:
-            src = abs_repo_path(site['file']).read_text(encoding='utf-8')
-            tree = ast.parse(src)
-        except Exception:
-            unresolved.append({**entry, 'reason': 'caller file could not be parsed'})
+        if not isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign,
+                                 ast.Return, ast.Expr, ast.If, ast.While,
+                                 ast.For, ast.With, ast.Assert, ast.Raise)):
             continue
-        target_fn = None
-        for n in ast.walk(tree):
-            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name == caller \
-                    and n.lineno <= site['line'] <= (n.end_lineno or n.lineno):
-                target_fn = n
-                break
-        if target_fn is None:
-            unresolved.append({**entry, 'reason': 'caller function not found'})
+        if call_node in set(ast.walk(node)):
+            span = (getattr(node, 'end_lineno', node.lineno) or node.lineno) - node.lineno
+            key = (span, -(node.col_offset or 0))
+            if best is None or key < best[0]:
+                best = (key, node)
+    return best[1] if best else None
+
+
+def _caller_result_flows(ctx):
+    """For every recorded call site of this function, find what the caller does
+    with the return value. Built on the index's caller edges (graph.callers)
+    plus the caller's own def-use facts and reaching definitions — no name
+    search. Unresolvable call shapes are reported, never guessed."""
+    from ..intelligence.graph_engine.codegraph import codegraph
+    graph = codegraph.load_current_graph()
+
+    callers = graph.callers(ctx['function_id'], depth=1,
+                            include_possible=True, include_ambiguous=True)
+    results, unresolved = [], []
+    for caller in callers:
+        entry = {'file': caller.get('file'), 'line': caller.get('line'),
+                 'caller': caller.get('from'),
+                 'edge_resolution': caller.get('resolution'),
+                 'callsite_id': caller.get('callsite_id')}
+        caller_id = caller.get('from')
+        node = graph.get(caller_id) if caller_id else None
+        if not node or not _is_python_file(node.get('file') or ''):
+            unresolved.append({**entry, 'reason': 'caller is not a Python function'})
             continue
-        # Locate the Call node at the site line and the statement consuming it.
-        call_node = None
-        for n in ast.walk(target_fn):
-            if isinstance(n, ast.Call) and n.lineno == site['line']:
-                call_node = n
-                break
+        caller_ctx, cerr = _function_facts(caller_id)
+        if cerr:
+            unresolved.append({**entry, 'reason': 'caller analysis failed: %s' % cerr.get('error')})
+            continue
+        call_node = _find_call_node(caller_ctx['func_ast'], caller.get('line'),
+                                    caller.get('column'))
         if call_node is None:
-            unresolved.append({**entry, 'reason': 'call node not found at reported line'})
+            unresolved.append({**entry, 'reason': 'call node not found at recorded position'})
             continue
-        assigned, disposition = [], 'expression_result_unused'
-        for stmt in ast.walk(target_fn):
-            if isinstance(stmt, (ast.Assign, ast.AnnAssign, ast.AugAssign)):
-                targets = stmt.targets if isinstance(stmt, ast.Assign) else [stmt.target]
-                for t in targets:
-                    for sub in ast.walk(t):
-                        if sub is call_node:
-                            for name in ast.walk(t):
-                                if isinstance(name, ast.Name):
-                                    assigned.append(name.id)
-                # call inside the value, not the target
-                val = stmt.value
-                if any(sub is call_node for sub in ast.walk(val)):
-                    for t in targets:
-                        for name in ast.walk(t):
-                            if isinstance(name, ast.Name):
-                                assigned.append(name.id)
-                    disposition = 'assigned'
-            elif isinstance(stmt, ast.Return) and stmt.value is not None \
-                    and any(sub is call_node for sub in ast.walk(stmt.value)):
-                disposition = 'returned'
-        entry['result'] = {'disposition': disposition,
-                           'assigned_variables': sorted(set(assigned))}
-        # Subsequent uses of each assigned variable inside the caller, from the
-        # caller AST: Load-context Name nodes below the call line.
-        for var in sorted(set(assigned)):
-            later = [{'line': n.lineno}
-                     for n in ast.walk(target_fn)
-                     if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load)
-                     and n.id == var and n.lineno > site['line']]
-            entry['result'].setdefault('subsequent_uses', {})[var] = later[:20]
-        results.append(entry)
+        stmt = _innermost_statement(caller_ctx['func_ast'], call_node)
+        result = {'disposition': 'unresolved'}
+        if isinstance(stmt, (ast.Assign, ast.AnnAssign, ast.AugAssign)):
+            targets = stmt.targets if isinstance(stmt, ast.Assign) else [stmt.target]
+            assigned = sorted({n.id for t in targets for n in ast.walk(t)
+                               if isinstance(n, ast.Name)})
+            result = {'disposition': 'assigned', 'assigned_variables': assigned}
+            # Subsequent uses: uses of the assigned variables, after the call,
+            # reached by the definitions this statement created.
+            def_line = stmt.lineno
+            call_pos = (call_node.lineno, call_node.col_offset)
+            uses_by_var = {}
+            for use, d in _reaching_pairs(caller_ctx):
+                if use.variable not in assigned:
+                    continue
+                if (use.line, use.column) <= call_pos:
+                    continue
+                if d.line != def_line:
+                    continue
+                uses_by_var.setdefault(use.variable, []).append(_use_out(use))
+            result['subsequent_uses'] = {
+                v: sorted(us, key=lambda x: (x['line'], x['column']))[:20]
+                for v, us in uses_by_var.items()}
+        elif isinstance(stmt, ast.Return):
+            result = {'disposition': 'returned'}
+        elif isinstance(stmt, ast.Expr) and stmt.value is call_node:
+            result = {'disposition': 'expression_result_unused'}
+        elif stmt is not None:
+            result = {'disposition': 'nested_in_expression',
+                      'context': ast.unparse(stmt)[:200] if hasattr(ast, 'unparse') else None}
+        entry['result'] = result
+        (results if result['disposition'] != 'unresolved' else unresolved).append(entry)
     return results, unresolved
 
 
@@ -337,6 +382,7 @@ def trace_variable_origin(variable_id: str, tool_context: ToolContext) -> dict:
         pairs = _reaching_pairs(ctx, variable_name)
 
         # Definitions that reach at least one use are the confirmed origins.
+        pairs = _reaching_pairs(ctx, variable_name)
         reached_def_ids = {d.id for _u, d in pairs}
         origins = []
         seen = set()
@@ -358,13 +404,43 @@ def trace_variable_origin(variable_id: str, tool_context: ToolContext) -> dict:
                 'message': 'Variable %s not found in function %s' % (variable_name, function_name)
             }
 
+        # 'origin' is claimed only when exactly one definition reaches the
+        # variable's uses. Multiple reaching definitions or none at all are
+        # reported explicitly instead of silently picking the first.
+        reaching = sorted(reached_def_ids)
+        if len(reaching) == 1:
+            origin_status = 'single'
+            d0 = next((d for d in defs if d.id == reaching[0]), None)
+            origin = ({'file': d0.file, 'line': d0.line, 'column': d0.column,
+                       'kind': d0.kind, 'expression': d0.expression,
+                       'reaches_use': True} if d0 else None)
+        elif len(reaching) > 1:
+            origin_status = 'multiple'
+            origin = None
+        else:
+            origin_status = 'none'
+            origin = None
+        affected_uses = []
+        if origin_status == 'multiple':
+            by_use = {}
+            for u, d in pairs:
+                by_use.setdefault(u.id, set()).add(d.id)
+            uses_by_id = _uses_by_id(ctx)
+            for uid, dids in by_use.items():
+                if len(dids) > 1:
+                    u = uses_by_id.get(uid)
+                    if u is not None:
+                        affected_uses.append(_use_out(u))
+
         return {
             'status': 'ok',
             'variable_id': variable_id,
             'function_id': ctx['function_id'],
             'is_parameter': is_parameter,
-            'origin': origins[0] if origins else None,
+            'origin': origin,
+            'origin_status': origin_status,
             'origins': origins,
+            'affected_uses': affected_uses,
             'use_count': len(uses),
             'evidence': 'CFG def-use facts + reaching definitions',
         }
@@ -711,18 +787,69 @@ def _callee_name(expression):
         return m.group(1) if m else None
 
 
-def _find_graph_function(graph, name):
-    """Resolve a (possibly dotted) callee name to a codegraph node."""
-    if not name:
-        return None
-    leaf = name.split('.')[-1]
-    for nid, node in (graph.items() if hasattr(graph, 'items') else []):
-        if not isinstance(node, dict):
+def _resolve_call_target(graph, ctx, op):
+    """Resolve the callee of a Call operation through the index's call-site
+    edges, matched on file, line and column. Never picks a first match:
+
+    - exactly one target          -> {'status': 'resolved', 'node', 'node_id', 'edge'}
+    - several candidate targets   -> {'status': 'ambiguous', 'candidates': [ids]}
+    - no usable call-site edge    -> {'status': 'unresolved', 'reason': ...}
+    """
+    try:
+        entries = graph.callees(ctx['function_id'], depth=1,
+                                include_possible=True, include_ambiguous=True)
+    except Exception:
+        entries = []
+    candidates = [e for e in entries
+                  if e.get('file') == ctx['file'] and e.get('line') == op.line]
+    if not candidates:
+        return {'status': 'unresolved',
+                'reason': 'no call-site edge recorded at %s:%s' % (ctx['file'], op.line)}
+    col = getattr(op, 'column', None)
+    exact = [e for e in candidates if col is not None and e.get('column') == col]
+    if exact:
+        candidates = exact
+    elif len(candidates) > 1:
+        return {'status': 'ambiguous',
+                'candidates': sorted({e.get('to') for e in candidates if e.get('to')})}
+    targets = []
+    for e in candidates:
+        t = e.get('to')
+        if t and t not in targets:
+            targets.append(t)
+    if len(targets) > 1:
+        return {'status': 'ambiguous', 'candidates': targets}
+    if not targets:
+        return {'status': 'unresolved', 'reason': 'call-site edge has no target'}
+    node = graph.get(targets[0])
+    if not node:
+        return {'status': 'unresolved',
+                'reason': 'call target %s not present in graph' % targets[0]}
+    return {'status': 'resolved', 'node': node, 'node_id': targets[0],
+            'edge': candidates[0]}
+
+
+def _ops_by_id(ctx):
+    return {o.id: o for o in ctx['facts'].operations}
+
+
+def _expand_arg_uses(ctx, arg):
+    """Every leaf use id contributed by one call_shape argument, following
+    nested operation ids transitively (e.g. ``f(g(x))`` still finds ``x``)."""
+    ops = _ops_by_id(ctx)
+    use_ids = set(arg.get('use_ids') or [])
+    seen, stack = set(), [arg.get('operation_id')]
+    while stack:
+        oid = stack.pop()
+        if not oid or oid in seen:
             continue
-        if node.get('name') == leaf or node.get('qualname') == name \
-                or str(nid).endswith('::' + leaf) or str(nid).endswith('.' + name):
-            return node
-    return None
+        seen.add(oid)
+        op = ops.get(oid)
+        if op is None:
+            continue
+        use_ids.update(op.input_use_ids)
+        stack.extend(op.input_operation_ids)
+    return use_ids
 
 
 @safe
@@ -733,12 +860,15 @@ def trace_cross_function_flow(
     """Track data across function boundaries for Python.
 
     Outbound edges: uses of the variable inside Call operations become
-    argument->parameter edges when the callee resolves in the code graph and
-    the argument position maps to a formal parameter. Inbound edges: call
-    sites of this function are followed to the caller's result assignment and
-    its subsequent uses. Anything that cannot be established is reported in
-    'unresolved' — a reference is never claimed as a confirmed flow edge."""
+    argument->parameter edges. The callee is resolved through the index's
+    call-site edges (file+line+column) and arguments are bound to formal
+    parameters with call_binding — never by guessing a position. Inbound
+    edges: call sites of this function are followed to the caller's result
+    assignment and its subsequent uses. Anything that cannot be established
+    is reported in 'unresolved' — a reference is never claimed as a confirmed
+    flow edge."""
     try:
+        from ..intelligence.dataflow.call_binding import bind_call
         parts = _split_variable_id(variable_id)
         if parts is None:
             return {
@@ -755,47 +885,73 @@ def trace_cross_function_flow(
         from ..intelligence.graph_engine.codegraph import codegraph
         graph = codegraph.load_current_graph()
         facts = ctx['facts']
-        use_by_id = _uses_by_id(ctx)
         var_use_ids = {u.id for u in facts.uses if u.variable == variable_name}
 
         outbound, unresolved = [], []
         for op in sorted(facts.operations, key=lambda o: (o.line, o.column)):
             if op.operation != 'Call':
                 continue
-            arg_uses = [use_by_id[i] for i in op.input_use_ids if i in use_by_id]
-            hits = [u for u in arg_uses if u.id in var_use_ids]
+            shape = (op.metadata or {}).get('call_shape') or {}
+            # Uses of the variable contributed by any argument (the callee and
+            # receiver are children of the Call op, not arguments, so their
+            # uses never appear here).
+            arg_use_sets = []
+            for arg in (shape.get('positional') or []) + (shape.get('keywords') or []):
+                arg_use_sets.append(_expand_arg_uses(ctx, arg))
+            hits = [u for u in (_uses_by_id(ctx)[i] for i in sorted(var_use_ids))
+                    if any(u.id in s for s in arg_use_sets)]
             if not hits:
                 continue
-            callee_name = _callee_name(op.expression or '')
             entry = {'line': op.line, 'expression': op.expression,
-                     'variable': variable_name, 'callee_name': callee_name,
+                     'variable': variable_name,
+                     'callee_name': shape.get('callee') or _callee_name(op.expression or ''),
                      'argument_uses': [_use_out(u) for u in hits]}
-            callee_node = _find_graph_function(graph, callee_name)
-            if callee_node is None:
-                unresolved.append({**entry, 'reason': 'callee not resolved in graph'})
+            resolution = _resolve_call_target(graph, ctx, op)
+            if resolution['status'] == 'ambiguous':
+                unresolved.append({**entry, 'reason': 'ambiguous callee',
+                                   'candidates': resolution['candidates']})
                 continue
-            callee_ctx, cerr = _function_facts(
-                callee_node.get('id') or callee_node.get('name'))
+            if resolution['status'] != 'resolved':
+                unresolved.append({**entry,
+                                   'reason': resolution.get('reason') or 'callee unresolved'})
+                continue
+            callee_node = resolution['node']
+            callee_ctx, cerr = _function_facts(callee_node.get('id'))
             if cerr:
-                unresolved.append({**entry, 'reason': 'callee analysis failed: %s' % cerr.get('error')})
+                unresolved.append({**entry,
+                                   'reason': 'callee analysis failed: %s' % cerr.get('error')})
                 continue
-            params = [d for d in callee_ctx['facts'].definitions if d.kind == 'parameter']
-            # input_use_ids preserves argument order; kwargs are not separated,
-            # so only positional indices are claimed as confirmed.
-            arg_index = {uid: i for i, uid in enumerate(op.input_use_ids)}
-            for u in hits:
-                idx = arg_index.get(u.id)
-                if idx is None or idx >= len(params):
-                    unresolved.append({**entry, 'reason': 'argument position %s has no matching parameter' % idx})
+            is_method = callee_node.get('kind') == 'method'
+            binding = bind_call(shape, callee_ctx['func_ast'], is_method=is_method)
+            param_defs = {d.variable: d for d in callee_ctx['facts'].definitions
+                          if d.kind == 'parameter'}
+            hit_ids = {u.id for u in hits}
+            bound_hit_ids = set()
+            for b in binding['bindings']:
+                if b['status'] != 'bound':
                     continue
-                outbound.append({
-                    'caller_function': ctx['function_id'],
-                    'argument': {'variable': variable_name, 'line': u.line},
-                    'call_line': op.line,
-                    'callee': callee_ctx['function_id'],
-                    'parameter': {'name': params[idx].variable, 'line': params[idx].line},
-                    'resolution': 'confirmed',
-                })
+                b_uses = _expand_arg_uses(
+                    ctx, {'use_ids': b.get('use_ids'), 'operation_id': b.get('operation_id')})
+                matched = [u for u in hits if u.id in b_uses]
+                if not matched:
+                    continue
+                pd = param_defs.get(b['param'])
+                for u in matched:
+                    bound_hit_ids.add(u.id)
+                    outbound.append({
+                        'caller_function': ctx['function_id'],
+                        'argument': {'variable': variable_name, 'line': u.line},
+                        'call_line': op.line,
+                        'callee': callee_ctx['function_id'],
+                        'parameter': {'name': b['param'],
+                                      'line': pd.line if pd else None},
+                        'resolution': 'confirmed',
+                    })
+            for u in hits:
+                if u.id not in bound_hit_ids:
+                    unresolved.append({**entry,
+                                       'reason': 'argument use %s did not bind to a parameter' % u.id,
+                                       'argument_uses': [_use_out(u)]})
 
         call_sites, ret_unresolved = _caller_result_flows(ctx)
         return {
@@ -805,7 +961,7 @@ def trace_cross_function_flow(
             'outbound_argument_edges': outbound,
             'inbound_return_edges': call_sites,
             'unresolved': unresolved + ret_unresolved,
-            'evidence': 'def-use call operations + graph callee resolution + AST call-site tracking'
+            'evidence': 'def-use call operations + call-site edge callee resolution + call_shape binding'
         }
     except Exception as e:
         return {
@@ -832,20 +988,232 @@ def _assigned_names(target):
     return [n.id for n in ast.walk(target) if isinstance(n, ast.Name)]
 
 
+_FILE_READ_ATTRS = {'read', 'readline', 'readlines'}
+_FILE_WRITE_ATTRS = {'write', 'writelines'}
+_FILE_OPEN_NAMES = {'open', 'io.open'}
+
+
+def _call_attr(op):
+    """(receiver, attr) for a Call operation's callee, from its expression."""
+    expr = op.expression or ''
+    try:
+        tree = ast.parse(expr.strip(), mode='eval')
+        node = tree.body
+        if isinstance(node, ast.Call):
+            node = node.func
+        if isinstance(node, ast.Attribute):
+            recv = ast.unparse(node.value) if hasattr(ast, 'unparse') else ''
+            return recv, node.attr
+        if isinstance(node, ast.Name):
+            return '', node.id
+    except Exception:
+        pass
+    m = re.match(r'\s*([A-Za-z_][\w.]*)\s*\(', expr)
+    if m:
+        name = m.group(1)
+        if '.' in name:
+            recv, _, attr = name.rpartition('.')
+            return recv, attr
+        return '', name
+    return '', None
+
+
+def _reaching_defs_by_use(ctx):
+    """use_id -> [Definition] reaching it (binding-key matched)."""
+    out = {}
+    for use, d in _reaching_pairs(ctx):
+        out.setdefault(use.id, []).append(d)
+    return out
+
+
+def _def_producing_op(ctx):
+    """definition_id -> ExpressionFact that produced it (via output_definition_ids)."""
+    out = {}
+    for op in ctx['facts'].operations:
+        for did in op.output_definition_ids:
+            out[did] = op
+    return out
+
+
+def _is_open_call(ctx, op):
+    _recv, attr = _call_attr(op)
+    if attr in _FILE_OPEN_NAMES:
+        return True
+    return (op.expression or '').strip().startswith('open(')
+
+
+def _is_read_call(op):
+    _recv, attr = _call_attr(op)
+    return attr in _FILE_READ_ATTRS
+
+
+def _is_write_call(op):
+    _recv, attr = _call_attr(op)
+    return attr in _FILE_WRITE_ATTRS
+
+
+def _receiver_use(ctx, op, receiver):
+    """The VariableUse inside op that reads the call receiver.
+
+    Receiver uses live inside the func/attribute operation, not necessarily in
+    the Call op's own input_use_ids, so the operation closure is searched."""
+    if not receiver:
+        return None
+    uses_by_id = _uses_by_id(ctx)
+    ops = _ops_by_id(ctx)
+    candidate_ids = list(op.input_use_ids)
+    seen, stack = set(), list(op.input_operation_ids)
+    while stack:
+        oid = stack.pop()
+        if oid in seen:
+            continue
+        seen.add(oid)
+        inner = ops.get(oid)
+        if inner is None:
+            continue
+        candidate_ids.extend(inner.input_use_ids)
+        stack.extend(inner.input_operation_ids)
+    for uid in candidate_ids:
+        u = uses_by_id.get(uid)
+        if u is not None and u.variable == receiver:
+            return u
+    # attribute receivers show up as 'obj.attr' uses
+    for uid in candidate_ids:
+        u = uses_by_id.get(uid)
+        if u is not None and u.variable.endswith('.' + receiver):
+            return u
+    return None
+
+
+def _file_op_sources(ctx):
+    """Per-function file-operation facts.
+
+    Returns (handles, reads, sinks, notes):
+    - handles: definition ids bound to open() results (reported as handles,
+      never as data sources)
+    - reads:   {'def_id', 'op', 'variable'} read-call results and handle
+      iterations
+    - sinks:   write/writelines Call ops
+    """
+    ops = ctx['facts'].operations
+    defs = _defs_by_id(ctx)
+    prod = _def_producing_op(ctx)
+    reaching = _reaching_defs_by_use(ctx)
+
+    handles, reads, sinks = set(), [], []
+    handle_expr = {}
+
+    for op in ops:
+        if op.operation != 'Call':
+            continue
+        if _is_open_call(ctx, op):
+            for did in op.output_definition_ids:
+                handles.add(did)
+                handle_expr[did] = op
+            # `with open(...) as f` / `for x in open(...)`: the binding def is
+            # created by the with/for statement on the same line, not linked
+            # through output_definition_ids.
+            for d in ctx['facts'].definitions:
+                if d.id in handles or d.line != op.line:
+                    continue
+                if d.kind in ('with_binding', 'for_loop', 'for_loop_unpack',
+                              'assignment', 'annotated_assignment',
+                              'named_expression'):
+                    # only claim the binding when the open call is part of the
+                    # same statement's expression
+                    if op.expression and op.expression.split('(')[0] in ('open', 'io.open'):
+                        handles.add(d.id)
+                        handle_expr[d.id] = op
+        elif _is_read_call(op):
+            reads.append({'op': op, 'def_ids': list(op.output_definition_ids)})
+        elif _is_write_call(op):
+            sinks.append(op)
+
+    # Handle iteration: `for line in handle:` — the for-target definition is a
+    # read source when the iterated expression reaches a handle definition.
+    for d in ctx['facts'].definitions:
+        if not d.kind.startswith('for_loop'):
+            continue
+        for uid, rdefs in reaching.items():
+            u = _uses_by_id(ctx).get(uid)
+            if u is None or u.line != d.line:
+                continue
+            if any(rd.id in handles for rd in rdefs):
+                reads.append({'op': None, 'def_ids': [d.id],
+                              'iteration': True,
+                              'variable': d.variable, 'line': d.line})
+                break
+
+    return handles, reads, sinks, prod, reaching
+
+
+def _def_file_sources(ctx, def_id, handles, reads_by_def, prod, reaching,
+                      _seen=None, _depth=0):
+    """The read-sources that reach a definition, following copies and
+    intermediate expressions through reaching definitions. Returns a list of
+    source descriptors; empty when the definition is not file-derived."""
+    if _seen is None:
+        _seen = set()
+    if def_id in _seen or _depth > 6:
+        return []
+    _seen.add(def_id)
+    if def_id in handles:
+        return []  # a handle is not file content
+    sources = []
+    if def_id in reads_by_def:
+        r = reads_by_def[def_id]
+        sources.append({'kind': 'source', 'operation': 'read',
+                        'line': r.get('line') or (r['op'].line if r.get('op') else None),
+                        'expression': (r['op'].expression if r.get('op') else None),
+                        'variable': r.get('variable')})
+    op = prod.get(def_id)
+    if op is not None and op.operation == 'Call' and _is_read_call(op):
+        if not sources:
+            sources.append({'kind': 'source', 'operation': 'read',
+                            'line': op.line, 'expression': op.expression,
+                            'variable': None})
+    # Propagate through whatever produced the definition: the operation's
+    # input uses (e.g. `b = a`) or an explicit copy link.
+    next_use_ids = []
+    if op is not None:
+        next_use_ids.extend(op.input_use_ids)
+    d = _defs_by_id(ctx).get(def_id)
+    if d is not None:
+        meta = d.metadata or {}
+        if meta.get('source_use_id'):
+            next_use_ids.append(meta['source_use_id'])
+    for uid in next_use_ids:
+        for rd in reaching.get(uid, []):
+            sources.extend(_def_file_sources(ctx, rd.id, handles, reads_by_def,
+                                             prod, reaching, _seen, _depth + 1))
+    # de-dup
+    uniq, seen = [], set()
+    for s in sources:
+        key = (s.get('operation'), s.get('line'), s.get('variable'))
+        if key not in seen:
+            seen.add(key)
+            uniq.append(s)
+    return uniq
+
+
 @safe
 def trace_file_operations(
     file_path: str,
     tool_context: ToolContext
 ) -> dict:
-    """Track data through file operations with AST evidence (Python files).
+    """Track data through file operations on the canonical CFG + reaching
+    definitions (Python files).
 
-    Sources are calls that produce file content (open/read/readline(s)); sinks
-    are calls that persist it (write/writelines). When a variable holding read
-    content is used inside a write call in the same function, that source->sink
-    relationship is reported as a confirmed data relationship. Non-Python files
-    return not_applicable rather than pattern-search results."""
+    open() results are reported as handles, never as data sources. Read calls
+    (read/readline/readlines) and handle iteration are sources; write calls
+    (write/writelines) are sinks. A source->sink relationship is reported only
+    when reaching definitions prove read content reaches the write — including
+    propagation through intermediate variables and inline ``f.write(g.read())``.
+    Overwritten variables produce no flow because reaching definitions kill the
+    earlier definition. Non-Python files return not_applicable."""
     try:
         from ._common import repo_root
+        from ..intelligence.graph_engine.codegraph import codegraph
         p = Path(str(file_path))
         if not p.is_absolute():
             p = repo_root() / p
@@ -859,47 +1227,99 @@ def trace_file_operations(
             return {'status': 'not_found', 'file_path': str(file_path),
                     'message': 'File not found'}
 
-        tree = ast.parse(p.read_text(encoding='utf-8', errors='replace'))
+        graph = codegraph.load_current_graph()
         rel = str(p.relative_to(repo_root())) if str(p).startswith(str(repo_root())) else str(p)
+        nodes = [n for n in graph.nodes_in_file(rel)
+                 if n.get('kind') in ('function', 'method')]
+        if not nodes:
+            return {'status': 'not_found', 'file_path': rel,
+                    'message': 'No functions found for this file in the graph'}
 
         operations, flows = [], []
-        scopes = [n for n in ast.walk(tree)
-                  if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]
-        scopes.append(tree)  # module level
-        for scope in scopes:
-            scope_name = getattr(scope, 'name', '<module>')
-            scope_nodes = scope.body if hasattr(scope, 'body') else list(ast.iter_child_nodes(scope))
-            read_vars = {}   # var -> line it was read at
-            for stmt in ast.walk(scope):
-                if isinstance(stmt, (ast.Assign, ast.AnnAssign)):
-                    value = stmt.value
-                    if not isinstance(value, ast.Call):
-                        continue
-                    cname, _ = _call_name(value)
-                    if cname in _FILE_READ_ATTRS or cname in _FILE_OPEN_NAMES:
-                        for t in (stmt.targets if isinstance(stmt, ast.Assign) else [stmt.target]):
-                            for name in _assigned_names(t):
-                                read_vars[name] = stmt.lineno
-                                operations.append({
-                                    'kind': 'source', 'operation': cname,
-                                    'function': scope_name, 'line': stmt.lineno,
-                                    'variable': name})
-                elif isinstance(stmt, ast.Call):
-                    cname, _ = _call_name(stmt)
-                    if cname in _FILE_WRITE_ATTRS:
-                        used_reads = sorted({n.id for n in ast.walk(stmt)
-                                             if isinstance(n, ast.Name) and n.id in read_vars})
-                        operations.append({
-                            'kind': 'sink', 'operation': cname,
-                            'function': scope_name, 'line': stmt.lineno,
-                            'uses_read_data': bool(used_reads)})
-                        for var in used_reads:
+        skipped = []
+        for node in sorted(nodes, key=lambda n: (n.get('start') or 0)):
+            scope = node.get('qualname') or node.get('name') or node.get('id')
+            ctx, err = _function_facts(node.get('id'))
+            if err:
+                skipped.append({'function': scope, 'reason': err.get('error') or err.get('message')})
+                continue
+            handles, reads, sinks, prod, reaching = _file_op_sources(ctx)
+            defs = _defs_by_id(ctx)
+            reads_by_def = {}
+            for r in reads:
+                for did in r['def_ids']:
+                    reads_by_def[did] = r
+
+            for did in sorted(handles):
+                d = defs.get(did)
+                operations.append({
+                    'kind': 'handle', 'operation': 'open',
+                    'function': scope, 'line': d.line if d else None,
+                    'variable': d.variable if d else None})
+            for r in reads:
+                d = defs.get(r['def_ids'][0]) if r['def_ids'] else None
+                operations.append({
+                    'kind': 'source', 'operation': 'read',
+                    'function': scope,
+                    'line': r.get('line') or (r['op'].line if r.get('op') else (d.line if d else None)),
+                    'variable': r.get('variable') or (d.variable if d else None),
+                    'iteration': bool(r.get('iteration'))})
+            for op in sinks:
+                recv, attr = _call_attr(op)
+                operations.append({
+                    'kind': 'sink', 'operation': attr or 'write',
+                    'function': scope, 'line': op.line,
+                    'receiver': recv or None})
+                # Uses contributed by each argument (receiver excluded).
+                shape = (op.metadata or {}).get('call_shape') or {}
+                arg_uses = []
+                for arg in (shape.get('positional') or []) + (shape.get('keywords') or []):
+                    arg_uses.extend(_expand_arg_uses(ctx, arg))
+                # Inline read inside the write call: f.write(g.read()).
+                inline_reads = []
+                for arg in (shape.get('positional') or []) + (shape.get('keywords') or []):
+                    seen_ops, stack = set(), [arg.get('operation_id')]
+                    while stack:
+                        oid = stack.pop()
+                        if not oid or oid in seen_ops:
+                            continue
+                        seen_ops.add(oid)
+                        inner = _ops_by_id(ctx).get(oid)
+                        if inner is None:
+                            continue
+                        if inner.operation == 'Call' and _is_read_call(inner):
+                            inline_reads.append(inner)
+                        stack.extend(inner.input_operation_ids)
+                found = set()
+                for inner in inline_reads:
+                    irecv, _ = _call_attr(inner)
+                    iuse = _receiver_use(ctx, inner, irecv)
+                    idefs = reaching.get(iuse.id, []) if iuse else []
+                    if any(d.id in handles for d in idefs):
+                        key = ('inline', inner.line, inner.expression)
+                        found.add(key)
+                        flows.append({
+                            'from': {'kind': 'source', 'operation': 'read',
+                                     'line': inner.line, 'expression': inner.expression,
+                                     'function': scope},
+                            'to': {'kind': 'sink', 'operation': attr or 'write',
+                                   'line': op.line, 'function': scope},
+                            'resolution': 'confirmed'})
+                for uid in arg_uses:
+                    for d in reaching.get(uid, []):
+                        for s in _def_file_sources(ctx, d.id, handles, reads_by_def,
+                                                   prod, reaching):
+                            key = (s.get('operation'), s.get('line'), s.get('variable'), uid)
+                            if key in found:
+                                continue
+                            found.add(key)
                             flows.append({
-                                'from': {'kind': 'source', 'variable': var,
-                                         'line': read_vars[var], 'function': scope_name},
-                                'to': {'kind': 'sink', 'operation': cname,
-                                       'line': stmt.lineno, 'function': scope_name},
+                                'from': {'kind': 'source', **{k: v for k, v in s.items() if v is not None},
+                                         'function': scope},
+                                'to': {'kind': 'sink', 'operation': attr or 'write',
+                                       'line': op.line, 'function': scope},
                                 'resolution': 'confirmed'})
+
         return {
             'status': 'ok',
             'file_path': rel,
@@ -907,7 +1327,10 @@ def trace_file_operations(
             'data_relationships': flows,
             'source_count': sum(1 for o in operations if o['kind'] == 'source'),
             'sink_count': sum(1 for o in operations if o['kind'] == 'sink'),
-            'evidence': 'AST call analysis; source->sink edges only when read data reaches a write'
+            'handle_count': sum(1 for o in operations if o['kind'] == 'handle'),
+            'skipped_functions': skipped,
+            'evidence': 'canonical CFG + reaching definitions; open() reported as handle, '
+                        'source->sink only when read data provably reaches a write'
         }
     except Exception as e:
         return {
@@ -937,16 +1360,20 @@ def trace_state_changes(
         from ..intelligence.graph_engine.codegraph import codegraph
 
         # Resolve component_id to a file: graph node first, then a repo path.
+        # CodeGraph has no items(); resolve() handles id/name/qualname lookups.
         file_path = None
         graph = codegraph.load_current_graph()
-        node = graph.get(component_id) if hasattr(graph, 'get') else None
+        node = None
+        try:
+            res = graph.resolve(component_id)
+            if res.get('status') == 'ok':
+                node = res.get('node')
+        except Exception:
+            node = None
+        if node is None:
+            node = graph.get(component_id)
         if node and node.get('file'):
             file_path = node['file']
-        else:
-            for nid, n in (graph.items() if hasattr(graph, 'items') else []):
-                if isinstance(n, dict) and (nid == component_id or n.get('name') == component_id):
-                    file_path = n.get('file')
-                    break
         if not file_path:
             p = Path(str(component_id))
             if not p.is_absolute():
@@ -976,13 +1403,7 @@ def trace_state_changes(
                 return 'subscript_write', ast.unparse(t), base
             return None, None, None
 
-        for node_ast in ast.walk(tree):
-            scope = '<module>'
-            for fn in ast.walk(tree):
-                if isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)) \
-                        and fn.lineno <= node_ast.lineno <= (fn.end_lineno or fn.lineno):
-                    scope = fn.name
-                    break
+        def _record(node_ast, scope):
             if isinstance(node_ast, (ast.Assign, ast.AnnAssign, ast.AugAssign)):
                 targets = node_ast.targets if isinstance(node_ast, ast.Assign) else [node_ast.target]
                 for t in targets:
@@ -1006,6 +1427,24 @@ def trace_state_changes(
                                       'target': recv, 'affected_variable': recv.split('.')[0] or None,
                                       'function': scope, 'line': node_ast.lineno})
 
+        def _walk_scope(body, qualname):
+            """Collect mutations in one scope without entering nested function
+            or class bodies, then recurse so each operation is attributed once
+            to the innermost (dotted-qualname) scope."""
+            for stmt in body:
+                if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                    _walk_scope(stmt.body,
+                                '%s.%s' % (qualname, stmt.name) if qualname else stmt.name)
+                    continue
+                stack = [stmt]
+                while stack:
+                    node_ast = stack.pop()
+                    if isinstance(node_ast, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                        continue
+                    _record(node_ast, qualname or '<module>')
+                    stack.extend(ast.iter_child_nodes(node_ast))
+
+        _walk_scope(tree.body, '')
         mutations.sort(key=lambda m: (m['function'], m['line']))
         return {
             'status': 'ok',
