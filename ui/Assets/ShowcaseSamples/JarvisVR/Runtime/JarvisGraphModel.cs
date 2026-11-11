@@ -9,28 +9,6 @@ namespace JarvisVR
 
   public static class JarvisGraphModel
   {
-    /// <summary>Placeholder graph shown until (or unless) the server's /graph answers.</summary>
-    public static GraphDto Sample()
-    {
-      var g = new GraphDto();
-      void N(string id, string name, string file, string cluster, string kind, string level = "function", string parent = "") =>
-        g.nodes.Add(new GraphNodeDto { id = id, name = name, file = file, cluster = cluster, kind = kind, level = level, parent = parent });
-      void E(string s, string d, string k, string file = "", int line = 0) => g.edges.Add(new GraphEdgeDto { src = s, dst = d, type = "calls", kind = k, file = file, line = line });
-      N("route.delete", "DELETE /account/:id", "routes/account.ts", "api", "route", "route");
-      N("auth.require", "requireAuth", "auth/requireAuth.ts", "auth", "function", "function");
-      N("service.delete", "deleteAccount", "services/account.ts", "services", "function", "service");
-      N("auth.owner", "checkOwner", "auth/owner.ts", "auth", "function", "function");
-      N("db.delete", "users.repo.delete", "db/users.repo.ts", "db", "function", "repository");
-      N("db.repo", "users.repo", "db/users.repo.ts", "db", "object", "repository");
-      N("test.own-account", "deletes own account", "tests/account.test.ts", "tests", "test", "test");
-      E("route.delete", "auth.require", "confirmed", "routes/account.ts", 15);
-      E("route.delete", "service.delete", "confirmed", "routes/account.ts", 16);
-      E("service.delete", "db.repo", "confirmed", "services/account.ts", 42);
-      E("db.repo", "db.delete", "inferred", "db/users.repo.ts", 8);
-      E("test.own-account", "route.delete", "ambiguous", "tests/account.test.ts", 23);
-      return g;
-    }
-
     private static readonly Dictionary<string, Vector3> Anchors = new Dictionary<string, Vector3>
     {
       { "api", new Vector3(-0.85f, 0.15f, 0f) },

@@ -87,22 +87,6 @@ namespace JarvisVR.EditorTools
       EditorApplication.update += Poll;
     }
 
-    [MenuItem("JARVIS/Use spatial workspace")]
-    private static void UseSpatialWorkspace()
-    {
-      PlayerPrefs.SetInt("jarvis.spatial", 1);
-      PlayerPrefs.Save();
-      Debug.Log("JARVIS: spatial workspace enabled. Restart Play Mode to apply.");
-    }
-
-    [MenuItem("JARVIS/Use canvas workspace")]
-    private static void UseCanvasWorkspace()
-    {
-      PlayerPrefs.SetInt("jarvis.spatial", 0);
-      PlayerPrefs.Save();
-      Debug.Log("JARVIS: canvas workspace enabled. Restart Play Mode to apply.");
-    }
-
     private static string LanIp()
     {
       foreach (var ni in NetworkInterface.GetAllNetworkInterfaces())

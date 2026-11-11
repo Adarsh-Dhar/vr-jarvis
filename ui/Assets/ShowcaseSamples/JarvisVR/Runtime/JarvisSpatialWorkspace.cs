@@ -10,14 +10,10 @@ namespace JarvisVR
 {
   /// <summary>
   /// Spatial JARVIS workspace: a 3D code graph in the middle and independent floating panels around it.
-  /// Replaces the single 1440x810 canvas of JarvisWorkspaceBootstrap. Turn it off with PlayerPrefs "jarvis.spatial" = 0.
+  /// Talks to the real JARVIS server through JarvisBridge.
   /// </summary>
   public sealed class JarvisSpatialWorkspace : MonoBehaviour
   {
-    public static bool Enabled { get { return PlayerPrefs.GetInt("jarvis.spatial", 1) == 1; } }
-    /// <summary>UI-only stage: scripted local answers, no network. Default is the REAL server (reads /repository).
-    /// Set PlayerPrefs "jarvis.mock" to 1 (menu: JARVIS > Use mock data) for the scripted placeholder data.</summary>
-    public static bool MockMode { get { return PlayerPrefs.GetInt("jarvis.mock", 0) == 1; } }
 
     private const float WorkspaceDistance = 1.5f;   // metres in front of the user
     private const float LabelSize = 0.010f;         // TextMesh characterSize; raise for bigger node labels
@@ -38,7 +34,6 @@ namespace JarvisVR
     private Camera _cam;
     private Transform _root, _graphRoot;
     private IJarvisBackend _bridge;
-    private bool _mock;
     private JarvisVoice _voice;
     private readonly Dictionary<string, JarvisSpatialPanel> _panels = new Dictionary<string, JarvisSpatialPanel>();
     private readonly Dictionary<string, JarvisSpatialButton> _navButtons = new Dictionary<string, JarvisSpatialButton>();
@@ -133,8 +128,7 @@ namespace JarvisVR
       _graphRoot.localPosition = new Vector3(0f, 0.05f, 0f);
       _graphRoot.localScale = Vector3.one * 0.85f;
 
-      _mock = MockMode;
-      _bridge = _mock ? (IJarvisBackend)gameObject.AddComponent<JarvisMockBackend>() : gameObject.AddComponent<JarvisBridge>();
+      _bridge = gameObject.AddComponent<JarvisBridge>();
       _voice = gameObject.AddComponent<JarvisVoice>();
       _voice.Transcript += Ask;
       _voice.Notice += m => Say(m);
@@ -144,16 +138,16 @@ namespace JarvisVR
       BuildOrb();
       JarvisAtmosphere.BuildFloor(_root, JarvisPalette.Current.Cyan);
       JarvisAtmosphere.BuildDust(_root, JarvisSpatialFx.Magenta, JarvisPalette.Current.Cyan);
-      LoadGraph(JarvisGraphModel.Sample());
+      LoadGraph(new GraphDto());
       SetMode("REPOS");                 // begin with the repository picker, like an IDE start screen
 
       gameObject.AddComponent<JarvisSpatialInput>().Initialize(_cam, _graphRoot, ToggleVoice);
       Say("Hi. Pinch the orb to talk, or tap a quick question.");
-      Log("workspace ready (sample graph)");
+      Log("workspace ready");
 
       _bridge.GetHealth(h => { _health = h; _serverOnline = h != null && h.ok; RefreshStatus(); }, e => { _serverOnline = false; RefreshStatus(); });
       FetchRepos();
-      if (!_mock) _bridge.GetGraph(g =>
+      _bridge.GetGraph(g =>
       {
         if (g == null || g.nodes == null || g.nodes.Count == 0) return;
         _serverOnline = true;
@@ -861,7 +855,7 @@ namespace JarvisVR
       if (!_nodes.TryGetValue(nodeId, out NodeView n)) return;
       ClusterView cv = n.Cluster;
       if (cv.Collapsed) SetClusterCollapsed(cv, false);
-      if (_bridge != null && !_mock && !IsDesignNode(nodeId))
+      if (_bridge != null && !IsDesignNode(nodeId))
         _bridge.GetGraphWithFocus(nodeId, 2, g => { if (g != null && g.nodes != null) MergeGraph(g); },
           e => Say("Could not fetch more of the graph: " + e));
       Log("expanded node: " + nodeId);
@@ -2168,8 +2162,7 @@ namespace JarvisVR
       string repo = _health != null && !string.IsNullOrEmpty(_health.repo) ? _health.repo : "demo repo";
       string branch = _health != null && !string.IsNullOrEmpty(_health.branch) ? _health.branch : "-";
       int changed = _health != null ? _health.changed : 0;
-      string server = _mock ? "<color=#" + Hex(JarvisSpatialFx.Magenta) + ">mock data (UI only)</color>"
-        : _serverOnline ? "<color=#" + Hex(pal.Green) + ">server online</color>" : "<color=#" + Hex(pal.Amber) + ">server offline: sample graph</color>";
+      string server = _serverOnline ? "<color=#" + Hex(pal.Green) + ">server online</color>" : "<color=#" + Hex(pal.Amber) + ">server offline</color>";
       _panels["status"].SetBody(repo + "  ·  " + branch + "  ·  " + changed + " changed  ·  " + server + "  ·  " + _mode);
     }
 
@@ -2911,7 +2904,7 @@ namespace JarvisVR
       _menu.Show(false);
       if (!cv.Collapsed) { SetClusterCollapsed(cv, true); return; }
       SetClusterCollapsed(cv, false);
-      if (_bridge != null && !_mock && !IsDesignNode(focusId))
+      if (_bridge != null && !IsDesignNode(focusId))
         _bridge.GetGraphWithFocus(focusId, 2, g => { if (g != null && g.nodes != null) MergeGraph(g); },
           e => Say("Could not fetch more of the graph: " + e));
     }

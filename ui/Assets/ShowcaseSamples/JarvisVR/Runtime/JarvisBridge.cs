@@ -227,6 +227,34 @@ namespace JarvisVR
   [Serializable] internal class RepoSelectResponse { public string active; public bool session_reset_required; }
   [Serializable] public class HealthDto { public bool ok, cached_tests; public string repo, branch; public int changed; }
 
+  /// <summary>What the spatial workspace needs from a backend. Implemented by JarvisBridge.</summary>
+  public interface IJarvisBackend
+  {
+    bool Busy { get; }
+    void Ask(string text, string selection, Action<AskResponse> ok, Action<string> fail, string taskId = null);
+    void Approve(bool approved, Action<ApproveResponse> ok, Action<string> fail);
+    void Promote(Action<PromoteResponse> ok, Action<string> fail);
+    void GetTask(Action<TaskResponse> ok);
+    void GetSource(string nodeId, Action<SourceResponse> ok);
+    void GetHealth(Action<HealthDto> ok, Action<string> fail);
+    void GetGraph(Action<GraphDto> ok);
+    void GetGraphWithFocus(string focusId, int depth, Action<GraphDto> ok, Action<string> fail);
+    void GetRepos(Action<ReposDto> ok, Action<string> fail);
+    void GetTree(string repo, string path, Action<RepoTreeDto> ok, Action<string> fail);
+    void GetFile(string repo, string path, Action<RepoFileDto> ok, Action<string> fail);
+    void SelectRepo(string name, Action<bool> done);
+    void GetProgress(int since, Action<ProgressDto> ok);
+    void Transcribe(byte[] wav, Action<string> ok, Action<string> fail);
+    void DesignPropose(string ideaText, Action<DesignProposeResponse> ok, Action<string> fail);
+    void GetDesign(Action<DesignStateDto> ok, Action<string> fail);
+    void DesignEdit(DesignEditOpDto[] ops, Action<DesignEditResponse> ok, Action<string> fail);
+    void DesignCompare(Action<CompareDto> ok, Action<string> fail, Dictionary<string, string> overrideMatches = null);
+    void DesignApprove(bool approved, Action<ArchitectureDto> ok, Action<string> fail);
+    void PlanGenerate(Action<ImplementationPlanDto> ok, Action<string> fail);
+    void PlanUpdateTask(string taskId, string status, Action<bool> ok, Action<string> fail,
+                        string evidence = null, bool acceptCycles = false, string cycleRationale = null);
+  }
+
   /// <summary>HTTP client for server/jarvis_server.py. On a Quest, 127.0.0.1 is the headset itself:
   /// set the PC's LAN IP via PlayerPrefs key "jarvis.server" (or DefaultServerUrl) and use the same token as JARVIS_TOKEN.</summary>
   public sealed class JarvisBridge : MonoBehaviour, IJarvisBackend

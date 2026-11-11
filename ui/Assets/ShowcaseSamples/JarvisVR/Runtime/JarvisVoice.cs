@@ -83,18 +83,12 @@ namespace JarvisVR
         return;
       }
 #endif
-#if UNITY_EDITOR
-      // Simulator fallback so the flow is testable without a microphone.
-      Invoke(nameof(DemoTranscript), 1.2f);
-#else
-      if (Notice != null) Notice(_mic == null ? "No microphone available. Allow microphone access for this app." : "Speech-to-text needs the server: turn off mock mode, or install the Meta Voice SDK (define JARVIS_META_VOICE).");
+      if (Notice != null) Notice(_mic == null ? "No microphone available. Allow microphone access for this app." : "Speech-to-text needs the server running, or install the Meta Voice SDK (define JARVIS_META_VOICE).");
       Current = State.Idle;
-#endif
     }
 
     public void StopListening()
     {
-      CancelInvoke(nameof(DemoTranscript));
 #if !JARVIS_META_VOICE
       if (_recording) { FinishRecording(false); return; }   // tapping the orb again sends what was said so far
 #endif
@@ -196,8 +190,6 @@ namespace JarvisVR
       return b;
     }
 #endif
-
-    private void DemoTranscript() { SubmitTranscript("What breaks if I change deleteAccount?"); }
 
     public void SubmitTranscript(string text)
     {

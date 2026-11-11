@@ -119,6 +119,6 @@ Tools live in `server/ai_agents/tools/`. Follow these conventions:
 - ⏳ Phase E: Unity integration (requires Unity Editor)
 - ⏳ Phase F: Verification (requires Gemini and headset)
 
-## Mock UI Mode
+## Unity Backend
 
-Choose **JARVIS → Use mock data** in Unity to test without the backend.
+The JARVIS workspace talks to the real server only. Start it with `JARVIS_REPO=<folder> uvicorn server.jarvis_server:app --port 8000`, then use **JARVIS → Server → Test connection** in Unity to verify.
