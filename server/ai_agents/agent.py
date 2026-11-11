@@ -3,19 +3,21 @@ from google.adk.agents import LlmAgent, LoopAgent, ParallelAgent, SequentialAgen
 from .agents.critic import make_critic
 from .agents.fix import code_reviewer, patch_agent, patch_repair, make_patch_review_repair, make_review_verifier, verifier
 from .agents.impact import change_loader, impact_synthesizer, static_impact, test_mapper
-from .agents.investigator import investigator
+from .agents.investigator import investigator, make_investigator
 from .agents.navigator import make_navigator
 from .agents.scene_director import make_scene_director, make_result_scene_director
 # Phase 2 agents
 from .agents.repository_intelligence import repository_intelligence_agent
 from .agents.code_understanding import code_understanding_agent
-from .agents.relationship_intelligence import relationship_intelligence_agent
+from .agents.relationship_intelligence import (relationship_intelligence_agent,
+                                               build_relationship_intelligence_agent)
 from .agents.data_flow import data_flow_intelligence_agent, build_data_flow_agent
 from .agents.software_engineering import software_engineering_agent
 from .agents.testing_verification import testing_verification_agent
 from .agents.visualization import visualization_agent
 from .agents.conversational import conversational_agent
 from .agents.architecture_design import architecture_design_agent
+from .agents.implementation_planning import implementation_planning_agent
 from .callbacks import init_state, trim_history
 from .config import MODEL
 from .tools.control_tools import request_approval
@@ -54,6 +56,29 @@ impact_pipeline = SequentialAgent(
                 make_scene_director('impact_scene')],
 )
 
+# Composed debugging workflow: the investigator finds where the failure lives,
+# then relationship and data-flow intelligence analyse it in parallel, and the
+# critic synthesizes likely cause, evidence and a proposed correction. This is
+# the ONLY route for error/stack-trace debugging; it never modifies code —
+# fix_pipeline is invoked separately and only when the developer asks for a fix.
+# Fresh instances: ADK agents cannot have two parents, and the module-level
+# specialists already belong to phase2/data_flow pipelines.
+debug_analysis = ParallelAgent(
+    name='debug_analysis',
+    description='Relationship intelligence and data-flow intelligence analyse the investigation in parallel.',
+    sub_agents=[build_relationship_intelligence_agent(), build_data_flow_agent()],
+)
+
+debug_pipeline = SequentialAgent(
+    name='debug_pipeline',
+    description=('Debugs an error, stack trace or failure: investigates the code, analyses relationships '
+                 'and data flow, then reports likely cause, evidence, a proposed correction and an '
+                 'explanation. Read-only; does not modify code.'),
+    sub_agents=[make_investigator(), debug_analysis,
+                make_critic('debug_critic', 'findings'),
+                make_scene_director('debug_scene')],
+)
+
 verify_loop = LoopAgent(
     name='verify_loop',
     description='Tests the patch, and repairs it if tests fail, up to three rounds.',
@@ -61,11 +86,16 @@ verify_loop = LoopAgent(
     max_iterations=3,
 )
 
+# Review-repair-review order matters: each iteration repairs the findings from the
+# PREVIOUS review, re-runs tests/typecheck on the corrected patch, and only then does
+# the independent reviewer see the final diff. The reviewer owns exit_loop, so the
+# loop can only end on an approval of the exact patch that will be committed —
+# passing tests alone can never terminate the loop before re-review.
 review_loop = LoopAgent(
     name='review_loop',
-    description='Reviews the patch and repairs requested changes, up to two rounds.',
-    sub_agents=[code_reviewer, make_patch_review_repair(), make_review_verifier()],
-    max_iterations=2,
+    description='Repairs review findings, re-verifies, and re-reviews the final patch, up to three rounds.',
+    sub_agents=[make_patch_review_repair(), make_review_verifier(), code_reviewer],
+    max_iterations=3,
 )
 
 fix_pipeline = SequentialAgent(
@@ -102,14 +132,18 @@ You are JARVIS, a voice-and-hands assistant that helps a developer understand an
 a VR headset. Requests arrive as spoken text or as a pinch on a graph node.
 Current selection (may be empty): {selection}
 
-Route each request by delegating to exactly one sub-agent:
+Route each request by delegating to the ONE sub-agent or pipeline that owns it:
 - phase2_pipeline: explain code and show connections (new vertical slice)
 - investigate_pipeline: how existing code works, where something happens, what a selected node does.
 - impact_pipeline: what breaks, what is affected, risk of changing or removing something, change review.
 - fix_pipeline: add, fix or change code, propose a patch. This is the ONLY route that changes code,
   including every request that carries an active plan task (WORK ON IT).
 - architecture_design: turn an idea into requirements and a proposed component architecture (design mode requests).
-- For error, stack trace or 'why does X fail' requests: run investigator, then pass its findings to relationship_intelligence and data_flow_intelligence via findings; call fix_pipeline only if the developer asks for a fix. The final answer must contain likely cause, evidence references, proposed correction and explanation.
+- implementation_planning: produce or refine the implementation plan for an APPROVED architecture.
+- debug_pipeline: every error, stack trace, exception or 'why does X fail' request. It runs the
+  investigator, then relationship and data-flow intelligence in parallel, and answers with likely
+  cause, evidence references, a proposed correction and an explanation. Call fix_pipeline afterwards
+  ONLY if the developer asks you to apply a fix — debugging itself never modifies code.
 - For broad 'how does this project work' questions, use phase2_pipeline.
 - navigator: open or switch a repository, show a folder or file, change tab, or move, resize, hide, pin, zoom or recenter anything in the workspace.
 
@@ -130,8 +164,9 @@ root_agent = LlmAgent(
     instruction=ROOT_INSTRUCTION,
     tools=[request_approval],
     sub_agents=[phase2_pipeline, investigate_pipeline, impact_pipeline, fix_pipeline,
+                debug_pipeline,
                 data_flow_pipeline, testing_pipeline,   # engineering_pipeline removed: fix_pipeline is the only code-change route
-                architecture_design_agent, navigator_agent],
+                architecture_design_agent, implementation_planning_agent, navigator_agent],
     before_agent_callback=init_state,
     before_model_callback=trim_history,
 )

@@ -12,7 +12,8 @@ PER_TURN_KEYS = ['changed_nodes', 'impact_static', 'tests_relevant', 'impact_rep
                  'proposed_patch', 'test_results', 'code_review', 'verified_answer',
                  'result_repository', 'result_code_understanding', 'result_relationship',
                  'result_data_flow', 'result_software_eng', 'result_testing',
-                 'result_visualization', 'result_orchestrator', 'result_conversational']
+                 'result_visualization', 'result_orchestrator', 'result_conversational',
+                 'result_implementation_planning']
 
 
 def init_state(callback_context):
@@ -181,6 +182,19 @@ def permission_guard(tool, args, tool_context):
     outcome = 'blocked'
     redacted_args = {k: '***' if 'token' in k.lower() or 'key' in k.lower() or 'password' in k.lower() else v
                      for k, v in args.items()}
+
+    # Tool-contract validation: arguments must satisfy the registered input
+    # schema before permission checks run. This is additive to permissions.
+    try:
+        from .registry.tool_registry import get_tool_registry
+        arg_errors = get_tool_registry().validate_arguments(name, args or {})
+        if arg_errors:
+            outcome = 'blocked_contract'
+            _log_authorization(tool_context.agent_name, name, redacted_args, outcome, time.time() - start_time)
+            return {'status': 'error', 'error': 'Invalid arguments for %s: %s' % (name, '; '.join(arg_errors)),
+                    'validation': 'input_schema'}
+    except Exception:
+        pass  # contract validation must never break tool dispatch
 
     # Use tool_context.agent_name (from ADK) instead of state['calling_agent']
     calling_agent = tool_context.agent_name
@@ -382,6 +396,18 @@ def evidence_collector(tool, args, tool_context, tool_response):
     if calling_agent in concurrent_calls and concurrent_calls[calling_agent] > 0:
         concurrent_calls[calling_agent] -= 1
         state['concurrent_calls'] = concurrent_calls
+
+    # Tool-contract validation: results must satisfy the registered output
+    # schema. A violation replaces the response with a structured error.
+    try:
+        from .registry.tool_registry import get_tool_registry
+        output_errors = get_tool_registry().validate_result(tool.name, tool_response)
+        if output_errors:
+            return {'status': 'error',
+                    'error': 'Tool %s returned an invalid result: %s' % (tool.name, '; '.join(output_errors)),
+                    'validation': 'output_schema'}
+    except Exception:
+        pass
 
     return None
 

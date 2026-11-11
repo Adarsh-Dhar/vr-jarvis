@@ -13,6 +13,7 @@ from typing import List, Dict
 # Permission ceilings for each agent
 PERMISSION_CEILINGS = {
     "architecture_design": 'write',
+    "implementation_planning": 'read',
     "code_understanding": 'read',
     "conversational": 'read',
     "data_flow_intelligence": 'read',
@@ -26,7 +27,9 @@ PERMISSION_CEILINGS = {
     # and blocks create_worktree / apply_patch_to_worktree / run_tests.
     "patch_agent": 'write',
     "patch_repair_agent": 'write',
+    "patch_review_repair_agent": 'write',
     "verifier_agent": 'execute',
+    "review_verifier_agent": 'execute',
     "code_reviewer": 'read',
 }
 
@@ -69,6 +72,7 @@ TOOL_LEVELS = {
     "dim_unrelated": "read",
     "discover_tests": "read",
     "edit_file": "write",
+    "exit_loop": "read",
     "expand_graph_neighborhood": "read",
     "expand_graph_node": "read",
     "explain_call_resolution": "read",
@@ -207,6 +211,7 @@ TOOL_LEVELS = {
 # Curated toolsets for each agent (using string names)
 TOOLSETS: Dict[str, List[str]] = {
     "architecture_design": ['extract_requirements', 'propose_architecture', 'compare_to_repository', 'generate_implementation_plan', 'get_proposed_architecture', 'validate_architecture', 'add_component', 'remove_component', 'update_component', 'add_relationship', 'remove_relationship', 'update_relationship'],
+    "implementation_planning": ['get_proposed_architecture', 'validate_architecture', 'compare_to_repository', 'generate_implementation_plan', 'list_files', 'read_file', 'search_code', 'record_finding', 'get_findings'],
     "orchestrator": ['classify_request', 'understand_user_intent', 'create_investigation_plan', 'check_task_completion', 'merge_agent_results', 'resolve_conflicting_findings', 'request_more_evidence', 'request_approval'],
     "conversational": ['answer_code_question', 'explain_visualization', 'summarize_investigation', 'retrieve_conversation_context', 'retrieve_investigation_context', 'ask_clarifying_question', 'compare_code_elements', 'manage_conversation_preferences'],
     "repository_intelligence": ['index_repository', 'incremental_index_repository', 'detect_languages', 'detect_frameworks', 'detect_build_system', 'detect_project_type', 'detect_package_manager', 'analyze_repository_structure', 'identify_entry_points', 'identify_external_services', 'identify_generated_files', 'detect_repository_changes', 'analyze_dependencies_manifest', 'list_files', 'read_file', 'search_code', 'get_repository_metadata', 'get_changed_files', 'get_recent_commits', 'record_finding', 'get_findings'],
@@ -214,7 +219,11 @@ TOOLSETS: Dict[str, List[str]] = {
     "relationship_intelligence": ['find_callers', 'find_callees', 'find_indirect_callers', 'trace_call_chain', 'get_call_sites', 'explain_call_resolution', 'build_call_graph', 'build_dependency_graph', 'find_dependents', 'find_all_paths_between_symbols', 'find_circular_dependencies', 'analyze_architecture_boundaries', 'calculate_change_impact', 'find_interface_implementations', 'trace_cross_module_relationships', 'record_finding', 'get_findings'],
     "data_flow_intelligence": ['trace_variable_origin', 'trace_variable_usage', 'trace_variable_modifications', 'trace_parameter_flow', 'trace_return_value_flow', 'trace_transformations', 'trace_cross_function_flow', 'trace_file_operations', 'trace_state_changes', 'build_data_flow_graph', 'record_finding', 'get_findings'],
     "software_engineering": ['create_worktree', 'apply_patch_to_worktree', 'get_worktree_diff', 'edit_file', 'apply_patch', 'search_and_replace', 'organize_imports', 'format_code', 'git_status', 'git_branch', 'git_diff', 'read_file', 'search_code', 'record_task_targets', 'get_recent_commits'],
-    "testing_verification": ['discover_tests', 'map_tests_to_functions', 'identify_untested_paths', 'run_unit_tests', 'run_integration_tests', 'run_regression_tests', 'measure_test_coverage', 'verify_compilation', 'verify_lint', 'verify_types', 'compare_before_after', 'run_tests', 'run_typecheck', 'read_test_results', 'record_finding', 'get_findings'],
+    # run_tests/run_typecheck are the canonical runners (pytest, Jest and Vitest).
+    # The legacy pytest-only run_unit_tests/run_integration_tests/run_regression_tests
+    # stay importable but are deliberately NOT in this toolset: the agent must not
+    # choose between runners with inconsistent framework support.
+    "testing_verification": ['discover_tests', 'map_tests_to_functions', 'identify_untested_paths', 'measure_test_coverage', 'verify_compilation', 'verify_lint', 'verify_types', 'compare_before_after', 'run_tests', 'run_typecheck', 'read_test_results', 'record_finding', 'get_findings'],
     "visualization_spatial": ['highlight_vr_path', 'dim_unrelated', 'focus_camera', 'open_code_panel', 'list_vr_repositories', 'open_vr_repository', 'browse_vr_folder', 'open_vr_file', 'move_graph', 'zoom_graph', 'move_panel', 'scale_panel', 'set_panel_state', 'highlight_callers', 'recenter_workspace', 'reset_layout', 'set_mode', 'set_edge_style', 'show_ghost_diff', 'show_test_badges', 'create_graph', 'visualize_call_graph', 'visualize_change_impact', 'visualize_data_flow', 'visualize_architecture', 'visualize_dependency_graph', 'visualize_control_flow', 'visualize_unified_graph', 'explain_graph_edge', 'query_graph_path', 'expand_graph_neighborhood', 'expand_graph_node', 'collapse_graph_node', 'isolate_subgraph', 'summarize_graph', 'get_current_selection', 'verify_citations', 'focus_on_graph_node', 'navigate_to_code_element', 'navigate_to_relationship', 'get_selected_node_details', 'get_current_spatial_context', 'focus_on_code_element'],
 }
 

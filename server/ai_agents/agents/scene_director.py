@@ -3,6 +3,7 @@ from google.adk.agents import LlmAgent
 from ..config import LITE_MODEL
 from ..tools.scene_tools import (dim_unrelated, focus_camera, highlight_vr_path, open_code_panel,
                                  set_edge_style, set_mode, show_ghost_diff, show_test_badges)
+from ..tools.git_tools import get_worktree_diff
 from ..callbacks import permission_guard, evidence_collector
 
 INSTRUCTION = '''
@@ -62,7 +63,7 @@ def make_scene_director(name: str) -> LlmAgent:
         description='Updates the VR scene to show verified results and speaks a two-sentence summary.',
         instruction=INSTRUCTION,
         tools=[highlight_vr_path, dim_unrelated, focus_camera, open_code_panel,
-               set_edge_style, show_ghost_diff, show_test_badges, set_mode],
+               set_edge_style, show_ghost_diff, show_test_badges, set_mode, get_worktree_diff],
         before_tool_callback=permission_guard,
         after_tool_callback=evidence_collector,
     )
@@ -80,7 +81,7 @@ def make_result_scene_director(name: str, result_key: str) -> LlmAgent:
         description='Shows a specialist result in the VR scene and speaks a two-sentence summary.',
         instruction=RESULT_INSTRUCTION.replace('{RESULT}', '{' + result_key + '}'),
         tools=[highlight_vr_path, dim_unrelated, focus_camera, open_code_panel,
-               set_edge_style, show_ghost_diff, show_test_badges, set_mode],
+               set_edge_style, show_ghost_diff, show_test_badges, set_mode, get_worktree_diff],
         before_tool_callback=permission_guard,
         after_tool_callback=evidence_collector,
     )

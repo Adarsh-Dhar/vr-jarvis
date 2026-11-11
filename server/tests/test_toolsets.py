@@ -37,17 +37,139 @@ def test_all_exported_tools_have_permission_levels():
         )
 
 
-def test_instructions_only_name_available_tools():
+def _agent_instructions():
+    """Every agent instruction in the system, keyed by agent name.
+
+    Specialist agents expose INSTRUCTION; fix-pipeline agents expose .instruction
+    on the LlmAgent instance. For agents without a TOOLSETS entry the allowed
+    tool names come from the agent's own tool list."""
     from ai_agents.agents import (software_engineering, data_flow, testing_verification,
                                   code_understanding, relationship_intelligence,
-                                  repository_intelligence)
-    from ai_agents.agents.toolsets import validate_instruction_tools
-    errors = validate_instruction_tools({
+                                  repository_intelligence, architecture_design,
+                                  implementation_planning, conversational,
+                                  visualization, orchestrator, navigator)
+    from ai_agents.agents.fix import (patch_agent, verifier, code_reviewer,
+                                      patch_repair)
+    from ai_agents.agents.navigator import make_navigator
+    navigator_agent_tools = make_navigator().tools
+    from ai_agents.agents.critic import TEMPLATE as CRITIC_TEMPLATE
+    from ai_agents.agent import ROOT_INSTRUCTION
+    from ai_agents.agents.scene_director import INSTRUCTION as SCENE_INSTRUCTION, RESULT_INSTRUCTION
+
+    instructions = {
         'software_engineering': software_engineering.INSTRUCTION,
         'data_flow_intelligence': data_flow.INSTRUCTION,
         'testing_verification': testing_verification.INSTRUCTION,
         'code_understanding': code_understanding.INSTRUCTION,
         'relationship_intelligence': relationship_intelligence.INSTRUCTION,
         'repository_intelligence': repository_intelligence.INSTRUCTION,
-    })
+        'architecture_design': architecture_design.INSTRUCTION,
+        'implementation_planning': implementation_planning.INSTRUCTION,
+        'conversational': conversational.INSTRUCTION,
+        'visualization_spatial': visualization.INSTRUCTION,
+        'orchestrator': orchestrator.INSTRUCTION,
+        'navigator': navigator.INSTRUCTION,
+        'patch_agent': patch_agent.instruction,
+        'verifier_agent': verifier.instruction,
+        'code_reviewer': code_reviewer.instruction,
+        'patch_repair_agent': patch_repair.instruction,
+        'jarvis_orchestrator': ROOT_INSTRUCTION,
+        'critic': CRITIC_TEMPLATE,
+        'scene_director': SCENE_INSTRUCTION,
+        'result_scene_director': RESULT_INSTRUCTION,
+    }
+
+    # Agents not in TOOLSETS: derive the allowed names from their tool lists.
+    allowed_override = {
+        'patch_agent': {getattr(t, '__name__', '') for t in patch_agent.tools},
+        'verifier_agent': {getattr(t, '__name__', '') for t in verifier.tools},
+        'code_reviewer': {getattr(t, '__name__', '') for t in code_reviewer.tools},
+        'patch_repair_agent': {getattr(t, '__name__', '') for t in patch_repair.tools},
+        'navigator': {getattr(t, '__name__', '') for t in navigator_agent_tools},
+        'critic': {'verify_citations', 'get_node'},
+        'scene_director': {'highlight_vr_path', 'dim_unrelated', 'focus_camera',
+                           'open_code_panel', 'set_edge_style', 'show_ghost_diff',
+                           'show_test_badges', 'set_mode', 'get_worktree_diff'},
+        'result_scene_director': {'highlight_vr_path', 'dim_unrelated', 'focus_camera',
+                                  'open_code_panel', 'set_edge_style', 'show_ghost_diff',
+                                  'show_test_badges', 'set_mode', 'get_worktree_diff'},
+        'jarvis_orchestrator': {'request_approval', 'exit_loop'},
+    }
+    return instructions, allowed_override
+
+
+def test_instructions_only_name_available_tools():
+    from ai_agents.agents.toolsets import validate_instruction_tools, TOOL_LEVELS
+    import re
+
+    instructions, allowed_override = _agent_instructions()
+
+    # Patch validate_instruction_tools' lookup: agents without a TOOLSETS entry
+    # use their explicit allowed set; TOOLSETS agents use their curated list.
+    errors = []
+    for agent, text in instructions.items():
+        if agent in allowed_override:
+            allowed = allowed_override[agent]
+        else:
+            allowed = set(TOOLSETS.get(agent, []))
+        for name in sorted(TOOL_LEVELS):
+            pattern = r'(?<![A-Za-z0-9_])%s(?![A-Za-z0-9_])' % re.escape(name)
+            if re.search(pattern, text) and name not in allowed:
+                errors.append('%s: instruction mentions %s but its toolset lacks it' % (agent, name))
     assert errors == []
+
+
+def test_review_loop_reviews_final_patch():
+    """Regression: the review loop must end only when the reviewer approves the
+    FINAL patch. Order is repair -> verifier -> reviewer, and the reviewer owns
+    exit_loop; the verifier must not be able to end the loop on test success."""
+    import ai_agents.agent as ag
+    from ai_agents.agents.fix import code_reviewer, make_review_verifier, make_patch_review_repair
+
+    fix = next(s for s in ag.root_agent.sub_agents if s.name == 'fix_pipeline')
+    review = next(s for s in fix.sub_agents if s.name == 'review_loop')
+    names = [getattr(s, 'name', '') for s in review.sub_agents]
+    assert names == ['patch_review_repair_agent', 'review_verifier_agent', 'code_reviewer']
+
+    # The review verifier must NOT hold exit_loop — passing tests cannot end
+    # the loop before the modified patch is reviewed again.
+    verifier_tools = {getattr(t, '__name__', '') for t in make_review_verifier().tools}
+    assert 'exit_loop' not in verifier_tools
+    assert {'run_tests', 'run_typecheck'} <= verifier_tools
+
+    # The reviewer owns loop exit.
+    reviewer_tools = {getattr(t, '__name__', '') for t in code_reviewer.tools}
+    assert 'exit_loop' in reviewer_tools
+
+    # The repair agent gets the review findings, not just test failures.
+    repair = make_patch_review_repair()
+    assert 'code_review' in repair.instruction
+    assert 'acceptance' in repair.instruction
+
+
+def test_tool_registry_contracts():
+    """Tool registry: resolved schemas, owners and runtime validation."""
+    from ai_agents.registry.tool_registry import get_tool_registry
+    reg = get_tool_registry()
+
+    spec = reg.get('run_tests')
+    assert spec is not None
+    assert spec.owner_agents, 'run_tests should have owner agents from TOOLSETS'
+    assert spec.input_schema and 'test_files' in spec.input_schema['properties']
+
+    # Optional/List/Dict annotations resolve to real schema types.
+    spec2 = reg.get('discover_tests')
+    props = spec2.input_schema['properties']
+    assert props['test_framework'].get('type') == 'string'
+
+    # Argument validation: missing required arg and wrong type are errors.
+    errors = reg.validate_arguments('run_tests', {'test_files': 'not-a-list'})
+    assert any('array' in e for e in errors)
+    errors = reg.validate_arguments('get_findings', {})
+    assert errors == []  # tool_context-only tool: nothing required
+
+    # Output validation: a non-dict result for a dict tool fails.
+    bad = reg.validate_result('run_tests', 'a string, not a dict')
+    assert bad
+    good = reg.validate_result('run_tests', {'status': 'passed'})
+    assert good == []

@@ -28,6 +28,7 @@ EXPECTED_AGENTS = [
     "testing_verification",
     "visualization_spatial",
     "architecture_design",
+    "implementation_planning",
 ]
 
 # Default tool budgets and permission ceilings for each agent
@@ -42,6 +43,7 @@ DEFAULT_AGENT_CONFIG = {
     "testing_verification": {"tool_budget": 25, "permission_ceiling": "execute"},
     "visualization_spatial": {"tool_budget": 20, "permission_ceiling": "read"},
     "architecture_design": {"tool_budget": 20, "permission_ceiling": "read"},
+    "implementation_planning": {"tool_budget": 20, "permission_ceiling": "read"},
     # fix_pipeline agents; patch_agent reads several files before it edits
     "patch_agent": {"tool_budget": 40, "permission_ceiling": "write"},
     "patch_repair_agent": {"tool_budget": 20, "permission_ceiling": "write"},
@@ -234,6 +236,14 @@ def initialize_agents() -> None:
     except ImportError as e:
         logger.error(f"✗ Failed to import architecture_design: {e}")
         raise ImportError(f"Failed to load agent architecture_design: {e}")
+
+    try:
+        from .implementation_planning import implementation_planning_agent
+        register_agent("implementation_planning", implementation_planning_agent)
+        logger.info("✓ Registered implementation_planning")
+    except ImportError as e:
+        logger.error(f"✗ Failed to import implementation_planning: {e}")
+        raise ImportError(f"Failed to load agent implementation_planning: {e}")
     
     # Initialize AGENT_CONFIG with default configurations
     for agent_name, config in DEFAULT_AGENT_CONFIG.items():

@@ -43,27 +43,34 @@ Return a JSON object with these keys:
 - evidence_nodes: every node id you relied on
 '''
 
-investigator = LlmAgent(
-    name='investigator_agent',
-    model=MODEL,
-    include_contents='none',
-    description=('Answers where, how and why questions about existing code by searching the code graph '
-                 'and reading source. Use for explaining flows, finding where something happens, and '
-                 'understanding a selected function.'),
-    instruction=INSTRUCTION,
-    tools=[search_graph_symbols, get_node, get_callers, get_callees, get_dependents, trace_path,
-           get_cluster, get_source, find_tests_for_node,
-           list_files, read_file, search_code, repo_search_symbols,
-           get_symbol_definition, get_symbol_references, get_symbol_hover_info,
-           get_call_hierarchy, get_type_hierarchy,
-           parse_source_code, extract_symbols, resolve_types,
-           analyze_control_flow, analyze_dependencies],
-    output_key='answer_draft',
-    before_tool_callback=permission_guard,
-    after_tool_callback=evidence_collector,
-)
-from .registry import AGENT_CONFIG
-AGENT_CONFIG['investigator_agent'] = {
-    "permission_ceiling": "read",
-    "tool_budget": 20,
-}
+def make_investigator() -> LlmAgent:
+    """Build an Investigator instance. Needed because ADK agents cannot have
+    two parents — pipelines that each need an investigator must not share one."""
+    agent = LlmAgent(
+        name='investigator_agent',
+        model=MODEL,
+        include_contents='none',
+        description=('Answers where, how and why questions about existing code by searching the code graph '
+                     'and reading source. Use for explaining flows, finding where something happens, and '
+                     'understanding a selected function.'),
+        instruction=INSTRUCTION,
+        tools=[search_graph_symbols, get_node, get_callers, get_callees, get_dependents, trace_path,
+               get_cluster, get_source, find_tests_for_node,
+               list_files, read_file, search_code, repo_search_symbols,
+               get_symbol_definition, get_symbol_references, get_symbol_hover_info,
+               get_call_hierarchy, get_type_hierarchy,
+               parse_source_code, extract_symbols, resolve_types,
+               analyze_control_flow, analyze_dependencies],
+        output_key='answer_draft',
+        before_tool_callback=permission_guard,
+        after_tool_callback=evidence_collector,
+    )
+    from .registry import AGENT_CONFIG
+    AGENT_CONFIG['investigator_agent'] = {
+        "permission_ceiling": "read",
+        "tool_budget": 20,
+    }
+    return agent
+
+
+investigator = make_investigator()

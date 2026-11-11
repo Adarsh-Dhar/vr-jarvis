@@ -117,6 +117,10 @@ Rules:
 - You only review. Never modify files, never run tests, never commit.
 - verdict is 'approve' only when you find no blocking issue; use 'changes_requested'
   when any blocker or unmet acceptance criterion exists.
+- You are the ONLY agent allowed to end this loop. Call exit_loop when — and only
+  when — your verdict on the CURRENT diff is 'approve'. The diff you approve is the
+  diff that gets committed, so never approve a patch you have not just re-read with
+  get_worktree_diff.
 - Cite file and approximate line for every finding.
 
 Return a JSON object with keys: verdict (approve|changes_requested), summary,
@@ -126,7 +130,7 @@ acceptance (list of {criterion, status: met|not_met|unknown, note}),
 suggested_tests (list of strings). The security block is a model review of the diff, not a vulnerability scan. Say so in summary when you report a security finding, and never claim the code is secure.
 ''',
     tools=[get_worktree_diff, read_worktree_file, read_file, read_file_range,
-           search_code, get_source, find_tests_for_node],
+           search_code, get_source, find_tests_for_node, exit_loop],
     before_tool_callback=permission_guard,
     after_tool_callback=evidence_collector,
     output_key='code_review',
@@ -160,18 +164,69 @@ assumptions, claims), with diff taken from get_worktree_diff and summary updated
 
 
 
+REVIEW_REPAIR_INSTRUCTION = '''
+Code review verdict: {code_review}
+Current patch: {proposed_patch}
+Latest test results (context only): {test_results}
+Active plan task (may be empty): {active_task}
+
+If {code_review} is empty or its verdict is 'approve', make NO changes: call
+get_worktree_diff and return the current patch unchanged.
+
+Otherwise the reviewer requested changes. You MUST address the review, not just
+the test results:
+1. Call get_worktree_diff to see the exact diff currently in place.
+2. For EVERY item in code_review.findings with severity 'blocker' (and every
+   'warning' you judge necessary), read the relevant source — read_worktree_file
+   for changed files, read_file / get_source for unchanged callers — then make a
+   correction for that finding.
+3. For EVERY item in code_review.acceptance with status 'not_met' or 'unknown',
+   change the patch so the criterion is actually met. If a criterion genuinely
+   cannot be met by a code change, say why in assumptions instead of ignoring it.
+4. Keep unrelated code unchanged. Write an incremental unified diff and apply it
+   with apply_patch_to_worktree; if applying fails, fix the diff and retry once.
+5. Call get_worktree_diff again and return the FULL diff now in place.
+
+Return a JSON object in the same shape as the current patch (summary, files, diff,
+tests_added, assumptions, claims), with diff taken from get_worktree_diff, summary
+updated to describe the review fixes, and a 'review_fixes' list naming each finding
+you addressed and how.
+'''
+
+
 def make_patch_review_repair():
     return LlmAgent(
         name='patch_review_repair_agent',
         model=MODEL,
         include_contents='none',
-        description='Repairs a patch after independent review requests changes.',
-        instruction=patch_repair.instruction,
-        tools=patch_repair.tools,
+        description='Repairs a patch so every code-review finding and unmet acceptance criterion is addressed.',
+        instruction=REVIEW_REPAIR_INSTRUCTION,
+        tools=[get_worktree_diff, read_worktree_file, read_file, get_source,
+               apply_patch_to_worktree],
         before_tool_callback=permission_guard,
         after_tool_callback=evidence_collector,
         output_key='proposed_patch',
     )
+
+
+REVIEW_VERIFIER_INSTRUCTION = '''
+Patch under test: {proposed_patch}
+Tests already known to be relevant: {tests_relevant}
+
+This patch may have just been modified by the review-repair agent. Re-verify it:
+1. Call run_tests with the test files from the patch plus the relevant tests above.
+2. Call run_typecheck.
+
+Rules:
+- Report exactly what the tools returned. Never say passed unless a tool result says passed.
+- If a tool errors or a test did not run, list it as not_run.
+- Do NOT call exit_loop and do NOT decide whether the review loop may end. The
+  independent reviewer runs after you and is the only agent that can approve the
+  final patch. Your job is only to leave fresh, accurate test_results in state.
+
+Return a JSON object with keys: status (passed, failed or not_run), passed (list), failed (list of
+objects with id and message), not_run (list), typecheck (passed, failed or not_run).
+'''
 
 
 def make_review_verifier():
@@ -179,9 +234,9 @@ def make_review_verifier():
         name='review_verifier_agent',
         model=MODEL,
         include_contents='none',
-        description='Re-runs tests and type check after review-driven repair.',
-        instruction=verifier.instruction,
-        tools=verifier.tools,
+        description='Re-runs tests and type check on the patch after review-driven repair, without ending the loop.',
+        instruction=REVIEW_VERIFIER_INSTRUCTION,
+        tools=[run_tests, run_typecheck, read_test_results],
         before_tool_callback=permission_guard,
         after_tool_callback=evidence_collector,
         output_key='test_results',

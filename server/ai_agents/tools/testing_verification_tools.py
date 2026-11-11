@@ -430,12 +430,21 @@ def measure_test_coverage(
         
         overall = coverage_data.get('totals', {}).get('percent_covered', 0.0)
 
+        by_file = {}
+        missing_lines = {}
+        for k, v in coverage_data.get('files', {}).items():
+            by_file[k] = v.get('percent_covered', 0.0)
+            ml = v.get('missing_lines')
+            if isinstance(ml, list):
+                missing_lines[k] = sorted(int(x) for x in ml)
+
         return {
             'status': 'ok',
             'repository_path': str(path),
             'coverage': {
                 'overall': overall,
-                'by_file': {k: v.get('percent_covered', 0.0) for k, v in coverage_data.get('files', {}).items()}
+                'by_file': by_file,
+                'missing_lines': missing_lines,
             }
         }
     except subprocess.TimeoutExpired:
@@ -535,21 +544,170 @@ def map_tests_to_functions(
                 out.extend(test_out)
             return out
 
-        def _js_mapping(test_file):
+        def _ts_walk(node):
+            """Pre-order walk over a tree-sitter node."""
+            yield node
+            for i in range(node.child_count):
+                yield from _ts_walk(node.child(i))
+
+        def _js_module_exports(src_file):
+            """Exported callable names of a JS/TS module via tree-sitter."""
             try:
+                from ai_agents.intelligence.parsers.tree_sitter_parser import parse_file
+                text = src_file.read_text(encoding='utf-8', errors='replace')
+                tree = parse_file(str(src_file), text)
+            except Exception:
+                return set()
+            names = set()
+            for node in _ts_walk(tree.root_node):
+                if node.type == 'function_declaration':
+                    for ch in node.children:
+                        if ch.type == 'identifier':
+                            names.add(ch.text.decode())
+                            break
+                elif node.type == 'variable_declarator':
+                    left = node.child_by_field_name('name')
+                    val = node.child_by_field_name('value')
+                    if left is not None and val is not None and val.type in (
+                            'arrow_function', 'function_expression'):
+                        names.add(left.text.decode())
+                elif node.type == 'export_statement':
+                    for ch in node.children:
+                        if ch.type in ('function_declaration', 'lexical_declaration'):
+                            for sub in _ts_walk(ch):
+                                if sub.type == 'identifier':
+                                    names.add(sub.text.decode())
+                                    break
+            return names
+
+        _EXPORT_CACHE = {}
+
+        def _resolve_js_import(test_file, local_name):
+            """Resolve an imported local name to (module_file, exported_name)."""
+            try:
+                from ai_agents.intelligence.parsers.tree_sitter_parser import parse_file
+                text = test_file.read_text(encoding='utf-8', errors='replace')
+                tree = parse_file(str(test_file), text)
+            except Exception:
+                return None
+            for node in _ts_walk(tree.root_node):
+                if node.type != 'import_statement':
+                    continue
+                clause = node.child_by_field_name('source')
+                if clause is None:
+                    continue
+                mod = clause.text.decode().strip('\'"')
+                # local bindings inside this import
+                for sub in _ts_walk(node):
+                    if sub.type == 'import_specifier':
+                        name_field = sub.child_by_field_name('name')
+                        alias_field = sub.child_by_field_name('alias')
+                        local = (alias_field or name_field)
+                        if local is not None and local.text.decode() == local_name:
+                            exported = name_field.text.decode() if name_field else local_name
+                            return _js_module_path(test_file, mod), exported
+                    elif sub.type == 'identifier' and sub.text.decode() == local_name:
+                        # default or namespace import
+                        if 'namespace_import' in [c.type for c in sub.parent.children] if sub.parent else False:
+                            return _js_module_path(test_file, mod), '*'
+                        return _js_module_path(test_file, mod), 'default'
+            return None
+
+        def _js_module_path(test_file, mod):
+            if not mod.startswith('.'):
+                return None  # package import: cannot map to a repo file reliably
+            base = (test_file.parent / mod)
+            for cand in (base.with_suffix('.ts'), base.with_suffix('.tsx'),
+                         base.with_suffix('.js'), base.with_suffix('.jsx'),
+                         base / 'index.ts', base / 'index.js'):
+                if cand.is_file():
+                    return cand
+            return None
+
+        def _js_mapping(test_file):
+            """AST-based mapping: find test()/it() callback bodies, collect the
+            calls inside them, resolve imports/aliases to repository modules and
+            mark anything unresolvable as unresolved — never a guessed name."""
+            try:
+                from ai_agents.intelligence.parsers.tree_sitter_parser import parse_file
                 content = test_file.read_text(encoding='utf-8', errors='replace')
+                tree = parse_file(str(test_file), content)
             except Exception:
                 return []
             out = []
-            for m in re.finditer(r'(?:test|it)\(\s*[\'"`]([^\'"`]+)[\'"`]', content):
-                title = m.group(1)
-                leaf = re.sub(r'[^A-Za-z0-9]+', '_', title).strip('_').lower()
-                if not leaf:
+            for node in _ts_walk(tree.root_node):
+                if node.type != 'call_expression':
                     continue
-                out.append({'test': title, 'function': leaf,
-                            'file': str(test_file.relative_to(path)),
-                            'confidence': 'low',
-                            'evidence': 'derived from the test title only'})
+                func = node.child_by_field_name('function')
+                if func is None or func.type != 'identifier' \
+                        or func.text.decode() not in ('test', 'it'):
+                    continue
+                args = node.child_by_field_name('arguments')
+                if args is None:
+                    continue
+                title = ''
+                callback = None
+                for ch in args.children:
+                    if ch.type in ('string', 'template_string'):
+                        title = ch.text.decode().strip('\'"`')
+                    elif ch.type in ('arrow_function', 'function_expression', 'function'):
+                        callback = ch
+                if callback is None:
+                    continue
+                calls = []
+                for sub in _ts_walk(callback):
+                    if sub.type != 'call_expression':
+                        continue
+                    cf = sub.child_by_field_name('function')
+                    if cf is None:
+                        continue
+                    if cf.type == 'identifier':
+                        calls.append(cf.text.decode())
+                    elif cf.type == 'member_expression':
+                        prop = cf.child_by_field_name('property')
+                        obj = cf.child_by_field_name('object')
+                        if prop is not None:
+                            obj_name = obj.text.decode() if obj is not None else ''
+                            calls.append('%s.%s' % (obj_name, prop.text.decode()))
+                seen = set()
+                for call in calls:
+                    if call in seen or call in ('expect', 'assert', 'console.log',
+                                                'describe', 'test', 'it', 'beforeEach',
+                                                'afterEach', 'beforeAll', 'afterAll'):
+                        continue
+                    seen.add(call)
+                    local, _, member = call.partition('.')
+                    resolved = _resolve_js_import(test_file, local)
+                    if resolved is None and member:
+                        # obj.method() where obj is a namespace/default import
+                        resolved = _resolve_js_import(test_file, local)
+                    entry = {'test': title or '<anonymous>',
+                             'file': str(test_file.relative_to(path)),
+                             'call': call}
+                    if resolved and resolved[0] is not None:
+                        mod_file, exported = resolved
+                        if exported == '*':
+                            target = '%s::%s' % (mod_file.relative_to(path), member or local)
+                        elif exported == 'default':
+                            target = str(mod_file.relative_to(path))
+                        else:
+                            target = '%s::%s' % (mod_file.relative_to(path), exported)
+                        # Confirm the export actually exists in the module.
+                        if exported not in ('*', 'default'):
+                            if mod_file not in _EXPORT_CACHE:
+                                _EXPORT_CACHE[mod_file] = _js_module_exports(mod_file)
+                            if exported not in _EXPORT_CACHE[mod_file]:
+                                entry.update({'function': target, 'confidence': 'unresolved',
+                                              'evidence': 'import resolved but export %r not found in %s'
+                                              % (exported, mod_file.name)})
+                                out.append(entry)
+                                continue
+                        entry.update({'function': target, 'confidence': 'high',
+                                      'evidence': 'call inside test body resolved via import'})
+                    else:
+                        entry.update({'function': None, 'confidence': 'unresolved',
+                                      'evidence': 'call %r could not be resolved to a repository function' % call})
+                    out.append(entry)
             return out
 
         test_mapping = []
@@ -572,12 +730,19 @@ def map_tests_to_functions(
 
 
 @safe
-@heuristic('File-level coverage threshold; not per-CFG-path.')
 def identify_untested_paths(
     repository_path: str,
     tool_context: ToolContext
 ) -> dict:
-    """Find paths without adequate coverage."""
+    """Find uncovered files AND uncovered execution paths.
+
+    'uncovered_files' keeps the file-level view (coverage < 50%).
+    'execution_paths' drills into Python files that have missing lines: each
+    function containing uncovered lines is reported with its CFG decision
+    points (branch/loop/condition nodes) so callers can see which control-flow
+    paths lack coverage evidence. Functions in files without line-level data,
+    and all non-Python files, are reported as 'unverified' — never claimed as
+    tested or untested without evidence."""
     try:
         coverage_result = measure_test_coverage(repository_path, tool_context)
         
@@ -586,20 +751,80 @@ def identify_untested_paths(
         
         coverage = coverage_result.get('coverage', {})
         by_file = coverage.get('by_file', {})
+        missing_lines = coverage.get('missing_lines', {})
         
-        untested_paths = []
+        uncovered_files = []
         for file_path, cov_value in by_file.items():
             if cov_value < 0.5:
-                untested_paths.append({
+                uncovered_files.append({
                     'file': file_path,
                     'coverage': cov_value,
                     'needs_attention': True
                 })
-        
+
+        execution_paths = []
+        unsupported = []
+        repo = Path(coverage_result.get('repository_path') or repository_path)
+        for file_path, cov_value in by_file.items():
+            if cov_value >= 0.95:
+                continue
+            fp = repo / file_path if not Path(file_path).is_absolute() else Path(file_path)
+            if not fp.is_file():
+                continue
+            if fp.suffix != '.py':
+                unsupported.append({'file': file_path, 'coverage': cov_value,
+                                    'status': 'unverified',
+                                    'reason': 'per-path coverage not implemented for this language'})
+                continue
+            missing = set(missing_lines.get(file_path, []))
+            try:
+                import ast as _ast
+                tree = _ast.parse(fp.read_text(encoding='utf-8', errors='replace'))
+            except Exception:
+                unsupported.append({'file': file_path, 'coverage': cov_value,
+                                    'status': 'unverified', 'reason': 'file could not be parsed'})
+                continue
+            funcs = [n for n in _ast.walk(tree)
+                     if isinstance(n, (_ast.FunctionDef, _ast.AsyncFunctionDef))]
+            for fn in funcs:
+                fn_lines = set(range(fn.lineno, (fn.end_lineno or fn.lineno) + 1))
+                uncovered = sorted(fn_lines & missing)
+                if not uncovered and not missing:
+                    # No line data at all: cannot claim the path is covered.
+                    status = 'unverified'
+                elif uncovered:
+                    status = 'has_uncovered_lines'
+                else:
+                    status = 'covered_lines_only'
+                # Count CFG decision points (branches/loops/conditions) as the
+                # number of distinct execution paths of interest.
+                decision_points = sum(
+                    1 for n in _ast.walk(fn)
+                    if isinstance(n, (_ast.If, _ast.For, _ast.AsyncFor, _ast.While,
+                                      _ast.Try, _ast.Match)) )
+                execution_paths.append({
+                    'file': file_path,
+                    'function': fn.name,
+                    'line': fn.lineno,
+                    'coverage': cov_value,
+                    'uncovered_lines': uncovered[:50],
+                    'uncovered_line_count': len(uncovered),
+                    'decision_points': decision_points,
+                    'status': status,
+                })
+
         return {
             'status': 'ok',
             'repository_path': repository_path,
-            'untested_paths': untested_paths
+            'untested_paths': uncovered_files,
+            'uncovered_files': uncovered_files,
+            'execution_paths': execution_paths,
+            'unsupported': unsupported,
+            'note': ('execution_paths are line-coverage derived: '
+                     'has_uncovered_lines = concrete uncovered lines inside the '
+                     'function; covered_lines_only = function lines all executed '
+                     'but branch-level coverage was not measured; unverified = '
+                     'no evidence either way.')
         }
     except Exception as e:
         return {
@@ -613,19 +838,24 @@ def verify_compilation(
     repository_path: str,
     tool_context: ToolContext
 ) -> dict:
-    """Check compilation."""
+    """Check Python syntax compilation (compileall). This is NOT a universal
+    compiler check — it only verifies that .py files parse and compile."""
     try:
         path = Path(repository_path)
         if not path.is_absolute():
             path = resolve_in_repo(path)
         
-        # Try to compile based on language
-        if (path / 'setup.py').exists() or (path / 'pyproject.toml').exists():
-            result = subprocess.run(['python3', '-m', 'compileall', str(path)], capture_output=True, text=True)
+        # compileall is the Python syntax compiler; other languages are not checked here.
+        if (path / 'setup.py').exists() or (path / 'pyproject.toml').exists() \
+                or any(path.rglob('*.py')):
+            result = subprocess.run(['python3', '-m', 'compileall', '-q', str(path)], capture_output=True, text=True)
             return {
                 'status': 'ok' if result.returncode == 0 else 'error',
                 'repository_path': str(path),
+                'scope': 'python_syntax',
+                'checker': 'compileall',
                 'compilation': 'success' if result.returncode == 0 else 'failed',
+                'note': 'Python syntax compilation only; not a universal or semantic build check.',
                 'errors': result.stderr[-1000:] if result.stderr else '',
                 'output': result.stdout[-1000:] if result.stdout else ''
             }
@@ -633,7 +863,8 @@ def verify_compilation(
         return {
             'status': 'not_applicable',
             'repository_path': str(path),
-            'message': 'No Python build configuration found'
+            'scope': 'python_syntax',
+            'message': 'No Python sources found; compilation check not applicable'
         }
     except Exception as e:
         return {
@@ -701,7 +932,21 @@ def verify_lint(
             path = resolve_in_repo(path)
         
         if linter == 'auto':
-            linter = 'pylint'
+            # Select the linter for the detected language instead of defaulting
+            # everything to pylint.
+            has_pkg = (path / 'package.json').is_file()
+            has_py = (path / 'setup.py').exists() or (path / 'pyproject.toml').exists() \
+                or any(path.rglob('*.py'))
+            if has_pkg:
+                linter = 'eslint'
+            elif has_py:
+                linter = 'pylint'
+            else:
+                return {
+                    'status': 'not_applicable',
+                    'repository_path': str(path),
+                    'message': 'No supported linter for the detected languages (Python, JavaScript/TypeScript)'
+                }
         
         # Check if linter is available
         check_result = subprocess.run(['which', linter], capture_output=True, text=True)

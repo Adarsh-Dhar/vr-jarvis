@@ -224,6 +224,7 @@ from .scene_tools import (
 
 from .control_tools import (
     request_approval,
+    exit_loop,
 )
 
 from .findings_tools import (
