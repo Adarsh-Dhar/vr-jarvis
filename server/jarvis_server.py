@@ -387,7 +387,8 @@ def _require_active_repo(name: Optional[str]):
 async def _check_session_repo(session_id):
     """Design/plan endpoints carry no repo field: verify the session was started
     against the currently active repository, else its plan/design would apply
-    to the wrong codebase."""
+    to the wrong codebase. Also refuses while a repository switch is in progress."""
+    _refuse_if_switching()
     state = (await ensure(session_id)).state
     sess_repo = state.get('repo')
     if not sess_repo:
@@ -630,6 +631,16 @@ async def ask_stream(body: AskBody):
     await _check_session_repo(body.session_id)
     async def gen():
         async with locks[body.session_id]:      # hold the lock for the whole stream
+            # Re-check under the session lock: /repos/select treats a held session
+            # lock as a blocker, so once we hold it no switch can start, and if one
+            # is in progress or already completed these checks refuse the turn.
+            try:
+                _refuse_if_switching()
+                _require_active_repo(body.repo)
+                await _check_session_repo(body.session_id)
+            except HTTPException as exc:
+                yield 'data: ' + json.dumps({'type': 'error', 'error': exc.detail}) + '\n\n'
+                return
             session = await ensure(body.session_id)
             await set_state(body.session_id, _turn_state(body, session.state))
 
@@ -767,17 +778,23 @@ async def ask(body: AskBody):
     _refuse_if_switching()
     _require_active_repo(body.repo)
     await _check_session_repo(body.session_id)
-    error = ''
-    if await _seen_request(body.session_id, body.request_id):
-        return {'reply': '', 'error': '', 'duplicate': True,
-                'scene_commands': [], 'pending_approval': '', 'approved': False,
-                'test_results': '', 'test_source': '', 'evidence': [],
-                'unverified_evidence': [], 'task_id': '', 'proposal_status': 'none'}
     calls_before = llm.stats['requests']
     reply = ''
     async with locks[body.session_id]:
+        # Re-check under the session lock (see /ask/stream): the switch guard in
+        # /repos/select only sees held session locks, so this makes the repo
+        # check and the turn atomic with respect to a repository switch.
+        _refuse_if_switching()
+        _require_active_repo(body.repo)
+        await _check_session_repo(body.session_id)
+        if await _seen_request(body.session_id, body.request_id):
+            return {'reply': '', 'error': '', 'duplicate': True,
+                    'scene_commands': [], 'pending_approval': '', 'approved': False,
+                    'test_results': '', 'test_source': '', 'evidence': [],
+                    'unverified_evidence': [], 'task_id': '', 'proposal_status': 'none'}
         session = await ensure(body.session_id)
         await set_state(body.session_id, _turn_state(body, session.state))
+        error = ''
         try:
             reply = await asyncio.wait_for(_run_turn(body), TURN_TIMEOUT)
         except asyncio.TimeoutError:
@@ -802,9 +819,14 @@ async def approve(body: ApproveBody):
     _refuse_if_switching()
     _require_active_repo(body.repo)
     await _check_session_repo(body.session_id)
-    if await _seen_request(body.session_id, body.request_id):
-        return {'ok': True, 'duplicate': True, 'detail': 'Request already handled.'}
     async with locks[body.session_id]:
+        # Re-check under the session lock so a repository switch cannot slip
+        # between the checks above and the approval/commit below.
+        _refuse_if_switching()
+        _require_active_repo(body.repo)
+        await _check_session_repo(body.session_id)
+        if await _seen_request(body.session_id, body.request_id):
+            return {'ok': True, 'duplicate': True, 'detail': 'Request already handled.'}
         state = (await ensure(body.session_id)).state
         pending = state.get('pending_approval', '')
         worktree = state.get('worktree', '')
@@ -874,6 +896,11 @@ async def promote(body: PromoteBody):
     _require_active_repo(body.repo)
     await _check_session_repo(body.session_id)
     async with locks[body.session_id]:
+        # Re-check under the session lock so a repository switch cannot slip
+        # between the checks above and the promote below.
+        _refuse_if_switching()
+        _require_active_repo(body.repo)
+        await _check_session_repo(body.session_id)
         state = (await ensure(body.session_id)).state
         last = state.get('last_commit') or {}
         if not last.get('branch'):

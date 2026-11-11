@@ -4,6 +4,7 @@ Automated Release Gates for JARVIS
 Runs all verification checks before a release
 """
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -229,7 +230,10 @@ class ReleaseGates:
             return False
         
         try:
-            # CRITICAL: Run in live mode to test actual agents, not mock
+            # CRITICAL: Run in live mode to test actual agents, not mock.
+            # A zero exit code alone is not proof: the runner exits 0 even when
+            # it silently fell back to mock mode, so the live summary line is
+            # required as well.
             result = subprocess.run(
                 ['python3', str(runner), '--live'],
                 capture_output=True,
@@ -237,39 +241,43 @@ class ReleaseGates:
                 timeout=120,
                 cwd=str(eval_dir)
             )
-            
-            # Check if tests ran successfully in live mode
-            if 'Live Success Rate:' in result.stdout or result.returncode == 0:
-                self.results['agent_capability_tests']['passed'] = True
-                self.results['agent_capability_tests']['details'] = ["Live agent tests passed"]
-                print("✅ PASSED: Live agent tests passed")
-                return True
-            else:
-                # If live mode fails due to missing ADK, try mock but note it
-                if 'Google ADK not available' in result.stdout:
-                    print("⚠️ WARNING: Google ADK not available, falling back to mock mode")
-                    result = subprocess.run(
-                        ['python3', str(runner), '--mock'],
-                        capture_output=True,
-                        text=True,
-                        timeout=120,
-                        cwd=str(eval_dir)
-                    )
-                    if 'Mock Success Rate: 100.00%' in result.stdout:
-                        self.results['agent_capability_tests']['passed'] = False
-                        self.results['agent_capability_tests']['details'] = ["Mock mode passed but live mode unavailable - cannot verify real agent performance"]
-                        print("❌ FAILED: Mock mode passed but live mode unavailable")
-                        return False
-                    else:
-                        self.results['agent_capability_tests']['passed'] = False
-                        self.results['agent_capability_tests']['details'] = [result.stdout[:500]]
-                        print("❌ FAILED: Agent tests did not pass")
-                        return False
-                else:
-                    self.results['agent_capability_tests']['passed'] = False
-                    self.results['agent_capability_tests']['details'] = [result.stdout[:500]]
-                    print("❌ FAILED: Agent tests did not pass")
-                    return False
+            out = result.stdout or ''
+
+            if 'Live Success Rate:' not in out:
+                # Live mode was requested but the runner fell back to mock (e.g.
+                # google.adk missing) or produced no summary at all.
+                reason = ('live mode unavailable - runner fell back to mock or '
+                          'produced no live summary (is google.adk installed?)')
+                if 'Mock Success Rate:' in out or 'Falling back to mock' in out:
+                    reason = 'live mode unavailable - Google ADK missing, runner used mock mode'
+                self.results['agent_capability_tests']['passed'] = False
+                self.results['agent_capability_tests']['details'] = [reason]
+                print(f"❌ FAILED: {reason}")
+                return False
+
+            if result.returncode != 0:
+                self.results['agent_capability_tests']['passed'] = False
+                self.results['agent_capability_tests']['details'] = [
+                    f"Live agent test runner exited {result.returncode}: {out[-500:]}"]
+                print("❌ FAILED: Live agent test runner failed")
+                return False
+
+            # Parse the reported rate; a live run that passed nothing is not a pass.
+            import re
+            m = re.search(r'Live Success Rate:\s*([0-9.]+)%', out)
+            rate = float(m.group(1)) if m else 0.0
+            if rate <= 0.0:
+                self.results['agent_capability_tests']['passed'] = False
+                self.results['agent_capability_tests']['details'] = [
+                    f"Live agent tests ran but success rate was {rate:.2f}%"]
+                print(f"❌ FAILED: Live agent tests ran but success rate was {rate:.2f}%")
+                return False
+
+            self.results['agent_capability_tests']['passed'] = True
+            self.results['agent_capability_tests']['details'] = [
+                f"Live agent tests passed (success rate {rate:.2f}%)"]
+            print(f"✅ PASSED: Live agent tests passed (success rate {rate:.2f}%)")
+            return True
         except Exception as e:
             self.results['agent_capability_tests']['passed'] = False
             self.results['agent_capability_tests']['details'] = [str(e)]
@@ -367,35 +375,55 @@ class ReleaseGates:
             print("❌ FAILED: Unity project not found")
             return False
         
-        # Check for Unity project structure
-        assets_dir = ui_dir / 'Assets'
-        if not assets_dir.exists():
+        # Verify the project structure, then run a REAL Unity batch-mode
+        # compilation. Folder presence alone does not prove the C# compiles.
+        for required in ('Assets', 'ProjectSettings', 'Packages/manifest.json'):
+            if not (ui_dir / required).exists():
+                self.results['unity_build']['passed'] = False
+                self.results['unity_build']['details'] = [f"Unity project missing {required}"]
+                print(f"❌ FAILED: Unity project missing {required}")
+                return False
+
+        compile_script = self.project_root / 'compile-vr-jarvis.sh'
+        if not compile_script.exists():
             self.results['unity_build']['passed'] = False
-            self.results['unity_build']['details'] = ["Unity Assets directory not found"]
-            print("❌ FAILED: Unity Assets directory not found")
+            self.results['unity_build']['details'] = ["compile-vr-jarvis.sh not found - cannot verify Unity compilation"]
+            print("❌ FAILED: compile-vr-jarvis.sh not found")
             return False
-        
-        # CRITICAL: Check for actual Unity build artifacts
-        # Unity builds produce Library/ folder and .unityproject file
-        library_dir = ui_dir / 'Library'
-        project_settings = ui_dir / 'ProjectSettings'
-        
-        if not library_dir.exists():
+
+        timeout = int(os.environ.get('JARVIS_UNITY_GATE_TIMEOUT', '900'))
+        try:
+            result = subprocess.run(
+                ['bash', str(compile_script), str(self.project_root)],
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+            )
+        except subprocess.TimeoutExpired:
             self.results['unity_build']['passed'] = False
-            self.results['unity_build']['details'] = ["Unity Library directory not found - project not built"]
-            print("❌ FAILED: Unity Library directory not found - project not built")
+            self.results['unity_build']['details'] = [f"Unity compilation timed out after {timeout}s"]
+            print(f"❌ FAILED: Unity compilation timed out after {timeout}s")
             return False
-        
-        if not project_settings.exists():
+        except Exception as e:
             self.results['unity_build']['passed'] = False
-            self.results['unity_build']['details'] = ["Unity ProjectSettings not found"]
-            print("❌ FAILED: Unity ProjectSettings not found")
+            self.results['unity_build']['details'] = [f"Unity compilation could not run: {e}"]
+            print(f"❌ FAILED: Unity compilation could not run: {e}")
             return False
-        
-        self.results['unity_build']['passed'] = True
-        self.results['unity_build']['details'] = ["Unity project structure and build artifacts valid"]
-        print("✅ PASSED: Unity project structure and build artifacts valid")
-        return True
+
+        if result.returncode == 0:
+            self.results['unity_build']['passed'] = True
+            self.results['unity_build']['details'] = [
+                "Unity batch-mode compilation completed with no C# compiler errors"]
+            print("✅ PASSED: Unity batch-mode compilation completed with no C# compiler errors")
+            return True
+
+        tail = '\n'.join((result.stdout or '').splitlines()[-15:])
+        self.results['unity_build']['passed'] = False
+        self.results['unity_build']['details'] = [
+            f"Unity compilation failed (exit {result.returncode}): {tail[-800:]}"]
+        print(f"❌ FAILED: Unity compilation failed (exit {result.returncode})")
+        print(tail)
+        return False
     
     def run_all_gates(self) -> bool:
         """Run all release gates."""

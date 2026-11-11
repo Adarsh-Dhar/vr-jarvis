@@ -189,6 +189,39 @@ class TestRepoSwitching:
         if r.status_code == 200:
             assert r.json()['session_reset_required'] is True
 
+    def test_ask_rechecks_repo_while_holding_session_lock(self, client, monkeypatch):
+        """Regression: the repo checks must run under the session lock. Before the
+        fix they ran before lock acquisition, so a /repos/select could slip into
+        the gap between the check and the turn."""
+        import jarvis_server
+        from ai_agents.tools import graph_tools
+        sid = self._sid(client)
+
+        monkeypatch.setattr(graph_tools, '_graph',
+                            lambda: {'nodes': {}, 'out': {}, 'in': {}, 'tests': [], 'coverage': {}})
+
+        lock_states = []
+        orig_require = jarvis_server._require_active_repo
+
+        def spy(name):
+            lock_states.append(jarvis_server.locks[sid].locked())
+            return orig_require(name)
+        monkeypatch.setattr(jarvis_server, '_require_active_repo', spy)
+
+        async def fake_turn(body):
+            # Mid-turn the session lock is held, so the switch guard must report
+            # this session as a blocker.
+            blockers = await jarvis_server._sessions_blocking_switch()
+            assert any(s == sid for s, _ in blockers)
+            return 'ok'
+        monkeypatch.setattr(jarvis_server, '_run_turn', fake_turn)
+
+        r = client.post('/ask', json={'session_id': sid, 'text': 'hi'}, headers=self.H)
+        assert r.status_code == 200
+        # The outer check runs unlocked (fast fail); the authoritative re-check
+        # inside the session lock must be the last one and must see the lock held.
+        assert lock_states[-1] is True
+
 
 # --------------------------------------------------------------------------- navigator repository switching
 class TestNavigatorRepoSwitch:
@@ -262,7 +295,7 @@ class TestTypecheckGate:
             {'last_test_run': _good(worktree)}, str(worktree)) == []
 
     def test_missing_typecheck_blocks(self, ts_worktree):
-        assert 'No type check is recorded' in self._why(ts_worktree, None)
+        assert 'Type check has not been run' in self._why(ts_worktree, None)
 
     @pytest.mark.parametrize('over,needle', [
         ({'typecheck': 'failed'}, 'Type check failed'),

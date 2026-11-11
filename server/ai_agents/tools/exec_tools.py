@@ -1,6 +1,7 @@
 import hashlib
 import json
 import subprocess
+import sys
 import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -72,7 +73,7 @@ def verification_blockers(state, worktree, allow_cached=False):
     needs_tc = bool(worktree) and (Path(worktree) / 'tsconfig.json').is_file()
     if needs_tc:
         if not tc:
-            why.append('No type check is recorded for this patch. Run it before committing.')
+            why.append('Type check has not been run for this patch. Run it before committing.')
         else:
             if tc.get('typecheck') not in ('passed', 'failed'):
                 why.append('Type check has not passed for this patch (status: %s).' % tc.get('typecheck'))
@@ -139,7 +140,7 @@ def _jest(test_files, cwd):
 
 def _pytest(test_files, cwd):
     xml_path = Path(cwd) / '.jarvis_junit.xml'
-    cmd = ['python', '-m', 'pytest', '-q', f'--junitxml={xml_path}', *test_files]
+    cmd = [sys.executable, '-m', 'pytest', '-q', f'--junitxml={xml_path}', *test_files]
     code, out, err = _run(cmd, cwd)
     if not xml_path.is_file():
         return cmd, code, None, None, None, (out + err)[-2000:], []
