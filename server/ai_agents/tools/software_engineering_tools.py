@@ -275,6 +275,30 @@ def organize_imports(
         }
 
 
+@safe
+def record_task_targets(
+    confirmed_targets: Optional[List[str]] = None,
+    rejected_targets: Optional[List[Dict[str, str]]] = None,
+    tool_context: ToolContext = None
+) -> dict:
+    """Record which files the coding agent actually confirmed or rejected for
+    the active plan task. suggested_files in the task are only hints; call this
+    after inspecting the source so the task record reflects reality. Requires
+    an active_task in session state (set when the ask came via WORK ON IT)."""
+    state = getattr(tool_context, 'state', None) or {}
+    if not state.get('active_task_id') and not state.get('active_task'):
+        return {'status': 'error',
+                'error': 'No active plan task. record_task_targets only applies '
+                         'to asks sent with a task_id (WORK ON IT).'}
+    confirmed = [str(f) for f in (confirmed_targets or [])]
+    rejected = [{'file': str(r.get('file') or ''), 'reason': str(r.get('reason') or '')}
+                for r in (rejected_targets or []) if isinstance(r, dict)]
+    state['task_targets'] = {'confirmed_targets': confirmed,
+                             'rejected_targets': rejected}
+    return {'status': 'ok', 'confirmed_targets': confirmed,
+            'rejected_targets': rejected}
+
+
 # Terminal and Build Tools
 
 @safe

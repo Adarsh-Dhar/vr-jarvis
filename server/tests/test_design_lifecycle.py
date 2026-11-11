@@ -236,13 +236,19 @@ class TestPlanLifecycle:
         tid = cyclic_task['id']
         assert client.patch('/plan/%s/tasks/%s' % (sid, tid),
                             json={'status': 'running'}, headers=H).status_code == 409
+        # accept_cycles alone is not enough: a rationale is required
         assert client.patch('/plan/%s/tasks/%s' % (sid, tid),
-                            json={'status': 'running', 'accept_cycles': True}, headers=H).status_code == 200
+                            json={'status': 'running', 'accept_cycles': True}, headers=H).status_code == 400
+        assert client.patch('/plan/%s/tasks/%s' % (sid, tid),
+                            json={'status': 'running', 'accept_cycles': True,
+                                  'cycle_rationale': 'cycle is intentional for MVP'}, headers=H).status_code == 200
         # done still requires evidence even with the cycle accepted
         assert client.patch('/plan/%s/tasks/%s' % (sid, tid),
-                            json={'status': 'done', 'accept_cycles': True}, headers=H).status_code == 400
+                            json={'status': 'done', 'accept_cycles': True,
+                                  'cycle_rationale': 'cycle is intentional for MVP'}, headers=H).status_code == 400
         r = client.patch('/plan/%s/tasks/%s' % (sid, tid),
                          json={'status': 'done', 'accept_cycles': True,
+                               'cycle_rationale': 'cycle is intentional for MVP',
                                'evidence': 'manual review: cycle is intentional'}, headers=H)
         assert r.status_code == 200
 

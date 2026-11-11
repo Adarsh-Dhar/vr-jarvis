@@ -26,11 +26,11 @@ namespace JarvisVR
     void DesignPropose(string ideaText, Action<DesignProposeResponse> ok, Action<string> fail);
     void GetDesign(Action<DesignStateDto> ok, Action<string> fail);
     void DesignEdit(DesignEditOpDto[] ops, Action<DesignEditResponse> ok, Action<string> fail);
-    void DesignCompare(Action<CompareDto> ok, Action<string> fail);
+    void DesignCompare(Action<CompareDto> ok, Action<string> fail, Dictionary<string, string> overrideMatches = null);
     void DesignApprove(bool approved, Action<ArchitectureDto> ok, Action<string> fail);
     void PlanGenerate(Action<ImplementationPlanDto> ok, Action<string> fail);
     void PlanUpdateTask(string taskId, string status, Action<bool> ok, Action<string> fail,
-                        string evidence = null, bool acceptCycles = false);
+                        string evidence = null, bool acceptCycles = false, string cycleRationale = null);
   }
 
   /// <summary>Local, network-free backend with scripted answers for UI development. Uses the ids of JarvisGraphModel.Sample().</summary>
@@ -240,7 +240,16 @@ namespace JarvisVR
       return new ArchitectureDto
       {
         version = 3, revision = 1, status = "draft", approved_by = "", approved_version = 0, approved_revision = 0,
+        provenance = "heuristic", edited_by_user = false,
         open_questions = new[] { "Should export include archived accounts?" },
+        deferred_questions = new[]
+        {
+          new ResolvedQuestionDto { question = "Cache TTL for exports?", reason = "Deferred: needs load-test data", revision = 1 },
+        },
+        resolved_questions = new[]
+        {
+          new ResolvedQuestionDto { question = "Sync or async export?", answer = "Async streaming", revision = 1 },
+        },
         components = new[]
         {
           new ComponentDto { id = "c1", name = "Export API", responsibility = "Accept export requests and stream results", kind = "service" },
@@ -311,12 +320,51 @@ namespace JarvisVR
                 questionsChanged = true;
               }
               else if (qi < 0) { err = "open question not found: " + text; }
-              else if (op.op == "resolve_question") { questions.RemoveAt(qi); questionsChanged = true; }
+              else if (op.op == "resolve_question")
+              {
+                string qtext = questions[qi];
+                questions.RemoveAt(qi); questionsChanged = true;
+                var rl = new List<ResolvedQuestionDto>(_designArch.resolved_questions ?? new ResolvedQuestionDto[0]);
+                rl.Add(new ResolvedQuestionDto { question = qtext, answer = op.answer ?? "", revision = _designArch.revision + 1 });
+                _designArch.resolved_questions = rl.ToArray();
+              }
               else
               {
                 if (string.IsNullOrEmpty(op.new_question)) { err = "update_question requires new_question text"; break; }
                 questions[qi] = op.new_question; questionsChanged = true;
               }
+              break;
+            }
+            case "defer_question":
+            {
+              string dq = op.question ?? "";
+              int di = questions.FindIndex(q => q == dq || q.Equals(dq ?? "", StringComparison.OrdinalIgnoreCase));
+              if (di < 0 && !string.IsNullOrEmpty(dq))
+                di = questions.FindIndex(q => (q ?? "").IndexOf(dq, StringComparison.OrdinalIgnoreCase) >= 0);
+              if (di < 0) { err = "open question not found: " + dq; break; }
+              string reason = op.answer ?? op.label ?? "";
+              if (string.IsNullOrEmpty(reason)) { err = "defer_question requires a reason"; break; }
+              var dl = new List<ResolvedQuestionDto>(_designArch.deferred_questions ?? new ResolvedQuestionDto[0]);
+              dl.Add(new ResolvedQuestionDto { question = questions[di], reason = reason, revision = _designArch.revision + 1 });
+              _designArch.deferred_questions = dl.ToArray();
+              questions.RemoveAt(di); questionsChanged = true;
+              break;
+            }
+            case "reopen_question":
+            {
+              string rq = op.question ?? "";
+              var defs = new List<ResolvedQuestionDto>(_designArch.deferred_questions ?? new ResolvedQuestionDto[0]);
+              var ress = new List<ResolvedQuestionDto>(_designArch.resolved_questions ?? new ResolvedQuestionDto[0]);
+              ResolvedQuestionDto hit = defs.Find(e => (e.question ?? "") == rq)
+                ?? ress.Find(e => (e.question ?? "") == rq)
+                ?? defs.Find(e => !string.IsNullOrEmpty(rq) && (e.question ?? "").IndexOf(rq, StringComparison.OrdinalIgnoreCase) >= 0)
+                ?? ress.Find(e => !string.IsNullOrEmpty(rq) && (e.question ?? "").IndexOf(rq, StringComparison.OrdinalIgnoreCase) >= 0);
+              if (hit == null) { err = "no deferred or resolved question matches: " + rq; break; }
+              defs.Remove(hit); ress.Remove(hit);
+              _designArch.deferred_questions = defs.ToArray();
+              _designArch.resolved_questions = ress.ToArray();
+              if (!string.IsNullOrEmpty(hit.question) && !questions.Contains(hit.question)) questions.Add(hit.question);
+              questionsChanged = true;
               break;
             }
             case "add_component":
@@ -369,15 +417,65 @@ namespace JarvisVR
       }));
     }
 
-    public void DesignCompare(Action<CompareDto> ok, Action<string> fail)
+    public void DesignCompare(Action<CompareDto> ok, Action<string> fail, Dictionary<string, string> overrideMatches = null)
     {
-      StartCoroutine(After(0.2f, () => ok(new CompareDto
+      StartCoroutine(After(0.2f, () =>
       {
-        status = "ok",
-        matched = new[] { new CompareItemDto { id = "c1", name = "Export API", node = "route.export", evidence = "routes/export.ts" } },
-        missing = new[] { new CompareItemDto { id = "c2", name = "Query Builder", node = "", evidence = "no graph node matches" } },
-        extra = new CompareItemDto[0],
-      })));
+        var matched = new List<CompareItemDto>();
+        var missing = new List<CompareItemDto>();
+        var ambiguous = new List<CompareItemDto>();
+        var c2cands = new[]
+        {
+          new CompareCandidateDto { node = "route.query", score = 0.71f },
+          new CompareCandidateDto { node = "service.query", score = 0.68f },
+        };
+        matched.Add(new CompareItemDto
+        {
+          id = "c1", name = "Export API", node = "route.export", score = 0.92f,
+          confidence = "high", ambiguous = false, evidence = "routes/export.ts (name match)",
+          candidates = new[] { new CompareCandidateDto { node = "route.export", score = 0.92f } },
+        });
+        string ov = null;
+        if (overrideMatches != null) overrideMatches.TryGetValue("c2", out ov);
+        if (!string.IsNullOrEmpty(ov))
+        {
+          matched.Add(new CompareItemDto
+          {
+            id = "c2", name = "Query Builder", node = ov, score = 1f,
+            confidence = "high", ambiguous = false, evidence = ov + " (developer override)",
+            candidates = c2cands,
+          });
+        }
+        else
+        {
+          ambiguous.Add(new CompareItemDto
+          {
+            id = "c2", name = "Query Builder", node = "", score = 0f,
+            confidence = "low", ambiguous = true,
+            evidence = "top candidates are too close to auto-assign; resolve with override_matches",
+            candidates = c2cands,
+          });
+        }
+        missing.Add(new CompareItemDto
+        {
+          id = "c3", name = "CSV Writer", node = "", score = 0f, confidence = "none",
+          ambiguous = false, evidence = "no unclaimed graph node matches", candidates = new CompareCandidateDto[0],
+        });
+        ok(new CompareDto
+        {
+          status = "ok", repo = "demo-repo (mock)", design_revision = _designArch != null ? _designArch.revision : 0, stale = false,
+          matched = matched.ToArray(), missing = missing.ToArray(), ambiguous = ambiguous.ToArray(),
+          extra = new[]
+          {
+            new CompareItemDto { id = "auth.owner", name = "checkOwner", node = "auth.owner", evidence = "auth/owner.ts" },
+          },
+          relationships = new[]
+          {
+            new CompareRelDto { id = "e1", src = "c1", dst = "c2", kind = "calls", status = "confirmed", evidence = "route.export -> route.query (calls, confirmed)" },
+            new CompareRelDto { id = "e2", src = "c2", dst = "c3", kind = "calls", status = "wrong_direction", evidence = "c3 -> c2 edge exists; direction is reversed relative to the proposal" },
+          },
+        });
+      }));
     }
 
     public void DesignApprove(bool approved, Action<ArchitectureDto> ok, Action<string> fail)
@@ -416,7 +514,7 @@ namespace JarvisVR
     }
 
     public void PlanUpdateTask(string taskId, string status, Action<bool> ok, Action<string> fail,
-                               string evidence = null, bool acceptCycles = false)
+                               string evidence = null, bool acceptCycles = false, string cycleRationale = null)
     {
       StartCoroutine(After(0.05f, () =>
       {
@@ -435,13 +533,14 @@ namespace JarvisVR
               if (t.depends_on != null && System.Array.Exists(t.depends_on, x => !done.Contains(x)))
               { fail("Task is blocked by unfinished dependencies."); return; }
               if ((_designPlan.circular != null && System.Array.IndexOf(_designPlan.circular, t.component_id) >= 0)
-                  && !acceptCycles)
-              { fail("Task is part of a circular dependency; resubmit with accept_cycles=true."); return; }
+                  && (!acceptCycles || string.IsNullOrEmpty(cycleRationale)))
+              { fail("Task is part of a circular dependency; resubmit with accept_cycles=true and a cycle_rationale."); return; }
             }
             if (norm == "done" && t.status != "done" && string.IsNullOrEmpty(evidence))
             { fail("Marking a task done requires evidence."); return; }
             t.status = norm;
             if (norm == "done" && !string.IsNullOrEmpty(evidence)) t.evidence = evidence;
+            if (acceptCycles && !string.IsNullOrEmpty(cycleRationale)) { t.cycle_accepted = true; t.cycle_rationale = cycleRationale; }
             ok(true); return;
           }
         fail("Task not found.");

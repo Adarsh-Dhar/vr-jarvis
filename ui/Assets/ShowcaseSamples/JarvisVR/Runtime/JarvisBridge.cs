@@ -29,10 +29,34 @@ namespace JarvisVR
   [Serializable] public class AskResponse
   {
     public string reply, error, pending_approval, test_results, test_source;
-    public bool approved;
+    public bool approved, duplicate;
     public List<SceneCommand> scene_commands;
     public string[] evidence;
     public string[] unverified_evidence;
+    public string[] tool_errors;
+    public string task_id, proposal_status;
+    public EvidenceItemDto[] evidence_items;
+    public ActiveTaskDto active_task;
+    public TestRunDto test_run;
+  }
+  [Serializable] public class EvidenceItemDto
+  {
+    public string node_id, file, kind;
+    public int first_line, last_line;
+  }
+  [Serializable] public class ActiveTaskDto
+  {
+    public string id, title, description, component_id, repo, repo_match;
+    public string[] files, acceptance_criteria, depends_on, symbols_flat;
+    public int design_revision;
+    public bool needs_investigation;
+  }
+  [Serializable] public class TestRunDto
+  {
+    public string status, source, runner, command, error;
+    public int exit_code;
+    public float duration_s;
+    public string[] passed, failed_ids, skipped, checks_not_run;
   }
   [Serializable] public class ProgressStep { public int i; public string agent, kind; }
   [Serializable] public class ProgressDto { public bool busy; public List<ProgressStep> steps; }
@@ -41,12 +65,31 @@ namespace JarvisVR
   [Serializable] public class SourceResponse { public string status, id, file, source, error; public int first_line; }
   [Serializable] public class ApproveResponse { public bool ok; public string branch, commit, detail; }
   [Serializable] public class PromoteResponse { public bool ok, graph_refreshed; public string commit, detail; public int nodes, edges; }
-  [Serializable] internal class PromoteRequest { public string session_id; }
+  [Serializable] internal class PromoteRequest { public string session_id, repo; }
+  [Serializable] public class SymbolDto { public string id, name, file; }
+  [Serializable] public class EvidenceCheckItemDto { public string claim, status, detail; }
+  [Serializable] public class EvidenceCheckDto { public string verdict; public EvidenceCheckItemDto[] checks; }
   [Serializable] public class TaskDto
   {
     public string id, title, status;
     public string[] depends_on;
     public string component_id, acceptance, owner, evidence;
+    public string[] files, acceptance_criteria, suggested_files, confirmed_targets;
+    public RejectedTargetDto[] rejected_targets;
+    public SymbolDto[] symbols;
+    public string repo_match, description;
+    public EvidenceCheckDto evidence_check;
+    public int design_revision;
+    public bool cycle_accepted, needs_investigation, modifies_existing;
+    public string cycle_rationale;
+    public string[] new_files;
+  }
+  [Serializable] public class RejectedTargetDto { public string file, reason; }
+  [Serializable] public class TaskCompletionDto
+  {
+    public string branch, commit, typecheck, diff_hash;
+    public int design_revision;
+    public TestRunDto test_run;
   }
 
   // ---- architecture design workflow (server /design and /plan endpoints)
@@ -60,30 +103,42 @@ namespace JarvisVR
     public string[] requirement_ids;
   }
   [Serializable] public class RelationshipDto { public string id, src, dst, kind, label; }
-  [Serializable] public class ResolvedQuestionDto { public string question, answer; public int revision; }
+  [Serializable] public class ResolvedQuestionDto { public string question, answer, reason; public int revision; }
   [Serializable] public class ArchitectureDto
   {
     public int version, revision, approved_version, approved_revision;
-    public string status, approved_by;
+    public string status, approved_by, provenance;
+    public bool edited_by_user;
     public ComponentDto[] components;
     public RelationshipDto[] relationships;
-    public string[] open_questions;
-    public ResolvedQuestionDto[] resolved_questions;
+    public string[] open_questions, deferred_questions_flat;
+    public ResolvedQuestionDto[] resolved_questions, deferred_questions;
   }
-  [Serializable] public class CompareItemDto { public string id, name, node, evidence; }
+  [Serializable] public class CompareCandidateDto { public string node; public float score; }
+  [Serializable] public class CompareItemDto
+  {
+    public string id, name, node, evidence;
+    public float score;
+    public string confidence;
+    public bool ambiguous;
+    public CompareCandidateDto[] candidates;
+  }
   [Serializable] public class CompareRelDto { public string id, src, dst, kind, status, evidence; }
   [Serializable] public class CompareDto
   {
-    public string status;
-    public CompareItemDto[] matched, missing, extra;
+    public string status, repo;
+    public int design_revision;
+    public bool stale;
+    public CompareItemDto[] matched, missing, ambiguous, extra;
     public CompareRelDto[] relationships;
   }
   [Serializable] public class ImplementationPlanDto
   {
     public int architecture_version, architecture_revision;
-    public string status;
+    public string status, repo;
     public TaskDto[] tasks;
-    public string[] circular;   // component ids whose dependencies form a cycle
+    public string[] circular;        // component ids whose dependencies form a cycle
+    public string[] cycle_paths;     // ordered paths like "c3>c5>c3"
   }
   [Serializable] public class DesignStateDto
   {
@@ -109,12 +164,12 @@ namespace JarvisVR
   [Serializable] internal class DesignEditRequest { public string session_id; public DesignEditOpDto[] ops; }
   [Serializable] internal class DesignApproveRequest { public string session_id; public bool approved; public string approved_by; }
   [Serializable] internal class PlanSessionRequest { public string session_id; }
-  [Serializable] internal class PlanTaskPatchRequest { public string status, title, evidence; public bool accept_cycles; }
+  [Serializable] internal class PlanTaskPatchRequest { public string status, title, evidence, cycle_rationale, request_id; public bool accept_cycles; }
   [Serializable] public class AgentResultDto { public string agent, summary, status; public float confidence; }
   [Serializable] public class TaskResponse { public bool busy; public string plan_summary; public TaskDto[] tasks; public string[] circular; public AgentResultDto[] agent_results; public string[] findings; }
   [Serializable] internal class SessionResponse { public string session_id; }
-  [Serializable] internal class AskRequest { public string session_id, text, selection, repo, task_id; }
-  [Serializable] internal class ApproveRequest { public string session_id; public bool approved; public string repo; }
+  [Serializable] internal class AskRequest { public string session_id, text, selection, repo, task_id, request_id; }
+  [Serializable] internal class ApproveRequest { public string session_id; public bool approved; public string repo, request_id; }
 
   // Field names match ai_agents/data/graph.json and the server's /health JSON.
   // Call-graph fields (callsite_id, resolution, confidence, ...) are optional:
@@ -180,6 +235,8 @@ namespace JarvisVR
     public int TimeoutSeconds = 180;   // keep above JARVIS_ASK_TIMEOUT (170) on the server
 
     private string _session;
+    private int _reqSeq;
+    private string NewRequestId() => "u" + (++_reqSeq) + "-" + DateTime.UtcNow.Ticks.ToString("x");
     /// <summary>Active repository name, kept in sync from /repos and /repos/select. Sent with ask/approve so the
     /// server can reject calls made against a stale repository (409).</summary>
     public string ActiveRepo = "";
@@ -295,7 +352,7 @@ namespace JarvisVR
       yield return EnsureSession(e => { failed = true; fail(e); });
       if (!failed)
       {
-        string json = JsonUtility.ToJson(new AskRequest { session_id = _session, text = text, selection = selection ?? "", repo = ActiveRepo, task_id = taskId ?? "" });
+        string json = JsonUtility.ToJson(new AskRequest { session_id = _session, text = text, selection = selection ?? "", repo = ActiveRepo, task_id = taskId ?? "", request_id = NewRequestId() });
         yield return Send("POST", "/ask", json, b =>
         {
           try { ok(JsonUtility.FromJson<AskResponse>(b)); }
@@ -308,7 +365,7 @@ namespace JarvisVR
     private IEnumerator ApproveRoutine(bool approved, Action<ApproveResponse> ok, Action<string> fail)
     {
       if (string.IsNullOrEmpty(_session)) { fail("No active session."); yield break; }
-      string json = JsonUtility.ToJson(new ApproveRequest { session_id = _session, approved = approved, repo = ActiveRepo });
+      string json = JsonUtility.ToJson(new ApproveRequest { session_id = _session, approved = approved, repo = ActiveRepo, request_id = NewRequestId() });
       yield return Send("POST", "/approve", json, b => ok(JsonUtility.FromJson<ApproveResponse>(b)), fail);
     }
 
@@ -319,7 +376,7 @@ namespace JarvisVR
       bool failed = false;
       yield return EnsureSession(e => { failed = true; fail(e); });
       if (failed) yield break;
-      string json = JsonUtility.ToJson(new PromoteRequest { session_id = _session });
+      string json = JsonUtility.ToJson(new PromoteRequest { session_id = _session, repo = ActiveRepo });
       yield return Send("POST", "/promote", json, b => ok(JsonUtility.FromJson<PromoteResponse>(b)), fail);
     }
 
@@ -366,15 +423,32 @@ namespace JarvisVR
       yield return Send("POST", "/design/" + _session + "/edit", json, b => ok(JsonUtility.FromJson<DesignEditResponse>(b)), fail);
     }
 
-    public void DesignCompare(Action<CompareDto> ok, Action<string> fail) =>
-      StartCoroutine(DesignCompareRoutine(ok, fail));
+    public void DesignCompare(Action<CompareDto> ok, Action<string> fail, Dictionary<string, string> overrideMatches = null) =>
+      StartCoroutine(DesignCompareRoutine(ok, fail, overrideMatches));
 
-    private IEnumerator DesignCompareRoutine(Action<CompareDto> ok, Action<string> fail)
+    private IEnumerator DesignCompareRoutine(Action<CompareDto> ok, Action<string> fail, Dictionary<string, string> overrideMatches)
     {
       bool failed = false;
       yield return EnsureSession(e => { failed = true; fail(e); });
       if (failed) yield break;
-      yield return Send("POST", "/design/" + _session + "/compare", "{}", b => ok(JsonUtility.FromJson<CompareDto>(b)), fail);
+      // override_matches is a bare JSON object {component_id: node_id}; repo picks the graph to compare against.
+      string url = "/design/" + _session + "/compare";
+      if (!string.IsNullOrEmpty(ActiveRepo)) url += "?repo=" + UnityWebRequest.EscapeURL(ActiveRepo);
+      yield return Send("POST", url, OverridesJson(overrideMatches), b => ok(JsonUtility.FromJson<CompareDto>(b)), fail);
+    }
+
+    private static string OverridesJson(Dictionary<string, string> m)
+    {
+      if (m == null || m.Count == 0) return "{}";
+      var sb = new StringBuilder("{");
+      bool first = true;
+      foreach (KeyValuePair<string, string> kv in m)
+      {
+        if (!first) sb.Append(',');
+        first = false;
+        sb.Append(JsonUtility.ToJson(kv.Key)).Append(':').Append(JsonUtility.ToJson(kv.Value ?? ""));
+      }
+      return sb.Append('}').ToString();
     }
 
     public void DesignApprove(bool approved, Action<ArchitectureDto> ok, Action<string> fail) =>
@@ -403,17 +477,18 @@ namespace JarvisVR
     }
 
     public void PlanUpdateTask(string taskId, string status, Action<bool> ok, Action<string> fail,
-                               string evidence = null, bool acceptCycles = false)
+                               string evidence = null, bool acceptCycles = false, string cycleRationale = null)
     {
       if (string.IsNullOrEmpty(_session)) { fail("No active session."); return; }
-      StartCoroutine(PlanUpdateRoutine(taskId, status, evidence, acceptCycles, ok, fail));
+      StartCoroutine(PlanUpdateRoutine(taskId, status, evidence, acceptCycles, cycleRationale, ok, fail));
     }
 
     private IEnumerator PlanUpdateRoutine(string taskId, string status, string evidence, bool acceptCycles,
-                                          Action<bool> ok, Action<string> fail)
+                                          string cycleRationale, Action<bool> ok, Action<string> fail)
     {
       string json = JsonUtility.ToJson(new PlanTaskPatchRequest
-        { status = status, title = null, evidence = evidence, accept_cycles = acceptCycles });
+        { status = status, title = null, evidence = evidence, accept_cycles = acceptCycles,
+          cycle_rationale = cycleRationale ?? "", request_id = NewRequestId() });
       yield return Send("PATCH", "/plan/" + _session + "/tasks/" + UnityWebRequest.EscapeURL(taskId), json,
         b => ok(true), fail);
     }

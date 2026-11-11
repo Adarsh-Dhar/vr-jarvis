@@ -86,6 +86,8 @@ def create_worktree(tool_context: ToolContext, branch_name: str = 'jarvis/fix') 
     if nm.is_dir() and not (path / 'node_modules').exists():
         (path / 'node_modules').symlink_to(nm, target_is_directory=True)
     tool_context.state['worktree'] = str(path)
+    tool_context.state['last_test_run'] = {}
+    tool_context.state['last_typecheck'] = {}
     return {'status': 'ok', 'worktree': str(path)}
 
 
@@ -103,7 +105,12 @@ def apply_patch_to_worktree(diff: str, tool_context: ToolContext) -> dict:
                           input=diff, cwd=wt, capture_output=True, text=True)
     if proc.returncode != 0:
         return {'status': 'error', 'stderr': proc.stderr[-1500:]}
-    return {'status': 'ok', 'applied': True}
+    # The patch changed: earlier test/typecheck results no longer describe it.
+    tool_context.state['last_test_run'] = {}
+    tool_context.state['last_typecheck'] = {}
+    tool_context.state['last_patch_task_id'] = str(tool_context.state.get('active_task_id') or '')
+    return {'status': 'ok', 'applied': True,
+            'task_id': tool_context.state.get('active_task_id') or ''}
 
 
 @safe

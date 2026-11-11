@@ -16,6 +16,14 @@ Context:
 - Sandbox worktree: {worktree}
 - Change request: {change_request}
 - Impact analysis: {impact_context}
+- Active plan task (may be empty): {active_task}
+
+When active_task is present it is the authoritative task record: read the
+files and symbols it lists, but treat them as suggestions — inspect the
+source before editing. After inspecting, call record_task_targets with the
+files you will actually modify (confirmed_targets) and any suggested files
+you rejected (rejected_targets, each with a reason). Refuse to edit files
+outside the confirmed set without saying why in your reply.
 
 Process:
 1. Create or use existing worktree

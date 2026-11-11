@@ -166,8 +166,8 @@ class TestCompareToRepository:
         assert rels['e1']['status'] == 'confirmed'
         # reads maps to imports: the module-level imports edge confirms it.
         assert rels['e2']['status'] == 'confirmed'
-        # auth -> services has no edge in that direction: missing.
-        assert rels['e3']['status'] == 'missing'
+        # auth -> services only exists in the reverse direction: wrong_direction.
+        assert rels['e3']['status'] == 'wrong_direction'
 
     def test_type_mismatch_reported_not_confirmed(self, tmp_path):
         gp = _write_graph(tmp_path,
@@ -182,7 +182,7 @@ class TestCompareToRepository:
         res = at.compare_to_repository(arch, graph_path=gp)
         rel = res['relationships'][0]
         # connectivity exists but an imports edge cannot confirm 'calls'.
-        assert rel['status'] == 'possible'
+        assert rel['status'] == 'wrong_type'
         assert 'does not match' in rel['evidence']
 
     def test_unmatched_endpoint(self, tmp_path):

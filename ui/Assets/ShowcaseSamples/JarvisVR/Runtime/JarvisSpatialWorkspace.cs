@@ -104,7 +104,16 @@ namespace JarvisVR
     private int _taskSel, _questionSel = -1;
     private string[] _planCircular;
     private readonly HashSet<string> _cycleAccepted = new HashSet<string>();   // tasks whose circular dep the user explicitly accepted
-    private JarvisSpatialButton _qPrevBtn, _qNextBtn, _qResolveBtn, _qEditBtn;
+    private readonly Dictionary<string, string> _cycleReasons = new Dictionary<string, string>();
+    private string _cycleStatus, _cycleEvidence;
+    private string _lastTaskError;
+    private TestRunDto _lastTestRun;
+    private JarvisSpatialButton _qPrevBtn, _qNextBtn, _qSecBtn, _qResolveBtn, _qEditBtn, _qDeferBtn, _qReopenBtn;
+    private JarvisSpatialButton _cmpAmbPrev, _cmpAmbNext, _cmpCandPrev, _cmpCandNext, _cmpAssignBtn;
+    private readonly Dictionary<string, string> _compareOverrides = new Dictionary<string, string>();   // component_id -> node_id, resent with every compare
+    private int _cmpAmbSel = -1, _cmpCandSel;
+    private int _qSection;   // 0 = open, 1 = deferred, 2 = resolved
+    private static readonly string[] QuestionSections = { "OPEN", "DEFERRED", "RESOLVED" };
     private JarvisSpatialButton _taskPrevBtn, _taskNextBtn, _taskStartBtn, _taskDoneBtn, _taskWorkBtn;
 
     public void Initialize(Camera cam)
@@ -284,14 +293,22 @@ namespace JarvisVR
       _impactPanel.SetBody("No impact analysis yet. Select a function and ask about change impact.");
 
       _designReqPanel = AddPanel("design_req", "Requirements", 440, 520, -1.12f, 0.20f, pal.Violet);
-      _designReqPanel.SetBodyBox(60, 400); _designReqPanel.Body.fontSize = 18;
-      _qPrevBtn = _designReqPanel.AddButton("Q <", 20, 468, 95, 44, () => CycleQuestion(-1), 0f, pal.Violet);
-      _qNextBtn = _designReqPanel.AddButton("Q >", 121, 468, 95, 44, () => CycleQuestion(+1), 0f, pal.Violet);
-      _qResolveBtn = _designReqPanel.AddButton("RESOLVE", 222, 468, 95, 44, ResolveQuestion, 0f, pal.Green);
-      _qEditBtn = _designReqPanel.AddButton("EDIT Q", 323, 468, 97, 44, EditQuestion, 0f, pal.Amber);
+      _designReqPanel.SetBodyBox(56, 350); _designReqPanel.Body.fontSize = 17;
+      _qPrevBtn = _designReqPanel.AddButton("Q <", 14, 414, 64, 40, () => CycleQuestion(-1), 0f, pal.Violet);
+      _qNextBtn = _designReqPanel.AddButton("Q >", 82, 414, 64, 40, () => CycleQuestion(+1), 0f, pal.Violet);
+      _qSecBtn = _designReqPanel.AddButton("SEC: OPEN", 150, 414, 140, 40, CycleQuestionSection, 0f, pal.Violet);
+      _qResolveBtn = _designReqPanel.AddButton("RESOLVE", 14, 462, 100, 44, ResolveQuestion, 0f, pal.Green);
+      _qEditBtn = _designReqPanel.AddButton("EDIT Q", 118, 462, 100, 44, EditQuestion, 0f, pal.Amber);
+      _qDeferBtn = _designReqPanel.AddButton("DEFER", 222, 462, 96, 44, DeferQuestion, 0f, pal.Amber);
+      _qReopenBtn = _designReqPanel.AddButton("REOPEN", 322, 462, 96, 44, ReopenQuestion, 0f, pal.Cyan);
 
       _designCmpPanel = AddPanel("design_cmp", "Component", 560, 330, 1.18f, 0.20f, pal.Violet);
-      _designCmpPanel.SetBodyBox(60, 200); _designCmpPanel.Body.fontSize = 20;
+      _designCmpPanel.SetBodyBox(44, 232); _designCmpPanel.Body.fontSize = 16;
+      _cmpAmbPrev = _designCmpPanel.AddButton("AMB <", 14, 283, 80, 40, () => CycleAmbiguous(-1), 0f, pal.Violet);
+      _cmpAmbNext = _designCmpPanel.AddButton("AMB >", 100, 283, 80, 40, () => CycleAmbiguous(+1), 0f, pal.Violet);
+      _cmpCandPrev = _designCmpPanel.AddButton("CAND <", 186, 283, 90, 40, () => CycleCandidate(-1), 0f, pal.Cyan);
+      _cmpCandNext = _designCmpPanel.AddButton("CAND >", 282, 283, 90, 40, () => CycleCandidate(+1), 0f, pal.Cyan);
+      _cmpAssignBtn = _designCmpPanel.AddButton("ASSIGN", 380, 283, 166, 40, AssignAmbiguousMatch, 0f, pal.Green);
 
       _designActPanel = AddPanel("design_act", "Architecture", 560, 330, 1.18f, -0.46f, pal.Cyan);
       _designActPanel.SetBodyBox(60, 120); _designActPanel.Body.fontSize = 20;
@@ -934,6 +951,9 @@ namespace JarvisVR
         }
         _design = new DesignStateDto { requirements = r.requirements, architecture = r.architecture };
         _compareStatus.Clear();
+        _compareOverrides.Clear();
+        _cmpAmbSel = -1; _cmpCandSel = 0;
+        _qSection = 0; _questionSel = -1;
         _cycleAccepted.Clear();
         RenderDesignGraph();
         DesignCompare();   // colour components against the repository immediately
@@ -981,7 +1001,9 @@ namespace JarvisVR
         if (!IsDesignNode(n.Dto.id)) continue;
         string cid = n.Dto.id.Substring(2);
         if (_compareStatus.TryGetValue(cid, out string st))
-          n.Base = st == "matched" ? JarvisPalette.Current.Green : st == "missing" ? JarvisPalette.Current.Amber : n.Base;
+          n.Base = st == "matched" ? JarvisPalette.Current.Green
+          : st == "missing" ? JarvisPalette.Current.Amber
+          : st == "ambiguous" ? JarvisPalette.Current.Cyan : n.Base;
       }
       RefreshStyles();
     }
@@ -996,12 +1018,17 @@ namespace JarvisVR
         _compareStatus.Clear();
         if (c.matched != null) foreach (CompareItemDto m in c.matched) _compareStatus[m.id] = "matched";
         if (c.missing != null) foreach (CompareItemDto m in c.missing) _compareStatus[m.id] = "missing";
+        if (c.ambiguous != null) foreach (CompareItemDto m in c.ambiguous) _compareStatus[m.id] = "ambiguous";
         RenderDesignGraph();
         RefreshDesignCmp();
+        int nAmb = c.ambiguous != null ? c.ambiguous.Length : 0;
         Say("Compare: " + (c.matched != null ? c.matched.Length : 0) + " matched, "
           + (c.missing != null ? c.missing.Length : 0) + " missing, "
-          + (c.extra != null ? c.extra.Length : 0) + " extra in repo.");
-      }, err => Say("Compare failed: " + err));
+          + (c.extra != null ? c.extra.Length : 0) + " extra in repo"
+          + (nAmb > 0 ? ", " + nAmb + " ambiguous (ASSIGN in the Component panel)" : "")
+          + (c.stale ? " — STALE, design changed since this comparison" : "") + ".");
+      }, err => Say("Compare failed: " + err),
+      _compareOverrides.Count > 0 ? _compareOverrides : null);
     }
 
     private void DesignApprove(bool approved)
@@ -1031,7 +1058,7 @@ namespace JarvisVR
       }, err => Say(err));
     }
 
-    // ---- open questions (they block approval until resolved) ----
+    // ---- design questions: open (block approval), deferred and resolved lists ----
 
     private string[] DesignQuestions()
     {
@@ -1040,24 +1067,63 @@ namespace JarvisVR
       return _design?.requirements?.open_questions;
     }
 
+    private ResolvedQuestionDto[] SectionEntries()
+    {
+      if (_design?.architecture == null) return null;
+      return _qSection == 1 ? _design.architecture.deferred_questions
+           : _qSection == 2 ? _design.architecture.resolved_questions
+           : null;
+    }
+
+    private int SectionCount()
+    {
+      if (_qSection == 0) { string[] q = DesignQuestions(); return q != null ? q.Length : 0; }
+      ResolvedQuestionDto[] e = SectionEntries();
+      return e != null ? e.Length : 0;
+    }
+
+    private bool AnyQuestions()
+    {
+      string[] open = DesignQuestions();
+      ArchitectureDto a = _design?.architecture;
+      return (open != null && open.Length > 0)
+        || (a != null && ((a.deferred_questions != null && a.deferred_questions.Length > 0)
+                          || (a.resolved_questions != null && a.resolved_questions.Length > 0)));
+    }
+
     private string SelectedQuestion()
     {
-      string[] qs = DesignQuestions();
-      if (qs == null || qs.Length == 0) return null;
-      _questionSel = Mathf.Clamp(_questionSel < 0 ? 0 : _questionSel, 0, qs.Length - 1);
-      return qs[_questionSel];
+      if (_qSection == 0)
+      {
+        string[] qs = DesignQuestions();
+        if (qs == null || qs.Length == 0) return null;
+        _questionSel = Mathf.Clamp(_questionSel < 0 ? 0 : _questionSel, 0, qs.Length - 1);
+        return qs[_questionSel];
+      }
+      ResolvedQuestionDto[] es = SectionEntries();
+      if (es == null || es.Length == 0) return null;
+      _questionSel = Mathf.Clamp(_questionSel < 0 ? 0 : _questionSel, 0, es.Length - 1);
+      return es[_questionSel].question;
     }
 
     private void CycleQuestion(int d)
     {
-      string[] qs = DesignQuestions();
-      if (qs == null || qs.Length == 0) { Say("No open questions."); return; }
-      _questionSel = (_questionSel + d + qs.Length) % qs.Length;
+      int n = SectionCount();
+      if (n == 0) { Say("No " + QuestionSections[_qSection].ToLowerInvariant() + " questions."); return; }
+      _questionSel = (_questionSel + d + n) % n;
+      RefreshDesignReq();
+    }
+
+    private void CycleQuestionSection()
+    {
+      _qSection = (_qSection + 1) % QuestionSections.Length;
+      _questionSel = -1;
       RefreshDesignReq();
     }
 
     private void ResolveQuestion()
     {
+      if (_qSection != 0) { Say("Only open questions can be resolved."); return; }
       string q = SelectedQuestion();
       if (q == null) { Say("No open questions to resolve."); return; }
       _questionSel = -1;
@@ -1068,10 +1134,31 @@ namespace JarvisVR
 
     private void EditQuestion()
     {
+      if (_qSection != 0) { Say("Only open questions can be edited."); return; }
       string q = SelectedQuestion();
       if (q == null) { Say("No open questions to edit."); return; }
       _kbOp = "update_question"; _kbOpId = q;
       OpenKeyboard();
+    }
+
+    private void DeferQuestion()
+    {
+      if (_qSection != 0) { Say("Only open questions can be deferred."); return; }
+      string q = SelectedQuestion();
+      if (q == null) { Say("No open questions to defer."); return; }
+      _questionSel = -1;
+      // The server requires a reason; the typed text becomes defer_question's answer field.
+      _kbOp = "defer_question"; _kbOpId = q;
+      OpenKeyboard();
+    }
+
+    private void ReopenQuestion()
+    {
+      string q = SelectedQuestion();
+      if (q == null || (_qSection != 1 && _qSection != 2))
+      { Say("Select a deferred or resolved question (SEC button) to reopen it."); return; }
+      _questionSel = -1;
+      SendDesignEdit(new[] { new DesignEditOpDto { op = "reopen_question", question = q } }, "Reopened question");
     }
 
     // ---- implementation plan tasks (lifecycle + hand-off to the coding workflow) ----
@@ -1118,23 +1205,27 @@ namespace JarvisVR
       PatchTask(t, status, null);
     }
 
-    /// <summary>PATCH a task status, gating circular-dependency tasks behind an
-    /// explicit second confirmation (the server requires accept_cycles).</summary>
+    /// <summary>PATCH a task status. Circular-dependency tasks require a typed
+    /// rationale (the server stores it as cycle_rationale) before they run.</summary>
     private void PatchTask(TaskDto t, string status, string evidence)
     {
       bool accept = _cycleAccepted.Contains(t.id);
       if (!accept && IsCyclicTask(t) && (status == "running" || status == "done"))
       {
-        _cycleAccepted.Add(t.id);
-        Say("Task " + t.id + " is in a circular dependency. Press again to accept the cycle and proceed, or fix the architecture first.");
+        _cycleStatus = status; _cycleEvidence = evidence;
+        _kbOp = "cycle_accept"; _kbOpId = t.id;
+        OpenKeyboard();
+        Say("Task " + t.id + " is in a circular dependency. Type a rationale to accept the cycle, or fix the architecture first.");
         return;
       }
+      string rationale = _cycleReasons.TryGetValue(t.id, out string rr) ? rr : null;
       _bridge.PlanUpdateTask(t.id, status, ok =>
       {
+        _lastTaskError = null;
         if (!ok) { Say("Task update rejected."); return; }
         RefreshTasks();
         Say("Task " + t.id + " -> " + status + ".");
-      }, err => Say(err), evidence, accept);
+      }, err => { _lastTaskError = err; Say(err); }, evidence, accept, rationale);
     }
 
     private bool IsCyclicTask(TaskDto t)
@@ -1159,20 +1250,26 @@ namespace JarvisVR
         "run the relevant tests, and propose the patch for my approval.";
       // Only start coding after the server confirms the task may run
       // (dependency rules are enforced there); a rejection must not launch the agent.
-      Action start = () => AskAgent(prompt, t.id);
+      Action start = () => AskAgent("Implement this approved architecture task (task_id " + t.id + "). " + prompt, t.id);
       if (t.status != "running")
       {
         if (!IsCyclicTask(t) || _cycleAccepted.Contains(t.id))
+        {
+          string rationale = _cycleReasons.TryGetValue(t.id, out string wr) ? wr : null;
           _bridge.PlanUpdateTask(t.id, "running", ok =>
           {
+            _lastTaskError = null;
             if (!ok) { Say("Task " + t.id + " could not be started."); return; }
             RefreshTasks();
             start();
-          }, err => Say(err), null, _cycleAccepted.Contains(t.id));
+          }, err => { _lastTaskError = err; Say(err); }, null, _cycleAccepted.Contains(t.id), rationale);
+        }
         else
         {
-          _cycleAccepted.Add(t.id);
-          Say("Task " + t.id + " is in a circular dependency. Press WORK ON IT again to accept the cycle and proceed, or fix the architecture first.");
+          _cycleStatus = "running"; _cycleEvidence = null;
+          _kbOp = "cycle_accept"; _kbOpId = t.id;
+          OpenKeyboard();
+          Say("Task " + t.id + " is in a circular dependency. Type a rationale to accept the cycle and proceed, or fix the architecture first.");
         }
       }
       else start();
@@ -1189,6 +1286,8 @@ namespace JarvisVR
         // and plan rows don't linger, then recompute the comparison.
         if (_design != null) { _design.compare = null; _design.plan = null; }
         _compareStatus.Clear();
+        _compareOverrides.Clear();   // overrides were computed against the old revision
+        _cmpAmbSel = -1; _cmpCandSel = 0;
         _tasks = null;
         _planCircular = null;
         _cycleAccepted.Clear();
@@ -1211,6 +1310,27 @@ namespace JarvisVR
         if (dt == null) { Say("That task no longer exists."); return; }
         if (string.IsNullOrEmpty(text)) { Say("Completion needs evidence (tests run, commit). Nothing recorded."); return; }
         PatchTask(dt, "done", text);
+        return;
+      }
+      if (_kbOp == "cycle_accept")
+      {
+        if (string.IsNullOrEmpty(text)) { Say("A rationale is required to accept a cycle."); return; }
+        _cycleReasons[_kbOpId] = text;
+        _cycleAccepted.Add(_kbOpId);
+        TaskDto ct = null;
+        if (_tasks != null) foreach (TaskDto x in _tasks) if (x.id == _kbOpId) ct = x;
+        if (ct != null) PatchTask(ct, _cycleStatus ?? "running", _cycleEvidence);
+        return;
+      }
+      if (_kbOp == "reopen_question")
+      {
+        SendDesignEdit(new[] { new DesignEditOpDto { op = "reopen_question", question = _kbOpId } }, "Reopened question");
+        return;
+      }
+      if (_kbOp == "defer_question")
+      {
+        if (string.IsNullOrEmpty(text)) { Say("A reason is required to defer a question."); return; }
+        SendDesignEdit(new[] { new DesignEditOpDto { op = "defer_question", question = _kbOpId, answer = text } }, "Deferred question");
         return;
       }
       if (_kbOp == "resolve_question")
@@ -1244,13 +1364,24 @@ namespace JarvisVR
     {
       if (_designReqPanel == null || !_panels.ContainsKey("design_req")) return;
       RequirementsDto r = _design != null ? _design.requirements : null;
-      string[] questions = DesignQuestions();
-      bool hasQuestions = questions != null && questions.Length > 0;
-      if (_qPrevBtn != null) _qPrevBtn.Interactable = hasQuestions;
-      if (_qNextBtn != null) _qNextBtn.Interactable = hasQuestions;
-      if (_qResolveBtn != null) _qResolveBtn.Interactable = hasQuestions;
-      if (_qEditBtn != null) _qEditBtn.Interactable = hasQuestions;
-      if (r == null && !hasQuestions) { _designReqPanel.SetBody("No requirements yet.\nType an idea in DESIGN mode or use voice."); return; }
+      ArchitectureDto arch = _design != null ? _design.architecture : null;
+      string[] open = DesignQuestions();
+      ResolvedQuestionDto[] defs = arch != null ? arch.deferred_questions : null;
+      ResolvedQuestionDto[] ress = arch != null ? arch.resolved_questions : null;
+      int openN = open != null ? open.Length : 0;
+      int defN = defs != null ? defs.Length : 0;
+      int resN = ress != null ? ress.Length : 0;
+      bool anyQuestions = openN + defN + resN > 0 || AnyQuestions();
+      int secN = SectionCount();
+      if (_qPrevBtn != null) _qPrevBtn.Interactable = secN > 0;
+      if (_qNextBtn != null) _qNextBtn.Interactable = secN > 0;
+      if (_qSecBtn != null) { _qSecBtn.Interactable = anyQuestions; _qSecBtn.Label.text = "SEC: " + QuestionSections[_qSection]; }
+      bool openSec = _qSection == 0;
+      if (_qResolveBtn != null) _qResolveBtn.Interactable = openSec && openN > 0;
+      if (_qEditBtn != null) _qEditBtn.Interactable = openSec && openN > 0;
+      if (_qDeferBtn != null) _qDeferBtn.Interactable = openSec && openN > 0;
+      if (_qReopenBtn != null) _qReopenBtn.Interactable = (_qSection == 1 && defN > 0) || (_qSection == 2 && resN > 0);
+      if (r == null && !anyQuestions) { _designReqPanel.SetBody("No requirements yet.\nType an idea in DESIGN mode or use voice."); return; }
       var sb = new StringBuilder();
       if (r != null)
       {
@@ -1260,31 +1391,50 @@ namespace JarvisVR
         AppendReqList(sb, "CONSTRAINTS", r.constraints);
         AppendReqList(sb, "ASSUMPTIONS", r.assumptions);
       }
-      if (hasQuestions)
+      if (openN > 0)
       {
         sb.Append("<b>OPEN QUESTIONS</b>  <color=#").Append(Hex(JarvisPalette.Current.TextMuted))
-          .Append(">selected Q</color> ").Append(SelectedQuestionIndex() + 1).Append('/').Append(questions.Length).Append('\n');
-        for (int i = 0; i < questions.Length; i++)
+          .Append(">block approval</color>\n");
+        for (int i = 0; i < open.Length; i++)
         {
-          if (i == SelectedQuestionIndex())
-            sb.Append("<color=#").Append(Hex(JarvisPalette.Current.Amber)).Append(">» ").Append(questions[i]).Append(" «</color>\n");
+          bool sel = openSec && i == SelectedQuestionIndex();
+          if (sel)
+            sb.Append("<color=#").Append(Hex(JarvisPalette.Current.Amber)).Append(">» ").Append(open[i]).Append(" «</color>\n");
           else
-            sb.Append("  ").Append(questions[i]).Append('\n');
+            sb.Append("  ").Append(open[i]).Append('\n');
         }
         sb.Append('\n');
       }
-      else if (r != null)
-      {
-        AppendReqList(sb, "OPEN QUESTIONS", r.open_questions);
-      }
+      AppendQuestionSection(sb, "DEFERRED", defs, _qSection == 1);
+      AppendQuestionSection(sb, "RESOLVED", ress, _qSection == 2);
       _designReqPanel.SetBody(sb.Length > 0 ? sb.ToString() : "No requirements extracted.");
+    }
+
+    private void AppendQuestionSection(StringBuilder sb, string label, ResolvedQuestionDto[] items, bool active)
+    {
+      if (items == null || items.Length == 0) return;
+      sb.Append("<b>").Append(label).Append("</b> (").Append(items.Length).Append(")\n");
+      for (int i = 0; i < items.Length; i++)
+      {
+        ResolvedQuestionDto e = items[i];
+        bool sel = active && i == SelectedQuestionIndex();
+        if (sel) sb.Append("<color=#").Append(Hex(JarvisPalette.Current.Amber)).Append(">» ");
+        else sb.Append("  ");
+        sb.Append(e.question ?? "?");
+        string note = !string.IsNullOrEmpty(e.reason) ? e.reason : e.answer;
+        if (!string.IsNullOrEmpty(note)) sb.Append(" — ").Append(note);
+        if (e.revision > 0) sb.Append(" (rev ").Append(e.revision).Append(')');
+        if (sel) sb.Append(" «</color>");
+        sb.Append('\n');
+      }
+      sb.Append('\n');
     }
 
     private int SelectedQuestionIndex()
     {
-      string[] qs = DesignQuestions();
-      if (qs == null || qs.Length == 0) return 0;
-      return Mathf.Clamp(_questionSel < 0 ? 0 : _questionSel, 0, qs.Length - 1);
+      int n = SectionCount();
+      if (n == 0) return 0;
+      return Mathf.Clamp(_questionSel < 0 ? 0 : _questionSel, 0, n - 1);
     }
 
     private static void AppendReqList(StringBuilder sb, string label, string[] items)
@@ -1295,20 +1445,173 @@ namespace JarvisVR
       sb.Append('\n');
     }
 
+    // ---- comparison: matched/missing/extra lists + ambiguous assign control ----
+
+    private CompareItemDto[] AmbiguousItems()
+    {
+      return _design?.compare?.ambiguous;
+    }
+
+    private int SelectedAmbiguousIndex()
+    {
+      CompareItemDto[] a = AmbiguousItems();
+      if (a == null || a.Length == 0) return -1;
+      return Mathf.Clamp(_cmpAmbSel < 0 ? 0 : _cmpAmbSel, 0, a.Length - 1);
+    }
+
+    private void CycleAmbiguous(int d)
+    {
+      CompareItemDto[] a = AmbiguousItems();
+      if (a == null || a.Length == 0) { Say("No ambiguous matches."); return; }
+      _cmpAmbSel = (_cmpAmbSel + d + a.Length) % a.Length;
+      _cmpCandSel = 0;
+      RefreshDesignCmp();
+    }
+
+    private void CycleCandidate(int d)
+    {
+      CompareItemDto[] a = AmbiguousItems();
+      int i = SelectedAmbiguousIndex();
+      if (a == null || i < 0 || a[i].candidates == null || a[i].candidates.Length == 0)
+      { Say("No candidates for the selected ambiguous match."); return; }
+      _cmpCandSel = (_cmpCandSel + d + a[i].candidates.Length) % a[i].candidates.Length;
+      RefreshDesignCmp();
+    }
+
+    /// <summary>Resolve an ambiguous match by sending override_matches {component_id: node_id}
+    /// with the next compare; the server re-runs assignment with the developer's pick.</summary>
+    private void AssignAmbiguousMatch()
+    {
+      CompareItemDto[] a = AmbiguousItems();
+      int i = SelectedAmbiguousIndex();
+      if (a == null || i < 0) { Say("No ambiguous matches to assign."); return; }
+      CompareItemDto item = a[i];
+      if (item.candidates == null || item.candidates.Length == 0) { Say(item.id + " has no candidates."); return; }
+      _cmpCandSel = Mathf.Clamp(_cmpCandSel, 0, item.candidates.Length - 1);
+      string node = item.candidates[_cmpCandSel].node;
+      if (string.IsNullOrEmpty(node)) { Say("Selected candidate has no node id."); return; }
+      _compareOverrides[item.id] = node;
+      Say("Assigned " + item.name + " → " + node + ". Re-comparing…");
+      DesignCompare();
+    }
+
+    private CompareItemDto FindCompareItem(string compId)
+    {
+      CompareDto cmp = _design?.compare;
+      if (cmp == null || compId == null) return null;
+      foreach (CompareItemDto[] list in new[] { cmp.matched, cmp.missing, cmp.ambiguous, cmp.extra })
+        if (list != null) foreach (CompareItemDto it in list) if (it.id == compId) return it;
+      return null;
+    }
+
+    private static Color CompareRelColor(string st)
+    {
+      JarvisPalette pal = JarvisPalette.Current;
+      switch (st)
+      {
+        case "confirmed": return pal.Green;
+        case "possible": return pal.Cyan;
+        case "missing": return pal.Amber;
+        case "wrong_direction":
+        case "wrong_type": return pal.Red;
+        default: return pal.TextMuted;
+      }
+    }
+
+    private void AppendCompareSection(StringBuilder sb, string label, CompareItemDto[] items, Color col)
+    {
+      sb.Append("<b>").Append(label).Append("</b> (").Append(items != null ? items.Length : 0).Append(")\n");
+      if (items == null) return;
+      int n = Mathf.Min(items.Length, 4);
+      for (int i = 0; i < n; i++)
+      {
+        CompareItemDto it = items[i];
+        sb.Append("  <color=#").Append(Hex(col)).Append('>').Append(it.id ?? "?").Append("</color>");
+        if (!string.IsNullOrEmpty(it.node)) sb.Append(" → ").Append(it.node);
+        sb.Append('\n');
+      }
+      if (items.Length > n) sb.Append("  … +").Append(items.Length - n).Append('\n');
+    }
+
     private void RefreshDesignCmp()
     {
       if (_designCmpPanel == null) return;
+      JarvisPalette pal = JarvisPalette.Current;
+      CompareDto cmp = _design != null ? _design.compare : null;
+      CompareItemDto[] amb = cmp != null ? cmp.ambiguous : null;
+      bool hasAmb = amb != null && amb.Length > 0;
+      int ai = hasAmb ? SelectedAmbiguousIndex() : -1;
+      CompareItemDto selAmb = ai >= 0 ? amb[ai] : null;
+      int candN = selAmb != null && selAmb.candidates != null ? selAmb.candidates.Length : 0;
+      if (_cmpAmbPrev != null) { _cmpAmbPrev.Interactable = _cmpAmbNext.Interactable = hasAmb; }
+      if (_cmpCandPrev != null) { _cmpCandPrev.Interactable = _cmpCandNext.Interactable = candN > 1; }
+      if (_cmpAssignBtn != null) _cmpAssignBtn.Interactable = candN > 0;
+      if (cmp == null) { _designCmpPanel.SetBody("No comparison yet.\nPress COMPARE in the Architecture panel."); return; }
+      var sb = new StringBuilder();
+      sb.Append("repo ").Append(string.IsNullOrEmpty(cmp.repo) ? "?" : cmp.repo)
+        .Append("   design rev ").Append(cmp.design_revision);
+      if (cmp.stale) sb.Append("   <color=#").Append(Hex(pal.Amber)).Append(">STALE</color>");
+      sb.Append('\n');
       string compId = DesignCompId(_selected);
       ComponentDto c = FindComponent(compId);
-      if (c == null) { _designCmpPanel.SetBody("Select a component node to see details."); return; }
-      var sb = new StringBuilder();
-      sb.Append("<b>").Append(c.name).Append("</b>  ").Append(c.kind).Append('\n');
-      sb.Append(c.id).Append('\n');
-      if (!string.IsNullOrEmpty(c.responsibility)) sb.Append(c.responsibility).Append('\n');
-      string st = _compareStatus.TryGetValue(c.id, out string s) ? s : null;
-      if (st == "matched") sb.Append("<color=#").Append(Hex(JarvisPalette.Current.Green)).Append(">matched in repo</color>\n");
-      else if (st == "missing") sb.Append("<color=#").Append(Hex(JarvisPalette.Current.Amber)).Append(">missing from repo</color>\n");
-      if (_designLinkFrom != null) sb.Append("<color=#").Append(Hex(JarvisPalette.Current.Amber)).Append(">link armed: pick a target</color>\n");
+      if (c != null)
+      {
+        sb.Append("<b>").Append(c.name).Append("</b>  ").Append(c.kind).Append('\n');
+        if (!string.IsNullOrEmpty(c.responsibility)) sb.Append(c.responsibility).Append('\n');
+        string st = _compareStatus.TryGetValue(c.id, out string s) ? s : null;
+        if (st == "matched") sb.Append("<color=#").Append(Hex(pal.Green)).Append(">matched in repo</color>\n");
+        else if (st == "missing") sb.Append("<color=#").Append(Hex(pal.Amber)).Append(">missing from repo</color>\n");
+        else if (st == "ambiguous") sb.Append("<color=#").Append(Hex(pal.Cyan)).Append(">ambiguous — assign a candidate below</color>\n");
+        CompareItemDto ci = FindCompareItem(c.id);
+        if (ci != null)
+        {
+          if (!string.IsNullOrEmpty(ci.confidence) && ci.confidence != "none")
+            sb.Append("confidence: ").Append(ci.confidence).Append('\n');
+          if (!string.IsNullOrEmpty(ci.evidence))
+            sb.Append("<color=#").Append(Hex(pal.TextMuted)).Append('>').Append(ci.evidence).Append("</color>\n");
+        }
+      }
+      if (_designLinkFrom != null) sb.Append("<color=#").Append(Hex(pal.Amber)).Append(">link armed: pick a target</color>\n");
+      AppendCompareSection(sb, "MATCHED", cmp.matched, pal.Green);
+      AppendCompareSection(sb, "MISSING", cmp.missing, pal.Amber);
+      AppendCompareSection(sb, "EXTRA", cmp.extra, pal.Red);
+      sb.Append("<b>AMBIGUOUS</b> (").Append(hasAmb ? amb.Length : 0).Append(") — AMB/CAND pick, ASSIGN sends override\n");
+      if (hasAmb)
+        for (int i = 0; i < amb.Length; i++)
+        {
+          bool sel = i == ai;
+          if (sel) sb.Append("<color=#").Append(Hex(pal.Violet)).Append(">» ");
+          else sb.Append("  ");
+          sb.Append(amb[i].name ?? amb[i].id ?? "?").Append(" (").Append(amb[i].id ?? "?").Append(")");
+          if (sel && amb[i].candidates != null)
+          {
+            sb.Append('\n');
+            for (int j = 0; j < amb[i].candidates.Length; j++)
+            {
+              CompareCandidateDto cd = amb[i].candidates[j];
+              sb.Append("    ");
+              if (j == _cmpCandSel) sb.Append("<color=#").Append(Hex(pal.Green)).Append(">» ");
+              sb.Append(cd.node ?? "?").Append(" (").Append(cd.score.ToString("0.00")).Append(')');
+              if (j == _cmpCandSel) sb.Append("</color>");
+              if (j + 1 < amb[i].candidates.Length) sb.Append("   ");
+            }
+          }
+          if (sel) sb.Append(" «</color>");
+          sb.Append('\n');
+        }
+      if (cmp.relationships != null && cmp.relationships.Length > 0)
+      {
+        sb.Append("<b>RELATIONSHIPS</b>\n");
+        foreach (CompareRelDto rel in cmp.relationships)
+        {
+          sb.Append("  <color=#").Append(Hex(CompareRelColor(rel.status))).Append('>')
+            .Append(rel.id ?? "?").Append(' ').Append(rel.src ?? "?").Append('→').Append(rel.dst ?? "?")
+            .Append(' ').Append(rel.kind ?? "").Append(": ").Append(rel.status ?? "?").Append("</color>");
+          if (!string.IsNullOrEmpty(rel.evidence))
+            sb.Append("  <color=#").Append(Hex(pal.TextMuted)).Append('>').Append(rel.evidence).Append("</color>");
+          sb.Append('\n');
+        }
+      }
       _designCmpPanel.SetBody(sb.ToString());
     }
 
@@ -1322,6 +1625,14 @@ namespace JarvisVR
         return;
       }
       var sb = new StringBuilder();
+      // Provenance banner: a heuristic fallback is never shown as an AI design.
+      string prov = a.provenance ?? "unknown";
+      if (prov == "heuristic")
+        sb.Append("<color=#").Append(Hex(JarvisPalette.Current.Amber))
+          .Append(">Heuristic fallback (not AI)</color>\n");
+      else if (prov == "model")
+        sb.Append("<color=#").Append(Hex(JarvisPalette.Current.Green)).Append(">AI model</color>\n");
+      if (a.edited_by_user) sb.Append("<color=#").Append(Hex(JarvisPalette.Current.TextMuted)).Append(">Edited by you</color>\n");
       sb.Append("v").Append(a.version).Append(" rev ").Append(a.revision).Append("  ")
         .Append(a.status == "approved"
           ? "<color=#" + Hex(JarvisPalette.Current.Green) + ">approved rev " + a.approved_revision + "</color>"
@@ -1332,24 +1643,47 @@ namespace JarvisVR
         .Append(a.relationships != null ? a.relationships.Length : 0).Append(" links\n");
       if (a.open_questions != null && a.open_questions.Length > 0)
         sb.Append("<color=#").Append(Hex(JarvisPalette.Current.Amber)).Append(">").Append(a.open_questions.Length).Append(" open questions block approval</color>\n");
-      if (_design?.plan?.tasks != null && _design.plan.tasks.Length > 0)
-        sb.Append("Plan: ").Append(_design.plan.tasks.Length).Append(" tasks (arch rev ")
-          .Append(_design.plan.architecture_revision).Append(", see activity panel)\n");
+      ImplementationPlanDto plan = _design?.plan;
+      if (plan != null && plan.tasks != null && plan.tasks.Length > 0)
+      {
+        sb.Append("Plan: ").Append(plan.tasks.Length).Append(" tasks (arch rev ")
+          .Append(plan.architecture_revision).Append(")");
+        if (!string.IsNullOrEmpty(plan.repo)) sb.Append("  repo ").Append(plan.repo);
+        if (a.status == "approved" && plan.architecture_revision != a.approved_revision)
+          sb.Append("  <color=#").Append(Hex(JarvisPalette.Current.Amber)).Append(">STALE</color>");
+        sb.Append('\n');
+      }
       TaskDto sel = SelectedTask();
       if (sel != null)
       {
         sb.Append("\n<b>Task ").Append(sel.id).Append("</b>  ").Append(sel.status ?? "pending").Append('\n');
         if (!string.IsNullOrEmpty(sel.title)) sb.Append(sel.title).Append('\n');
+        if (!string.IsNullOrEmpty(sel.description) && sel.description != sel.acceptance)
+          sb.Append(sel.description).Append('\n');
+        if (sel.files != null && sel.files.Length > 0)
+          sb.Append("files: ").Append(string.Join(", ", sel.files)).Append('\n');
+        if (sel.acceptance_criteria != null && sel.acceptance_criteria.Length > 0)
+          sb.Append("criteria: ").Append(string.Join(" | ", sel.acceptance_criteria)).Append('\n');
+        if (!string.IsNullOrEmpty(sel.repo_match)) sb.Append("repo match: ").Append(sel.repo_match).Append('\n');
+        if (sel.evidence_check != null && !string.IsNullOrEmpty(sel.evidence_check.verdict))
+          sb.Append("evidence: ").Append(sel.evidence_check.verdict).Append('\n');
         if (!string.IsNullOrEmpty(sel.evidence)) sb.Append("evidence: ").Append(sel.evidence).Append('\n');
+        if (!string.IsNullOrEmpty(_lastTaskError))
+          sb.Append("<color=#").Append(Hex(JarvisPalette.Current.Red)).Append(">blocked: ").Append(_lastTaskError).Append("</color>\n");
         if (IsCyclicTask(sel) && sel.status != "done" && sel.status != "completed")
           sb.Append("<color=#").Append(Hex(JarvisPalette.Current.Amber))
-            .Append(">").Append(_cycleAccepted.Contains(sel.id) ? "cycle accepted" : "circular dependency — confirm twice")
+            .Append(">")
+            .Append(sel.cycle_accepted ? "cycle accepted" + (string.IsNullOrEmpty(sel.cycle_rationale) ? "" : ": " + sel.cycle_rationale) : "circular dependency — type a rationale")
             .Append("</color>\n");
       }
-      string[] circ = _planCircular ?? (_design?.plan?.circular);
+      string[] circ = _planCircular ?? (plan != null ? plan.circular : null);
       if (circ != null && circ.Length > 0)
         sb.Append("<color=#").Append(Hex(JarvisPalette.Current.Amber)).Append(">circular dependencies: ")
           .Append(string.Join(", ", circ)).Append("</color>\n");
+      string[] cpaths = plan != null ? plan.cycle_paths : null;
+      if (cpaths != null && cpaths.Length > 0)
+        sb.Append("<color=#").Append(Hex(JarvisPalette.Current.TextMuted)).Append(">cycle paths: ")
+          .Append(string.Join("  ", cpaths)).Append("</color>\n");
       _designActPanel.SetBody(sb.ToString());
       bool hasTasks = _tasks != null && _tasks.Length > 0;
       if (_taskPrevBtn != null) _taskPrevBtn.Interactable = hasTasks;
@@ -1386,6 +1720,7 @@ namespace JarvisVR
       _agentMode = null;
       _agentEvidence = r.evidence;
       _agentTestResults = r.test_results;
+      _lastTestRun = r.test_run;
       _unverifiedEvidence = r.unverified_evidence;
       bool graphChanged = false;
       if (r.scene_commands != null) foreach (SceneCommand c in r.scene_commands) graphChanged |= ApplyCommand(c);
@@ -1752,6 +2087,7 @@ namespace JarvisVR
             _lastCommitBranch = null; _ghostDiff = null; _ghostPage = 0;
             Say("Promoted " + r.commit + ". Graph re-indexed: " + r.nodes + " nodes, " + r.edges + " edges.");
             ReloadGraph();
+            RefreshTasks();
           }
           else Say("NOT promoted: " + (r != null ? r.detail : "no response"));
           RefreshAll();

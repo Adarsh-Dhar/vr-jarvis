@@ -27,6 +27,7 @@ from ai_agents import config, repository
 from ai_agents.config import USE_CACHED_TESTS
 from ai_agents import llm
 from ai_agents.tools.git_tools import commit_worktree, promote_branch
+from ai_agents.tools.exec_tools import _worktree_fingerprint
 from ai_agents.tools.graph_tools import get_source
 from ai_agents.agents.registry import initialize_agents
 
@@ -187,8 +188,27 @@ async def ensure(session_id):
     return session
 
 
+# Tracks per-session flags that make a repository switch unsafe. Updated by
+# set_state whenever a session gains/loses a worktree, pending approval or a
+# commit awaiting promotion.
+_session_flags = {}
+
+
+def _track_session_flags(session_id, delta):
+    flags = _session_flags.setdefault(session_id, {})
+    for key in ('worktree', 'pending_approval', 'last_commit'):
+        if key in delta:
+            flags[key] = bool(delta[key])
+    # last_commit is a dict; cleared to {} means done
+    if 'last_commit' in delta:
+        flags['last_commit'] = bool((delta.get('last_commit') or {}).get('branch')
+                                    if isinstance(delta.get('last_commit'), dict)
+                                    else delta.get('last_commit'))
+
+
 async def set_state(session_id, delta):
     session = await ensure(session_id)
+    _track_session_flags(session_id, delta or {})
     await sessions.append_event(session, Event(author='user', actions=EventActions(state_delta=delta)))
 
 
@@ -244,27 +264,87 @@ class AskBody(BaseModel):
     selection: str = ''
     repo: Optional[str] = None
     task_id: Optional[str] = None   # set when the ask implements a plan task (WORK ON IT)
+    request_id: Optional[str] = None  # client-generated id; retries are ignored
 
 
-def _turn_state(body):
+def _active_task_record(state, task_id):
+    """Resolve a plan task into the full record the coding agent needs.
+    Returns (record, error); error is an HTTP detail string when the task
+    cannot be started (missing, stale, done or blocked)."""
+    plan = state.get('implementation_plan') or {}
+    tasks = plan.get('tasks') or []
+    task = next((t for t in tasks if str(t.get('id')) == str(task_id)), None)
+    if task is None:
+        return None, 'Task not found in the implementation plan: ' + str(task_id)
+    arch = state.get('design') or {}
+    # The plan is only valid for the architecture revision it was generated from.
+    if arch.get('status') != 'approved' or \
+            plan.get('architecture_revision') != arch.get('approved_revision'):
+        return None, 'Task plan is stale: the architecture changed since the plan was generated. Regenerate the plan.'
+    status = task.get('status') or 'pending'
+    if status in ('done', 'completed'):
+        return None, 'Task ' + str(task_id) + ' is already done.'
+    done_ids = {str(t.get('id')) for t in tasks
+                if (t.get('status') or 'pending') in ('done', 'completed')}
+    missing = [str(d) for d in (task.get('depends_on') or []) if str(d) not in done_ids]
+    if missing:
+        return None, 'Task ' + str(task_id) + ' is blocked by unfinished dependencies: ' + ', '.join(missing)
+    # Tasks inside a dependency cycle need explicit acceptance first.
+    cyclic_ids = set()
+    for path in (plan.get('cycle_paths') or []):
+        cyclic_ids.update(str(x) for x in path)
+    if str(task.get('component_id') or '') in cyclic_ids and not task.get('cycle_accepted'):
+        return None, ('Task ' + str(task_id) + ' is part of a circular dependency '
+                      '(see cycle_paths). Accept the cycle with a rationale via '
+                      'PATCH /plan/{session}/tasks/{id} first.')
+    return {
+        'id': str(task.get('id')), 'title': task.get('title') or '',
+        'description': task.get('description') or task.get('acceptance') or '',
+        'component_id': str(task.get('component_id') or ''),
+        'files': list(task.get('files') or task.get('suggested_files') or []),
+        'symbols': task.get('symbols') or [],
+        'acceptance_criteria': [str(c) for c in (task.get('acceptance_criteria') or [])],
+        'depends_on': [str(d) for d in (task.get('depends_on') or [])],
+        'repo': plan.get('repo') or state.get('repo') or '',
+        'design_revision': plan.get('architecture_revision'),
+        'repo_match': str(task.get('repo_match') or ''),
+        'needs_investigation': bool(task.get('needs_investigation')),
+    }, None
+
+
+def _turn_state(body, session_state=None):
     """Build state delta for a new turn."""
     from ai_agents.agents.registry import list_agents
-    return {
+    state = {
         'selection': body.selection,
         'user_request': body.text,
         'repo_path': str(config.REPO_ROOT),
+        'repo': config.REPO_ROOT.name,
         'available_agents': ', '.join(list_agents()),
         'session_id': body.session_id,
         # Links this turn's code change back to its plan task so /promote
         # completes only that task. Cleared by any ask that is not task work.
         'active_task_id': (body.task_id or '').strip(),
     }
+    task_id = state['active_task_id']
+    if task_id:
+        if session_state is None:
+            state['active_task'] = {}
+        else:
+            record, err = _active_task_record(session_state, task_id)
+            if err:
+                raise HTTPException(status_code=409, detail=err)
+            state['active_task'] = record
+    else:
+        state['active_task'] = {}
+    return state
 
 
 class ApproveBody(BaseModel):
     session_id: str
     approved: bool
     repo: Optional[str] = None
+    request_id: Optional[str] = None   # client-generated id; retries are ignored
 
 
 @app.post('/session', dependencies=[Depends(auth)])
@@ -283,6 +363,18 @@ def _require_active_repo(name: Optional[str]):
             detail=f'Active repository is {config.REPO_ROOT.name}, not {name}. Select it again.')
 
 
+async def _check_session_repo(session_id):
+    """Design/plan endpoints carry no repo field: verify the session was started
+    against the currently active repository, else its plan/design would apply
+    to the wrong codebase."""
+    state = (await ensure(session_id)).state
+    sess_repo = state.get('repo')
+    if sess_repo and sess_repo != config.REPO_ROOT.name:
+        raise HTTPException(status_code=409,
+            detail=f'Session repository is {sess_repo}, but the active repository '
+                   f'is {config.REPO_ROOT.name}. Start a new session.')
+
+
 def _git(*args):
     try:
         return subprocess.run(['git', *args], cwd=config.REPO_ROOT, capture_output=True, text=True, timeout=5).stdout.strip()
@@ -296,7 +388,13 @@ async def health():
     changed = len([line for line in _git('status', '--porcelain').splitlines() if line.strip()])
     return {'ok': True, 'cached_tests': USE_CACHED_TESTS, 'repo': config.REPO_ROOT.name,
             'branch': _git('rev-parse', '--abbrev-ref', 'HEAD') or '?', 'changed': changed,
-            'semantic_languages': ['python', 'javascript', 'typescript']}
+            'semantic_languages': ['python', 'javascript', 'typescript'],
+            'analysis_support': {
+                'python': {'structure': True, 'calls': True, 'cfg': True, 'dfg': True},
+                'typescript': {'structure': True, 'calls': True, 'cfg': False, 'dfg': False},
+                'javascript': {'structure': True, 'calls': True, 'cfg': False, 'dfg': False},
+                'other': {'structure': True, 'calls': False, 'cfg': False, 'dfg': False}},
+            'persistence_warnings': list(_PERSIST_WARNINGS)}
 
 
 @app.get('/graph', dependencies=[Depends(auth)])
@@ -358,6 +456,14 @@ async def repos():
 
 @app.post('/repos/select', dependencies=[Depends(auth)])
 async def select_repo(body: RepoBody):
+    # One active repository per server process: refuse to switch while any
+    # session has work in flight (worktree, pending approval or unpromoted commit).
+    busy = [sid for sid, f in _session_flags.items()
+            if f.get('worktree') or f.get('pending_approval') or f.get('last_commit')]
+    if busy:
+        raise HTTPException(status_code=409,
+            detail='Cannot switch repository: a session has a worktree, pending '
+                   'approval or unpromoted commit. Finish or reject it first.')
     try:
         async with repo_lock:
             g = await asyncio.to_thread(repository.activate, body.name)
@@ -496,8 +602,8 @@ async def ask_stream(body: AskBody):
     _require_active_repo(body.repo)
     async def gen():
         async with locks[body.session_id]:      # hold the lock for the whole stream
-            await ensure(body.session_id)
-            await set_state(body.session_id, _turn_state(body))
+            session = await ensure(body.session_id)
+            await set_state(body.session_id, _turn_state(body, session.state))
 
             reply = ''
             error = ''
@@ -567,6 +673,22 @@ def _build_ask_response(reply: str, error: str, state: dict) -> dict:
     approval_type = state.get('approval_type', '')
     has_patch = state.get('proposed_patch') or state.get('result_software_eng')
 
+    # Structured evidence items for the contract: {file, first_line,
+    # last_line, node_id, kind}. kind is 'confirmed' for graph nodes the
+    # tools actually returned; anything else stays in unverified_evidence.
+    from ai_agents.tools.graph_tools import _graph as _g
+    nodes = _g()['nodes']
+    evidence_items = []
+    for eid in state.get('evidence', []):
+        n = nodes.get(eid) or {}
+        evidence_items.append({
+            'node_id': str(eid),
+            'file': str(n.get('file') or ''),
+            'first_line': int(n.get('start') or n.get('line') or 0),
+            'last_line': int(n.get('end') or n.get('line') or 0),
+            'kind': 'confirmed' if n else 'unsupported',
+        })
+
     return {
         'reply': reply,
         'error': error,
@@ -576,9 +698,30 @@ def _build_ask_response(reply: str, error: str, state: dict) -> dict:
         'approved': bool(state.get('approved', False)),
         'test_results': _s(state.get('test_results')),
         'test_source': last.get('source', '') if isinstance(last, dict) else '',
+        'test_run': last if isinstance(last, dict) else {},
         'evidence': list(state.get('evidence', [])),
+        'evidence_items': evidence_items,
         'unverified_evidence': _unverified_evidence(state),
+        'task_id': state.get('active_task_id') or '',
+        'active_task': state.get('active_task') or {},
+        'proposal_status': ('pending' if pending else
+                            'committed' if state.get('last_commit') else
+                            'proposed' if has_patch else 'none'),
+        'tool_errors': [str(e) for e in (state.get('tool_errors') or [])],
     }
+
+
+async def _seen_request(session_id, request_id):
+    """True when this client request id was already handled for the session;
+    records it otherwise. Prevents retry storms from double-patching."""
+    if not request_id:
+        return False
+    state = (await ensure(session_id)).state
+    seen = state.get('handled_request_ids') or []
+    if request_id in seen:
+        return True
+    await set_state(session_id, {'handled_request_ids': (list(seen) + [request_id])[-200:]})
+    return False
 
 
 @app.post('/ask', dependencies=[Depends(auth)])
@@ -586,11 +729,16 @@ async def ask(body: AskBody):
     """Non-streaming endpoint for compatibility."""
     _require_active_repo(body.repo)
     error = ''
+    if await _seen_request(body.session_id, body.request_id):
+        return {'reply': '', 'error': '', 'duplicate': True,
+                'scene_commands': [], 'pending_approval': '', 'approved': False,
+                'test_results': '', 'test_source': '', 'evidence': [],
+                'unverified_evidence': [], 'task_id': '', 'proposal_status': 'none'}
     calls_before = llm.stats['requests']
     reply = ''
     async with locks[body.session_id]:
-        await ensure(body.session_id)
-        await set_state(body.session_id, _turn_state(body))
+        session = await ensure(body.session_id)
+        await set_state(body.session_id, _turn_state(body, session.state))
         try:
             reply = await asyncio.wait_for(_run_turn(body), TURN_TIMEOUT)
         except asyncio.TimeoutError:
@@ -620,6 +768,8 @@ async def ask(body: AskBody):
 @app.post('/approve', dependencies=[Depends(auth)])
 async def approve(body: ApproveBody):
     _require_active_repo(body.repo)
+    if await _seen_request(body.session_id, body.request_id):
+        return {'ok': True, 'duplicate': True, 'detail': 'Request already handled.'}
     async with locks[body.session_id]:
         state = (await ensure(body.session_id)).state
         pending = state.get('pending_approval', '')
@@ -653,22 +803,59 @@ async def approve(body: ApproveBody):
         last = state.get('last_test_run', {})
         if not isinstance(last, dict) or last.get('status') != 'passed':
             return {'ok': False, 'action': 'commit', 'detail': 'Tests must pass before committing.'}
-        if (state.get('last_typecheck') or {}).get('typecheck') == 'failed':
+        # Cached or stale results never verify the current patch.
+        if last.get('source') != 'live':
+            if os.getenv('JARVIS_ALLOW_CACHED_APPROVAL') == '1':
+                logging.getLogger('uvicorn.error').warning(
+                    'approve: accepting CACHED test results (JARVIS_ALLOW_CACHED_APPROVAL=1)')
+            else:
+                return {'ok': False, 'action': 'commit',
+                        'detail': 'Test results are not from a live run of this patch. '
+                                  'Re-run the tests before committing.'}
+        fp = _worktree_fingerprint(worktree)
+        if last.get('diff_hash') and last.get('diff_hash') != fp['diff_hash']:
+            return {'ok': False, 'action': 'commit',
+                    'detail': 'The patch changed after the tests ran. Re-run the tests.'}
+        tc = state.get('last_typecheck') or {}
+        if tc.get('typecheck') == 'failed':
             return {'ok': False, 'action': 'commit', 'detail': 'Type check failed. Fix it before committing.'}
+        if tc.get('source') == 'cached' and os.getenv('JARVIS_ALLOW_CACHED_APPROVAL') != '1':
+            return {'ok': False, 'action': 'commit',
+                    'detail': 'Type check results are cached, not live. Re-run it before committing.'}
+        # A tsconfig.json means a type check is expected: missing is not a pass.
+        if (Path(worktree) / 'tsconfig.json').is_file() and tc.get('typecheck') != 'passed':
+            return {'ok': False, 'action': 'commit',
+                    'detail': 'Type check has not passed for this patch. Run it before committing.'}
+        if tc.get('diff_hash') and tc.get('diff_hash') != fp['diff_hash']:
+            return {'ok': False, 'action': 'commit',
+                    'detail': 'The patch changed after the type check ran. Re-run it.'}
 
         result = await asyncio.to_thread(commit_worktree, worktree, 'JARVIS: ' + str(pending)[:120])
         if result.get('ok'):
+            # Structured validation record: what was verified, against which patch.
+            record = {'task_id': state.get('active_task_id') or state.get('last_patch_task_id') or '',
+                      'commit': result.get('commit'), 'branch': result.get('branch'),
+                      'diff_hash': fp['diff_hash'],
+                      'test_run': {'command': last.get('command'), 'exit_code': last.get('exit_code'),
+                                   'passed': last.get('passed'), 'failed': last.get('failed'),
+                                   'skipped': last.get('skipped'), 'source': last.get('source')},
+                      'typecheck': tc.get('typecheck'), 'source_tc': tc.get('source'),
+                      'checks_not_run': last.get('checks_not_run') or []}
             await set_state(body.session_id, {**cleared, 'approved': True,
-                            'last_commit': {'branch': result['branch'], 'commit': result['commit']}})
+                            'last_commit': {'branch': result['branch'], 'commit': result['commit']},
+                            'validation_record': record})
+            result['validation'] = record
         return {'action': 'commit', **result}
 
 
 class PromoteBody(BaseModel):
     session_id: str
+    repo: Optional[str] = None
 
 
 @app.post('/promote', dependencies=[Depends(auth)])
 async def promote(body: PromoteBody):
+    _require_active_repo(body.repo)
     async with locks[body.session_id]:
         state = (await ensure(body.session_id)).state
         last = state.get('last_commit') or {}
@@ -684,17 +871,35 @@ async def promote(body: PromoteBody):
         # plain ask clears it, so unrelated running tasks are left untouched.
         plan = state.get('implementation_plan')
         if isinstance(plan, dict) and plan.get('tasks'):
-            active = str(state.get('active_task_id') or '')
+            active = str(state.get('active_task_id') or state.get('last_patch_task_id') or '')
             running = [t for t in plan['tasks'] if t.get('status') == 'running']
             targets = ([t for t in running if str(t.get('id')) == active] if active
                        else running if len(running) == 1 else [])
+            # Structured completion record: what was committed, verified against
+            # which patch, and which design revision it implements.
+            vr = state.get('validation_record') or {}
+            completion = {'branch': last.get('branch'), 'commit': last.get('commit'),
+                          'test_run': vr.get('test_run') or {},
+                          'typecheck': vr.get('typecheck'),
+                          'diff_hash': vr.get('diff_hash') or '',
+                          'design_revision': (plan.get('architecture_revision')
+                                              or vr.get('design_revision'))}
+            targets_state = state.get('task_targets') or {}
             for t in targets:
                 t['status'] = 'done'
                 t['evidence'] = 'promoted branch %s (%s)' % (
                     last.get('branch'), (last.get('commit') or '')[:10])
+                t['completion'] = completion
+                # Files the coding agent confirmed/rejected become the task record.
+                if targets_state.get('confirmed_targets'):
+                    t['confirmed_targets'] = targets_state['confirmed_targets']
+                if targets_state.get('rejected_targets'):
+                    t['rejected_targets'] = targets_state['rejected_targets']
             if targets:
                 await set_state(body.session_id, {'implementation_plan': plan,
-                                                  'active_task_id': ''})
+                                                  'active_task_id': '',
+                                                  'task_targets': {},
+                                                  'validation_record': {}})
                 await _persist_design(body.session_id)
         return {**res, 'graph_refreshed': True, 'nodes': len(g['nodes']), 'edges': len(g['edges'])}
 
@@ -817,17 +1022,35 @@ async def _design_view(session_id):
                                 ('design_compare', 'compare'),
                                 ('implementation_plan', 'plan')):
         view[disk_key] = state[state_key] if state_key in state else disk[disk_key]
+    # A comparison is only valid for the revision it was computed against.
+    # Edits already clear it; this marks any survivor explicitly stale.
+    cmp_ = view.get('compare')
+    arch = view.get('architecture')
+    if isinstance(cmp_, dict) and cmp_ and isinstance(arch, dict):
+        rev = cmp_.get('design_revision')
+        if rev is not None and rev != arch.get('revision'):
+            cmp_ = dict(cmp_)
+            cmp_['stale'] = True
+            view['compare'] = cmp_
     return view
+
+
+_PERSIST_WARNINGS = []   # recent design-persistence failures, surfaced via /health
 
 
 async def _persist_design(session_id):
     view = await _design_view(session_id)
-    save_design(session_id, {
+    ok = save_design(session_id, {
         'requirements': view['requirements'],
         'architecture': view['architecture'],
         'compare': view['compare'],
         'plan': view['plan'],
     })
+    if not ok:
+        import datetime
+        _PERSIST_WARNINGS.append({'session_id': session_id,
+                                  'at': datetime.datetime.utcnow().isoformat()})
+        del _PERSIST_WARNINGS[:-20]
 
 
 class DesignIdeaBody(BaseModel):
@@ -854,6 +1077,7 @@ class DesignEditOp(BaseModel):
     question: str = ''        # open-question text (resolve/update/add ops)
     new_question: str = ''    # replacement text for update_question
     answer: str = ''          # developer's resolution/rationale for resolve_question
+    cycle_rationale: str = '' # required reason when accepting a dependency cycle
 
 
 class DesignEditBody(BaseModel):
@@ -876,6 +1100,8 @@ class PlanTaskPatch(BaseModel):
     title: Optional[str] = None
     evidence: Optional[str] = None      # required to mark a task done
     accept_cycles: bool = False         # explicit acceptance of circular deps
+    cycle_rationale: str = ''           # required reason for accepting a cycle
+    request_id: Optional[str] = None    # client-generated id; retries are ignored
 
 
 def _next_id(prefix, items, key='id'):
@@ -1009,6 +1235,21 @@ def _apply_design_op(arch, op):
             deferred.append({'question': questions[i], 'reason': reason,
                              'revision': int(arch.get('revision') or 0) + 1})
             questions.pop(i)
+    elif op_type == 'reopen_question':
+        # Move a deferred or resolved question back to open_questions so it
+        # blocks approval again.
+        questions = arch.setdefault('open_questions', [])
+        for key in ('deferred_questions', 'resolved_questions'):
+            entries = arch.get(key) or []
+            hit = next((e for e in entries
+                        if _question_matches([e.get('question', '')], op.question)), None)
+            if hit is not None:
+                entries.remove(hit)
+                text = hit.get('question', '')
+                if text and text not in questions:
+                    questions.append(text)
+                return arch, None
+        return arch, 'no deferred or resolved question matches: ' + (op.question or '<empty>')
     elif op_type == 'update_question':
         questions = arch.setdefault('open_questions', [])
         idx = _question_matches(questions, op.question)
@@ -1040,6 +1281,11 @@ async def design_requirements(body: DesignIdeaBody):
     res = await asyncio.to_thread(extract_requirements, body.idea_text)
     await set_state(body.session_id, {'design_requirements': res['requirements']})
     await _persist_design(body.session_id)
+    # Never present a heuristic fallback as a clean AI result.
+    if res.get('source') == 'heuristic':
+        res = dict(res)
+        res['warning'] = ('Requirements were produced by the heuristic '
+                          'fallback, not the AI model.')
     return res
 
 
@@ -1080,6 +1326,7 @@ async def design_get(session_id: str):
 
 @app.post('/design/{session_id}/edit', dependencies=[Depends(auth)])
 async def design_edit(session_id: str, body: DesignEditBody):
+    await _check_session_repo(session_id)
     view = await _design_view(session_id)
     arch = view['architecture']
     if not arch:
@@ -1087,7 +1334,7 @@ async def design_edit(session_id: str, body: DesignEditBody):
     import copy
     working = copy.deepcopy(arch)
     question_ops = {'resolve_question', 'update_question', 'add_question',
-                    'defer_question'}
+                    'defer_question', 'reopen_question'}
     touched_questions = False
     for op in body.ops:
         working, err = _apply_design_op(working, op)
@@ -1095,6 +1342,10 @@ async def design_edit(session_id: str, body: DesignEditBody):
             raise HTTPException(status_code=400, detail=err)
         touched_questions = touched_questions or (op.op or '').strip() in question_ops
     working['revision'] = int(arch.get('revision') or 1) + 1
+    # Provenance survives edits: a hand-edited model design is still 'model';
+    # a heuristic fallback stays 'heuristic' even after edits. The flag lets
+    # the UI say "edited by you" without lying about the origin.
+    working['edited_by_user'] = True
     if working.get('status') == 'approved':
         # Editing an approved architecture reverts it to draft and invalidates its plan.
         working['status'] = 'draft'
@@ -1134,7 +1385,9 @@ def _graph_path_for_repo(name: Optional[str]):
 
 
 @app.post('/design/{session_id}/compare', dependencies=[Depends(auth)])
-async def design_compare(session_id: str, repo: Optional[str] = None):
+async def design_compare(session_id: str, repo: Optional[str] = None,
+                         override_matches: Optional[Dict[str, str]] = None):
+    await _check_session_repo(session_id)
     view = await _design_view(session_id)
     arch = view['architecture']
     if not arch:
@@ -1142,10 +1395,13 @@ async def design_compare(session_id: str, repo: Optional[str] = None):
     gpath = _graph_path_for_repo(repo)
     res = await asyncio.to_thread(compare_to_repository,
                                   {'architecture': arch}, None,
-                                  str(gpath) if gpath else None)
-    # Record which repository the comparison ran against so plan generation
-    # grounds tasks in the same graph.
+                                  str(gpath) if gpath else None,
+                                  repo=repo or config.REPO_ROOT.name,
+                                  override_matches=override_matches)
+    # Record which repository and revision the comparison ran against so
+    # staleness is explicit and plan generation grounds tasks in the same graph.
     res['repo'] = repo or config.REPO_ROOT.name
+    res['design_revision'] = arch.get('revision')
     await set_state(session_id, {'design_compare': res})
     await _persist_design(session_id)
     return res
@@ -1153,6 +1409,7 @@ async def design_compare(session_id: str, repo: Optional[str] = None):
 
 @app.post('/design/{session_id}/approve', dependencies=[Depends(auth)])
 async def design_approve(session_id: str, body: DesignApproveBody):
+    await _check_session_repo(session_id)
     view = await _design_view(session_id)
     arch = view['architecture']
     if not arch:
@@ -1182,6 +1439,7 @@ async def design_approve(session_id: str, body: DesignApproveBody):
 
 @app.post('/plan/generate', dependencies=[Depends(auth)])
 async def plan_generate(body: PlanGenerateBody):
+    await _check_session_repo(body.session_id)
     view = await _design_view(body.session_id)
     arch = view['architecture']
     if not arch:
@@ -1198,7 +1456,8 @@ async def plan_generate(body: PlanGenerateBody):
             'architecture_revision': arch.get('revision'),
             'repo': repo_name or config.REPO_ROOT.name,
             'status': 'active',
-            'tasks': res['tasks'], 'circular': res.get('circular') or []}
+            'tasks': res['tasks'], 'circular': res.get('circular') or [],
+            'cycle_paths': res.get('cycle_paths') or []}
     await set_state(body.session_id, {'implementation_plan': plan})
     await _persist_design(body.session_id)
     return plan
@@ -1206,10 +1465,23 @@ async def plan_generate(body: PlanGenerateBody):
 
 @app.patch('/plan/{session_id}/tasks/{task_id}', dependencies=[Depends(auth)])
 async def plan_update_task(session_id: str, task_id: str, body: PlanTaskPatch):
+    await _check_session_repo(session_id)
     view = await _design_view(session_id)
     plan = view['plan']
+    arch = view['architecture']
     if not plan or not plan.get('tasks'):
         raise HTTPException(status_code=404, detail='No implementation plan for this session.')
+    # Defensive: a plan only drives the architecture revision it was generated
+    # from, and only while that revision is the approved one.
+    if arch and (arch.get('status') != 'approved'
+                 or plan.get('architecture_revision') != arch.get('approved_revision')):
+        raise HTTPException(status_code=409,
+                            detail='Plan is stale: the approved architecture revision changed. Regenerate the plan.')
+    if body.request_id:
+        seen = (await ensure(session_id)).state.get('handled_request_ids') or []
+        if body.request_id in seen:
+            return {'ok': True, 'duplicate': True, 'detail': 'Request already handled.'}
+        await set_state(session_id, {'handled_request_ids': (seen + [body.request_id])[-200:]})
     task = next((t for t in plan['tasks'] if str(t.get('id')) == task_id), None)
     if task is None:
         raise HTTPException(status_code=404, detail='Task not found: ' + task_id)
@@ -1245,16 +1517,25 @@ async def plan_update_task(session_id: str, task_id: str, body: PlanTaskPatch):
             # Tasks inside a dependency cycle cannot be scheduled until the
             # developer either fixes the architecture or explicitly accepts
             # the cycle for this task.
-            cyclic = {str(c) for c in (plan.get('circular') or [])}
-            if str(task.get('component_id') or '') in cyclic and not body.accept_cycles:
-                raise HTTPException(
-                    status_code=409,
-                    detail='Task %s is part of a circular dependency (%s). '
-                           'Resolve the cycle in the architecture or resubmit '
-                           'with accept_cycles=true to proceed anyway.'
-                           % (task_id, task.get('component_id')))
-            if body.accept_cycles:
+            cyclic_ids = set()
+            for path in (plan.get('cycle_paths') or []):
+                cyclic_ids.update(str(x) for x in path)
+            if str(task.get('component_id') or '') in cyclic_ids and not task.get('cycle_accepted'):
+                if not body.accept_cycles:
+                    raise HTTPException(
+                        status_code=409,
+                        detail='Task %s is part of a circular dependency (%s). '
+                               'Resolve the cycle in the architecture or resubmit '
+                               'with accept_cycles=true and a cycle_rationale.'
+                               % (task_id, task.get('component_id')))
+                rationale = (body.cycle_rationale or '').strip()
+                if not rationale:
+                    raise HTTPException(
+                        status_code=400,
+                        detail='Accepting a circular dependency requires a '
+                               'cycle_rationale explaining why it is safe.')
                 task['cycle_accepted'] = True
+                task['cycle_rationale'] = rationale
         if new_status == 'done' and current != 'done':
             # Manual DONE is not proof of work: require the developer to
             # record what demonstrates the task is complete (tests run,
@@ -1270,7 +1551,14 @@ async def plan_update_task(session_id: str, task_id: str, body: PlanTaskPatch):
             # branches, pytest node ids and graph node ids are checked against
             # the repository. A claim that contradicts the repo rejects the
             # completion; unverifiable prose is allowed but recorded.
-            check = await asyncio.to_thread(verify_task_evidence, ev)
+            # Evidence is checked against the plan's repository and graph,
+            # not whichever repo happens to be globally active.
+            plan_repo = plan.get('repo') or config.REPO_ROOT.name
+            repo_root = config.REPOSITORY_DIR / plan_repo
+            graph_path = config.INDEX_DIR / (plan_repo + '.json')
+            check = await asyncio.to_thread(verify_task_evidence, ev,
+                                            repo_root if repo_root.is_dir() else None,
+                                            str(graph_path) if graph_path.is_file() else None)
             if check.get('verdict') == 'failed':
                 bad = '; '.join('%s: %s' % (c['claim'], c['detail'])
                                 for c in check['checks'] if c['status'] == 'failed')

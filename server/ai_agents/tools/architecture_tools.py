@@ -331,22 +331,37 @@ def _match_candidates(comp, nodes, limit=8):
     return out
 
 
-def _assign_matches(comps, nodes):
+def _assign_matches(comps, nodes, override_matches=None):
     """Assign each component at most one repository node and each node at most
     one component (global greedy by score). Returns (node_of, matched_info,
-    missing_info) where node_of maps component id -> node id."""
+    missing_info, ambiguous_info).
+
+    A component whose top two candidates score within AMBIGUITY_MARGIN is NOT
+    auto-assigned: it is reported in `ambiguous` for the developer to resolve
+    (compare_to_repository accepts override_matches for that)."""
+    AMBIGUITY_MARGIN = 0.12
+    override_matches = override_matches or {}
     cand_lists = []
     flat = []
+    ambiguous_ids = set()
     for i, c in enumerate(comps):
+        cid = str(c.get('id'))
         cands = _match_candidates(c, nodes)
         cand_lists.append(cands)
+        # Explicit developer override wins over scoring entirely.
+        if cid in override_matches:
+            continue
+        if len(cands) >= 2 and cands[0][1] - cands[1][1] < AMBIGUITY_MARGIN \
+                and cands[0][1] < 1.0:
+            ambiguous_ids.add(cid)
+            continue
         for rank, (n, s, how) in enumerate(cands):
             flat.append((-s, _LEVEL_RANK.get(n.get('level'), 9), str(n.get('id')), i, rank))
     flat.sort()
     comp_of_node, node_of, used_cands = {}, {}, {}
     for neg_s, _lr, _nid, i, rank in flat:
         cid = str(comps[i].get('id'))
-        if cid in node_of:
+        if cid in node_of or cid in ambiguous_ids:
             continue
         node = cand_lists[i][rank][0]
         nid = node.get('id') or node.get('name')
@@ -355,26 +370,56 @@ def _assign_matches(comps, nodes):
         node_of[cid] = nid
         comp_of_node[nid] = cid
         used_cands[cid] = cand_lists[i][rank]
-    matched, missing = [], []
+    # Apply explicit overrides after greedy assignment.
+    node_by_id = {n.get('id'): n for n in nodes}
+    for cid, nid in override_matches.items():
+        cid = str(cid)
+        if cid not in {str(c.get('id')) for c in comps}:
+            continue
+        if nid not in node_by_id:
+            continue
+        old = node_of.get(cid)
+        if old and old != nid:
+            comp_of_node.pop(old, None)
+        for other, assigned in list(node_of.items()):
+            if other != cid and assigned == nid:
+                del node_of[other]
+                comp_of_node.pop(nid, None)
+        node_of[cid] = nid
+        comp_of_node[nid] = cid
+        n = node_by_id[nid]
+        used_cands[cid] = (n, 1.0, 'developer override')
+    matched, missing, ambiguous = [], [], []
     for i, c in enumerate(comps):
         cid = str(c.get('id'))
-        if cid in node_of:
+        cands = [{'node': n.get('id') or n.get('name'), 'score': round(s, 3)}
+                 for n, s, _how in cand_lists[i][:5]]
+        if cid in ambiguous_ids and cid not in node_of:
+            ambiguous.append({'id': cid, 'name': str(c.get('name') or ''),
+                              'node': '', 'score': 0.0,
+                              'confidence': 'low', 'ambiguous': True,
+                              'candidates': cands,
+                              'evidence': 'top candidates are too close to auto-assign; '
+                                          'resolve with override_matches'})
+        elif cid in node_of:
             n, s, how = used_cands[cid]
             nid = node_of[cid]
             matched.append({'id': cid, 'name': str(c.get('name') or ''), 'node': nid,
                             'score': round(s, 3),
                             'confidence': ('high' if s >= 0.9 else
                                            'medium' if s >= 0.5 else 'low'),
+                            'ambiguous': False,
+                            'candidates': cands,
                             'evidence': '%s (%s) [%s]' % (nid, n.get('file') or '?', how)})
         else:
-            cands = cand_lists[i]
-            best = cands[0] if cands else None
+            best = cand_lists[i][0] if cand_lists[i] else None
             why = ('best candidate %s already claimed by another component'
                    % (best[0].get('id') if best else 'none'))
             missing.append({'id': cid, 'name': str(c.get('name') or ''),
-                            'node': '', 'score': 0.0,
+                            'node': '', 'score': 0.0, 'confidence': 'none',
+                            'ambiguous': False, 'candidates': cands,
                             'evidence': 'no unclaimed graph node matches (%s)' % why})
-    return node_of, matched, missing
+    return node_of, matched, missing, ambiguous
 
 
 def _scopes(node_id, nodes):
@@ -410,7 +455,7 @@ EDGE_TYPES_FOR_KIND = {
 
 
 def compare_to_repository(architecture, tool_context: ToolContext = None,
-                          graph_path=None) -> dict:
+                          graph_path=None, repo=None, override_matches=None) -> dict:
     """Map each proposed component onto repository graph nodes and check each
     proposed relationship against actual repository edges.
 
@@ -430,7 +475,7 @@ def compare_to_repository(architecture, tool_context: ToolContext = None,
     rels = arch.get('relationships') or []
     nodes, edges, _index = _graph_data(graph_path)
 
-    node_of, matched, missing = _assign_matches(comps, nodes)
+    node_of, matched, missing, ambiguous = _assign_matches(comps, nodes, override_matches)
     used_nodes = set(node_of.values())
 
     # Relationship comparison: does a real (non-'contains') repository edge
@@ -450,9 +495,24 @@ def compare_to_repository(architecture, tool_context: ToolContext = None,
             entry['evidence'] = 'one or both endpoints have no repository match'
         else:
             a_scope, b_scope = scopes[src], scopes[dst]
-            candidates = [e for e in edges
-                          if e.get('src') in a_scope and e.get('dst') in b_scope
-                          and e.get('type') != 'contains']
+            forward = [e for e in edges
+                       if e.get('src') in a_scope and e.get('dst') in b_scope
+                       and e.get('type') != 'contains']
+            reverse = [e for e in edges
+                       if e.get('src') in b_scope and e.get('dst') in a_scope
+                       and e.get('type') != 'contains']
+            candidates = forward
+            if not candidates and reverse:
+                # Connectivity exists but in the opposite direction.
+                entry['status'] = 'wrong_direction'
+                reverse.sort(key=_edge_kind_rank)
+                e = reverse[0]
+                entry['evidence'] = ('%s -> %s (%s, %s); direction is reversed '
+                                     'relative to the proposal' % (
+                                         e.get('src'), e.get('dst'),
+                                         e.get('type'), e.get('kind')))
+                rel_results.append(entry)
+                continue
             semantic = [e for e in candidates if e.get('type') in wanted]
             if semantic:
                 semantic.sort(key=_edge_kind_rank)
@@ -465,7 +525,7 @@ def compare_to_repository(architecture, tool_context: ToolContext = None,
                 # proposed relationship semantics.
                 candidates.sort(key=_edge_kind_rank)
                 e = candidates[0]
-                entry['status'] = 'possible'
+                entry['status'] = 'wrong_type'
                 entry['evidence'] = ('%s -> %s (%s, %s); type does not match '
                                      'proposed kind %r' % (
                                          e.get('src'), e.get('dst'),
@@ -481,7 +541,8 @@ def compare_to_repository(architecture, tool_context: ToolContext = None,
              if (n.get('id') or n.get('name')) not in used_nodes
              and n.get('level') not in ('module', 'file')]
     return {'status': 'ok', 'matched': matched, 'missing': missing,
-            'extra': extra[:50], 'relationships': rel_results}
+            'ambiguous': ambiguous, 'extra': extra[:50], 'relationships': rel_results,
+            'design_revision': arch.get('revision'), 'repo': repo}
 
 
 def generate_implementation_plan(architecture, tool_context: ToolContext = None,
@@ -528,45 +589,114 @@ def generate_implementation_plan(architecture, tool_context: ToolContext = None,
     cyclic_set = set(cyclic)
     order = order + cyclic   # cyclic components still get tasks, scheduled last
 
+    # Ordered cycle paths (e.g. ['c3','c5','c3']) so the UI can show the actual
+    # loop instead of a bare list of component ids. Recomputed on every
+    # generation, so a fixed architecture never carries stale cycle info.
+    cycle_paths = _cycle_paths(deps, cyclic_set)
+
     # Ground every task in the repository: which files implement the component
     # and which symbols are the likely edit points. Loaded once for all tasks.
     grounding = _repo_grounding(comps, graph_path=graph_path)
 
+    def _subtasks(cid, comp, g):
+        """Split a component into several tasks when its responsibility lists
+        several actions or it matches several files."""
+        actions = [s.strip() for s in re.split(r'[;\n]|\.\s+',
+                    str(comp.get('responsibility') or '')) if s.strip()]
+        files = list(g['files'])
+        n = max(1, min(3, len(actions) if len(actions) > 1 else 0,
+                      (len(files) + 1) // 2 if len(files) > 2 else 1))
+        if n <= 1:
+            return [(comp.get('name', cid), comp.get('responsibility') or '', files, g['symbols'])]
+        out = []
+        for i in range(n):
+            resp = actions[i] if i < len(actions) else (actions[-1] if actions else '')
+            chunk = files[i::n] if files else []
+            out.append(('Implement %s (%d/%d)' % (comp.get('name', cid), i + 1, n),
+                        resp, chunk, g['symbols']))
+        return out
+
     task_of = {}
     tasks = []
-    for i, cid in enumerate(order, 1):
+    seq = 0
+    for cid in order:
         comp = next((c for c in comps if c['id'] == cid), None)
         if comp is None:
             continue
-        tid = 't%d' % i
-        task_of[cid] = tid
-        # Only dependencies that are already scheduled produce valid task
-        # edges; edges inside a cycle are dropped (reported via `circular`).
-        depends = [d for d in sorted(deps.get(cid, ()))
-                   if d in task_of and not (cid in cyclic_set and d in cyclic_set)]
         g = grounding.get(cid) or {'files': [], 'symbols': [], 'match': 'unmatched'}
-        criteria = []
-        if comp.get('responsibility'):
-            criteria.append('Responsibility: ' + str(comp['responsibility']))
-        if g['files']:
-            criteria.append('Change is confined to: ' + ', '.join(g['files']))
-        if g['symbols']:
-            criteria.append('Primary symbols: ' + ', '.join(
-                s['name'] for s in g['symbols']))
-        if g['match'] == 'unmatched':
-            criteria.append('No repository component matched; identify the '
-                            'target files during implementation and record them.')
-        tasks.append({'id': tid, 'title': 'Implement ' + comp.get('name', cid),
-                      'status': 'pending', 'component_id': cid,
-                      'depends_on': [task_of[d] for d in depends],
-                      'acceptance': comp.get('responsibility') or '',
-                      'acceptance_criteria': criteria,
-                      'files': g['files'],
-                      'symbols': g['symbols'],
-                      'repo_match': g['match'],
-                      'owner': 'developer'})
+        unmatched = g['match'] == 'unmatched'
+        for title, resp, files, symbols in _subtasks(cid, comp, g):
+            seq += 1
+            tid = 't%d' % seq
+            task_of[cid] = tid   # last subtask owns dependency edges
+            # Only dependencies that are already scheduled produce valid task
+            # edges; edges inside a cycle are dropped (reported via cycle_paths).
+            depends = [d for d in sorted(deps.get(cid, ()))
+                       if d in task_of and not (cid in cyclic_set and d in cyclic_set)]
+            criteria = []
+            if resp:
+                criteria.append('Responsibility: ' + str(resp))
+            if files:
+                criteria.append('Change is confined to: ' + ', '.join(files))
+            if symbols:
+                criteria.append('Primary symbols: ' + ', '.join(
+                    s['name'] for s in symbols))
+            if unmatched:
+                criteria.append('No repository component matched; identify the '
+                                'target files during investigation and record them.')
+            t = {'id': tid,
+                 'title': ('Investigate ' if unmatched else 'Implement ') + title,
+                 'status': 'pending', 'component_id': cid,
+                 'depends_on': [task_of[d] for d in depends],
+                 'description': str(comp.get('responsibility') or ''),
+                 'acceptance': resp,
+                 'acceptance_criteria': criteria,
+                 'suggested_files': files,
+                 'files': files,               # alias kept for older clients
+                 'confirmed_targets': [],      # filled by the coding agent
+                 'rejected_targets': [],
+                 'symbols': symbols,
+                 'repo_match': g['match'],
+                 'needs_investigation': unmatched,
+                 'modifies_existing': g['match'] == 'repository',
+                 'new_files': [],
+                 'design_revision': arch.get('revision'),
+                 'cycle_accepted': False,
+                 'cycle_rationale': '',
+                 'owner': 'developer'}
+            tasks.append(t)
 
-    return {'status': 'ok', 'tasks': tasks, 'circular': cyclic}
+    return {'status': 'ok', 'tasks': tasks, 'circular': cyclic,
+            'cycle_paths': cycle_paths}
+
+
+def _cycle_paths(deps, cyclic_set):
+    """Find one concrete dependency cycle per cyclic component, as an ordered
+    path of component ids ending where it started (['c3','c5','c3'])."""
+    paths = []
+    seen_cycles = set()
+    for start in sorted(cyclic_set):
+        # DFS from start following dependency edges inside the cycle set.
+        stack = [(start, [start])]
+        found = None
+        while stack and found is None:
+            node, path = stack.pop()
+            for nxt in sorted(deps.get(node, ())):
+                if nxt not in cyclic_set:
+                    continue
+                if nxt == start and len(path) > 1:
+                    found = path + [start]
+                    break
+                if nxt not in path:
+                    stack.append((nxt, path + [nxt]))
+            if found:
+                break
+        if found:
+            key = tuple(found)
+            if key not in seen_cycles:
+                seen_cycles.add(key)
+                paths.append(found)
+    return paths
 
 
 def _repo_grounding(comps, graph_path=None):
@@ -587,7 +717,7 @@ def _repo_grounding(comps, graph_path=None):
 
     # Reuse the comparison matcher so grounding and comparison agree on which
     # repository unit a component refers to.
-    node_of, _matched, _missing = _assign_matches(comps, nodes)
+    node_of, _matched, _missing, _ambiguous = _assign_matches(comps, nodes)
     node_by_id = {n.get('id'): n for n in nodes}
 
     # Incoming-edge counts per symbol (confirmed calls weigh more than may_call).
@@ -780,12 +910,15 @@ def _design_path(session_id: str) -> Path:
     return DESIGN_DIR / (safe + '.json')
 
 
-def save_design(session_id: str, payload: Dict[str, Any]) -> None:
+def save_design(session_id: str, payload: Dict[str, Any]) -> bool:
+    """Persist design state; returns False on failure so callers can warn."""
     try:
         DESIGN_DIR.mkdir(parents=True, exist_ok=True)
         _design_path(session_id).write_text(json.dumps(payload, indent=2, default=str))
+        return True
     except Exception as exc:
         log.warning('could not persist design state for %s: %s', session_id, exc)
+        return False
 
 
 def load_design(session_id: str) -> Dict[str, Any]:

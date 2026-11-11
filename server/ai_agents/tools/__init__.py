@@ -144,6 +144,7 @@ from .software_engineering_tools import (
     generate_class,
     extract_function,
     rename_symbol,
+    record_task_targets,
 )
 
 from .testing_verification_tools import (

@@ -1,3 +1,4 @@
+import hashlib
 import json
 import subprocess
 import time
@@ -27,6 +28,23 @@ def _run(cmd, cwd, timeout=180):
         return 124, '', 'timeout'
 
 
+def _worktree_fingerprint(cwd):
+    """Identify the exact patch a test/typecheck run saw: hash of the worktree
+    diff plus HEAD. /approve recomputes this and refuses stale results."""
+    import hashlib as _hl
+    head = _run(['git', 'rev-parse', 'HEAD'], cwd)[1].strip()
+    subprocess.run(['git', 'add', '-N', '.'], cwd=cwd, capture_output=True, text=True)
+    diff = _run(['git', 'diff', 'HEAD'], cwd)[1]
+    return {'diff_hash': _hl.sha256(diff.encode()).hexdigest()[:16], 'head': head}
+
+
+def _clear_verification(state):
+    """A patch that changed invalidates every recorded test/typecheck result."""
+    if state is not None:
+        state['last_test_run'] = {}
+        state['last_typecheck'] = {}
+
+
 def _detect_runner(cwd):
     p = Path(cwd)
     if (p / 'package.json').is_file():
@@ -43,15 +61,17 @@ def _jest(test_files, cwd):
         report = json.loads(out)
     except json.JSONDecodeError:
         return cmd, code, None, None, err[-2000:]
-    passed, failed = [], []
+    passed, failed, skipped = [], [], []
     for suite in report.get('testResults', []):
         for a in suite.get('assertionResults', []):
             if a['status'] == 'passed':
                 passed.append(_test_id(a['fullName']))
+            elif a['status'] == 'skipped' or a['status'] == 'pending' or a['status'] == 'todo':
+                skipped.append(_test_id(a['fullName']))
             else:
                 failed.append({'id': _test_id(a['fullName']),
                                'message': ' '.join(a.get('failureMessages', []))[:500]})
-    return cmd, code, passed, failed, err[-500:]
+    return cmd, code, passed, failed, skipped, err[-500:], []
 
 
 def _pytest(test_files, cwd):
@@ -59,19 +79,27 @@ def _pytest(test_files, cwd):
     cmd = ['python', '-m', 'pytest', '-q', f'--junitxml={xml_path}', *test_files]
     code, out, err = _run(cmd, cwd)
     if not xml_path.is_file():
-        return cmd, code, None, None, (out + err)[-2000:]
-    passed, failed = [], []
+        return cmd, code, None, None, None, (out + err)[-2000:], []
+    passed, failed, skipped = [], [], []
+    ran_files = set()
     for case in ET.parse(xml_path).getroot().iter('testcase'):
-        name = case.get('classname', '') + '::' + case.get('name', '')
+        classname = case.get('classname', '')
+        ran_files.add(classname.split('::')[0].split('.')[0] if '::' not in classname else classname.split('::')[0])
+        name = classname + '::' + case.get('name', '')
         bad = case.find('failure')
         if bad is None:
             bad = case.find('error')
         if bad is not None:
             failed.append({'id': name, 'message': (bad.get('message') or '')[:500]})
-        elif case.find('skipped') is None:
+        elif case.find('skipped') is not None:
+            skipped.append(name)
+        else:
             passed.append(name)
     xml_path.unlink(missing_ok=True)   # must not end up in the commit (commit_worktree runs git add -A)
-    return cmd, code, passed, failed, ''
+    # Requested test files that produced no testcase at all never ran.
+    not_run = [f for f in (test_files or [])
+               if Path(f).stem not in ran_files and f not in ran_files]
+    return cmd, code, passed, failed, skipped, err[-2000:], not_run
 
 
 @safe
@@ -80,6 +108,10 @@ def run_tests(test_files: list[str], tool_context: ToolContext) -> dict:
     unverified means no test actually ran. Never guess a result; report exactly what ran.'''
     if USE_CACHED_TESTS:
         data = json.loads(CACHED_TESTS_PATH.read_text())
+        # Cached results are labelled so /approve can refuse to treat them as
+        # verification of the current patch.
+        data = dict(data)
+        data['source'] = 'cached'
         tool_context.state['last_test_run'] = data
         return {'source': 'cached', **data}
     cwd = tool_context.state.get('worktree')
@@ -92,14 +124,17 @@ def run_tests(test_files: list[str], tool_context: ToolContext) -> dict:
         tool_context.state['last_test_run'] = result
         return result
     started = time.time()
-    cmd, code, passed, failed, err = (_jest if runner == 'jest' else _pytest)(test_files, cwd)
+    cmd, code, passed, failed, skipped, err, not_run = (_jest if runner == 'jest' else _pytest)(test_files, cwd)
     meta = {'source': 'live', 'runner': runner, 'command': ' '.join(cmd),
             'exit_code': code, 'duration_s': round(time.time() - started, 1)}
-    if passed is None or (not passed and not failed):
+    meta.update(_worktree_fingerprint(cwd))
+    if passed is None or (not passed and not failed and not skipped):
         result = {'status': 'unverified', **meta,
                   'error': 'No tests were executed, so nothing can be reported as passed.', 'stderr': err}
     else:
-        result = {'status': 'failed' if failed else 'passed', **meta, 'passed': passed, 'failed': failed}
+        result = {'status': 'failed' if failed else 'passed', **meta,
+                  'passed': passed, 'failed': failed, 'skipped': skipped or [],
+                  'checks_not_run': not_run or []}
     tool_context.state['last_test_run'] = result
     return result
 
@@ -108,7 +143,9 @@ def run_tests(test_files: list[str], tool_context: ToolContext) -> dict:
 def run_typecheck(tool_context: ToolContext) -> dict:
     '''Run the TypeScript type check in the sandbox worktree. Returns the first 40 lines of errors.'''
     if USE_CACHED_TESTS:
-        return {'status': 'ok', 'typecheck': 'passed', 'source': 'cached'}
+        res = {'status': 'ok', 'typecheck': 'passed', 'source': 'cached'}
+        tool_context.state['last_typecheck'] = res
+        return res
     cwd = tool_context.state.get('worktree')
     if not cwd:
         return {'status': 'error', 'error': 'No sandbox worktree. Call create_worktree first.'}
@@ -119,6 +156,7 @@ def run_typecheck(tool_context: ToolContext) -> dict:
         res = {'status': 'ok', 'typecheck': 'passed' if code == 0 else 'failed',
                'command': 'npx tsc --noEmit', 'exit_code': code,
                'errors': (out + err).splitlines()[:40], 'source': 'live'}
+        res.update(_worktree_fingerprint(cwd))
     tool_context.state['last_typecheck'] = res
     return res
 
