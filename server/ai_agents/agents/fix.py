@@ -100,7 +100,7 @@ error-handling defects, and test results are context, not your verdict.
 
 Patch under review: {proposed_patch}
 Test results (context only): {test_results}
-Security scan (deterministic, from run_security_scan): {security_scan}
+Security scan (deterministic scanner output): {security_scan}
 Active plan task (may be empty): {active_task}
 
 Process:

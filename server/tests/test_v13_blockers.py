@@ -218,7 +218,7 @@ class TestFixPipelinePermissions:
     def test_placeholder_tools_are_not_exposed(self):
         from ai_agents.agents.toolsets import TOOLSETS
         for name in ('generate_function', 'generate_class', 'extract_function', 'rename_symbol'):
-            assert name not in TOOLSETS['software_engineering']
+            assert name not in TOOLSETS.get('patch_agent', [])
 
 
 # --------------------------------------------------------------------------- repository switching

@@ -60,6 +60,18 @@ PATH_POLICIES: Dict[str, Dict[str, str]] = {
     'git_diff': {'repository_path': 'registered_repository',
                  'file_path': 'registered_repository'},
     'git_branch': {'repository_path': 'registered_repository'},
+    'read_worktree_file': {'file_path': 'active_worktree'},
+    'apply_patch_to_worktree': {'file_path': 'active_worktree',
+                                'target_file': 'active_worktree',
+                                'patch_file': 'active_worktree'},
+    'get_worktree_diff': {'file_path': 'active_worktree'},
+    'get_source': {'file_path': 'active_repository'},
+    'search_symbols': {'path': 'active_repository',
+                       'directory': 'active_repository'},
+    'find_tests_for_node': {'test_path': 'active_repository'},
+    'run_security_scan': {'files': 'active_worktree'},
+    'start_runtime_trace': {'command': 'active_worktree'},
+    'create_worktree': {'repository_path': 'registered_repository'},
 }
 
 

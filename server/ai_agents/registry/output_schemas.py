@@ -234,6 +234,7 @@ OUTPUT_SCHEMAS = {
                                   ok_required=['diff']),
     'read_worktree_file': envelope(ok_props={'file': _STR, 'content': _STR},
                                    ok_required=['file', 'content']),
+    'exit_loop': envelope({}),
 
     # ------------------------------------------------------------------
     # Repository family
@@ -565,6 +566,8 @@ OUTPUT_SCHEMAS = {
         ok_props={'scanner': _STR, 'scanner_version': _STR,
                   'ruleset_version': _STR, 'files_scanned': _INT,
                   'diff_hash': _STR, 'counts': _OBJ,
+                  'unsupported_rules_ignored': _INT,
+                  'unsupported_rule_ids': _OBJ,
                   'findings': {'type': 'array', 'items': SECURITY_FINDING}},
         ok_required=['scanner', 'findings', 'diff_hash'],
         statuses=['completed', 'failed', 'unavailable', 'error']),
@@ -743,3 +746,89 @@ for _t in [
     'zoom_graph',
 ]:
     OUTPUT_SCHEMAS.setdefault(_t, envelope())
+
+
+# ----------------------------------------------------------------------
+# Tools bound directly to fix_pipeline / analyst agents (v26 Phase 1).
+# Entries use the shared fragments defined above.
+# ----------------------------------------------------------------------
+_GNODE_LIST = {'type': 'array', 'items': GRAPH_NODE}
+OUTPUT_SCHEMAS.update({
+    'search_graph_symbols': envelope(
+        ok_props={'matches': _GNODE_LIST}, ok_required=['matches']),
+    'get_source': envelope(
+        ok_props={'id': _STR, 'file': _STR, 'first_line': _INT,
+                  'source': _STR, 'total_lines': _INT, 'truncated': _BOOL},
+        ok_required=['file', 'first_line', 'source']),
+    'get_callers': envelope(
+        ok_props={'node': _STR, 'callers': _GNODE_LIST, 'total': _INT,
+                  'truncated': _BOOL},
+        ok_required=['callers']),
+    'find_tests_for_node': envelope(
+        ok_props={'node': _STR, 'tests': _LIST, 'untested': _BOOL},
+        ok_required=['tests']),
+    'get_call_hierarchy': envelope(
+        ok_props={'symbol_name': _STR, 'symbol_id': _STR,
+                  'incoming_calls': _LIST, 'outgoing_calls': _LIST},
+        ok_required=['incoming_calls', 'outgoing_calls'],
+        extra_statuses=['not_found']),
+    'search_symbols': envelope(
+        ok_props={'symbol_name': _STR,
+                  'matches': {'type': 'array', 'items': _OBJ}},
+        ok_required=['matches']),
+    'get_node': envelope(
+        ok_props={'id': _STR, 'name': _STR, 'file': _STR, 'cluster': _STR,
+                  'coverage': {'type': ['number', 'null']}},
+        ok_required=['id']),
+    'get_callees': envelope(
+        ok_props={'node': _STR, 'callees': _GNODE_LIST, 'total': _INT,
+                  'truncated': _BOOL},
+        ok_required=['callees']),
+    'get_dependents': envelope(
+        ok_props={'node': _STR, 'dependents': _GNODE_LIST, 'total': _INT,
+                  'truncated': _BOOL},
+        ok_required=['dependents']),
+    'trace_path': envelope(
+        ok_props={'path': _LIST, 'hops': _LIST},
+        ok_required=['path'], extra_statuses=['no_path']),
+    'get_cluster': envelope(
+        ok_props={'cluster': _STR,
+                  'members': {'type': 'array', 'items': GRAPH_NODE},
+                  'total': _INT, 'truncated': _BOOL},
+        ok_required=['members']),
+    'get_coverage': envelope(
+        ok_props={'node': _STR, 'coverage': {'type': ['number', 'null']}},
+        ok_required=['coverage']),
+    'get_diff': envelope(
+        ok_props={'branch': _STR, 'diff': _STR},
+        ok_required=['branch', 'diff']),
+    'list_changed_nodes': envelope(
+        ok_props={'changed_nodes': _LIST},
+        ok_required=['changed_nodes']),
+    'analyze_dependencies': envelope(
+        ok_props={'file_path': _STR, 'dependencies': _LIST},
+        ok_required=['dependencies']),
+    # Runtime tracing (Phase 3). Events carry names/locations only.
+    'start_runtime_trace': envelope(
+        ok_props={'trace_id': _STR}, ok_required=['trace_id']),
+    'stop_runtime_trace': envelope(ok_props={'trace_id': _STR}),
+    'get_runtime_trace': envelope(
+        ok_props={'trace_id': _STR,
+                  'events': {'type': 'array', 'items': {
+                      'type': 'object',
+                      'required': ['sequence', 'kind', 'function', 'file',
+                                   'line'],
+                      'properties': {
+                          'sequence': _INT,
+                          'kind': {'enum': ['call', 'return', 'exception']},
+                          'function': _STR, 'file': _STR, 'line': _INT,
+                          'module': _STR, 'exception_type': _STR}}},
+                  'call_edges': {'type': 'array', 'items': {
+                      'type': 'object',
+                      'required': ['source', 'target']}},
+                  'exit_code': {'type': ['integer', 'null']},
+                  'truncated': _BOOL},
+        ok_required=['trace_id'],
+        extra_statuses=['running', 'completed', 'failed', 'stopped',
+                        'timed_out']),
+})

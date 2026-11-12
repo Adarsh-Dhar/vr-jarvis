@@ -14,6 +14,7 @@ from .repository_tools import (
     search_code,
     get_repository_metadata,
     get_changed_files,
+    search_symbols,
 )
 
 from .navigation_tools import (
@@ -24,6 +25,7 @@ from .navigation_tools import (
     get_imports,
     get_exports,
     get_scope_information,
+    get_call_hierarchy,
 )
 
 from .analysis_tools import (
@@ -31,6 +33,7 @@ from .analysis_tools import (
     extract_symbols,
     resolve_types,
     analyze_control_flow,
+    analyze_dependencies,
 )
 
 from .orchestrator_tools import (
@@ -48,7 +51,6 @@ from .architecture_tools import (
     propose_architecture,
     compare_to_repository,
     generate_implementation_plan,
-    verify_task_evidence,
 )
 
 from .conversational_tools import (
@@ -123,26 +125,11 @@ from .data_flow_intelligence_tools import (
 )
 
 from .software_engineering_tools import (
-    edit_file,
-    apply_patch,
-    search_and_replace,
-    format_code,
-    organize_imports,
-    git_status,
-    git_diff,
-    git_branch,
-    generate_function,
-    generate_class,
-    extract_function,
-    rename_symbol,
     record_task_targets,
 )
 
 from .testing_verification_tools import (
     discover_tests,
-    run_unit_tests,
-    run_integration_tests,
-    run_regression_tests,
     measure_test_coverage,
     map_tests_to_functions,
     identify_untested_paths,
@@ -178,6 +165,16 @@ from .visualization_spatial_tools import (
 
 from .graph_tools import (
     verify_citations,
+    search_graph_symbols,
+    get_source,
+    get_callers,
+    find_tests_for_node,
+    get_node,
+    get_callees,
+    get_dependents,
+    trace_path,
+    get_cluster,
+    get_coverage,
 )
 
 from .security_tools import run_security_scan
@@ -198,6 +195,8 @@ from .git_tools import (
     get_worktree_diff,
     read_worktree_file,
     get_recent_commits,
+    get_diff,
+    list_changed_nodes,
 )
 
 from .scene_tools import (
@@ -226,6 +225,12 @@ from .scene_tools import (
 from .control_tools import (
     request_approval,
     exit_loop,
+)
+
+from .runtime_tools import (
+    start_runtime_trace,
+    stop_runtime_trace,
+    get_runtime_trace,
 )
 
 from .findings_tools import (

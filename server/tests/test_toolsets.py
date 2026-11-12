@@ -97,7 +97,9 @@ def _agent_instructions():
         'result_scene_director': {'highlight_vr_path', 'dim_unrelated', 'focus_camera',
                                   'open_code_panel', 'set_edge_style', 'show_ghost_diff',
                                   'show_test_badges', 'set_mode', 'get_worktree_diff'},
-        'jarvis_orchestrator': {'request_approval', 'exit_loop'},
+        'jarvis_orchestrator': {'request_approval', 'exit_loop',
+                                'start_runtime_trace', 'stop_runtime_trace',
+                                'get_runtime_trace'},  # named to delegate, not called
     }
     return instructions, allowed_override
 
@@ -155,6 +157,78 @@ def test_review_loop_reviews_final_patch():
     repair = make_patch_review_repair()
     assert 'code_review' in repair.instruction
     assert 'acceptance' in repair.instruction
+
+
+def _minimal_valid_args(tool, reg):
+    """Fill required parameters from the registry input schema with type-correct
+    placeholder values."""
+    spec = reg.get(_tool_callable_name(tool))
+    schema = (spec.input_schema if spec else None) or {}
+    args = {}
+    for pname in schema.get('required', []):
+        pschema = (schema.get('properties') or {}).get(pname) or {}
+        t = pschema.get('type')
+        if t == 'array' or (isinstance(t, list) and 'array' in t):
+            args[pname] = []
+        elif t == 'integer' or (isinstance(t, list) and 'integer' in t):
+            args[pname] = 1
+        elif t == 'number' or (isinstance(t, list) and 'number' in t):
+            args[pname] = 1.0
+        elif t == 'boolean' or (isinstance(t, list) and 'boolean' in t):
+            args[pname] = True
+        elif t == 'object' or (isinstance(t, list) and 'object' in t):
+            args[pname] = {}
+        elif pschema.get('enum'):
+            args[pname] = pschema['enum'][0]
+        else:
+            args[pname] = 'x'
+    return args
+
+
+def _tool_callable_name(t):
+    return getattr(t, 'name', None) or getattr(t, '__name__', str(t))
+
+
+class _FakeTool:
+    def __init__(self, name):
+        self.name = name
+
+
+class FakeToolContext:
+    def __init__(self, agent_name, state=None):
+        self.agent_name = agent_name
+        self.state = state if state is not None else {}
+
+
+def test_every_bound_tool_is_registered():
+    from ai_agents.agents.validate_toolsets import validate_agent_bindings
+    assert validate_agent_bindings() == []
+
+
+def test_permission_guard_accepts_every_bound_tool():
+    from ai_agents.agents.validate_toolsets import (collect_active_agents,
+                                                     _tool_name)
+    from ai_agents.callbacks import permission_guard
+    from ai_agents.registry.tool_registry import get_tool_registry
+    from ai_agents import config
+    from ai_agents.tools._common import repo_root
+    reg = get_tool_registry()
+    old_wt = getattr(config, 'ACTIVE_WORKTREE', None)
+    config.ACTIVE_WORKTREE = str(repo_root())
+    try:
+        for aname, agent in collect_active_agents().items():
+            for t in agent.tools:
+                name = _tool_name(t)
+                ctx = FakeToolContext(agent_name=aname,
+                                      state={'worktree': '/tmp/wt'})
+                res = permission_guard(_FakeTool(name),
+                                       _minimal_valid_args(t, reg), ctx)
+                assert not (res and res.get('validation') == 'input_schema'), \
+                    (aname, name, res)
+                assert not (res and 'not registered' in str(res)), \
+                    (aname, name, res)
+    finally:
+        config.ACTIVE_WORKTREE = old_wt
 
 
 def test_tool_registry_contracts():

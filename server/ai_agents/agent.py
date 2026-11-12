@@ -190,6 +190,11 @@ Rules:
 - Before any step that would change code outside the sandbox, call request_approval and wait.
 - Spoken replies are at most two sentences.
 - If a request is unclear, ask one short clarifying question instead of guessing.
+
+Runtime tracing: use static analysis by default. Call start_runtime_trace only when the
+user explicitly asks to execute or trace code. For a question about an earlier trace,
+call get_runtime_trace with its trace_id. Never state that a trace exists or describe
+its events until a runtime tool has returned status ok.
 '''
 
 root_agent = LlmAgent(
