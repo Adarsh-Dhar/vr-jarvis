@@ -94,17 +94,25 @@ class CallSiteConnector:
         operation: ExpressionFact,
         facts: DefUseFacts
     ) -> Optional[str]:
-        """
-        Resolve the callee function ID for a call operation.
-
-        This is a simplified implementation. A full version would use
-        the existing call resolver from the codebase.
-        """
-        # Try to extract a qualified name from the expression
-        expr = operation.expression
-
-        # For now, return None if we can't resolve it
-        # This means we'll mark it as 'unresolved' or 'dynamic'
+        """Resolve the callee through the shared confirmed-call resolver
+        (call_target.resolve_call_target) using the builder's index graph.
+        Returns the target id only for status 'resolved'; every other status
+        maps to an unresolved/polymorphic CallSite resolution."""
+        builder = self._summary_builder
+        graph = getattr(builder, '_graph', None)
+        if graph is None:
+            return None
+        from .call_target import resolve_call_target
+        file_of = getattr(builder, '_file_of', {}) or {}
+        file = file_of.get(facts.function_id) or facts.file
+        res = resolve_call_target(graph, facts.function_id, file,
+                                  operation.line,
+                                  getattr(operation, 'column', None))
+        # Stash the full result so _determine_resolution/callers can see it.
+        operation.metadata = dict(operation.metadata or {})
+        operation.metadata['call_target'] = res
+        if res['status'] == 'resolved':
+            return res.get('target_id')
         return None
 
     def _determine_resolution(
@@ -113,6 +121,14 @@ class CallSiteConnector:
         callee_id: Optional[str]
     ) -> str:
         """Determine the resolution confidence of a call."""
+        target = (operation.metadata or {}).get('call_target') or {}
+        status = target.get('status')
+        if callee_id and status == 'resolved':
+            return 'static_resolved'
+        if status == 'possible':
+            return 'polymorphic'
+        if status in ('ambiguous', 'unresolved'):
+            return 'unresolved'
         if callee_id:
             return 'static_resolved'
         elif 'self.' in operation.expression or 'cls.' in operation.expression:
@@ -127,12 +143,20 @@ class CallSiteConnector:
         call_site: CallSite,
         caller_facts: DefUseFacts,
         callee_facts: Optional[DefUseFacts],
-        callee_summary: Optional[FunctionSummary]
+        callee_summary: Optional[FunctionSummary],
+        callee_func_ast=None,
+        is_method: bool = False
     ) -> List[InterproceduralEdge]:
         """
         Create interprocedural edges for a call site.
 
-        Returns argument edges and return edges.
+        Argument binding uses call_binding.bind_call against the callee's
+        real signature (keywords, defaults, self/cls, *args/**kwargs and
+        positional-only rules) — never a positional index guess. Only
+        bindings with status 'bound' produce edges; aggregate bindings
+        (vararg/kwarg) produce 'possible' edges, never per-element edges.
+        A 'confirmed' edge additionally requires the call site itself to be
+        'static_resolved'.
         """
         edges = []
 
@@ -140,34 +164,77 @@ class CallSiteConnector:
             # Unresolved call - no edges
             return edges
 
-        # Create argument edges: actual arg -> formal param
-        param_defs = [d for d in callee_facts.definitions if d.kind == 'parameter']
+        from .call_binding import bind_call
 
-        for i, actual_arg_id in enumerate(call_site.actual_args):
-            if i < len(param_defs):
-                param_def = param_defs[i]
+        call_op = next((o for o in caller_facts.operations
+                        if o.id == call_site.operation_id), None)
+        call_shape = ((call_op.metadata or {}).get('call_shape')
+                      if call_op else None)
+        binding = bind_call(call_shape, callee_func_ast, is_method=is_method)
 
+        param_defs = {d.variable: d for d in callee_facts.definitions
+                      if d.kind == 'parameter'}
+        site_confirmed = call_site.resolution == 'static_resolved'
+
+        for b in binding.get('bindings') or []:
+            param_def = param_defs.get(b.get('param')) if b.get('param') else None
+            aggregate = b.get('precision') == 'aggregate' \
+                or b.get('param_kind') in ('vararg', 'kwarg')
+            confirmed = site_confirmed and b.get('status') == 'bound' \
+                and not aggregate
+            resolution = 'confirmed' if confirmed else 'possible'
+            for use_id in b.get('use_ids') or [call_site.operation_id]:
                 self._edge_counter += 1
                 edge = InterproceduralEdge(
                     edge_id=f"{call_site.call_site_id}_arg_{self._edge_counter}",
                     call_site_id=call_site.call_site_id,
                     source_kind='argument',
-                    source_id=actual_arg_id,
+                    source_id=use_id,
                     target_kind='parameter',
-                    target_id=param_def.id,
-                    resolution='confirmed' if call_site.resolution == 'static_resolved' else 'possible',
+                    target_id=param_def.id if param_def else
+                              'unbound:%s' % (b.get('param') or 'arg'),
+                    resolution=resolution,
                     metadata={
-                        'param_index': i,
-                        'param_name': param_def.variable
+                        'param_name': b.get('param'),
+                        'param_kind': b.get('param_kind'),
+                        'arg_index': b.get('arg_index'),
+                        'keyword': b.get('keyword'),
+                        'aggregate': aggregate,
                     }
                 )
                 edges.append(edge)
 
-        # Create return edges: callee return -> call result
-        if callee_summary:
-            # Find the use of the call result in the caller
-            # This is simplified - we'd need to find the use that corresponds to this call
-            pass
+        # Return edges: each callee return feeds the caller's use (or the
+        # definition) that consumes the call result.
+        return_sources = [o.id for o in callee_facts.operations
+                          if o.operation == 'return_value']
+        if callee_summary and callee_summary.returns_from:
+            return_sources += ['summary:%s' % r
+                               for r in sorted(callee_summary.returns_from)]
+        result_def_ids = set((call_op.output_definition_ids
+                              if call_op else []) or [])
+        result_defs = [d for d in caller_facts.definitions
+                       if d.id in result_def_ids]
+        if return_sources and result_defs:
+            for rdef in result_defs:
+                consumers = [u for u in caller_facts.uses
+                             if u.binding_key == rdef.binding_key
+                             and u.line >= call_site.line]
+                targets = [u.id for u in consumers] or [rdef.id]
+                for src in return_sources:
+                    for tgt in targets:
+                        self._edge_counter += 1
+                        edges.append(InterproceduralEdge(
+                            edge_id=f"{call_site.call_site_id}_ret_{self._edge_counter}",
+                            call_site_id=call_site.call_site_id,
+                            source_kind='return',
+                            source_id=src,
+                            target_kind='call_result',
+                            target_id=tgt,
+                            resolution='confirmed' if site_confirmed else 'possible',
+                            metadata={'result_definition': rdef.id,
+                                      'param_name': rdef.variable}
+                        ))
 
         return edges
 

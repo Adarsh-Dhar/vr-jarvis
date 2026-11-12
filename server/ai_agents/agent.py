@@ -143,12 +143,18 @@ phase2_specialists = ParallelAgent(
     sub_agents=[repository_intelligence_agent, code_understanding_agent, relationship_intelligence_agent, build_data_flow_agent()],
 )
 
-phase2_pipeline = SequentialAgent(
-    name='phase2_pipeline',
-    description='First vertical slice: explain function and show connections',
+# Single project-understanding role: one named pipeline that routes to the
+# four specialists (repository, code, relationship, data-flow) plus critic,
+# visualization and conversational synthesis.
+project_understanding_agent = SequentialAgent(
+    name='project_understanding_agent',
+    description=('Project understanding: explains the repository, code, '
+                 'relationships and data flow. Runs the repository, code '
+                 'understanding, relationship and data-flow specialists, '
+                 'then critiques, visualizes and answers.'),
     sub_agents=[
         phase2_specialists,
-        make_critic('phase2_critic', 'findings'),
+        make_critic('project_understanding_critic', 'findings'),
         visualization_agent,
         conversational_agent
     ],
@@ -162,7 +168,7 @@ a VR headset. Requests arrive as spoken text or as a pinch on a graph node.
 Current selection (may be empty): {selection}
 
 Route each request by delegating to the ONE sub-agent or pipeline that owns it:
-- phase2_pipeline: explain code and show connections (new vertical slice)
+- project_understanding_agent: explain the repository, code, relationships and data flow
 - investigate_pipeline: how existing code works, where something happens, what a selected node does.
 - impact_pipeline: what breaks, what is affected, risk of changing or removing something, change review.
 - fix_pipeline: add, fix or change code, propose a patch. This is the ONLY route that changes code,
@@ -173,7 +179,7 @@ Route each request by delegating to the ONE sub-agent or pipeline that owns it:
   investigator, then relationship and data-flow intelligence in parallel, and answers with likely
   cause, evidence references, a proposed correction and an explanation. Call fix_pipeline afterwards
   ONLY if the developer asks you to apply a fix — debugging itself never modifies code.
-- For broad 'how does this project work' questions, use phase2_pipeline.
+- For broad 'how does this project work' questions, use project_understanding_agent.
 - navigator: open or switch a repository, show a folder or file, change tab, or move, resize, hide, pin, zoom or recenter anything in the workspace.
 
 For data flow or testing requests, delegate to exactly one of:
@@ -192,7 +198,7 @@ root_agent = LlmAgent(
     description='Voice-and hands assistant for understanding and changing code in VR.',
     instruction=ROOT_INSTRUCTION,
     tools=[request_approval],
-    sub_agents=[phase2_pipeline, investigate_pipeline, impact_pipeline, fix_pipeline,
+    sub_agents=[project_understanding_agent, investigate_pipeline, impact_pipeline, fix_pipeline,
                 debug_pipeline,
                 data_flow_pipeline, testing_pipeline,   # engineering_pipeline removed: fix_pipeline is the only code-change route
                 architecture_design_agent, implementation_planning_agent, navigator_agent],

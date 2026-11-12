@@ -154,22 +154,73 @@ def _resolve_python_function(function_id):
         tree = parse_python_module(source, file_path)
     except Exception as e:
         return None, {'status': 'error', 'function_id': function_id, 'error': str(e)}
-    symbol = {'id': node.get('id'), 'name': node.get('name'),
-              'qualname': node.get('qualname'), 'file': file_path,
-              'start': node.get('start'), 'end': node.get('end'),
-              'kind': node.get('kind')}
-    func_ast = find_function_ast(tree, symbol)
-    if func_ast is None:
-        simple = node.get('name') or (node.get('id', '').split('.')[-1] if node.get('id') else '')
-        for n in ast.walk(tree):
-            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name == simple:
-                func_ast = n
-                break
+    func_ast, amb = _select_function_ast(tree, node, file_path)
+    if amb is not None:
+        return None, amb
     if func_ast is None:
         return None, {'status': 'not_found', 'function_id': function_id,
                       'message': 'Function AST node not found'}
     return {'node': node, 'file': file_path, 'source': source, 'tree': tree,
             'func_ast': func_ast}, None
+
+
+def _function_candidates(tree):
+    """All function defs in the module as (qualified_name, node) pairs,
+    where the qualified name includes enclosing class/function scopes."""
+    out = []
+
+    def visit(node, scope):
+        for ch in ast.iter_child_nodes(node):
+            if isinstance(ch, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                q = '.'.join(scope + [ch.name])
+                out.append((q, ch))
+                visit(ch, scope + [ch.name])
+            elif isinstance(ch, ast.ClassDef):
+                visit(ch, scope + [ch.name])
+            else:
+                visit(ch, scope)
+
+    visit(tree, [])
+    return out
+
+
+def _select_function_ast(tree, node, file_path):
+    """Pick the AST node for a graph function node.
+
+    Order: (1) find_function_ast exact match; (2) candidates whose qualified
+    name equals the node's qualname; (3) among those, the one whose lineno
+    equals node['start']. Exactly one survivor is returned; several yields an
+    'ambiguous' error dict; none yields (None, None) -> not_found upstream.
+    Returns (func_ast, error_dict_or_None)."""
+    from ..intelligence.parsers.python_symbol_locator import find_function_ast
+
+    symbol = {'id': node.get('id'), 'name': node.get('name'),
+              'qualname': node.get('qualname'), 'file': file_path,
+              'start': node.get('start'), 'end': node.get('end'),
+              'kind': node.get('kind')}
+    func_ast = find_function_ast(tree, symbol)
+    if func_ast is not None:
+        return func_ast, None
+
+    qualname = node.get('qualname')
+    candidates = _function_candidates(tree)
+    matched = [(q, n) for q, n in candidates
+               if qualname and q == qualname]
+    if not matched:
+        return None, None
+    start = node.get('start')
+    if start is not None:
+        by_line = [(q, n) for q, n in matched
+                   if getattr(n, 'lineno', None) == start]
+        if by_line:
+            matched = by_line
+    if len(matched) == 1:
+        return matched[0][1], None
+    return None, {'status': 'ambiguous', 'function_id': node.get('id'),
+                  'message': 'Multiple functions match %r in %s' % (
+                      qualname, file_path),
+                  'candidates': ['%s:%s' % (q, getattr(n, 'lineno', '?'))
+                                 for q, n in matched]}
 
 
 def _function_facts(function_id, use_cache=True):
@@ -403,16 +454,231 @@ def _caller_result_flows(ctx):
                 result['subsequent_uses'] = {
                     v: sorted(us, key=lambda x: (x['line'], x['column']))[:20]
                     for v, us in uses_by_var.items()}
+                # Narrow attribute/subscript propagation (no alias analysis).
+                attr_sub = _attribute_subscript_uses(
+                    caller_ctx, cls['attributes'], cls['subscripts'],
+                    call_pos)
+                if attr_sub:
+                    result['attribute_subscript_uses'] = attr_sub
         elif isinstance(stmt, ast.Return):
             result = {'disposition': 'returned'}
         elif isinstance(stmt, ast.Expr) and stmt.value is call_node:
             result = {'disposition': 'expression_result_unused'}
         elif stmt is not None:
-            result = {'disposition': 'nested_in_expression',
-                      'context': ast.unparse(stmt)[:200] if hasattr(ast, 'unparse') else None}
+            result = _expression_path_result(stmt, call_node,
+                                             caller_ctx, MAX_EXPR_HOPS)
         entry['result'] = result
         (results if result['disposition'] != 'unresolved' else unresolved).append(entry)
     return results, unresolved
+
+
+def _access_path(target):
+    """Access-path string for an attribute/subscript target, or None when it
+    is not a plain Name base with at most constant subscripts (depth <= 2)."""
+    try:
+        parts = []
+        node = target
+        depth = 0
+        while isinstance(node, (ast.Attribute, ast.Subscript)):
+            depth += 1
+            if depth > 2:
+                return None
+            if isinstance(node, ast.Attribute):
+                parts.append('.' + node.attr)
+                node = node.value
+            else:
+                sl = node.slice
+                if isinstance(sl, ast.Constant) and isinstance(
+                        sl.value, (str, int)):
+                    parts.append('[%r]' % sl.value)
+                else:
+                    return None
+                node = node.value
+        if isinstance(node, ast.Name):
+            return node.id + ''.join(reversed(parts))
+    except Exception:
+        return None
+    return None
+
+
+def _attribute_subscript_uses(ctx, attributes, subscripts, after_pos):
+    """Scan later uses of recorded attribute/subscript targets.
+
+    Reports {'precision': 'partial', 'access_path', 'uses',
+    'stopped_because'} per resolvable path; unresolved paths get a reason.
+    Stops at a reassignment of the base name or a call receiving the base
+    object (possible mutation)."""
+    out = []
+    uses = sorted(ctx['facts'].uses,
+                   key=lambda u: (u.line, u.column))
+    defs = ctx['facts'].definitions
+    ops = ctx['facts'].operations
+    for raw in list(attributes) + list(subscripts):
+        try:
+            target = ast.parse(raw, mode='eval').body \
+                if isinstance(raw, str) else raw
+        except Exception:
+            target = None
+        path = _access_path(target) if target is not None else None
+        if path is None:
+            out.append({'access_path': None, 'precision': 'unresolved',
+                        'reason': 'non-constant or deep access path'})
+            continue
+        base = path.split('.')[0].split('[')[0]
+        is_param = any(d.variable == base and d.kind == 'parameter'
+                       for d in defs)
+        is_global = any((d.metadata or {}).get('is_global')
+                        and d.variable == base for d in defs)
+        if is_param or is_global:
+            out.append({'access_path': path, 'precision': 'unresolved',
+                        'reason': 'base is a parameter or global'})
+            continue
+        hits, stopped = [], None
+        for u in uses:
+            if (u.line, u.column) <= after_pos:
+                continue
+            if u.variable != path:
+                continue
+            # Reassignment of the base name kills the path.
+            if any(d.variable == base and d.kind != 'parameter'
+                   and (d.line, d.column) > after_pos
+                   and (d.line, d.column) < (u.line, u.column)
+                   for d in defs):
+                stopped = 'base_reassigned'
+                break
+            # A call receiving the base object may mutate it.
+            if any(o.operation == 'Call' and o.line <= u.line
+                   for o in ops):
+                # conservative: any later call in the function stops the scan
+                stopped = 'possible_mutation'
+                break
+            hits.append(_use_out(u))
+        entry = {'access_path': path, 'precision': 'partial',
+                 'uses': hits[:20]}
+        if stopped:
+            entry['stopped_because'] = stopped
+        out.append(entry)
+    return out
+
+
+MAX_EXPR_HOPS = 8
+
+
+def _describe_hop(parent, child):
+    """Describe one step from a parent AST node to the child on the path
+    from a nested call up to its statement."""
+    if isinstance(parent, ast.Call):
+        if child is parent.func:
+            return {'kind': 'call_callee',
+                    'callee': ast.unparse(parent.func)[:120]
+                    if hasattr(ast, 'unparse') else None}
+        for i, a in enumerate(parent.args):
+            if a is child:
+                return {'kind': 'call_arg', 'position': i}
+        for kw in parent.keywords:
+            if kw.value is child:
+                return {'kind': 'call_keyword', 'name': kw.arg}
+        return {'kind': 'call'}
+    if isinstance(parent, ast.keyword):
+        return {'kind': 'keyword', 'name': parent.arg}
+    if isinstance(parent, ast.Attribute):
+        return {'kind': 'attribute', 'name': parent.attr}
+    if isinstance(parent, ast.Subscript):
+        return {'kind': 'subscript'}
+    if isinstance(parent, (ast.Assign, ast.AnnAssign, ast.AugAssign)):
+        return {'kind': 'assign_value'}
+    if isinstance(parent, ast.Return):
+        return {'kind': 'return'}
+    if isinstance(parent, ast.Expr):
+        return {'kind': 'expr'}
+    if isinstance(parent, ast.BoolOp):
+        return {'kind': 'boolop', 'op': type(parent.op).__name__}
+    if isinstance(parent, ast.BinOp):
+        return {'kind': 'binop', 'op': type(parent.op).__name__}
+    if isinstance(parent, ast.UnaryOp):
+        return {'kind': 'unaryop', 'op': type(parent.op).__name__}
+    if isinstance(parent, ast.Compare):
+        return {'kind': 'compare'}
+    if isinstance(parent, ast.IfExp):
+        return {'kind': 'ifexp'}
+    if isinstance(parent, (ast.Tuple, ast.List, ast.Set)):
+        return {'kind': 'collection'}
+    if isinstance(parent, ast.Starred):
+        return {'kind': 'starred'}
+    if isinstance(parent, ast.JoinedStr):
+        return {'kind': 'fstring'}
+    if isinstance(parent, ast.FormattedValue):
+        return {'kind': 'format'}
+    return {'kind': type(parent).__name__.lower()}
+
+
+def _expression_path_result(stmt, call_node, ctx, max_hops):
+    """Walk from a nested call node up to its statement and describe the
+    consumption path. Pure expression structure is 'confirmed'; a hop
+    through another call is 'possible' unless that call resolves to a
+    confirmed target (checked via the shared call resolver)."""
+    # Parent map over the statement (bounded by max_hops anyway).
+    parents = {}
+    stack = [stmt]
+    seen = set()
+    while stack:
+        n = stack.pop()
+        if id(n) in seen:
+            continue
+        seen.add(id(n))
+        for ch in ast.iter_child_nodes(n):
+            parents[ch] = n
+            stack.append(ch)
+
+    path = []
+    cur = call_node
+    truncated = False
+    while cur is not stmt:
+        parent = parents.get(cur)
+        if parent is None:
+            break
+        hop = _describe_hop(parent, cur)
+        # Resolution: structural hops are confirmed; a hop into another
+        # call's arguments is only 'possible' (we do not claim the outer
+        # call propagates this value without interprocedural evidence).
+        if hop['kind'] in ('call_arg', 'call_keyword', 'call_callee',
+                           'call', 'keyword'):
+            hop['resolution'] = 'possible'
+            hop['reason'] = 'value consumed by an outer call; propagation ' \
+                            'into its result is not statically confirmed'
+        else:
+            hop['resolution'] = 'confirmed'
+        path.append(hop)
+        cur = parent
+        if len(path) >= max_hops:
+            if cur is not stmt:
+                truncated = True
+            break
+
+    if isinstance(stmt, (ast.Assign, ast.AnnAssign, ast.AugAssign)) \
+            and getattr(stmt, 'value', None) is not None:
+        final = 'assigned'
+    elif isinstance(stmt, ast.Return):
+        final = 'returned'
+    elif isinstance(stmt, ast.Expr):
+        final = 'unused'
+    else:
+        final = 'expression'
+
+    out = {'disposition': 'consumed_by_expression',
+           'path': path,
+           'final': final,
+           'precision': 'expression'}
+    if truncated:
+        out['truncated'] = True
+    if final == 'assigned':
+        targets = stmt.targets if isinstance(stmt, ast.Assign) else [stmt.target]
+        cls = _classify_targets(targets)
+        if cls['variables'] or cls['attributes'] or cls['subscripts']:
+            out['assigned_variables'] = sorted(set(cls['variables']))
+            out['assigned_attributes'] = cls['attributes']
+            out['assigned_subscripts'] = cls['subscripts']
+    return out
 
 
 @safe
@@ -845,72 +1111,30 @@ def _callee_name(expression):
         return m.group(1) if m else None
 
 
-# Call-edge entries from graph.callees/graph.callers carry 'kind'
-# ('confirmed' for static calls edges, 'possible'/'ambiguous' for may_call)
-# and 'resolution' (the indexer's result status: 'static_resolved',
-# 'polymorphic', 'ambiguous', ...). Only a statically confirmed edge may
-# produce a confirmed data-flow edge.
-_CONFIRMED_RESOLUTIONS = {'confirmed', 'static_resolved'}
-
-
 def _edge_is_confirmed(e):
-    kind = e.get('kind')
-    if kind:
-        return kind == 'confirmed'
-    return e.get('resolution') in _CONFIRMED_RESOLUTIONS
+    from ..intelligence.dataflow.call_target import edge_is_confirmed
+    return edge_is_confirmed(e)
 
 
 def _resolve_call_target(graph, ctx, op):
-    """Resolve the callee of a Call operation through the index's call-site
-    edges, matched on file, line and column. Never picks a first match:
-
-    - exactly one statically confirmed target -> {'status': 'resolved', ...}
-    - several candidate targets / ambiguous edge -> {'status': 'ambiguous', ...}
-    - only possible (unconfirmed) edges       -> {'status': 'possible', ...}
-    - no usable call-site edge                -> {'status': 'unresolved', ...}
-    """
-    try:
-        entries = graph.callees(ctx['function_id'], depth=1,
-                                include_possible=True, include_ambiguous=True)
-    except Exception:
-        entries = []
-    candidates = [e for e in entries
-                  if e.get('file') == ctx['file'] and e.get('line') == op.line]
-    if not candidates:
-        return {'status': 'unresolved',
-                'reason': 'no call-site edge recorded at %s:%s' % (ctx['file'], op.line)}
-    col = getattr(op, 'column', None)
-    exact = [e for e in candidates if col is not None and e.get('column') == col]
-    if exact:
-        candidates = exact
-    elif len(candidates) > 1:
-        return {'status': 'ambiguous',
-                'candidates': sorted({e.get('to') for e in candidates if e.get('to')})}
-    targets = []
-    for e in candidates:
-        t = e.get('to')
-        if t and t not in targets:
-            targets.append(t)
-    if any(e.get('resolution') == 'ambiguous' for e in candidates) \
-            or len(targets) > 1:
-        return {'status': 'ambiguous', 'candidates': targets, 'edges': candidates}
-    if not targets:
-        return {'status': 'unresolved', 'reason': 'call-site edge has no target'}
-    confirmed = [e for e in candidates if _edge_is_confirmed(e)]
-    if not confirmed:
-        return {'status': 'possible', 'candidates': targets,
-                'reason': 'call edge is not statically resolved',
-                'edges': candidates}
-    node = graph.get(targets[0])
-    if not node:
-        return {'status': 'unresolved',
-                'reason': 'call target %s not present in graph' % targets[0]}
-    return {'status': 'resolved', 'node': node, 'node_id': targets[0],
-            'edge': confirmed[0]}
+    """Thin wrapper over the shared resolver in
+    intelligence.dataflow.call_target; adds the resolved graph node."""
+    from ..intelligence.dataflow.call_target import resolve_call_target
+    res = resolve_call_target(graph, ctx['function_id'], ctx['file'],
+                              op.line, getattr(op, 'column', None))
+    if res['status'] == 'resolved':
+        node = graph.get(res['target_id'])
+        if not node:
+            return {'status': 'unresolved',
+                    'reason': 'call target %s not present in graph'
+                              % res['target_id']}
+        res['node'] = node
+        res['node_id'] = res['target_id']
+    return res
 
 
 def _ops_by_id(ctx):
-    return {o.id: o for o in ctx['facts'].operations}
+    return {o.id: o for o in ctx['facts'].operations if hasattr(o, 'id')}
 
 
 def _expand_arg_uses(ctx, arg):
@@ -1021,6 +1245,8 @@ def trace_cross_function_flow(
                 if not matched:
                     continue
                 pd = param_defs.get(b['param'])
+                aggregate = b.get('precision') == 'aggregate' \
+                    or b.get('param_kind') in ('vararg', 'kwarg')
                 for u in matched:
                     bound_hit_ids.add(u.id)
                     outbound.append({
@@ -1030,7 +1256,8 @@ def trace_cross_function_flow(
                         'callee': callee_ctx['function_id'],
                         'parameter': {'name': b['param'],
                                       'line': pd.line if pd else None},
-                        'resolution': 'confirmed',
+                        'resolution': 'possible' if aggregate else 'confirmed',
+                        'aggregate': aggregate,
                     })
             for u in hits:
                 if u.id not in bound_hit_ids:
@@ -1208,6 +1435,70 @@ def _is_open_call(ctx, op):
     return (op.expression or '').strip().startswith('open(')
 
 
+def _dotted_callee(func):
+    """Dotted name of a call func node, e.g. 'io.open', 'Path'."""
+    parts = []
+    while isinstance(func, ast.Attribute):
+        parts.append(func.attr)
+        func = func.value
+    if isinstance(func, ast.Name):
+        parts.append(func.id)
+    return '.'.join(reversed(parts)) if parts else None
+
+
+def _path_receiver_names(func_ast):
+    """Names established as pathlib.Path inside this function: assigned from
+    a Path(...) call or annotated as Path."""
+    names = set()
+    for node in ast.walk(func_ast):
+        if isinstance(node, (ast.Assign, ast.AnnAssign)):
+            targets = node.targets if isinstance(node, ast.Assign) \
+                else [node.target]
+            value = node.value
+            is_path_ctor = isinstance(value, ast.Call) and \
+                _dotted_callee(value.func) in ('Path', 'PurePath',
+                                               'pathlib.Path',
+                                               'pathlib.PurePath')
+            ann = getattr(node, 'annotation', None)
+            ann_is_path = ann is not None and \
+                'Path' in (ast.unparse(ann) if hasattr(ast, 'unparse')
+                           else str(ann))
+            if is_path_ctor or ann_is_path:
+                for t in targets:
+                    if isinstance(t, ast.Name):
+                        names.add(t.id)
+    return names
+
+
+def _open_call_confidence(ctx, op, call_node):
+    """'confirmed' for builtin open/io.open/os.fdopen and .open() on a
+    receiver established as pathlib.Path; 'possible' for any other name
+    match."""
+    expr = (op.expression or '').strip()
+    if expr.startswith(('open(', 'io.open(', 'os.fdopen(')):
+        return 'confirmed'
+    _recv, attr = _call_attr(op)
+    if attr in _FILE_OPEN_NAMES:
+        if _recv and _recv in _path_receiver_names(ctx['func_ast']):
+            return 'confirmed'
+        return 'possible'
+    return 'possible'
+
+
+def _handle_op_confidence(ctx, op, call_node, confirmed_handles, reaching):
+    """Confidence for a read/write call: confirmed only when the receiver's
+    reaching definition is a confirmed handle."""
+    recv, _attr = _call_attr(op)
+    if not recv:
+        return 'possible'
+    use = _receiver_use(ctx, op, recv)
+    if use is None:
+        return 'possible'
+    if any(d.id in confirmed_handles for d in reaching.get(use.id, [])):
+        return 'confirmed'
+    return 'possible'
+
+
 def _is_read_call(op):
     _recv, attr = _call_attr(op)
     return attr in _FILE_READ_ATTRS
@@ -1268,12 +1559,15 @@ def _file_op_sources(ctx):
 
     handles, reads, sinks = set(), [], []
     handle_expr = {}
+    handle_conf = {}
+    sink_conf = {}
 
     for op in ops:
         if op.operation != 'Call':
             continue
         is_open = _is_open_call(ctx, op)
         call_node = None
+        open_conf = 'possible'
         if is_open:
             call_node = _find_call_node_expr(ctx['func_ast'], op.line,
                                              getattr(op, 'column', None),
@@ -1282,6 +1576,8 @@ def _file_op_sources(ctx):
             # the AST call resolves to something else it is not an open call.
             if call_node is not None and _open_call_name(call_node) != 'open':
                 is_open = False
+            else:
+                open_conf = _open_call_confidence(ctx, op, call_node)
         if is_open:
             nested = call_node is not None and _call_nested_in_call(
                 ctx['func_ast'], call_node)
@@ -1289,6 +1585,7 @@ def _file_op_sources(ctx):
                 for did in op.output_definition_ids:
                     handles.add(did)
                     handle_expr[did] = op
+                    handle_conf[did] = open_conf
             # `with open(...) as f` / `for x in open(...)` / `f = open(...)`:
             # bind only the names THIS open call produces, matched to the
             # definition on the same line — never every definition on the line.
@@ -1315,10 +1612,14 @@ def _file_op_sources(ctx):
                 for d in ds:
                     handles.add(d.id)
                     handle_expr[d.id] = op
-        elif _is_read_call(op):
-            reads.append({'op': op, 'def_ids': list(op.output_definition_ids)})
-        elif _is_write_call(op):
-            sinks.append(op)
+                    handle_conf[d.id] = open_conf
+        elif _is_read_call(op) or _is_write_call(op):
+            # Receiver verification needs the confirmed-handle set, which is
+            # only complete after this loop; store ops now, classify below.
+            if _is_read_call(op):
+                reads.append({'op': op, 'def_ids': list(op.output_definition_ids)})
+            else:
+                sinks.append(op)
 
     # Handle iteration: `for line in handle:` — the for-target definition is a
     # read source when the iterated expression reaches a handle definition.
@@ -1335,6 +1636,24 @@ def _file_op_sources(ctx):
                               'variable': d.variable, 'line': d.line})
                 break
 
+    # Receiver verification for read/write calls: confirmed only when the
+    # receiver's reaching definition is a confirmed handle.
+    confirmed_handles = {did for did, c in handle_conf.items()
+                         if c == 'confirmed'}
+    for r in reads:
+        op = r.get('op')
+        if op is not None:
+            r['confidence'] = _handle_op_confidence(
+                ctx, op, None, confirmed_handles, reaching)
+            if r['confidence'] == 'possible':
+                r['receiver_unverified'] = True
+        else:
+            r['confidence'] = 'confirmed'  # handle iteration reads a handle
+    for op in sinks:
+        sink_conf[op.id] = _handle_op_confidence(
+            ctx, op, None, confirmed_handles, reaching)
+
+    ctx['file_op_conf'] = {'handles': handle_conf, 'sinks': sink_conf}
     return handles, reads, sinks, prod, reaching
 
 
@@ -1445,6 +1764,8 @@ def trace_file_operations(
                 skipped.append({'function': scope, 'reason': err.get('error') or err.get('message')})
                 continue
             handles, reads, sinks, prod, reaching = _file_op_sources(ctx)
+            handle_conf = (ctx.get('file_op_conf') or {}).get('handles', {})
+            sink_conf = (ctx.get('file_op_conf') or {}).get('sinks', {})
             defs = _defs_by_id(ctx)
             reads_by_def = {}
             for r in reads:
@@ -1456,7 +1777,8 @@ def trace_file_operations(
                 operations.append({
                     'kind': 'handle', 'operation': 'open',
                     'function': scope, 'line': d.line if d else None,
-                    'variable': d.variable if d else None})
+                    'variable': d.variable if d else None,
+                    'confidence': handle_conf.get(did, 'possible')})
             for r in reads:
                 d = defs.get(r['def_ids'][0]) if r['def_ids'] else None
                 operations.append({
@@ -1464,13 +1786,17 @@ def trace_file_operations(
                     'function': scope,
                     'line': r.get('line') or (r['op'].line if r.get('op') else (d.line if d else None)),
                     'variable': r.get('variable') or (d.variable if d else None),
-                    'iteration': bool(r.get('iteration'))})
+                    'iteration': bool(r.get('iteration')),
+                    'confidence': r.get('confidence', 'possible'),
+                    **({'receiver_unverified': True}
+                       if r.get('receiver_unverified') else {})})
             for op in sinks:
                 recv, attr = _call_attr(op)
                 operations.append({
                     'kind': 'sink', 'operation': attr or 'write',
                     'function': scope, 'line': op.line,
-                    'receiver': recv or None})
+                    'receiver': recv or None,
+                    'confidence': sink_conf.get(op.id, 'possible')})
                 # Uses contributed by each argument (receiver excluded).
                 shape = (op.metadata or {}).get('call_shape') or {}
                 arg_uses = []

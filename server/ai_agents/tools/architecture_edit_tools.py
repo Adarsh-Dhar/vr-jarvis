@@ -1,5 +1,5 @@
 from types import SimpleNamespace
-from typing import List
+from typing import List, Optional
 
 from google.adk.tools import ToolContext
 
@@ -26,7 +26,7 @@ def _edit(tool_context, op, **fields):
 
 @safe
 def add_component(name: str, responsibility: str, component_kind: str, tool_context: ToolContext,
-                  requirement_ids: List[str] = None) -> dict:
+                  requirement_ids: Optional[List[str]] = None) -> dict:
     return _edit(tool_context, 'add_component', name=name, responsibility=responsibility,
                  component_kind=component_kind, requirement_ids=requirement_ids or [])
 

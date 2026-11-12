@@ -1,38 +1,79 @@
 """Tool registry for managing tool specifications and contracts."""
+import collections.abc as _cabc
+import enum
 import inspect
+import pathlib
 import types
 import typing
 from typing import List, Dict, Any, Optional
 from ..contracts.tool import ToolSpec
 from ..agents.toolsets import TOOL_LEVELS, TOOLSETS
-from .output_schemas import OUTPUT_SCHEMAS
+from .output_schemas import OUTPUT_SCHEMAS, UNRESTRICTED_PARAMS
 
 try:
     import jsonschema
+    from jsonschema import Draft202012Validator, validators
     _HAS_JSONSCHEMA = True
 except Exception:  # pragma: no cover - jsonschema is optional
     _HAS_JSONSCHEMA = False
+    Draft202012Validator = None
+    validators = None
+
+
+def _tuple_ok(checker, inst):
+    return isinstance(inst, (list, tuple))
+
+
+if _HAS_JSONSCHEMA:
+    _Validator = validators.extend(
+        Draft202012Validator,
+        type_checker=Draft202012Validator.TYPE_CHECKER.redefine(
+            'array', _tuple_ok))
+else:  # pragma: no cover
+    _Validator = None
+
+_UNRESOLVED = {'x-unresolved': True}
+
+
+def _union_schema(args):
+    """Shared union handling for typing.Union and X | Y."""
+    non_null = [a for a in args if a is not type(None)]
+    members = [_py_type_to_schema(a) for a in non_null]
+    # A member that maps to {} accepts anything, so the whole union does.
+    if any(not m for m in members):
+        return {}
+    # An unresolved member makes the whole union unresolved.
+    if any(m.get('x-unresolved') for m in members):
+        return dict(_UNRESOLVED)
+    if len(non_null) != len(args):
+        members.append({'type': 'null'})
+    return members[0] if len(members) == 1 else {'anyOf': members}
 
 
 def _py_type_to_schema(ann) -> Dict[str, Any]:
-    """Map a resolved Python type hint to a JSON-schema fragment."""
+    """Map a resolved Python type hint to a JSON-schema fragment.
+
+    Returns {} only for intentionally unrestricted annotations (Any, object).
+    Anything we cannot map returns {'x-unresolved': True} so registration can
+    reject it instead of silently accepting every value."""
     if ann is inspect.Parameter.empty or ann is None:
         return {}
+    if ann is typing.Any or ann is object:
+        return {}
+
+    # Annotated[X, ...] -> schema of X
+    if typing.get_origin(ann) is typing.Annotated:
+        return _py_type_to_schema(typing.get_args(ann)[0])
+
     origin = typing.get_origin(ann)
     args = typing.get_args(ann)
 
     # Optional[X] / Union[X, None] / X | None
     if origin is typing.Union or origin is types.UnionType:
-        non_null = [a for a in args if a is not type(None)]
-        members = [_py_type_to_schema(a) for a in non_null]
-        # A member that maps to {} accepts anything, so the whole union does.
-        if any(not m for m in members):
-            return {}
-        if len(non_null) != len(args):
-            members.append({'type': 'null'})
-        return members[0] if len(members) == 1 else {'anyOf': members}
+        return _union_schema(args)
 
-    if origin in (list, typing.List, tuple, typing.Tuple, set, typing.Set, frozenset):
+    if origin in (list, typing.List, tuple, typing.Tuple, set, typing.Set,
+                  frozenset, typing.FrozenSet):
         item = _py_type_to_schema(args[0]) if args else {}
         schema = {'type': 'array'}
         if item:
@@ -45,6 +86,14 @@ def _py_type_to_schema(ann) -> Dict[str, Any]:
             schema['additionalProperties'] = _py_type_to_schema(args[1])
         return schema
 
+    # collections.abc generics: Mapping -> object, Sequence/Iterable/Set -> array
+    if origin in (_cabc.Mapping, _cabc.MutableMapping, typing.Mapping):
+        return {'type': 'object'}
+    if origin in (_cabc.Sequence, _cabc.MutableSequence, _cabc.Iterable,
+                  _cabc.Set, _cabc.MutableSet, typing.Sequence,
+                  typing.Iterable, typing.Set):
+        return {'type': 'array'}
+
     if origin is typing.Literal:
         return {'enum': list(args)}
 
@@ -55,7 +104,38 @@ def _py_type_to_schema(ann) -> Dict[str, Any]:
         return {'type': simple}
     if ann is bytes:
         return {'type': 'string'}
-    return {}  # unknown annotation: accept anything rather than guess wrong
+    if ann is pathlib.Path or (inspect.isclass(ann)
+                               and issubclass(ann, pathlib.PurePath)):
+        return {'type': 'string'}
+
+    if inspect.isclass(ann):
+        # TypedDict -> object with properties (check first: issubclass on a
+        # TypedDict raises TypeError)
+        if getattr(ann, '__required_keys__', None) is not None \
+                or getattr(ann, '__optional_keys__', None) is not None \
+                or (hasattr(ann, '__annotations__')
+                    and hasattr(ann, '__total__')):
+            props = {}
+            hints = getattr(ann, '__annotations__', {})
+            for k, v in hints.items():
+                props[k] = _py_type_to_schema(v)
+            schema = {'type': 'object', 'properties': props}
+            required = [k for k in getattr(ann, '__required_keys__', ())]
+            if required:
+                schema['required'] = list(required)
+            return schema
+        try:
+            if issubclass(ann, enum.Enum):
+                return {'enum': [m.value for m in ann]}
+            if issubclass(ann, _cabc.Mapping):
+                return {'type': 'object'}
+            if issubclass(ann, (_cabc.Sequence, _cabc.Set, _cabc.Iterable)) \
+                    and not issubclass(ann, (str, bytes, bytearray)):
+                return {'type': 'array'}
+        except TypeError:
+            pass
+
+    return dict(_UNRESOLVED)
 
 
 def _resolve_hints(fn) -> Dict[str, Any]:
@@ -165,6 +245,25 @@ class ToolRegistry:
             jsonschema.Draft202012Validator.check_schema(schema)
         return schema
 
+    @staticmethod
+    def _check_input_schema(tool_name, fn):
+        """Build the input schema, validate the schema itself, and reject
+        parameters whose annotation could not be resolved (x-unresolved)
+        unless explicitly allowlisted in UNRESTRICTED_PARAMS."""
+        schema = _input_schema(fn) if callable(fn) else None
+        if schema is None:
+            return None
+        if _HAS_JSONSCHEMA:
+            _Validator.check_schema(schema)
+        for pname, pschema in (schema.get('properties') or {}).items():
+            if isinstance(pschema, dict) and pschema.get('x-unresolved'):
+                if (tool_name, pname) not in UNRESTRICTED_PARAMS:
+                    raise ValueError(
+                        'tool %s parameter %r has an annotation that cannot '
+                        'be mapped to a JSON schema; fix the annotation or '
+                        'add it to UNRESTRICTED_PARAMS' % (tool_name, pname))
+        return schema
+
     def _load_tools(self):
         """Load tools from toolsets."""
         from .. import tools as tools_module
@@ -175,7 +274,7 @@ class ToolRegistry:
                 group=_group_for(tool_name),
                 level=level,
                 owner_agents=list(self._owners.get(tool_name, [])),
-                input_schema=_input_schema(fn) if callable(fn) else None,
+                input_schema=self._check_input_schema(tool_name, fn),
                 output_schema=self._checked_output_schema(tool_name, fn),
             )
 
@@ -199,64 +298,39 @@ class ToolRegistry:
     # ------------------------------------------------------------------
     @staticmethod
     def _type_errors(value, schema, path):
-        """Recursive JSON-schema subset check. Returns error strings.
-
-        Handles type (incl. union lists), enum, anyOf/oneOf, nested
-        properties/additionalProperties and array items — the shapes the
-        registry actually emits from type hints."""
+        """Full JSON Schema (Draft 2020-12) validation of a value against a
+        schema fragment. Returns error strings. The 'array' type checker is
+        extended to accept tuples as well as lists."""
         if not isinstance(schema, dict) or not schema:
             return []
+        if not _HAS_JSONSCHEMA or _Validator is None:
+            return ['%s: input validator unavailable' % path]
         errors = []
-
-        expected = schema.get('type')
-        type_map = {'string': str, 'integer': int, 'number': (int, float),
-                    'boolean': bool, 'array': (list, tuple), 'object': dict,
-                    'null': type(None)}
-        if expected:
-            types = expected if isinstance(expected, list) else [expected]
-            ok = False
-            for t in types:
-                py = type_map.get(t)
-                if py is None:
-                    continue
-                # bool is a subclass of int; keep 'integer' honest.
-                if t == 'integer' and isinstance(value, bool):
-                    continue
-                if isinstance(value, py):
-                    ok = True
-                    break
-            if not ok:
-                errors.append('%s must be %s, got %s' % (path, '/'.join(types), type(value).__name__))
-                return errors  # deeper checks are meaningless on a type miss
-
-        if 'enum' in schema and value not in schema['enum']:
-            errors.append('%s must be one of %r' % (path, schema['enum']))
-
-        for key in ('anyOf', 'oneOf'):
-            branches = schema.get(key)
-            if branches:
-                branch_errors = [ToolRegistry._type_errors(value, b, path) for b in branches]
-                if not any(not e for e in branch_errors):
-                    errors.append('%s does not match any allowed %s' % (path, key))
-                return errors
-
-        if isinstance(value, dict):
-            props = schema.get('properties') or {}
-            for req in schema.get('required', []):
-                if req not in value or value[req] is None:
-                    errors.append('%s.%s is required' % (path, req))
-            addl = schema.get('additionalProperties')
-            for k, v in value.items():
-                if k in props:
-                    errors.extend(ToolRegistry._type_errors(v, props[k], '%s.%s' % (path, k)))
-                elif isinstance(addl, dict):
-                    errors.extend(ToolRegistry._type_errors(v, addl, '%s.%s' % (path, k)))
-        elif isinstance(value, (list, tuple)):
-            items = schema.get('items')
-            if isinstance(items, dict):
-                for i, item in enumerate(value):
-                    errors.extend(ToolRegistry._type_errors(item, items, '%s[%d]' % (path, i)))
+        for e in _Validator(schema).iter_errors(value):
+            loc = ('.' + '.'.join(map(str, e.absolute_path))) \
+                if e.absolute_path else ''
+            errors.append('%s%s: %s' % (path, loc, e.message))
         return errors
+
+    @staticmethod
+    def _allows_null(pschema, tool_name=None, param=None):
+        """True when the parameter schema admits an explicit null."""
+        if not isinstance(pschema, dict):
+            return True
+        if pschema.get('x-unresolved'):
+            return False
+        if not pschema:
+            # Intentionally unrestricted (Any/object or allowlisted).
+            return True
+        if pschema.get('type') == 'null':
+            return True
+        for key in ('anyOf', 'oneOf'):
+            branches = pschema.get(key)
+            if branches and any(
+                    isinstance(b, dict) and b.get('type') == 'null'
+                    for b in branches):
+                return True
+        return False
 
     def validate_arguments(self, tool_name: str, args: Dict[str, Any]) -> List[str]:
         """Validate call arguments against the tool's input schema.
@@ -267,16 +341,21 @@ class ToolRegistry:
         schema = spec.input_schema
         props = schema.get('properties', {})
         errors = []
+        args = args or {}
         for req in schema.get('required', []):
-            if req not in (args or {}) or args[req] is None:
+            if req not in args:
                 errors.append('missing required argument: %s' % req)
-        for key, value in (args or {}).items():
-            if key == 'tool_context' or value is None:
+        for key, value in args.items():
+            if key == 'tool_context':
                 continue
             pschema = props.get(key)
             if pschema is None:
                 if schema.get('additionalProperties') is False:
                     errors.append('unexpected argument: %s' % key)
+                continue
+            if value is None:
+                if not self._allows_null(pschema, tool_name, key):
+                    errors.append('argument %s must not be null' % key)
                 continue
             if not pschema:
                 continue  # {} means declared but untyped: any value accepted

@@ -43,11 +43,11 @@ def _agent_instructions():
     Specialist agents expose INSTRUCTION; fix-pipeline agents expose .instruction
     on the LlmAgent instance. For agents without a TOOLSETS entry the allowed
     tool names come from the agent's own tool list."""
-    from ai_agents.agents import (software_engineering, data_flow, testing_verification,
+    from ai_agents.agents import (data_flow, testing_verification,
                                   code_understanding, relationship_intelligence,
                                   repository_intelligence, architecture_design,
                                   implementation_planning, conversational,
-                                  visualization, orchestrator, navigator)
+                                  visualization, navigator)
     from ai_agents.agents.fix import (patch_agent, verifier, code_reviewer,
                                       patch_repair, make_patch_review_repair,
                                       make_review_verifier)
@@ -58,7 +58,6 @@ def _agent_instructions():
     from ai_agents.agents.scene_director import INSTRUCTION as SCENE_INSTRUCTION, RESULT_INSTRUCTION
 
     instructions = {
-        'software_engineering': software_engineering.INSTRUCTION,
         'data_flow_intelligence': data_flow.INSTRUCTION,
         'testing_verification': testing_verification.INSTRUCTION,
         'code_understanding': code_understanding.INSTRUCTION,
@@ -68,7 +67,6 @@ def _agent_instructions():
         'implementation_planning': implementation_planning.INSTRUCTION,
         'conversational': conversational.INSTRUCTION,
         'visualization_spatial': visualization.INSTRUCTION,
-        'orchestrator': orchestrator.INSTRUCTION,
         'navigator': navigator.INSTRUCTION,
         'patch_agent': patch_agent.instruction,
         'verifier_agent': verifier.instruction,

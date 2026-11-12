@@ -632,20 +632,60 @@ def visualize_control_flow(
 # This consolidates the implementation to avoid duplication
 
 
+def _build_cfg_dfg_for_node(graph, node, function_id):
+    """Build (cfg, dfg) for one graph function node.
+    Returns (cfg, dfg) or raises; callers handle errors."""
+    from ..intelligence.controlflow.service import analyze_python_control_flow
+    from ._common import abs_repo_path
+
+    rel_file = node.get('file', '')
+    with open(abs_repo_path(rel_file), 'r', encoding='utf-8') as f:
+        source = f.read()
+
+    symbol = {
+        'id': node.get('id', function_id),
+        'name': node.get('name', ''),
+        'file': rel_file,
+        'source': source,
+        'qualname': node.get('qualname', node.get('id', function_id))
+    }
+    result = analyze_python_control_flow(graph, symbol, use_cache=False)
+    if result.get('error'):
+        raise ValueError(result['error'])
+    cfg = result['graph']
+    if not cfg:
+        raise ValueError('CFG build failed')
+
+    from ..intelligence.dataflow import PythonDefUseExtractor
+    from ..intelligence.dataflow.dependency_builder import DataFlowGraphBuilder
+    from ..intelligence.controlflow.models import CFGArtifact
+    extractor = PythonDefUseExtractor()
+    cfg_artifact = CFGArtifact(graph=cfg,
+                               metadata=result.get('metadata', {}))
+    facts = extractor.extract_function(
+        artifact=cfg_artifact, source=source, file_path=rel_file)
+    dfg = DataFlowGraphBuilder().build(cfg, facts)
+    return cfg, dfg
+
+
 @safe
 def visualize_unified_graph(
     function_id: str,
     tool_context: ToolContext,
     summarize: bool = True,
-    max_nodes: int = 100
+    max_nodes: int = 100,
+    repository_scope: bool = False,
+    max_repository_functions: int = 8
 ) -> dict:
-    """Visualize unified CFG and DFG graph with optional summarization."""
+    """Visualize unified CFG and DFG graph with optional summarization.
+    With repository_scope=True, merges the function's unified graph with
+    its confirmed call neighbours (capped by max_repository_functions) and
+    adds interprocedural edges labelled confirmed/possible."""
     try:
         from ..intelligence.controlflow import cfg_to_unity_format
         from ..intelligence.dataflow import dfg_to_unity_format
         from ..intelligence.dataflow.unified_graph import UnifiedGraphBuilder
         from ..intelligence.dataflow.graph_summarizer import GraphSummarizer
-        from ..intelligence.controlflow.service import analyze_python_control_flow
         from ..intelligence.graph_engine.codegraph import codegraph
 
         # Get the graph
@@ -659,57 +699,13 @@ def visualize_unified_graph(
                 'message': 'Function not found in graph'
             }
 
-        from ._common import abs_repo_path
-        rel_file = node.get('file', '')
-        with open(abs_repo_path(rel_file), 'r', encoding='utf-8') as f:
-            source = f.read()
+        if repository_scope:
+            return _visualize_repository_unified(
+                graph, function_id, node, tool_context,
+                max_repository_functions=max_repository_functions,
+                summarize=summarize, max_nodes=max_nodes)
 
-        # Build CFG using the service (qualname-aware lookup)
-        symbol = {
-            'id': node.get('id', function_id),
-            'name': node.get('name', ''),
-            'file': rel_file,
-            'source': source,
-            'qualname': node.get('qualname', node.get('id', function_id))
-        }
-        result = analyze_python_control_flow(graph, symbol, use_cache=False)
-
-        if result.get('error'):
-            return {
-                'status': 'error',
-                'function_id': function_id,
-                'error': result['error']
-            }
-
-        cfg = result['graph']
-        if not cfg:
-            return {
-                'status': 'error',
-                'function_id': function_id,
-                'error': 'CFG build failed'
-            }
-
-        # Build DFG
-        from ..intelligence.dataflow import PythonDefUseExtractor
-        from ..intelligence.dataflow.dependency_builder import DataFlowGraphBuilder
-        extractor = PythonDefUseExtractor()
-        
-        # Create a mock artifact for the extractor
-        from ..intelligence.controlflow.models import CFGArtifact
-        cfg_artifact = CFGArtifact(
-            graph=cfg,
-            metadata=result.get('metadata', {})
-        )
-        
-        facts = extractor.extract_function(
-            artifact=cfg_artifact,
-            source=source,
-            file_path=rel_file
-        )
-
-        # Build actual DFG from facts
-        dfg_builder = DataFlowGraphBuilder()
-        dfg = dfg_builder.build(cfg, facts)
+        cfg, dfg = _build_cfg_dfg_for_node(graph, node, function_id)
 
         # Build unified graph
         unified_builder = UnifiedGraphBuilder()
@@ -771,7 +767,7 @@ def visualize_unified_graph(
             'node_count': len(unity_nodes),
             'edge_count': len(unity_edges),
             'graph_type': 'unified',
-            'cfg_nodes': len(cfg_to_unity_format(cfg_artifact.graph)['nodes']),
+            'cfg_nodes': len(cfg_to_unity_format(cfg)['nodes']),
             'dfg_nodes': len(dfg_to_unity_format(dfg)['nodes']),
             'summarized': was_summarized,
             'original_node_count': original_count
@@ -781,6 +777,124 @@ def visualize_unified_graph(
             'status': 'error',
             'error': str(e)
         }
+
+
+def _visualize_repository_unified(graph, function_id, node, tool_context,
+                                  max_repository_functions=8, summarize=True,
+                                  max_nodes=100):
+    """Repository-scope variant of visualize_unified_graph: merges the
+    function's unified graph with confirmed call neighbours and labels
+    interprocedural edges confirmed/possible."""
+    from ..intelligence.controlflow import cfg_to_unity_format
+    from ..intelligence.dataflow import dfg_to_unity_format
+    from ..intelligence.dataflow.unified_graph import UnifiedGraphBuilder
+    from ..intelligence.dataflow.graph_summarizer import GraphSummarizer
+
+    # Confirmed call neighbours only — possible edges never enter the graph.
+    neighbour_ids = []
+    for direction in ('callees', 'callers'):
+        try:
+            entries = getattr(graph, direction)(
+                function_id, depth=1, include_possible=False,
+                include_ambiguous=False)
+        except TypeError:
+            entries = getattr(graph, direction)(function_id, depth=1)
+        except Exception:
+            entries = []
+        for e in entries or []:
+            tid = e.get('to') if direction == 'callees' else e.get('from')
+            if tid and tid != function_id and tid not in neighbour_ids:
+                neighbour_ids.append(tid)
+            if len(neighbour_ids) >= max_repository_functions - 1:
+                break
+        if len(neighbour_ids) >= max_repository_functions - 1:
+            break
+
+    fids = [function_id] + neighbour_ids[:max_repository_functions - 1]
+    function_graphs = {}
+    inter_edges = []
+    skipped = []
+    for fid in fids:
+        n = graph.get(fid)
+        if not n:
+            skipped.append(fid)
+            continue
+        try:
+            cfg, dfg = _build_cfg_dfg_for_node(graph, n, fid)
+        except Exception:
+            skipped.append(fid)
+            continue
+        function_graphs[fid] = UnifiedGraphBuilder().build_unified(cfg, dfg)
+
+    # Interprocedural edges from the index's confirmed call edges.
+    for fid in function_graphs:
+        for direction, kind in (('callees', 'call'), ('callers', 'call')):
+            try:
+                entries = getattr(graph, direction)(
+                    fid, depth=1, include_possible=False,
+                    include_ambiguous=False)
+            except Exception:
+                entries = []
+            for e in entries or []:
+                other = e.get('to') if direction == 'callees' else e.get('from')
+                if other not in function_graphs:
+                    continue
+                src, dst = (fid, other) if direction == 'callees' else (other, fid)
+                inter_edges.append({
+                    'source_function': src, 'target_function': dst,
+                    'kind': kind,
+                    'resolution': 'confirmed'
+                    if (e.get('kind') == 'confirmed'
+                        or e.get('resolution') in ('confirmed', 'static_resolved'))
+                    else 'possible',
+                    'call_site_id': e.get('callsite_id'),
+                    'evidence': {'file': e.get('file'), 'line': e.get('line')}})
+
+    repo_graph = UnifiedGraphBuilder().build_repository_graph(
+        function_graphs, inter_edges)
+
+    unity_nodes, unity_edges = [], []
+    for fid, g in function_graphs.items():
+        for n in g.nodes:
+            unity_nodes.append({'id': '%s::%s' % (fid, n.id),
+                                'label': '%s (%s)' % (fid, n.kind),
+                                'kind': n.kind, 'layer': 'unified',
+                                'file': n.file, 'line': n.line})
+    for e in repo_graph.edges:
+        unity_edges.append({'src': e.source, 'dst': e.target,
+                            'kind': e.kind, 'layer': 'unified',
+                            'resolution': e.subkind})
+
+    was_summarized = False
+    original_count = len(unity_nodes)
+    if summarize and len(unity_nodes) > max_nodes:
+        summarizer = GraphSummarizer(max_nodes_per_view=max_nodes)
+        summary = summarizer.summarize_graph(
+            {'function_id': 'repository', 'nodes': unity_nodes,
+             'edges': unity_edges}, 'repository')
+        unity_nodes = summary.summarized_nodes
+        unity_edges = summary.summarized_edges
+        was_summarized = True
+        original_count = summary.original_node_count
+
+    _emit_command(tool_context, 'show_graph',
+                  nodes=unity_nodes, edges=unity_edges,
+                  title='Repository Unified Graph: %s' % function_id,
+                  graph_type='unified_repository')
+
+    return {
+        'status': 'ok',
+        'function_id': function_id,
+        'scope': 'repository',
+        'function_ids': sorted(function_graphs),
+        'skipped_functions': skipped,
+        'node_count': len(unity_nodes),
+        'edge_count': len(unity_edges),
+        'graph_type': 'unified_repository',
+        'truncated': repo_graph.metadata.get('truncated', False),
+        'summarized': was_summarized,
+        'original_node_count': original_count,
+    }
 
 
 @safe

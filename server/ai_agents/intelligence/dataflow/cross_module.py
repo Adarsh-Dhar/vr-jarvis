@@ -1,9 +1,132 @@
 """Cross-file and cross-module propagation for interprocedural analysis."""
+import ast
 from dataclasses import dataclass, field
-from typing import Dict, List, Set, Optional, Any
 from pathlib import Path
+from typing import Dict, List, Optional, Set, Any, Tuple
+
 from .models import DefUseFacts, Definition
 from .interprocedural import InterproceduralSummaryBuilder, FunctionSummary
+
+EXTERNAL = 'external'
+
+
+def _parse_import_expr(expr: str) -> List[Dict[str, Any]]:
+    """Parse 'import a.b as c' / 'from x import y as z' / 'from . import w'
+    into resolver imp dicts {module, name, level, kind}."""
+    expr = (expr or '').strip()
+    if not expr:
+        return []
+    out = []
+    if expr.startswith('import '):
+        for part in expr[len('import '):].split(','):
+            part = part.strip()
+            if not part:
+                continue
+            if ' as ' in part:
+                mod, alias = [s.strip() for s in part.split(' as ', 1)]
+            else:
+                mod, alias = part, None
+            # import a.b.c binds 'a'; the module path is the full dotted name
+            top = mod.split('.')[0]
+            out.append({'module': mod, 'name': alias or top,
+                        'level': 0, 'kind': 'import'})
+        return out
+    if expr.startswith('from '):
+        rest = expr[len('from '):]
+        if ' import ' not in rest:
+            return []
+        mod_part, names_part = rest.split(' import ', 1)
+        mod_part = mod_part.strip()
+        level = 0
+        while mod_part.startswith('.'):
+            level += 1
+            mod_part = mod_part[1:]
+        module = mod_part.strip()
+        for part in names_part.split(','):
+            part = part.strip()
+            if not part:
+                continue
+            if ' as ' in part:
+                name, alias = [s.strip() for s in part.split(' as ', 1)]
+            else:
+                name, alias = part, part
+            out.append({'module': module, 'name': name, 'alias': alias,
+                        'level': level, 'kind': 'from'})
+        return out
+    return []
+
+
+def _module_source(file_path: str) -> Optional[str]:
+    """Best-effort read of a module's source for AST-level facts."""
+    candidates = [Path(file_path)]
+    try:
+        from .. import config
+        root = getattr(config, 'REPO_ROOT', None)
+        if root:
+            candidates.append(Path(root) / file_path)
+    except Exception:
+        pass
+    for c in candidates:
+        try:
+            if c.is_file():
+                return c.read_text(encoding='utf-8')
+        except Exception:
+            continue
+    return None
+
+
+def _function_line_ranges(tree: ast.AST) -> List[Tuple[int, int]]:
+    ranges = []
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) \
+                and node.lineno is not None:
+            ranges.append((node.lineno, node.end_lineno or node.lineno))
+    return ranges
+
+
+def _all_exports(tree: ast.AST) -> Optional[List[str]]:
+    """__all__ when it is a statically-known list/tuple of strings."""
+    for node in tree.body:
+        targets = []
+        if isinstance(node, ast.Assign):
+            targets = node.targets
+        elif isinstance(node, ast.AnnAssign):
+            targets = [node.target]
+        for t in targets:
+            if isinstance(t, ast.Name) and t.id == '__all__' \
+                    and isinstance(node.value, (ast.List, ast.Tuple)):
+                names = [e.value for e in node.value.elts
+                         if isinstance(e, ast.Constant)
+                         and isinstance(e.value, str)]
+                if len(names) == len(node.value.elts):
+                    return names
+    return None
+
+
+def _top_level_public_names(tree: ast.AST) -> List[str]:
+    names = []
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef,
+                             ast.ClassDef)):
+            if not node.name.startswith('_'):
+                names.append(node.name)
+        elif isinstance(node, ast.Assign):
+            for t in node.targets:
+                if isinstance(t, ast.Name) and not t.id.startswith('_'):
+                    names.append(t.id)
+        elif isinstance(node, ast.Import):
+            for a in node.names:
+                bound = (a.asname or a.name).split('.')[0]
+                if not bound.startswith('_'):
+                    names.append(bound)
+        elif isinstance(node, ast.ImportFrom):
+            for a in node.names:
+                if a.name == '*':
+                    continue
+                bound = a.asname or a.name
+                if not bound.startswith('_'):
+                    names.append(bound)
+    return names
 
 
 @dataclass
@@ -13,7 +136,7 @@ class ModuleSummary:
     file_path: str
     top_level_definitions: List[str]  # Definition IDs at module level
     global_writes: List[str]  # Definitions that write to globals
-    imports: List[str]  # Imported modules
+    imports: List[str]  # Imported modules (raw import expressions)
     exports: List[str]  # Names exported from this module
     metadata: Dict[str, Any] = field(default_factory=dict)
 
@@ -28,9 +151,21 @@ class CrossModuleAnalyzer:
     - Global variable propagation across files
     """
 
-    def __init__(self):
+    def __init__(self, graph_ctx: Optional[Dict[str, Any]] = None,
+                 resolver=None):
         self._module_summaries: Dict[str, ModuleSummary] = {}
         self._import_graph: Dict[str, Set[str]] = {}  # module -> set of imports
+        # graph_ctx is the indexer's repository-wide context
+        # (module_files, file_symbols, node_ids, ...). Without it every
+        # import resolves as external/unresolved.
+        self._graph_ctx = graph_ctx or {}
+        self._resolver = resolver
+        if self._resolver is None and graph_ctx is not None:
+            try:
+                from ..resolvers.python_resolver import PythonResolver
+                self._resolver = PythonResolver()
+            except Exception:
+                self._resolver = None
 
     def analyze_module(
         self,
@@ -44,23 +179,58 @@ class CrossModuleAnalyzer:
         """
         module_id = file_path
 
-        # Identify top-level definitions (not inside functions)
+        # Real top-level check: a definition is module-level only when it is
+        # not inside any FunctionDef/AsyncFunctionDef body. DefUseFacts has
+        # no scope field, so the ranges come from the module AST.
+        tree = None
+        source = _module_source(file_path)
+        if source:
+            try:
+                tree = ast.parse(source)
+            except Exception:
+                tree = None
+        fn_ranges = _function_line_ranges(tree) if tree is not None else []
+
+        def _is_top_level(d: Definition) -> bool:
+            if not fn_ranges:
+                # No AST available: keep the previous conservative behaviour
+                # only for definitions that are not function-scoped. Facts
+                # from per-function extraction carry the function id; module
+                # facts do not.
+                return not (d.function_id and '::' in d.function_id
+                            and d.function_id != file_path)
+            return not any(lo <= d.line <= hi for lo, hi in fn_ranges)
+
         top_level_defs = []
         global_writes = []
+        top_level_names = set()
 
         for definition in facts.definitions:
-            # Assume all definitions in this facts are at module level
-            # (A full implementation would track scope)
+            if not _is_top_level(definition):
+                continue
             top_level_defs.append(definition.id)
-
-            if definition.metadata.get('is_global'):
+            top_level_names.add(definition.variable)
+            # Global writes: explicit `global x` statements surface through
+            # the is_global metadata; binding keys of the form file::name
+            # written at module level are module globals by construction.
+            if definition.metadata.get('is_global') \
+                    or definition.binding_key.startswith('%s::' % file_path):
                 global_writes.append(definition.id)
 
-        # Extract imports from operations
+        # Extract imports from operations, keeping both the raw expressions
+        # and the parsed resolver dicts.
         imports = []
+        import_details = []
         for operation in facts.operations:
-            if operation.operation == 'Import' or operation.operation == 'ImportFrom':
+            if operation.operation in ('Import', 'ImportFrom'):
                 imports.append(operation.expression)
+                import_details.extend(_parse_import_expr(operation.expression))
+
+        exports = _all_exports(tree) if tree is not None else None
+        if exports is None and tree is not None:
+            exports = _top_level_public_names(tree)
+        if exports is None:
+            exports = sorted(n for n in top_level_names if not n.startswith('_'))
 
         summary = ModuleSummary(
             module_id=module_id,
@@ -68,57 +238,125 @@ class CrossModuleAnalyzer:
             top_level_definitions=top_level_defs,
             global_writes=global_writes,
             imports=imports,
-            exports=[],  # Would need name analysis
-            metadata={}
+            exports=exports,
+            metadata={'import_details': import_details}
         )
 
         self._module_summaries[module_id] = summary
-        self._import_graph[module_id] = set(imports)
+        self._import_graph[module_id] = {d['module'] for d in import_details
+                                         if d.get('module')}
 
         return summary
 
     def resolve_import(
         self,
-        import_name: str,
+        import_name,
         source_module: str
     ) -> Optional[str]:
         """
         Resolve an import to a target module.
 
-        Returns the module ID if resolvable, None otherwise.
+        Delegates to the Python resolver (python_resolver._resolve_import_target).
+        Returns the repo-relative file path for in-repo modules, the marker
+        'external' for third-party/stdlib modules, and None only when the
+        import cannot be resolved at all. ``import_name`` may be a raw import
+        expression string or an already-parsed imp dict.
         """
-        # Simplified import resolution
-        # A full implementation would:
-        # 1. Check local files
-        # 2. Check installed packages
-        # 3. Check Python stdlib
-        return None
+        if isinstance(import_name, dict):
+            details = [dict(import_name)]
+        else:
+            details = _parse_import_expr(str(import_name))
+            if not details:
+                # A bare dotted name is treated as `import <name>`.
+                details = [{'module': str(import_name), 'name': None,
+                            'level': 0, 'kind': 'import'}]
+        for imp in details:
+            if imp.get('kind') == 'import' and not imp.get('name'):
+                imp['name'] = (imp.get('module') or '').split('.')[0] or None
+        if self._resolver is None or self._graph_ctx is None:
+            return None
+        results = []
+        for imp in details:
+            try:
+                _sid, kind, resolved_file = self._resolver._resolve_import_target(
+                    imp, source_module, self._graph_ctx)
+            except Exception:
+                continue
+            if kind == 'external':
+                results.append(EXTERNAL)
+            elif resolved_file:
+                results.append(resolved_file)
+            # 'unresolved'/'star' without a file contribute nothing
+        if not results:
+            return None
+        # Prefer an in-repo file over the external marker.
+        for r in results:
+            if r != EXTERNAL:
+                return r
+        return EXTERNAL
 
     def propagate_globals(
         self,
         all_summaries: Dict[str, ModuleSummary]
-    ) -> Dict[str, Set[str]]:
+    ) -> Dict[str, Any]:
         """
-        Propagate global variable definitions across modules.
+        Propagate global variable definitions across modules via a worklist
+        over the resolved import graph.
 
-        Returns: module -> set of global definitions it uses from other modules
+        Only imports that resolve to an in-repo file propagate; unresolved
+        and external imports are recorded in 'unresolved_imports', never
+        skipped silently.
+
+        Returns {'global_usage': module -> set of global definition ids,
+                 'unresolved_imports': [module, import, reason]}.
         """
         global_usage: Dict[str, Set[str]] = {}
+        unresolved_imports: List[Dict[str, str]] = []
 
+        # Resolve each module's imports once.
+        resolved: Dict[str, Dict[str, Optional[str]]] = {}
         for module_id, summary in all_summaries.items():
-            used_globals = set()
+            per_import: Dict[str, Optional[str]] = {}
+            details = (summary.metadata or {}).get('import_details') or []
+            for imp in details:
+                key = '%s:%s' % (imp.get('module'), imp.get('name'))
+                target = self.resolve_import(imp, module_id)
+                per_import[key] = target
+                if target is None:
+                    unresolved_imports.append({
+                        'module': module_id,
+                        'import': key,
+                        'reason': 'unresolved',
+                    })
+                elif target == EXTERNAL:
+                    unresolved_imports.append({
+                        'module': module_id,
+                        'import': key,
+                        'reason': 'external',
+                    })
+            resolved[module_id] = per_import
 
-            # Check if this module imports from others
-            for import_name in summary.imports:
-                target_module = self.resolve_import(import_name, module_id)
-                if target_module and target_module in all_summaries:
-                    target_summary = all_summaries[target_module]
-                    # All top-level defs in target are potential globals
-                    used_globals.update(target_summary.top_level_definitions)
+        # Worklist propagation: a module uses the top-level definitions of
+        # every in-repo module reachable through resolved imports.
+        for module_id in all_summaries:
+            used: Set[str] = set()
+            seen = {module_id}
+            worklist = [module_id]
+            while worklist:
+                cur = worklist.pop()
+                for target in resolved.get(cur, {}).values():
+                    if not target or target == EXTERNAL \
+                            or target not in all_summaries \
+                            or target in seen:
+                        continue
+                    seen.add(target)
+                    worklist.append(target)
+                    used.update(all_summaries[target].top_level_definitions)
+                    used.update(all_summaries[target].global_writes)
+            global_usage[module_id] = used
 
-            global_usage[module_id] = used_globals
-
-        return global_usage
+        return {'global_usage': global_usage,
+                'unresolved_imports': unresolved_imports}
 
     def get_module_summary(self, module_id: str) -> Optional[ModuleSummary]:
         """Get a module summary by ID."""

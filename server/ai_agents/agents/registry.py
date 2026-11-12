@@ -17,14 +17,13 @@ AGENTS: Dict[str, Agent] = {}
 AGENT_CONFIG: Dict[str, Dict[str, Any]] = {}
 
 # Expected agents - must all be registered for the system to be valid
+# Top-level registered agents = the routing roles, not every sub-agent.
+# The four project-understanding specialists are reached through the single
+# project_understanding_agent role.
 EXPECTED_AGENTS = [
-    "orchestrator",
+    "jarvis_orchestrator",
     "conversational",
-    "repository_intelligence",
-    "code_understanding",
-    "relationship_intelligence",
-    "data_flow_intelligence",
-    "software_engineering",
+    "project_understanding_agent",
     "testing_verification",
     "visualization_spatial",
     "architecture_design",
@@ -33,13 +32,15 @@ EXPECTED_AGENTS = [
 
 # Default tool budgets and permission ceilings for each agent
 DEFAULT_AGENT_CONFIG = {
-    "orchestrator": {"tool_budget": 30, "permission_ceiling": "read"},
+    "jarvis_orchestrator": {"tool_budget": 30, "permission_ceiling": "read"},
     "conversational": {"tool_budget": 20, "permission_ceiling": "read"},
     "repository_intelligence": {"tool_budget": 25, "permission_ceiling": "read"},
     "code_understanding": {"tool_budget": 25, "permission_ceiling": "read"},
     "relationship_intelligence": {"tool_budget": 25, "permission_ceiling": "read"},
     "data_flow_intelligence": {"tool_budget": 25, "permission_ceiling": "read"},
-    "software_engineering": {"tool_budget": 20, "permission_ceiling": "write"},
+    "patch_agent": {"tool_budget": 20, "permission_ceiling": "write"},
+    "code_reviewer": {"tool_budget": 20, "permission_ceiling": "read"},
+    "investigator": {"tool_budget": 25, "permission_ceiling": "read"},
     "testing_verification": {"tool_budget": 25, "permission_ceiling": "execute"},
     "visualization_spatial": {"tool_budget": 20, "permission_ceiling": "read"},
     "architecture_design": {"tool_budget": 20, "permission_ceiling": "read"},
@@ -158,45 +159,16 @@ def initialize_agents() -> None:
     
     # Import and register each agent
     try:
-        from .repository_intelligence import repository_intelligence_agent
-        register_agent("repository_intelligence", repository_intelligence_agent)
-        logger.info("✓ Registered repository_intelligence")
+        # Single orchestration path and the single project-understanding
+        # role are defined on the root agent module.
+        from ..agent import root_agent, project_understanding_agent
+        register_agent("jarvis_orchestrator", root_agent)
+        register_agent("project_understanding_agent", project_understanding_agent)
+        logger.info("✓ Registered jarvis_orchestrator, project_understanding_agent")
     except ImportError as e:
-        logger.error(f"✗ Failed to import repository_intelligence: {e}")
-        raise ImportError(f"Failed to load agent repository_intelligence: {e}")
-    
-    try:
-        from .code_understanding import code_understanding_agent
-        register_agent("code_understanding", code_understanding_agent)
-        logger.info("✓ Registered code_understanding")
-    except ImportError as e:
-        logger.error(f"✗ Failed to import code_understanding: {e}")
-        raise ImportError(f"Failed to load agent code_understanding: {e}")
-    
-    try:
-        from .relationship_intelligence import relationship_intelligence_agent
-        register_agent("relationship_intelligence", relationship_intelligence_agent)
-        logger.info("✓ Registered relationship_intelligence")
-    except ImportError as e:
-        logger.error(f"✗ Failed to import relationship_intelligence: {e}")
-        raise ImportError(f"Failed to load agent relationship_intelligence: {e}")
-    
-    try:
-        from .data_flow import data_flow_intelligence_agent
-        register_agent("data_flow_intelligence", data_flow_intelligence_agent)
-        logger.info("✓ Registered data_flow_intelligence")
-    except ImportError as e:
-        logger.error(f"✗ Failed to import data_flow_intelligence: {e}")
-        raise ImportError(f"Failed to load agent data_flow_intelligence: {e}")
-    
-    try:
-        from .software_engineering import software_engineering_agent
-        register_agent("software_engineering", software_engineering_agent)
-        logger.info("✓ Registered software_engineering")
-    except ImportError as e:
-        logger.error(f"✗ Failed to import software_engineering: {e}")
-        raise ImportError(f"Failed to load agent software_engineering: {e}")
-    
+        logger.error(f"✗ Failed to import root agents: {e}")
+        raise ImportError(f"Failed to load root agents: {e}")
+
     try:
         from .testing_verification import testing_verification_agent
         register_agent("testing_verification", testing_verification_agent)
@@ -221,14 +193,6 @@ def initialize_agents() -> None:
         logger.error(f"✗ Failed to import conversational: {e}")
         raise ImportError(f"Failed to load agent conversational: {e}")
     
-    try:
-        from .orchestrator import orchestrator_agent
-        register_agent("orchestrator", orchestrator_agent)
-        logger.info("✓ Registered orchestrator")
-    except ImportError as e:
-        logger.error(f"✗ Failed to import orchestrator: {e}")
-        raise ImportError(f"Failed to load agent orchestrator: {e}")
-
     try:
         from .architecture_design import architecture_design_agent
         register_agent("architecture_design", architecture_design_agent)

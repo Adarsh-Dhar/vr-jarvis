@@ -1,4 +1,4 @@
-from ai_agents.agent import phase2_pipeline
+from ai_agents.agent import project_understanding_agent as phase2_pipeline
 
 
 def _agent_names(agent):

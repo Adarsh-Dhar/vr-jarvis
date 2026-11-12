@@ -42,10 +42,21 @@ class InterproceduralSummaryBuilder:
     Computes summaries bottom-up over call graph SCCs and caches them.
     """
 
-    def __init__(self, library_registry: Optional[SummaryRegistry] = None):
+    def __init__(self, library_registry: Optional[SummaryRegistry] = None,
+                 graph=None, file_of: Optional[Dict[str, str]] = None):
         self._library_registry = library_registry or SummaryRegistry()
         self._summaries: Dict[str, FunctionSummary] = {}
         self._call_graph: Optional[CallGraph] = None
+        # Optional index graph + function_id -> file mapping used to resolve
+        # call targets through the shared confirmed-call resolver. Without a
+        # graph every call stays unresolved (previous stub behaviour).
+        self._graph = graph
+        self._file_of = dict(file_of or {})
+        self._unresolved: Dict[str, List[Dict[str, Any]]] = {}
+
+    @property
+    def unresolved(self) -> Dict[str, List[Dict[str, Any]]]:
+        return self._unresolved
 
     def build_call_graph(
         self,
@@ -73,7 +84,8 @@ class InterproceduralSummaryBuilder:
         self._call_graph = CallGraph(
             nodes=nodes,
             edges=edges,
-            reverse_edges=reverse_edges
+            reverse_edges=reverse_edges,
+            metadata={'unresolved': self._unresolved}
         )
 
         return self._call_graph
@@ -83,21 +95,27 @@ class InterproceduralSummaryBuilder:
         operation,
         facts: DefUseFacts
     ) -> Optional[str]:
-        """
-        Resolve a call operation to a target function ID.
-
-        This is a simplified resolution - a full implementation would use
-        the existing call resolver from the codebase.
-        """
-        # Try to extract a qualified name from the expression
-        expr = operation.expression
-
-        # For now, we'll return None if we can't resolve it
-        # A full implementation would:
-        # 1. Check if it's a direct function call
-        # 2. Check if it's a method call on a known type
-        # 3. Use the symbol table to resolve names
-        return None
+        """Resolve a call operation to a target function ID via the shared
+        confirmed-call resolver. Returns the id only for status 'resolved';
+        every other status is recorded in the unresolved map and yields
+        None, so a possible edge can never become a confirmed summary link."""
+        if self._graph is None:
+            return None
+        from .call_target import resolve_call_target
+        file = self._file_of.get(facts.function_id) or facts.file
+        res = resolve_call_target(
+            self._graph, facts.function_id, file,
+            operation.line, getattr(operation, 'column', None))
+        if res['status'] != 'resolved':
+            self._unresolved.setdefault(facts.function_id, []).append({
+                'line': operation.line,
+                'expression': operation.expression,
+                'status': res['status'],
+                'reason': res.get('reason'),
+                'candidates': res.get('candidates'),
+            })
+            return None
+        return res.get('target_id')
 
     def compute_summaries(
         self,
@@ -112,62 +130,105 @@ class InterproceduralSummaryBuilder:
         # Build call graph
         call_graph = self.build_call_graph(functions)
 
-        # Find SCCs (simplified - use reverse post-order for DAGs)
+        # Tarjan emits components in reverse topological order of the
+        # condensation (callees first), which is the order summaries need.
         sccs = self._find_sccs(call_graph)
 
-        # Process SCCs in reverse topological order
-        all_summaries = {}
-        iteration = 0
+        facts_map = {f.function_id: f for f in functions}
+        all_summaries: Dict[str, FunctionSummary] = {}
+        converged = True
 
-        while iteration < max_iterations:
-            changed = False
-            iteration += 1
+        for scc in sccs:
+            # A singleton SCC without a self-edge needs exactly one pass;
+            # recursive components iterate to their own fixed point.
+            needs_fixpoint = len(scc) > 1 or any(
+                fid in call_graph.edges.get(fid, set()) for fid in scc)
+            local: Dict[str, FunctionSummary] = {}
+            iteration = 0
 
-            for scc in sccs:
-                for function_id in scc:
-                    facts = next((f for f in functions if f.function_id == function_id), None)
+            while True:
+                iteration += 1
+                if needs_fixpoint and iteration > max_iterations:
+                    converged = False
+                    break
+                changed = False
+
+                for function_id in sorted(scc):
+                    facts = facts_map.get(function_id)
                     if not facts:
                         continue
 
-                    # Get callee summaries
+                    # Callee summaries: same-SCC members from the current
+                    # iteration, earlier SCCs from all_summaries.
+                    lookup = dict(all_summaries)
+                    lookup.update(local)
                     callee_summaries = {
-                        callee: all_summaries.get(callee)
+                        callee: lookup.get(callee)
                         for callee in call_graph.edges.get(function_id, set())
                     }
 
-                    # Compute summary
                     summary = self._compute_function_summary(
-                        facts,
-                        callee_summaries,
-                        all_summaries
-                    )
+                        facts, callee_summaries, lookup)
 
-                    # Check if changed
-                    old_summary = all_summaries.get(function_id)
-                    if old_summary:
-                        if (summary.content_hash != old_summary.content_hash or
+                    old_summary = local.get(function_id)
+                    if old_summary is None or (
+                            summary.content_hash != old_summary.content_hash or
                             summary.callee_hashes != old_summary.callee_hashes):
-                            changed = True
-                            all_summaries[function_id] = summary
-                    else:
                         changed = True
-                        all_summaries[function_id] = summary
+                        local[function_id] = summary
 
-            if not changed:
-                break
+                if not needs_fixpoint or not changed:
+                    break
+
+            all_summaries.update(local)
 
         self._summaries = all_summaries
+        if self._call_graph is not None:
+            self._call_graph.metadata['converged'] = converged
         return all_summaries
 
     def _find_sccs(self, call_graph: CallGraph) -> List[Set[str]]:
-        """
-        Find strongly connected components in the call graph.
-
-        Simplified implementation - assumes mostly DAG structure.
-        """
-        # For now, treat each node as its own SCC
-        # A full implementation would use Tarjan's algorithm
-        return [{node} for node in call_graph.nodes]
+        """Strongly connected components via iterative Tarjan. Components are
+        emitted in reverse topological order of the condensation graph
+        (callees before callers), the order summaries need."""
+        g = call_graph
+        index, low, on_stack = {}, {}, set()
+        stack, out = [], []
+        idx = [0]
+        for root in sorted(g.nodes):
+            if root in index:
+                continue
+            work = [(root, iter(sorted(g.edges.get(root, ()) or ())))]
+            index[root] = low[root] = idx[0]
+            idx[0] += 1
+            stack.append(root)
+            on_stack.add(root)
+            while work:
+                v, it = work[-1]
+                for w in it:
+                    if w not in index:
+                        index[w] = low[w] = idx[0]
+                        idx[0] += 1
+                        stack.append(w)
+                        on_stack.add(w)
+                        work.append((w, iter(sorted(g.edges.get(w, ()) or ()))))
+                        break
+                    elif w in on_stack:
+                        low[v] = min(low[v], index[w])
+                else:
+                    work.pop()
+                    if work:
+                        low[work[-1][0]] = min(low[work[-1][0]], low[v])
+                    if low[v] == index[v]:
+                        comp = set()
+                        while True:
+                            w = stack.pop()
+                            on_stack.discard(w)
+                            comp.add(w)
+                            if w == v:
+                                break
+                        out.append(comp)
+        return out
 
     def _compute_function_summary(
         self,
@@ -192,6 +253,36 @@ class InterproceduralSummaryBuilder:
         raises = set()
         sources = []
         sinks = []
+
+        # Local facts: parameters that reach a return-value sink contribute
+        # to returns_from; parameter receivers mutated through attribute or
+        # subscript writes contribute to mutates; raise operations contribute
+        # to raises.
+        param_names = set(params)
+        uses_by_id = {u.id: u for u in facts.uses}
+        for operation in facts.operations:
+            if operation.operation == 'return_value':
+                for uid in operation.input_use_ids or []:
+                    use = uses_by_id.get(uid)
+                    if use and use.variable in param_names:
+                        returns_from.add(use.variable)
+                meta = operation.metadata or {}
+                rv = meta.get('return_variable')
+                if rv in param_names:
+                    returns_from.add(rv)
+            elif operation.operation and 'raise' in operation.operation.lower():
+                meta = operation.metadata or {}
+                exc = meta.get('exception') or meta.get('type')
+                if exc:
+                    raises.add(str(exc))
+
+        for d in facts.definitions:
+            meta = d.metadata or {}
+            if not meta.get('is_mutation'):
+                continue
+            base = meta.get('receiver') or meta.get('collection')
+            if base in param_names:
+                mutates.add(base)
 
         # Analyze local definitions and operations
         for operation in facts.operations:

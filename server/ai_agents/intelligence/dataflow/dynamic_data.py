@@ -66,3 +66,19 @@ class DynamicDataCollector:
             line=0,
             metadata={'node_id': node_id, 'label': label, 'value': value}
         ))
+
+
+class DynamicDataTracker:
+    """Marks dynamically-dispatched constructs in a function's AST/CFG.
+
+    Used by controlflow/service.py when ENABLE_DYNAMIC_DATA_TRACKING is on.
+    The full implementation lands with the runtime-tracing workstream; until
+    then it reports itself as unsupported and returns no nodes rather than
+    guessing."""
+
+    def track_dynamic_constructs(self, tree, cfg) -> List[Dict[str, Any]]:
+        """Return dynamic construct nodes (getattr/setattr/eval/exec/import
+        and importlib call sites). Currently unsupported: returns an empty
+        list labelled accordingly."""
+        return [{'status': 'unsupported',
+                 'reason': 'dynamic construct tracking is not implemented'}]

@@ -79,7 +79,8 @@ def bind_call(call_shape: Optional[Dict[str, Any]], func_ast,
         {'status': 'ok'|'partial'|'unresolved',
          'bindings': [{'param': name, 'param_kind': ..., 'arg_index': i|None,
                        'keyword': name|None, 'use_ids': [...],
-                       'operation_id': ...|None, 'status': 'bound'|'unresolved'}],
+                       'operation_id': ...|None, 'status': 'bound'|'unresolved',
+                       'precision': 'exact'|'aggregate'}],
          'unbound_arguments': [{'position': i} | {'keyword': name}],
          'defaults': [param names supplied by default],
          'reason': str|None}
@@ -119,6 +120,8 @@ def bind_call(call_shape: Optional[Dict[str, Any]], func_ast,
             'use_ids': list(arg.get('use_ids') or []),
             'operation_id': arg.get('operation_id'),
             'status': 'bound',
+            'precision': ('aggregate' if param_kind in ('vararg', 'kwarg')
+                          else 'exact'),
         })
         filled.add(param_name)
 
@@ -131,6 +134,7 @@ def bind_call(call_shape: Optional[Dict[str, Any]], func_ast,
             'use_ids': list(arg.get('use_ids') or []),
             'operation_id': arg.get('operation_id'),
             'status': 'unresolved',
+            'precision': 'aggregate' if arg.get('starred') else 'exact',
         })
         unbound.append({'position': arg_index} if arg_index is not None
                        else {'keyword': keyword})

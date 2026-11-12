@@ -156,6 +156,83 @@ class UnifiedGraphBuilder:
             }
         )
 
+    def build_repository_graph(
+        self,
+        function_graphs: Dict[str, 'UnifiedGraph'],
+        interprocedural_edges: Optional[List[Dict[str, Any]]] = None,
+        max_nodes: int = 5000,
+    ) -> UnifiedGraph:
+        """Merge per-function unified graphs into one repository-level graph.
+
+        ``function_graphs`` maps function_id -> UnifiedGraph (built by
+        build_unified). Node and edge ids are namespaced per function so they
+        cannot collide. ``interprocedural_edges`` are dicts with keys
+        source_function, target_function, kind ('call'|'argument'|'return'),
+        resolution ('confirmed'|'possible'), call_site_id and evidence; each
+        becomes an edge between the functions' entry nodes labelled with its
+        resolution. The merge is capped at ``max_nodes``; when the cap is hit
+        the result reports ``metadata['truncated'] = True``.
+        """
+        nodes: List[UnifiedGraphNode] = []
+        edges: List[UnifiedGraphEdge] = []
+        entry_of: Dict[str, str] = {}
+        truncated = False
+
+        for fid in sorted(function_graphs):
+            g = function_graphs[fid]
+            if len(nodes) >= max_nodes:
+                truncated = True
+                break
+            first = True
+            for n in g.nodes:
+                if len(nodes) >= max_nodes:
+                    truncated = True
+                    break
+                nid = '%s::%s' % (fid, n.id)
+                nodes.append(UnifiedGraphNode(
+                    id=nid, kind=n.kind, subkind=n.subkind,
+                    function_id=fid, file=n.file, line=n.line,
+                    column=n.column, metadata=dict(n.metadata, unified_id=n.id)))
+                if first:
+                    entry_of[fid] = nid
+                    first = False
+            for e in g.edges:
+                edges.append(UnifiedGraphEdge(
+                    id='%s::%s' % (fid, e.id),
+                    source='%s::%s' % (fid, e.source),
+                    target='%s::%s' % (fid, e.target),
+                    kind=e.kind, subkind=e.subkind,
+                    call_site_id=e.call_site_id, condition=e.condition,
+                    evidence=e.evidence))
+
+        for i, ie in enumerate(interprocedural_edges or []):
+            src = ie.get('source_function')
+            dst = ie.get('target_function')
+            if src not in entry_of or dst not in entry_of:
+                continue
+            edges.append(UnifiedGraphEdge(
+                id='repo_edge_%d' % i,
+                source=entry_of[src],
+                target=entry_of[dst],
+                kind=ie.get('kind', 'call'),
+                subkind=ie.get('resolution', 'possible'),
+                call_site_id=ie.get('call_site_id'),
+                condition=None,
+                evidence=ie.get('evidence') or {}))
+
+        fids = sorted(function_graphs)
+        return UnifiedGraph(
+            nodes=nodes,
+            edges=edges,
+            function_id='repository',
+            file='',
+            metadata={
+                'scope': 'repository',
+                'function_count': len(fids),
+                'function_ids': fids,
+                'truncated': truncated,
+            })
+
     def _standardize_condition(self, condition: Optional[Any]) -> Optional[Dict[str, Any]]:
         """Standardize condition to dict format."""
         if not condition:

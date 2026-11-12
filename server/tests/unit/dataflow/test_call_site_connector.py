@@ -103,13 +103,33 @@ def test_connect_call_site():
         resolution='static_resolved'
     )
 
-    # Create mock caller facts
+    # Create mock caller facts with a Call operation carrying a call_shape
+    from ai_agents.intelligence.dataflow.models import (
+        DefUseFacts, ExpressionFact)
+
     caller_facts = DefUseFacts(
         function_id='test::caller',
         file='test.py',
         definitions=[],
         uses=[],
-        operations=[]
+        operations=[
+            ExpressionFact(
+                id='test_op_1',
+                function_id='test::caller',
+                file='test.py',
+                line=1,
+                column=0,
+                cfg_node_ids=[],
+                expression='callee(1)',
+                operation='Call',
+                input_use_ids=['use_1'],
+                metadata={'call_shape': {
+                    'callee': 'callee',
+                    'positional': [{'use_ids': ['use_1'],
+                                    'operation_id': 'op_arg'}],
+                    'keywords': []}},
+            )
+        ]
     )
 
     # Create mock callee facts with parameter
@@ -135,12 +155,18 @@ def test_connect_call_site():
         operations=[]
     )
 
-    edges = connector.connect_call_site(call_site, caller_facts, callee_facts, None)
+    callee_tree = ast.parse('def callee(x):\n    return x\n')
+    edges = connector.connect_call_site(
+        call_site, caller_facts, callee_facts, None,
+        callee_func_ast=callee_tree.body[0])
 
-    # Should create an argument edge
+    # Should create an argument edge bound by signature, not position
     assert len(edges) > 0
     assert edges[0].source_kind == 'argument'
     assert edges[0].target_kind == 'parameter'
+    assert edges[0].target_id == 'test::callee_def_param_1'
+    assert edges[0].resolution == 'confirmed'
+    assert edges[0].metadata['param_name'] == 'x'
 
 
 def test_connect_all_call_sites():

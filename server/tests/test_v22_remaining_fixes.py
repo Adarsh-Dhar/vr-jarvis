@@ -226,7 +226,9 @@ def test_caller_result_flows_nested_call_not_assignment(monkeypatch):
                                             [_confirmed_entry(src)])
     assert not unresolved
     assert len(results) == 1
-    assert results[0]['result']['disposition'] == 'nested_in_expression'
+    assert results[0]['result']['disposition'] == 'consumed_by_expression'
+    assert results[0]['result']['final'] == 'assigned'
+    assert results[0]['result']['assigned_variables'] == ['x']
 
 
 # --------------------------------------- open() handle binding (PR3.1)
@@ -334,9 +336,10 @@ def test_py_type_to_schema_unions():
     # Optional[dict] must not collapse the object member to a string contract
     s3 = _py_type_to_schema(typing.Optional[dict])
     assert s3['anyOf'][0] == {'type': 'object'}
-    # a member that accepts anything collapses the whole union
-    assert _py_type_to_schema(int | complex) == {} or True  # complex -> {}
-    assert _py_type_to_schema(int | type('X', (), {})) == {}
+    # intentionally unrestricted members still collapse the union
+    assert _py_type_to_schema(int | typing.Any) == {}
+    # an unresolvable member makes the union unresolved, not unrestricted
+    assert _py_type_to_schema(int | type('X', (), {})) == {'x-unresolved': True}
 
 
 def test_validate_arguments_rejects_undeclared():
