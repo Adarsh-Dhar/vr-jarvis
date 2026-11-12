@@ -129,6 +129,19 @@ def _top_level_public_names(tree: ast.AST) -> List[str]:
     return names
 
 
+@dataclass(frozen=True)
+class ImportBinding:
+    """Explicit import binding record: which local name in which scope binds
+    which target symbol, and the definition that created the binding."""
+    importer_file: str
+    scope: str            # "app.py" for module level, "app.py::calculate" for function-local
+    local_name: str
+    target_file: Optional[str]
+    target_symbol: Optional[str]
+    binding_key: str
+    definition_id: str
+
+
 @dataclass
 class ModuleSummary:
     """Summary of a module for cross-file analysis."""
@@ -218,13 +231,42 @@ class CrossModuleAnalyzer:
                 global_writes.append(definition.id)
 
         # Extract imports from operations, keeping both the raw expressions
-        # and the parsed resolver dicts.
+        # and the parsed resolver dicts. Only module-scope operations
+        # (function_id == file_path) feed the module import graph;
+        # function-local imports are recorded separately per scope.
         imports = []
         import_details = []
+        import_bindings = []
         for operation in facts.operations:
             if operation.operation in ('Import', 'ImportFrom'):
-                imports.append(operation.expression)
-                import_details.extend(_parse_import_expr(operation.expression))
+                scope = operation.function_id or file_path
+                if scope == file_path:
+                    imports.append(operation.expression)
+                    import_details.extend(_parse_import_expr(operation.expression))
+        # Import bindings come from 'import'-kind definitions, which carry
+        # scope (module vs function id), binding key and definition id.
+        for d in facts.definitions:
+            if d.kind != 'import':
+                continue
+            meta = d.metadata or {}
+            # Scope is the owning function id; module-level facts carry
+            # function_id == file_path, function-local imports carry the
+            # function id ("app.py::calculate").
+            scope = d.function_id or file_path
+            import_bindings.append({
+                'importer_file': file_path,
+                'scope': scope,
+                'local_name': d.variable,
+                'import_module': meta.get('import_module'),
+                'import_name': meta.get('import_name'),
+                'import_kind': meta.get('import_kind'),
+                'import_level': meta.get('import_level', 0),
+                'target_file': None,
+                'target_symbol': None,
+                'binding_key': d.binding_key,
+                'definition_id': d.id,
+                'line': d.line,
+            })
 
         exports = _all_exports(tree) if tree is not None else None
         if exports is None and tree is not None:
@@ -239,7 +281,8 @@ class CrossModuleAnalyzer:
             global_writes=global_writes,
             imports=imports,
             exports=exports,
-            metadata={'import_details': import_details}
+            metadata={'import_details': import_details,
+                      'import_bindings': import_bindings}
         )
 
         self._module_summaries[module_id] = summary
@@ -389,37 +432,73 @@ class CrossModuleAnalyzer:
     def propagate_global_values(
         self,
         summaries: Dict[str, ModuleSummary],
-        facts_by_file: Dict[str, DefUseFacts]
+        facts_by_file: Dict[str, DefUseFacts],
+        reaching: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """Turn resolved imports into value-level 'global' edges.
 
-        For every import that resolves to an in-repo module, match the
-        imported name against the exporting module's top-level definitions
-        (by variable name), then to uses in the importing file whose
-        variable equals the local alias (or ``alias.attr`` for
-        ``import mod`` forms). Each confirmed match yields
-        {'source': def_id, 'target': use_id, 'kind': 'global',
-         'resolution': 'confirmed', 'file', 'line', 'target_file'}.
-        Unresolved or external imports are reported, never emitted as edges.
+        Matching is binding-aware: a use belongs to an import binding only
+        when its binding_key equals the import definition's binding key AND
+        reaching-definition evidence confirms it — the import definition id
+        is in the use's reaching set (function scope), or the module-level
+        binding still resolves to the import (module scope). Name equality
+        alone never yields a confirmed edge: parameters/locals that shadow
+        an imported name carry a different binding key, and a reassignment
+        wins over the import through reaching definitions.
         """
+        from .reaching_definitions import reaching_definition_ids
         edges: List[Dict[str, Any]] = []
         unresolved: List[Dict[str, Any]] = []
+        reaching = reaching or {}
 
         for importer_file, summary in summaries.items():
             facts = facts_by_file.get(importer_file)
             if facts is None:
                 continue
-            details = (summary.metadata or {}).get('import_details') or []
-            for imp in details:
-                local = imp.get('alias') or imp.get('name')
-                if not local:
+            bindings = (summary.metadata or {}).get('import_bindings') or []
+            for ib in bindings:
+                local = ib.get('local_name')
+                scope = ib.get('scope') or importer_file
+                binding_key = ib.get('binding_key')
+                import_def_id = ib.get('definition_id')
+                if not local or not binding_key:
                     continue
-                kind = imp.get('kind')
+
+                # Uses bound to this import: same binding identity; a
+                # function-scope import only sees uses inside its function.
+                uses = [u for u in facts.uses
+                        if u.binding_key == binding_key
+                        and (scope == importer_file
+                             or u.function_id == scope)]
+                if not uses:
+                    continue
+
+                module_scope = scope == importer_file
+                kind = ib.get('import_kind')
+                imp = {'module': ib.get('import_module'),
+                       'name': ib.get('import_name'),
+                       'level': ib.get('import_level', 0),
+                       'kind': kind}
+
+                # Module-scope reassignment: the effective module binding is
+                # the LAST top-level definition of the name in this file. If
+                # it is not the import definition, uses connect to the
+                # reassignment, not the import.
+                reassigned_to = None
+                if module_scope:
+                    top_defs = [d for d in facts.definitions
+                                if d.function_id == importer_file
+                                and d.variable == local
+                                and not (d.metadata or {})
+                                .get('is_kill_only')]
+                    if top_defs:
+                        latest = max(top_defs, key=lambda d: d.line)
+                        if latest.id != import_def_id:
+                            reassigned_to = latest
+
+                # Resolve the import target module once per binding.
                 target = self.resolve_import(imp, importer_file)
                 if target is None:
-                    # Fallback: module-level names (constants, __init__
-                    # re-exports) have no symbol node for the resolver, so
-                    # resolve the module file directly from module_files.
                     mod = imp.get('module') or ''
                     module_files = self._graph_ctx.get('module_files') or {}
                     candidates = [mod]
@@ -433,23 +512,15 @@ class CrossModuleAnalyzer:
                             break
                 if not target or target == EXTERNAL \
                         or target not in summaries:
-                    unresolved.append({
-                        'module': importer_file,
-                        'import': '%s:%s' % (imp.get('module'), local),
-                        'reason': 'external' if target == EXTERNAL
-                                  else 'unresolved',
-                    })
+                    if reassigned_to is None:
+                        unresolved.append({
+                            'module': importer_file,
+                            'import': '%s:%s' % (imp.get('module'), local),
+                            'reason': 'external' if target == EXTERNAL
+                                      else 'unresolved',
+                        })
                     continue
 
-                # Uses of the local alias, including alias.attr for
-                # ``import mod`` style bindings.
-                uses = [u for u in facts.uses
-                        if u.variable == local
-                        or u.variable.startswith(local + '.')]
-                if not uses:
-                    continue
-
-                # Exporting module's top-level definitions by variable name.
                 target_facts = facts_by_file.get(target)
                 target_summary = summaries.get(target)
                 top_ids = set(target_summary.top_level_definitions) \
@@ -465,13 +536,73 @@ class CrossModuleAnalyzer:
                         if d.function_id == target:
                             by_var_mod.setdefault(d.variable, d)
 
+                # Function-scope reaching evidence, computed once.
+                rd = reaching.get(scope) if not module_scope else None
+
                 for u in uses:
+                    # Reaching-definition evidence for the use.
+                    if module_scope:
+                        confirmed = reassigned_to is None
+                        ambiguous = False
+                    else:
+                        if rd is None:
+                            # No reaching data: binding identity alone is
+                            # not enough for 'confirmed' — emit 'possible'.
+                            confirmed = False
+                            ambiguous = True
+                            reaching_ids = set()
+                        else:
+                            reaching_ids = reaching_definition_ids(
+                                rd.analysis, rd.facts, u)
+                            if import_def_id in reaching_ids:
+                                confirmed = True
+                                ambiguous = len(reaching_ids) > 1
+                            elif reaching_ids:
+                                # Reassigned (or shadowed) before this use:
+                                # the use belongs to the other definition.
+                                unresolved.append({
+                                    'module': importer_file,
+                                    'import': local,
+                                    'scope': scope,
+                                    'reason': 'reassigned before use',
+                                    'status': 'possible',
+                                    'file': importer_file,
+                                    'line': u.line,
+                                })
+                                continue
+                            else:
+                                # Import does not reach this use (e.g. use
+                                # before the import on every path).
+                                continue
+
                     if kind == 'from':
-                        tname = imp.get('name')
+                        tname = ib.get('import_name')
                     else:
                         tname = u.variable.split('.', 1)[1] \
                             if '.' in u.variable else None
                     td = by_var_top.get(tname) or by_var_mod.get(tname)
+
+                    if reassigned_to is not None:
+                        # Module-level rebinding: the use connects to the
+                        # reassignment definition in this file.
+                        edges.append({
+                            'source': reassigned_to.id,
+                            'target': u.id,
+                            'kind': 'global',
+                            'resolution': 'confirmed',
+                            'via': 'reassignment',
+                            'file': importer_file,
+                            'line': u.line,
+                            'target_file': importer_file,
+                            'source_file': importer_file,
+                            'source_line': reassigned_to.line,
+                            'target_line': u.line,
+                            'target_function': u.function_id,
+                            'scope': scope,
+                            'binding_key': binding_key,
+                        })
+                        continue
+
                     if td is None:
                         unresolved.append({
                             'module': importer_file,
@@ -482,14 +613,23 @@ class CrossModuleAnalyzer:
                             'line': u.line,
                         })
                         continue
+                    resolution = 'confirmed' if confirmed and not ambiguous \
+                        else 'possible'
                     edges.append({
                         'source': td.id,
                         'target': u.id,
                         'kind': 'global',
-                        'resolution': 'confirmed',
+                        'resolution': resolution,
                         'file': importer_file,
                         'line': u.line,
                         'target_file': target,
+                        'source_file': target,
+                        'source_line': td.line,
+                        'target_line': u.line,
+                        'target_function': u.function_id,
+                        'scope': scope,
+                        'binding_key': binding_key,
+                        'definition_id': import_def_id,
                     })
 
         return {'edges': edges, 'unresolved': unresolved}

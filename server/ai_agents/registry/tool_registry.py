@@ -7,7 +7,8 @@ import types
 import typing
 from typing import List, Dict, Any, Optional
 from ..contracts.tool import ToolSpec, Constraint
-from ..agents.toolsets import TOOL_LEVELS, TOOLSETS
+from ..agents.toolsets import (TOOL_LEVELS, TOOLSETS, MVP_TOOL_NAMES,
+                               MVP_TOOL_OWNERS)
 from .output_schemas import OUTPUT_SCHEMAS, UNRESTRICTED_PARAMS, CORE_TOOLS
 
 import jsonschema
@@ -160,10 +161,21 @@ def _input_schema(fn):
         if p.default is inspect.Parameter.empty and p.kind not in (
                 inspect.Parameter.VAR_POSITIONAL,):
             required.append(name)
-    has_var_kw = any(p.kind is inspect.Parameter.VAR_KEYWORD
-                     for p in inspect.signature(fn).parameters.values())
-    return {'type': 'object', 'properties': props, 'required': required,
-            'additionalProperties': has_var_kw}
+    var_kw = next((p for p in inspect.signature(fn).parameters.values()
+                   if p.kind is inspect.Parameter.VAR_KEYWORD), None)
+    has_var_kw = var_kw is not None
+    schema = {'type': 'object', 'properties': props, 'required': required}
+    if has_var_kw:
+        # **kwargs: T annotates additionalProperties; untyped kwargs stay
+        # unrestricted here and are policed at registration for MVP tools.
+        kw_ann = hints.get(var_kw.name, var_kw.annotation)
+        kw_schema = _py_type_to_schema(kw_ann) \
+            if kw_ann is not inspect.Parameter.empty else {}
+        schema['additionalProperties'] = kw_schema if kw_schema else True
+        schema['x-var-keyword'] = var_kw.name
+    else:
+        schema['additionalProperties'] = False
+    return schema
 
 
 def _output_schema(fn):
@@ -240,9 +252,9 @@ class ToolRegistry:
         family table and the return-annotation fallback."""
         schema = OUTPUT_SCHEMAS.get(tool_name)
         if schema is None:
-            if tool_name in CORE_TOOLS:
+            if tool_name in MVP_TOOL_NAMES or tool_name in CORE_TOOLS:
                 raise ValueError(
-                    'core tool %s has no explicit OUTPUT_SCHEMAS entry'
+                    'MVP tool %s has no explicit OUTPUT_SCHEMAS entry'
                     % tool_name)
             schema = (_FAMILY_OUTPUT_SCHEMAS.get(tool_name)
                       or (_output_schema(fn) if callable(fn)
@@ -261,6 +273,17 @@ class ToolRegistry:
             return None
         if _HAS_JSONSCHEMA:
             _Validator.check_schema(schema)
+        # **kwargs typing: an untyped VAR_KEYWORD on an MVP tool is rejected
+        # unless explicitly allowlisted in UNRESTRICTED_PARAMS.
+        var_kw = schema.get('x-var-keyword')
+        if var_kw is not None:
+            kw_schema = schema.get('additionalProperties')
+            typed = isinstance(kw_schema, dict) and kw_schema \
+                and not kw_schema.get('x-unresolved')
+            if not typed and (tool_name, var_kw) not in UNRESTRICTED_PARAMS:
+                raise ValueError(
+                    'tool %s has untyped **%s; annotate it or add it to '
+                    'UNRESTRICTED_PARAMS' % (tool_name, var_kw))
         for pname, pschema in (schema.get('properties') or {}).items():
             if isinstance(pschema, dict) and not pschema \
                     and (tool_name, pname) not in UNRESTRICTED_PARAMS:
@@ -277,9 +300,17 @@ class ToolRegistry:
         return schema
 
     def _load_tools(self):
-        """Load tools from toolsets."""
+        """Load the active MVP tools (the union of the agent toolsets)."""
         from .. import tools as tools_module
-        for tool_name, level in TOOL_LEVELS.items():
+        for tool_name in sorted(MVP_TOOL_NAMES):
+            level = TOOL_LEVELS.get(tool_name)
+            if level is None:
+                raise ValueError(
+                    'MVP tool %s missing from TOOL_LEVELS' % tool_name)
+            owners = self._owners.get(tool_name) or []
+            if not owners:
+                raise ValueError(
+                    'MVP tool %s has empty ownership metadata' % tool_name)
             fn = getattr(tools_module, tool_name, None)
             if fn is None or not callable(fn):
                 raise ValueError(
@@ -288,7 +319,7 @@ class ToolRegistry:
                 name=tool_name,
                 group=_group_for(tool_name),
                 level=level,
-                owner_agents=list(self._owners.get(tool_name, [])),
+                owner_agents=list(owners),
                 input_schema=self._check_input_schema(tool_name, fn),
                 output_schema=self._checked_output_schema(tool_name, fn),
             )

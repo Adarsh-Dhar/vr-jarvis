@@ -16,6 +16,7 @@ from .models import DefUseFacts, Definition, ExpressionFact
 from .interprocedural import FunctionSummary, InterproceduralSummaryBuilder
 from .call_site_connector import CallSiteConnector, InterproceduralEdge
 from .cross_module import CrossModuleAnalyzer, ModuleSummary
+from .reaching_definitions import ReachingDefs
 
 
 @dataclass
@@ -27,6 +28,14 @@ class RepositoryDFG:
     summaries: Dict[str, FunctionSummary]
     modules: Dict[str, ModuleSummary]
     converged: bool
+    # Per-function reaching-definition artifacts (function_id -> ReachingDefs),
+    # retained so summaries, call-site connection and cross-module propagation
+    # can resolve uses to the definitions that actually reach them.
+    reaching: Dict[str, ReachingDefs] = None
+
+    def __post_init__(self):
+        if self.reaching is None:
+            self.reaching = {}
 
 
 def _repo_path(rel_file: str) -> Path:
@@ -126,13 +135,14 @@ def _module_facts(file_path: str, source: str) -> DefUseFacts:
         return facts
     seq = [0]
 
-    def _def(variable, line, kind):
+    def _def(variable, line, kind, meta=None):
         seq[0] += 1
         facts.definitions.append(Definition(
             id='%s::top::%s:%d' % (file_path, variable, line),
             variable=variable, function_id=file_path, file=file_path,
             line=line, column=0, kind=kind, cfg_node_ids=[],
-            binding_key='%s::%s' % (file_path, variable)))
+            binding_key='%s::%s' % (file_path, variable),
+            metadata=dict(meta or {}, scope='module')))
 
     for node in tree.body:
         if isinstance(node, ast.Import):
@@ -140,18 +150,26 @@ def _module_facts(file_path: str, source: str) -> DefUseFacts:
                 id='%s::imp:%d' % (file_path, node.lineno),
                 function_id=file_path, file=file_path,
                 line=node.lineno, column=0, cfg_node_ids=[],
-                expression=ast.unparse(node), operation='Import'))
+                expression=ast.unparse(node), operation='Import',
+                metadata={'scope': 'module'}))
             for a in node.names:
-                _def((a.asname or a.name).split('.')[0], node.lineno, 'import')
+                _def((a.asname or a.name).split('.')[0], node.lineno,
+                     'import',
+                     {'import_module': a.name, 'import_kind': 'import',
+                      'import_name': a.name})
         elif isinstance(node, ast.ImportFrom):
             facts.operations.append(ExpressionFact(
                 id='%s::impf:%d' % (file_path, node.lineno),
                 function_id=file_path, file=file_path,
                 line=node.lineno, column=0, cfg_node_ids=[],
-                expression=ast.unparse(node), operation='ImportFrom'))
+                expression=ast.unparse(node), operation='ImportFrom',
+                metadata={'scope': 'module'}))
             for a in node.names:
                 if a.name != '*':
-                    _def(a.asname or a.name, node.lineno, 'import')
+                    _def(a.asname or a.name, node.lineno, 'import',
+                         {'import_module': node.module or '',
+                          'import_level': node.level,
+                          'import_kind': 'from', 'import_name': a.name})
         elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             _def(node.name, node.lineno, 'function')
         elif isinstance(node, ast.ClassDef):
@@ -231,6 +249,7 @@ def build_repository_dfg(
     method_ids = set()
     facts_by_file: Dict[str, DefUseFacts] = {}
     module_sources: Dict[str, str] = {}
+    reaching: Dict[str, ReachingDefs] = {}
 
     # (1) per-function artifacts
     for fid in function_ids:
@@ -247,6 +266,13 @@ def build_repository_dfg(
             continue
         facts = art['facts']
         all_facts.append(facts)
+        # Scope tag: every fact keeps its owning scope — the module (file)
+        # for top-level facts, the function id for function-level facts.
+        facts.metadata['scope'] = 'module' if facts.function_id == art['file'] \
+            else facts.function_id
+        reaching[facts.function_id] = ReachingDefs(
+            function_id=facts.function_id, file=art['file'],
+            analysis=art['analysis'], facts=facts, cfg=art['cfg'])
         file_of[facts.function_id] = art['file']
         ast_of[facts.function_id] = art['func_ast']
         segment = ast.get_source_segment(art['source'], art['func_ast']) \
@@ -295,7 +321,8 @@ def build_repository_dfg(
     # (3) interprocedural summaries
     builder = InterproceduralSummaryBuilder(
         graph=graph, file_of=file_of,
-        source_hash_of=source_hash_of, ast_of=ast_of)
+        source_hash_of=source_hash_of, ast_of=ast_of,
+        reaching=reaching)
     summaries = builder.compute_summaries(all_facts)
     converged = bool(builder._call_graph.metadata.get('converged', True)) \
         if builder._call_graph else True
@@ -306,7 +333,8 @@ def build_repository_dfg(
     # (4) call-site edges
     connector = CallSiteConnector(builder)
     edges_by_func = connector.connect_all_call_sites(
-        all_facts, summaries, ast_of=ast_of, method_ids=method_ids)
+        all_facts, summaries, ast_of=ast_of, method_ids=method_ids,
+        reaching=reaching)
     edges: List[InterproceduralEdge] = []
     for flist in edges_by_func.values():
         edges.extend(flist)
@@ -317,7 +345,8 @@ def build_repository_dfg(
     # stay None unless a caller resolves them — see repository_dfg_edges.
 
     # (5) global value propagation
-    global_result = analyzer.propagate_global_values(modules, facts_by_file)
+    global_result = analyzer.propagate_global_values(
+        modules, facts_by_file, reaching=reaching)
     unresolved.extend(global_result.get('unresolved') or [])
 
     return RepositoryDFG(
@@ -326,4 +355,5 @@ def build_repository_dfg(
         unresolved=unresolved,
         summaries=summaries,
         modules=modules,
-        converged=converged)
+        converged=converged,
+        reaching=reaching)

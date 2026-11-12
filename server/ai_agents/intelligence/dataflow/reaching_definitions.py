@@ -1,7 +1,43 @@
 """Reaching definitions analysis for data-flow graphs."""
+from dataclasses import dataclass
 from typing import Dict, List, Set, Optional, Any
 from ..controlflow.models import ControlFlowGraph, CFGNode
 from .models import Definition, VariableUse, DefUseFacts
+
+
+@dataclass
+class ReachingDefs:
+    """Retained reaching-definition artifacts for one function.
+
+    Keeps the per-function analysis result together with the facts and CFG
+    it was computed from, so downstream interprocedural stages can answer
+    "which definitions reach this use" without re-running the analysis."""
+    function_id: str
+    file: str
+    analysis: Dict[str, Any]
+    facts: DefUseFacts
+    cfg: Optional[ControlFlowGraph] = None
+
+
+def reaching_definition_ids(
+    analysis: Dict[str, Any],
+    facts: DefUseFacts,
+    use: VariableUse
+) -> Set[str]:
+    """IDs of the definitions that may reach ``use``.
+
+    Unions the IN sets of every CFG node the use is attached to and keeps
+    only definitions sharing the use's binding key — the same identity rule
+    ReachingDefinitionsAnalyzer.resolve_use applies, returned as ids so
+    callers can test membership (e.g. "does the call-result definition
+    reach this use") without materializing Definition objects."""
+    in_sets = (analysis or {}).get('in_sets', {})
+    ids: Set[str] = set()
+    for node_id in use.cfg_node_ids or []:
+        ids.update(in_sets.get(node_id, set()) or set())
+    defs = {d.id: d for d in facts.definitions}
+    return {i for i in ids
+            if i in defs and defs[i].binding_key == use.binding_key}
 
 
 class ReachingDefinitionsAnalyzer:

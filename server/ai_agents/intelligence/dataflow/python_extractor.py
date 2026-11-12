@@ -756,9 +756,13 @@ class DefUseVisitor(ast.NodeVisitor):
                 function_id=self.function_id,
                 file=self.file,
                 local_vars=self.local_vars,
+                free_vars=self.free_vars,
+                global_vars=self.global_vars,
+                nonlocal_vars=self.nonlocal_vars,
                 cfg_node_map=self.cfg_node_map,
                 ast_index=self.ast_index,
                 facts=self.facts,
+                symbol_table=self.symbol_table,
                 ids=self.ids
             )
             evaluator = RecursiveExpressionEvaluator(ctx)
@@ -843,9 +847,13 @@ class DefUseVisitor(ast.NodeVisitor):
                 function_id=self.function_id,
                 file=self.file,
                 local_vars=self.local_vars,
+                free_vars=self.free_vars,
+                global_vars=self.global_vars,
+                nonlocal_vars=self.nonlocal_vars,
                 cfg_node_map=self.cfg_node_map,
                 ast_index=self.ast_index,
                 facts=self.facts,
+                symbol_table=self.symbol_table,
                 ids=self.ids
             )
             evaluator = RecursiveExpressionEvaluator(ctx)
@@ -918,6 +926,58 @@ class DefUseVisitor(ast.NodeVisitor):
         # Nonlocal declarations are scope markers, not value assignments
         # They indicate the variable refers to enclosing scope binding
         pass
+
+    def visit_Import(self, node: ast.Import) -> None:
+        """Visit import statements - bind imported names as 'import'
+        definitions scoped to this function."""
+        self._visit_import(node, 'Import')
+
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+        """Visit from-imports - same binding treatment as visit_Import."""
+        self._visit_import(node, 'ImportFrom')
+
+    def _visit_import(self, node, operation: str) -> None:
+        """Record an Import/ImportFrom operation plus one 'import' definition
+        per bound name. The definition carries the import metadata and the
+        function-scoped binding key, so reaching definitions and cross-module
+        binding resolution can see function-local imports."""
+        from .models import ExpressionFact
+        cfg_node_ids = self._get_cfg_node_ids(node)
+        self.facts.operations.append(ExpressionFact(
+            id=self._generate_operation_id(),
+            function_id=self.function_id,
+            file=self.file,
+            line=node.lineno,
+            column=node.col_offset if hasattr(node, 'col_offset') else 0,
+            cfg_node_ids=cfg_node_ids,
+            expression=ast.unparse(node) if hasattr(ast, 'unparse') else operation,
+            operation=operation,
+            metadata={'scope': self.function_id}))
+        for a in node.names:
+            if isinstance(node, ast.Import):
+                bound = (a.asname or a.name).split('.')[0]
+                meta = {'import_module': a.name, 'import_kind': 'import',
+                        'import_name': a.name, 'scope': self.function_id}
+            else:
+                if a.name == '*':
+                    continue
+                bound = a.asname or a.name
+                meta = {'import_module': node.module or '',
+                        'import_level': node.level, 'import_kind': 'from',
+                        'import_name': a.name, 'scope': self.function_id}
+            self.facts.definitions.append(Definition(
+                id=self._generate_def_id(bound),
+                variable=bound,
+                function_id=self.function_id,
+                file=self.file,
+                line=node.lineno,
+                column=0,
+                kind='import',
+                cfg_node_ids=cfg_node_ids,
+                binding_key='%s::%s' % (self.function_id, bound),
+                expression=ast.unparse(node) if hasattr(ast, 'unparse') else None,
+                metadata=meta,
+            ))
 
     # Expression visit methods are now handled by RecursiveExpressionEvaluator
     # in the higher-level statement visitors (Assign, AugAssign, Return, etc.)

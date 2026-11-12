@@ -575,3 +575,171 @@ OUTPUT_SCHEMAS = {
 OUTPUT_SCHEMAS['run_security_scan'].setdefault('allOf', []).append(
     {'if': {'properties': {'status': {'enum': ['failed', 'unavailable']}}},
      'then': {'required': ['error']}})
+
+
+# ----------------------------------------------------------------------
+# Strict reusable fragments (audit 2.4): nested graph/result objects are
+# validated, not just envelopes.
+# ----------------------------------------------------------------------
+SOURCE_REFERENCE = {'type': 'object',
+                    'required': ['file', 'line'],
+                    'properties': {'file': _STR, 'line': _INT}}
+GRAPH_NODE = {'type': 'object',
+              'required': ['id', 'kind'],
+              'properties': {'id': _STR, 'kind': _STR,
+                             'file': _STR, 'line': _INT,
+                             'source': SOURCE_REFERENCE}}
+GRAPH_EDGE = {'type': 'object',
+              'required': ['source', 'target', 'kind', 'resolution'],
+              'properties': {'source': _STR, 'target': _STR,
+                             'kind': _STR, 'resolution': RESOLUTION,
+                             'file': _STR, 'line': _INT}}
+DFG_EDGE = {'type': 'object',
+            'required': ['source', 'target', 'kind', 'resolution'],
+            'properties': {'source': _STR, 'target': _STR,
+                           'kind': _STR, 'resolution': RESOLUTION,
+                           'evidence': _EVIDENCE_ITEM}}
+FUNCTION_RESULT = {'type': 'object',
+                   'required': ['id', 'name', 'file'],
+                   'properties': {'id': _STR, 'name': _STR, 'file': _STR,
+                                  'line': _INT}}
+IMPLEMENTATION_TASK = {'type': 'object',
+                       'required': ['id', 'title', 'status'],
+                       'properties': {'id': _STR, 'title': _STR,
+                                      'description': _STR, 'status': _STR,
+                                      'dependencies': _LIST,
+                                      'acceptance_criteria': _LIST}}
+PATCH_RESULT = {'type': 'object',
+                'required': ['operation_id', 'worktree', 'status'],
+                'properties': {'operation_id': _STR, 'worktree': _STR,
+                               'status': _STR, 'diff': _STR,
+                               'resulting_diff': _STR}}
+
+# Strict edge/evidence lists built on the fragments above.
+_GRAPH_NODE_LIST = {'type': 'array', 'items': GRAPH_NODE}
+_GRAPH_EDGE_LIST = {'type': 'array', 'items': GRAPH_EDGE}
+_DFG_EDGE_LIST = {'type': 'array', 'items': DFG_EDGE}
+
+# ----------------------------------------------------------------------
+# Repository-intelligence tools (MVP)
+# ----------------------------------------------------------------------
+OUTPUT_SCHEMAS.update({
+    'analyze_dependencies_manifest': envelope(
+        ok_props={'manifest': _STR, 'dependencies': _LIST,
+                  'file': _STR},
+        ok_required=['dependencies']),
+    'analyze_repository_structure': envelope(
+        ok_props={'directories': _LIST, 'files': _LIST, 'tree': _OBJ},
+        ok_required=['directories', 'files']),
+    'detect_build_system': envelope(
+        ok_props={'build_system': _STR, 'files': _LIST,
+                  'detected': _LIST},
+        ok_required=['detected']),
+    'detect_frameworks': envelope(
+        ok_props={'frameworks': _LIST, 'detected': _LIST},
+        ok_required=['detected']),
+    'detect_languages': envelope(
+        ok_props={'languages': _LIST, 'counts': _OBJ},
+        ok_required=['languages']),
+    'detect_package_manager': envelope(
+        ok_props={'package_manager': _STR, 'detected': _LIST,
+                  'files': _LIST},
+        ok_required=['detected']),
+    'detect_project_type': envelope(
+        ok_props={'project_type': _STR, 'detected': _LIST,
+                  'confidence': _NUM},
+        ok_required=['detected']),
+    'extract_function_contract': envelope(
+        ok_props={'contract': _OBJ, 'function_id': _STR, 'file': _STR},
+        ok_required=['contract']),
+    'identify_entry_points': envelope(
+        ok_props={'entry_points': _LIST, 'count': _INT},
+        ok_required=['entry_points']),
+    'identify_external_services': envelope(
+        ok_props={'services': _LIST, 'external_services': _LIST},
+        ok_required=['services']),
+    'identify_generated_files': envelope(
+        ok_props={'generated_files': _LIST, 'files': _LIST},
+        ok_required=['generated_files']),
+    'identify_hidden_assumptions': envelope(
+        ok_props={'assumptions': _LIST, 'hidden_assumptions': _LIST},
+        ok_required=['assumptions']),
+    'record_task_targets': envelope(
+        ok_props={'tasks': _LIST, 'targets': _LIST, 'recorded': _BOOL},
+        ok_required=['targets']),
+    'resolve_types': envelope(
+        ok_props={'types': _LIST, 'resolved': _LIST, 'file': _STR},
+        ok_required=['types']),
+    'compare_code_elements': envelope(
+        ok_props={'comparison': _OBJ, 'differences': _LIST,
+                  'similarities': _LIST, 'elements': _LIST},
+        ok_required=['comparison']),
+})
+
+# ----------------------------------------------------------------------
+# Visualization tools (MVP)
+# ----------------------------------------------------------------------
+OUTPUT_SCHEMAS.update({
+    'visualize_architecture': envelope(
+        ok_props={'node_count': _INT, 'edge_count': _INT, 'scope': _STR},
+        ok_required=['node_count', 'edge_count']),
+    'visualize_call_graph': envelope(
+        ok_props={'function_id': _STR, 'nodes': _LIST, 'edges': _LIST,
+                  'node_count': _INT, 'edge_count': _INT},
+        ok_required=['nodes', 'edges']),
+    'visualize_dependency_graph': envelope(
+        ok_props={'nodes': _GRAPH_NODE_LIST, 'edges': _GRAPH_EDGE_LIST,
+                  'node_count': _INT, 'edge_count': _INT},
+        ok_required=['nodes', 'edges']),
+    'visualize_data_flow': envelope(
+        ok_props={'function_id': _STR, 'nodes': _LIST, 'edges': _LIST,
+                  'graph': _OBJ, 'node_count': _INT, 'edge_count': _INT},
+        ok_required=['edges']),
+    'visualize_control_flow': envelope(
+        ok_props={'function_id': _STR, 'nodes': _LIST, 'edges': _LIST,
+                  'node_count': _INT, 'edge_count': _INT},
+        ok_required=['nodes', 'edges']),
+    'visualize_unified_graph': envelope(
+        ok_props={'function_id': _STR, 'nodes': _LIST, 'edges': _LIST,
+                  'node_count': _INT, 'edge_count': _INT,
+                  'scope': _STR, 'summarized': _BOOL,
+                  'graph_type': _STR},
+        ok_required=['nodes', 'edges']),
+    'visualize_change_impact': envelope(
+        ok_props={'element_id': _STR, 'impacted': _LIST, 'nodes': _LIST,
+                  'edges': _LIST, 'node_count': _INT, 'edge_count': _INT},
+        ok_required=['impacted']),
+})
+
+# DFG result: 'graph' must be a real graph object with node/edge lists, not
+# an arbitrary object.
+OUTPUT_SCHEMAS['build_data_flow_graph']['properties']['graph'] = {
+    'type': 'object',
+    'required': ['nodes', 'edges'],
+    'properties': {'nodes': _LIST, 'edges': _LIST}}
+
+# Conversational / orchestration / spatial helpers: envelope contracts.
+# Their results are scene commands or text payloads consumed structurally;
+# the envelope still enforces the status field fail-closed.
+for _t in [
+    'answer_code_question', 'ask_clarifying_question', 'browse_vr_folder',
+    'check_task_completion', 'classify_request', 'collapse_graph_node',
+    'compare_before_after', 'create_graph', 'create_investigation_plan',
+    'dim_unrelated', 'expand_graph_neighborhood', 'expand_graph_node',
+    'explain_class', 'explain_function', 'explain_graph_edge',
+    'explain_module', 'explain_visualization', 'focus_camera',
+    'focus_on_code_element', 'focus_on_graph_node',
+    'get_current_selection', 'get_current_spatial_context',
+    'get_selected_node_details', 'highlight_callers', 'highlight_vr_path',
+    'infer_code_intent', 'isolate_subgraph', 'list_vr_repositories',
+    'manage_conversation_preferences', 'move_graph', 'move_panel',
+    'navigate_to_code_element', 'navigate_to_relationship',
+    'open_code_panel', 'open_vr_file', 'open_vr_repository',
+    'recenter_workspace', 'request_approval', 'request_more_evidence',
+    'reset_layout', 'retrieve_conversation_context',
+    'retrieve_investigation_context', 'scale_panel', 'set_edge_style',
+    'set_mode', 'set_panel_state', 'show_ghost_diff', 'show_test_badges',
+    'summarize_graph', 'summarize_investigation', 'understand_user_intent',
+    'zoom_graph',
+]:
+    OUTPUT_SCHEMAS.setdefault(_t, envelope())

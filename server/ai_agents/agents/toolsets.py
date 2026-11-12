@@ -232,6 +232,16 @@ TOOLSETS: Dict[str, List[str]] = {
     "visualization_spatial": ['highlight_vr_path', 'dim_unrelated', 'focus_camera', 'open_code_panel', 'list_vr_repositories', 'open_vr_repository', 'browse_vr_folder', 'open_vr_file', 'move_graph', 'zoom_graph', 'move_panel', 'scale_panel', 'set_panel_state', 'highlight_callers', 'recenter_workspace', 'reset_layout', 'set_mode', 'set_edge_style', 'show_ghost_diff', 'show_test_badges', 'create_graph', 'visualize_call_graph', 'visualize_change_impact', 'visualize_data_flow', 'visualize_architecture', 'visualize_dependency_graph', 'visualize_control_flow', 'visualize_unified_graph', 'explain_graph_edge', 'query_graph_path', 'expand_graph_neighborhood', 'expand_graph_node', 'collapse_graph_node', 'isolate_subgraph', 'summarize_graph', 'get_current_selection', 'verify_citations', 'focus_on_graph_node', 'navigate_to_code_element', 'navigate_to_relationship', 'get_selected_node_details', 'get_current_spatial_context', 'focus_on_code_element'],
 }
 
+# MVP tool manifest: every tool used by the active MVP agents (the union of
+# TOOLSETS), with ownership metadata. The registry loads exactly this set —
+# tools in TOOL_LEVELS that no MVP agent uses are not registered.
+MVP_TOOL_OWNERS: Dict[str, List[str]] = {}
+for _agent, _names in TOOLSETS.items():
+    for _n in _names:
+        MVP_TOOL_OWNERS.setdefault(_n, []).append(_agent)
+MVP_TOOL_NAMES = set(MVP_TOOL_OWNERS)
+
+
 def get_toolset(agent_name: str) -> List:
     """
     Get the toolset for an agent, resolving string names to actual tool callables.

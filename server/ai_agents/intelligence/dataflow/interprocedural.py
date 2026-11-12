@@ -57,7 +57,8 @@ class InterproceduralSummaryBuilder:
     def __init__(self, library_registry: Optional[SummaryRegistry] = None,
                  graph=None, file_of: Optional[Dict[str, str]] = None,
                  source_hash_of: Optional[Dict[str, str]] = None,
-                 ast_of: Optional[Dict[Any, Any]] = None):
+                 ast_of: Optional[Dict[Any, Any]] = None,
+                 reaching: Optional[Dict[str, Any]] = None):
         self._library_registry = library_registry or SummaryRegistry()
         self._summaries: Dict[str, FunctionSummary] = {}
         self._call_graph: Optional[CallGraph] = None
@@ -71,6 +72,9 @@ class InterproceduralSummaryBuilder:
         # argument binding; without them summaries fall back to fact counts.
         self._source_hash_of = dict(source_hash_of or {})
         self._ast_of = dict(ast_of or {})
+        # function_id -> ReachingDefs: retained per-function reaching
+        # definition artifacts used for alias-aware return provenance.
+        self._reaching = dict(reaching or {})
         self._unresolved: Dict[str, List[Dict[str, Any]]] = {}
 
     @property
@@ -278,6 +282,7 @@ class InterproceduralSummaryBuilder:
         # to raises.
         param_names = set(params)
         uses_by_id = {u.id: u for u in facts.uses}
+        prov = {'params': set(), 'external': set(), 'unresolved': []}
         for operation in facts.operations:
             if operation.operation == 'return_value':
                 for uid in operation.input_use_ids or []:
@@ -288,6 +293,13 @@ class InterproceduralSummaryBuilder:
                 rv = meta.get('return_variable')
                 if rv in param_names:
                     returns_from.add(rv)
+                # Alias-aware provenance: trace each returned use back
+                # through reaching definitions and producing operations so
+                # `cleaned = value.strip(); return cleaned` still records
+                # 'value' in returns_from.
+                self._trace_return_provenance(
+                    facts, operation, callee_summaries,
+                    existing_summaries, prov)
             elif operation.operation and 'raise' in operation.operation.lower():
                 meta = operation.metadata or {}
                 exc = meta.get('exception') or meta.get('type')
@@ -330,6 +342,17 @@ class InterproceduralSummaryBuilder:
                         sources.extend(callee_summary.sources)
                         sinks.extend(callee_summary.sinks)
 
+        # Alias-aware provenance contributes parameter names reached through
+        # local aliases; unresolved trace hits are recorded, never dropped.
+        returns_from.update(prov['params'])
+        for u in prov['unresolved']:
+            self._unresolved.setdefault(facts.function_id, []).append({
+                'kind': 'return_provenance',
+                'status': 'unresolved',
+                'reason': u.get('reason'),
+                'detail': u,
+            })
+
         # Compute callee hashes: digest the callee's computed result so a
         # change anywhere inside the callee's own callees is visible here.
         callee_hashes = {}
@@ -347,8 +370,261 @@ class InterproceduralSummaryBuilder:
             sinks=sinks,
             content_hash=content_hash,
             callee_hashes=callee_hashes,
-            metadata={}
+            metadata={
+                'return_provenance': {
+                    'external_sources': sorted(prov['external']),
+                    'unresolved': prov['unresolved'],
+                    'return_status': 'unresolved' if prov['unresolved']
+                    else 'resolved',
+                }
+            }
         )
+
+    # ------------------------------------------------------------------
+    # Alias-aware return provenance (reaching-definition trace)
+    # ------------------------------------------------------------------
+    def _trace_return_provenance(
+        self,
+        facts: DefUseFacts,
+        return_op,
+        callee_summaries: Dict[str, Optional[FunctionSummary]],
+        existing_summaries: Dict[str, FunctionSummary],
+        prov: Dict[str, Any],
+    ) -> None:
+        """Trace every value that can reach a return_value operation back to
+        its sources: function parameters (-> returns_from), local constants /
+        independent sources, external sources, or unresolved dependencies.
+
+        The walk is use -> reaching definitions -> producing operations ->
+        input uses/operations, with a visited set per return operation so
+        loops terminate."""
+        rd = self._reaching.get(facts.function_id)
+        if rd is None:
+            prov['unresolved'].append({
+                'reason': 'no reaching-definition data for %s'
+                          % facts.function_id,
+                'operation': return_op.id,
+            })
+            return
+        uses_by_id = {u.id: u for u in facts.uses}
+        ops_by_id = {o.id: o for o in facts.operations}
+        # Seed uses: direct inputs plus every use feeding the nested
+        # operations that produce the returned value.
+        seed_uses: List[Any] = []
+        seen_ops = set()
+        stack = list(return_op.input_operation_ids or [])
+        while stack:
+            oid = stack.pop()
+            if oid in seen_ops:
+                continue
+            seen_ops.add(oid)
+            op = ops_by_id.get(oid)
+            if op is None:
+                continue
+            for uid in op.input_use_ids or []:
+                u = uses_by_id.get(uid)
+                if u is not None:
+                    seed_uses.append(u)
+            stack.extend(op.input_operation_ids or [])
+        for uid in return_op.input_use_ids or []:
+            u = uses_by_id.get(uid)
+            if u is not None:
+                seed_uses.append(u)
+        visited = set()
+        for use in seed_uses:
+            self._prov_trace_use(rd, use, visited, prov,
+                                 callee_summaries, existing_summaries)
+
+    def _prov_reaching_ids(self, rd, use) -> Set[str]:
+        from .reaching_definitions import reaching_definition_ids
+        return reaching_definition_ids(rd.analysis, rd.facts, use)
+
+    def _prov_trace_use(self, rd, use, visited, prov,
+                        callee_summaries, existing_summaries) -> None:
+        key = ('use', use.id)
+        if key in visited:
+            return
+        visited.add(key)
+        # Attribute/subscript reads carry no definitions of their own
+        # binding; trace the receiver/collection binding instead.
+        receiver = (use.metadata or {}).get('receiver') \
+            or (use.metadata or {}).get('collection')
+        def_ids = self._prov_reaching_ids(rd, use)
+        if not def_ids and receiver:
+            pseudo = type(use)(
+                id=use.id, variable=receiver,
+                function_id=use.function_id, file=use.file,
+                line=use.line, column=use.column,
+                cfg_node_ids=use.cfg_node_ids,
+                binding_key='%s::%s' % (use.function_id, receiver))
+            def_ids = {i for i in self._prov_reaching_ids(rd, pseudo)}
+            if not def_ids:
+                prov['external'].add(receiver)
+                return
+        if not def_ids:
+            bk = use.binding_key or ''
+            file_prefix = '%s::' % (rd.file or '')
+            if bk.startswith(('global::', 'external::', 'closure::')) \
+                    or (file_prefix != '::' and bk.startswith(file_prefix)
+                        and '::' not in bk[len(file_prefix):]) \
+                    or (use.metadata or {}).get('is_global'):
+                prov['external'].add(use.variable)
+            else:
+                prov['unresolved'].append({
+                    'reason': 'no reaching definition for use %s (%s)'
+                              % (use.id, use.variable),
+                    'use_id': use.id, 'variable': use.variable,
+                    'line': use.line,
+                })
+            return
+        defs_by_id = {d.id: d for d in rd.facts.definitions}
+        for def_id in def_ids:
+            d = defs_by_id.get(def_id)
+            if d is not None:
+                self._prov_trace_def(rd, d, visited, prov,
+                                     callee_summaries, existing_summaries)
+
+    def _prov_trace_def(self, rd, d, visited, prov,
+                        callee_summaries, existing_summaries) -> None:
+        key = ('def', d.id)
+        if key in visited:
+            return
+        visited.add(key)
+        if d.kind == 'parameter':
+            prov['params'].add(d.variable)
+            return
+        meta = d.metadata or {}
+        if meta.get('is_literal') or meta.get('literal_value') is not None:
+            prov['external'].add('constant:%s' % d.variable)
+            return
+        if meta.get('is_copy') and meta.get('source_use_id'):
+            uses_by_id = {u.id: u for u in rd.facts.uses}
+            src = uses_by_id.get(meta['source_use_id'])
+            if src is not None:
+                self._prov_trace_use(rd, src, visited, prov,
+                                     callee_summaries, existing_summaries)
+                return
+        if d.kind == 'import':
+            prov['external'].add(d.variable)
+            return
+        # Definitions produced by an operation: follow the operation's
+        # inputs. Definitions with no producing operation are independent
+        # sources (loop targets, with-bindings, exception variables, ...).
+        producers = [o for o in rd.facts.operations
+                     if d.id in (o.output_definition_ids or [])]
+        if not producers:
+            if d.kind in ('for_loop', 'for_loop_unpack', 'with_binding',
+                          'exception_variable', 'exception_variable_clear',
+                          'assignment_unpack', 'augmented_assignment_unpack',
+                          'assignment_starred', 'named_expression_unpack',
+                          'deletion'):
+                prov['external'].add('independent:%s' % d.variable)
+            else:
+                prov['unresolved'].append({
+                    'reason': 'definition %s (%s) has no producing operation'
+                              % (d.id, d.variable),
+                    'definition_id': d.id, 'variable': d.variable,
+                    'line': d.line,
+                })
+            return
+        for op in producers:
+            self._prov_trace_op(rd, op, visited, prov,
+                                callee_summaries, existing_summaries)
+
+    def _prov_trace_op(self, rd, op, visited, prov,
+                       callee_summaries, existing_summaries) -> None:
+        key = ('op', op.id)
+        if key in visited:
+            return
+        visited.add(key)
+        uses_by_id = {u.id: u for u in rd.facts.uses}
+        if op.operation == 'Call':
+            callee_id, callee_summary = self._prov_call_summary(
+                rd, op, callee_summaries, existing_summaries)
+            if callee_summary is not None:
+                # Propagate the callee's returns_from through the recorded
+                # argument binding so the caller's result inherits the
+                # callee's parameter relationships.
+                self._prov_trace_callee_returns(
+                    rd, op, callee_id, callee_summary, uses_by_id,
+                    visited, prov, callee_summaries, existing_summaries)
+                if callee_summary.metadata.get('return_provenance', {}) \
+                        .get('unresolved'):
+                    prov['unresolved'].extend(
+                        callee_summary.metadata['return_provenance']
+                        ['unresolved'])
+                return
+            # External/unresolved call: the arguments and receiver still
+            # contribute their provenance conservatively.
+            prov['external'].add('call:%s' % (op.expression or op.id))
+        for uid in op.input_use_ids or []:
+            u = uses_by_id.get(uid)
+            if u is not None:
+                self._prov_trace_use(rd, u, visited, prov,
+                                     callee_summaries, existing_summaries)
+        for oid in op.input_operation_ids or []:
+            ops_by_id = {o.id: o for o in rd.facts.operations}
+            child = ops_by_id.get(oid)
+            if child is not None:
+                self._prov_trace_op(rd, child, visited, prov,
+                                    callee_summaries, existing_summaries)
+
+    def _prov_call_summary(self, rd, op, callee_summaries,
+                           existing_summaries):
+        """Resolve a Call op to (callee_id, summary) without recording
+        unresolved entries (the call-graph pass already does that)."""
+        if self._graph is None:
+            return None, None
+        from .call_target import resolve_call_target
+        file = self._file_of.get(rd.function_id) or rd.file
+        try:
+            res = resolve_call_target(self._graph, rd.function_id, file,
+                                      op.line, getattr(op, 'column', None))
+        except Exception:
+            return None, None
+        if res.get('status') != 'resolved':
+            return None, None
+        cid = res.get('target_id')
+        summary = callee_summaries.get(cid) or existing_summaries.get(cid)
+        return cid, summary
+
+    def _prov_trace_callee_returns(self, rd, op, callee_id, callee_summary,
+                                   uses_by_id, visited, prov,
+                                   callee_summaries, existing_summaries):
+        """Map callee returns_from params onto the caller's argument uses via
+        call_binding.bind_call and trace those uses' provenance."""
+        from .call_binding import bind_call
+        call_shape = (op.metadata or {}).get('call_shape')
+        callee_ast = self._ast_of.get(callee_id)
+        is_method = False
+        if isinstance(callee_ast, (ast.FunctionDef, ast.AsyncFunctionDef)) \
+                and callee_ast.args.args \
+                and callee_ast.args.args[0].arg in ('self', 'cls'):
+            is_method = True
+        try:
+            binding = bind_call(call_shape, callee_ast, is_method=is_method)
+        except Exception:
+            binding = {'bindings': []}
+        traced = False
+        for b in binding.get('bindings') or []:
+            if b.get('status') != 'bound' or not b.get('param'):
+                continue
+            if b.get('param') not in (callee_summary.returns_from or set()):
+                continue
+            for uid in b.get('use_ids') or []:
+                u = uses_by_id.get(uid)
+                if u is not None:
+                    traced = True
+                    self._prov_trace_use(rd, u, visited, prov,
+                                         callee_summaries, existing_summaries)
+        if not traced:
+            # Aggregate/unbound arguments: fall back to tracing every input
+            # use so parameter provenance is never silently dropped.
+            for uid in op.input_use_ids or []:
+                u = uses_by_id.get(uid)
+                if u is not None:
+                    self._prov_trace_use(rd, u, visited, prov,
+                                         callee_summaries, existing_summaries)
 
     def _merge_callee_effects(
         self,

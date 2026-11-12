@@ -56,8 +56,10 @@ class CallSiteConnector:
     - Tagged with call_site_id for context sensitivity
     """
 
-    def __init__(self, summary_builder: InterproceduralSummaryBuilder):
+    def __init__(self, summary_builder: InterproceduralSummaryBuilder,
+                 reaching: Optional[Dict[str, Any]] = None):
         self._summary_builder = summary_builder
+        self._reaching = dict(reaching or {})
 
     def identify_call_sites(
         self,
@@ -235,7 +237,11 @@ class CallSiteConnector:
                 ))
 
         # Return edges: each callee return feeds the caller's use (or the
-        # definition) that consumes the call result.
+        # definition) that consumes the call result. Consumers are picked by
+        # reaching definitions, not by line order: a use only connects when
+        # the call-result definition is in its reaching set, so an
+        # overwritten variable (`result = f(); result = 1; use(result)`)
+        # never produces an edge to the stale use.
         return_sources = [o.id for o in callee_facts.operations
                           if o.operation == 'return_value']
         if callee_summary and callee_summary.returns_from:
@@ -246,17 +252,41 @@ class CallSiteConnector:
         result_defs = [d for d in caller_facts.definitions
                        if d.id in result_def_ids]
         callee_op_by_id = {o.id: o for o in callee_facts.operations}
+        rd = self._reaching.get(caller_facts.function_id)
         if return_sources and result_defs:
+            from .reaching_definitions import reaching_definition_ids
             for rdef in result_defs:
-                consumers = [u for u in caller_facts.uses
-                             if u.binding_key == rdef.binding_key
-                             and u.line >= call_site.line]
-                targets = [u.id for u in consumers] or [rdef.id]
+                # (use, resolution) pairs: 'confirmed' only when the
+                # reaching set at the use is exactly {rdef}; a set with
+                # rdef plus other definitions is 'possible'.
+                consumers: List[Any] = []
+                for u in caller_facts.uses:
+                    if u.binding_key != rdef.binding_key:
+                        continue
+                    if rd is None:
+                        # No reaching data: keep the legacy line-order rule
+                        # but never confirm without evidence.
+                        if u.line >= call_site.line:
+                            consumers.append((u, 'possible'))
+                        continue
+                    reaching_ids = reaching_definition_ids(
+                        rd.analysis, rd.facts, u)
+                    if rdef.id not in reaching_ids:
+                        continue  # overwritten or bound to another def
+                    res = 'confirmed' if reaching_ids == {rdef.id} \
+                        else 'possible'
+                    consumers.append((u, res))
+                if not consumers:
+                    consumers = [(None, 'confirmed' if site_confirmed
+                                  else 'possible')]
                 target_uses = {u.id: u for u in caller_facts.uses}
                 for si, src in enumerate(return_sources):
                     src_op = callee_op_by_id.get(src)
-                    for ti, tgt in enumerate(targets):
-                        tgt_use = target_uses.get(tgt)
+                    for ti, (tgt_use, use_res) in enumerate(consumers):
+                        tgt = tgt_use.id if tgt_use is not None else rdef.id
+                        resolution = 'confirmed' \
+                            if site_confirmed and use_res == 'confirmed' \
+                            else 'possible'
                         edges.append(InterproceduralEdge(
                             edge_id='%s_ret_%s_%s' % (
                                 call_site.call_site_id, si, ti),
@@ -265,7 +295,7 @@ class CallSiteConnector:
                             source_id=src,
                             target_kind='call_result',
                             target_id=tgt,
-                            resolution='confirmed' if site_confirmed else 'possible',
+                            resolution=resolution,
                             caller_function_id=caller_facts.function_id,
                             callee_function_id=callee_facts.function_id,
                             source_file=callee_facts.file,
@@ -283,7 +313,8 @@ class CallSiteConnector:
         all_facts: List[DefUseFacts],
         summaries: Dict[str, FunctionSummary],
         ast_of: Optional[Dict[str, Any]] = None,
-        method_ids=frozenset()
+        method_ids=frozenset(),
+        reaching: Optional[Dict[str, Any]] = None
     ) -> Dict[str, List[InterproceduralEdge]]:
         """
         Connect all call sites across all functions.
@@ -297,6 +328,8 @@ class CallSiteConnector:
         Returns a mapping from function_id to list of interprocedural edges.
         """
         ast_of = ast_of or {}
+        if reaching is not None:
+            self._reaching = dict(reaching)
         all_edges: Dict[str, List[InterproceduralEdge]] = {}
 
         # Build function ID -> facts mapping

@@ -208,17 +208,48 @@ class UnifiedGraphBuilder:
                     call_site_id=e.call_site_id, condition=e.condition,
                     evidence=e.evidence))
 
+        added_node_ids = {n.id for n in nodes}
         for i, ie in enumerate(interprocedural_edges or []):
-            src = ie.get('source_function')
-            dst = ie.get('target_function')
-            if src not in entry_of or dst not in entry_of:
-                continue
-            src_node = ie.get('source_node')
-            dst_node = ie.get('target_node')
-            source = ('%s::unified_%s' % (src, src_node)
-                      if src_node else entry_of[src])
-            target = ('%s::unified_%s' % (dst, dst_node)
-                      if dst_node else entry_of[dst])
+            # Explicit endpoints: 'source_node_id'/'target_node_id' name
+            # unified node ids directly (used by module-level 'global'
+            # edges whose endpoints are not functions). 'nodes' carries any
+            # extra nodes the edge needs (e.g. module_data definitions).
+            for extra in ie.get('nodes') or []:
+                if not isinstance(extra, dict):
+                    continue
+                nid = extra.get('id')
+                if not nid or nid in added_node_ids:
+                    continue
+                nodes.append(UnifiedGraphNode(
+                    id=nid,
+                    kind=extra.get('kind', 'module_data'),
+                    subkind=extra.get('subkind'),
+                    function_id=extra.get('function_id', ''),
+                    file=extra.get('file', ''),
+                    line=extra.get('line', 0),
+                    column=extra.get('column', 0),
+                    metadata=dict(extra.get('metadata') or {},
+                                  **({'variable': extra['variable']}
+                                     if extra.get('variable') else {}))))
+                added_node_ids.add(nid)
+
+            src_explicit = ie.get('source_node_id')
+            dst_explicit = ie.get('target_node_id')
+            if src_explicit or dst_explicit:
+                if not src_explicit or not dst_explicit:
+                    continue
+                source, target = src_explicit, dst_explicit
+            else:
+                src = ie.get('source_function')
+                dst = ie.get('target_function')
+                if src not in entry_of or dst not in entry_of:
+                    continue
+                src_node = ie.get('source_node')
+                dst_node = ie.get('target_node')
+                source = ('%s::unified_%s' % (src, src_node)
+                          if src_node else entry_of[src])
+                target = ('%s::unified_%s' % (dst, dst_node)
+                          if dst_node else entry_of[dst])
             edges.append(UnifiedGraphEdge(
                 id='repo_edge_%d' % i,
                 source=source,

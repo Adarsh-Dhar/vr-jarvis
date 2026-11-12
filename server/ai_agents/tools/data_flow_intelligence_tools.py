@@ -1161,6 +1161,25 @@ def _cross_function_chain(graph, start_function_id, max_depth):
             'resolution': e.resolution, 'file': e.source_file,
             'line': e.source_line}))
 
+    # Global (cross-module) edges: a module-level definition flows into a
+    # use inside a function. The hop is keyed by the definition id so a
+    # chain can start at a module-level definition and continue into the
+    # consuming function.
+    for g in repo_dfg.global_edges or []:
+        tf = g.get('target_function')
+        src_def = g.get('source')
+        if not tf or not src_def:
+            continue
+        adj.setdefault(src_def, []).append((tf, {
+            'source': src_def, 'target': g.get('target'),
+            'kind': 'global', 'resolution': g.get('resolution'),
+            'source_function': None, 'target_function': tf,
+            'source_file': g.get('source_file') or g.get('target_file'),
+            'source_line': g.get('source_line'),
+            'target_file': g.get('target_file') or g.get('file'),
+            'target_line': g.get('target_line'),
+            'file': g.get('file'), 'line': g.get('line')}))
+
     # Each emitted path is one chain: a list of hop dicts from the queried
     # function outward, up to max_depth.
     chains = []

@@ -830,7 +830,6 @@ def _visualize_repository_unified(graph, function_id, node, tool_context,
     try:
         from ..intelligence.dataflow.repository_dfg import build_repository_dfg
         repo_dfg = build_repository_dfg(graph, function_ids=list(function_graphs))
-        dfg_counts['global_edges'] = len(repo_dfg.global_edges)
         dfg_counts['unresolved'] = len(repo_dfg.unresolved)
         for e in repo_dfg.edges:
             if e.source_kind == 'argument':
@@ -858,6 +857,54 @@ def _visualize_repository_unified(graph, function_id, node, tool_context,
                 dfg_counts['argument_edges'] += 1
             else:
                 dfg_counts['return_edges'] += 1
+
+        # Global (cross-module) edges: module-level definitions have no
+        # function, so endpoints are explicit node ids — a 'module_data'
+        # node for the exporting definition and the consuming function's
+        # unified DFG node for the use.
+        use_owner = {}
+        for fid, rd in (repo_dfg.reaching or {}).items():
+            f2n = ((dfg_by_fid.get(fid).metadata or {}).get('fact_to_node', {})
+                   if dfg_by_fid.get(fid) is not None else {})
+            for u in rd.facts.uses:
+                use_owner[u.id] = (fid, f2n.get(u.id))
+        module_nodes = {}
+        for g in repo_dfg.global_edges or []:
+            src_def = g.get('source')
+            tgt_use = g.get('target')
+            owner = use_owner.get(tgt_use)
+            if not src_def or owner is None:
+                continue
+            fid, dfg_node = owner
+            if dfg_node is None:
+                continue
+            src_node_id = 'module_data::%s' % src_def
+            if src_node_id not in module_nodes:
+                module_nodes[src_node_id] = {
+                    'id': src_node_id, 'kind': 'module_data',
+                    'file': g.get('source_file') or g.get('target_file'),
+                    'line': g.get('source_line') or g.get('line') or 0,
+                    'variable': src_def,
+                    'function_id': ''}
+            tgt_node_id = '%s::unified_%s' % (fid, dfg_node)
+            inter_edges.append({
+                'kind': 'global',
+                'resolution': g.get('resolution', 'possible'),
+                'source_node_id': src_node_id,
+                'target_node_id': tgt_node_id,
+                'nodes': [module_nodes[src_node_id]],
+                'call_site_id': None,
+                'evidence': {
+                    'file': g.get('file'), 'line': g.get('line'),
+                    'source_file': g.get('source_file')
+                    or g.get('target_file'),
+                    'source_line': g.get('source_line'),
+                    'target_file': g.get('target_file') or g.get('file'),
+                    'target_line': g.get('target_line'),
+                    'resolution': g.get('resolution'),
+                    'scope': g.get('scope'),
+                    'binding_key': g.get('binding_key')}})
+            dfg_counts['global_edges'] += 1
     except Exception:
         pass
 
