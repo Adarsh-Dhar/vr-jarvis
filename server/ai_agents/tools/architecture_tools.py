@@ -1101,10 +1101,25 @@ def _design_path(session_id: str) -> Path:
 
 
 def save_design(session_id: str, payload: Dict[str, Any]) -> bool:
-    """Persist design state; returns False on failure so callers can warn."""
+    """Persist design state atomically; returns False on failure so callers
+    can warn. Writes to a temp file, fsyncs, verifies the JSON reads back,
+    then os.replace()s into place so a crash never leaves a torn file."""
+    import os
+    import tempfile
     try:
         DESIGN_DIR.mkdir(parents=True, exist_ok=True)
-        _design_path(session_id).write_text(json.dumps(payload, indent=2, default=str))
+        final = _design_path(session_id)
+        fd, tmp = tempfile.mkstemp(dir=str(DESIGN_DIR), suffix='.tmp')
+        try:
+            with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                f.write(json.dumps(payload, indent=2, default=str))
+                f.flush()
+                os.fsync(f.fileno())
+            json.loads(Path(tmp).read_text(encoding='utf-8'))   # readback check
+            os.replace(tmp, final)                                # atomic
+        except Exception:
+            Path(tmp).unlink(missing_ok=True)
+            raise
         return True
     except Exception as exc:
         log.warning('could not persist design state for %s: %s', session_id, exc)

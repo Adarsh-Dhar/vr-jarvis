@@ -31,6 +31,17 @@ Rules:
 - Report 'passed' only when check really ran
 - Use record_finding for all verification claims
 
+Runtime tracing (only when the developer explicitly asks to execute or trace):
+1. Confirm the target is a .py script. Otherwise return status 'unsupported' with a reason.
+2. Call start_runtime_trace with command=[script, *args]. Never pass shell strings.
+3. Call get_runtime_trace(trace_id). Repeat while trace_status is 'running' (at most 5 polls).
+4. If still running, call stop_runtime_trace, then call get_runtime_trace once more.
+5. Explain events in sequence order with file:line evidence. Distinguish actual runtime
+   events from static call-graph predictions.
+6. Always report timed_out, failed, truncated and exit_code when present.
+7. Do not describe any event that get_runtime_trace did not return.
+
+Write your output_key value as JSON: {"status": "completed|partial|unsupported|failed", "answer": str, "findings": [], "evidence": [{"file": str, "line": int}], "unresolved": [], "limitations": [], "reason": str|null}. partial/unsupported/failed require reason or limitations.
 Return your analysis to state['result_testing']
 '''
 

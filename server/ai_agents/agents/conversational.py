@@ -28,6 +28,7 @@ Rules:
 - Never fabricate information
 - Ask only one clarifying question at a time
 
+Write your output_key value as JSON: {"status": "completed|partial|unsupported|failed", "answer": str, "findings": [], "evidence": [{"file": str, "line": int}], "unresolved": [], "limitations": [], "reason": str|null}. partial/unsupported/failed require reason or limitations.
 Return your response to state['result_conversational']
 '''
 

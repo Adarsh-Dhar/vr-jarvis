@@ -9,7 +9,8 @@ from typing import List, Dict, Any, Optional
 from ..contracts.tool import ToolSpec, Constraint
 from ..agents.toolsets import (TOOL_LEVELS, TOOLSETS, MVP_TOOL_NAMES,
                                MVP_TOOL_OWNERS)
-from .output_schemas import OUTPUT_SCHEMAS, UNRESTRICTED_PARAMS, CORE_TOOLS
+from .output_schemas import (OUTPUT_SCHEMAS, UNRESTRICTED_PARAMS, CORE_TOOLS,
+                             assert_data_tool_schemas)
 
 import jsonschema
 from jsonschema import Draft202012Validator, validators
@@ -243,6 +244,9 @@ class ToolRegistry:
         self._tools: Dict[str, ToolSpec] = {}
         self._owners = _owner_agents()
         self._load_tools()
+        # Data tools must carry data-bearing schemas; a violation stops the
+        # server at startup rather than surfacing mid-run.
+        assert_data_tool_schemas()
 
     @staticmethod
     def _checked_output_schema(tool_name, fn):

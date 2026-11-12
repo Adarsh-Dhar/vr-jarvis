@@ -191,10 +191,15 @@ Rules:
 - Spoken replies are at most two sentences.
 - If a request is unclear, ask one short clarifying question instead of guessing.
 
-Runtime tracing: use static analysis by default. Call start_runtime_trace only when the
-user explicitly asks to execute or trace code. For a question about an earlier trace,
-call get_runtime_trace with its trace_id. Never state that a trace exists or describe
-its events until a runtime tool has returned status ok.
+Runtime tracing:
+- Use static analysis by default.
+- When the developer explicitly asks to execute or trace code, delegate to
+  testing_verification_pipeline.
+- The testing-verification agent owns start_runtime_trace, get_runtime_trace and
+  stop_runtime_trace.
+- Never attempt to call runtime tools directly from the root agent.
+- Never claim that runtime evidence exists before the testing agent has returned it.
+- An ordinary code explanation must not start a process.
 '''
 
 root_agent = LlmAgent(

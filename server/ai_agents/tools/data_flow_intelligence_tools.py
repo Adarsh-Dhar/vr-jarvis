@@ -1144,8 +1144,11 @@ def _cross_function_chain(graph, start_function_id, max_depth):
     try:
         from ..intelligence.dataflow.repository_dfg import build_repository_dfg
         repo_dfg = build_repository_dfg(graph)
-    except Exception:
-        return []
+    except NotImplementedError as exc:
+        return {'status': 'unsupported', 'chain': [], 'diagnostics': [str(exc)]}
+    except Exception as exc:
+        return {'status': 'failed', 'chain': [],
+                'diagnostics': [type(exc).__name__ + ': ' + str(exc)]}
 
     # function_id -> ordered list of (next_function, edge-dict) hops
     adj: Dict[str, list] = {}
@@ -1195,7 +1198,11 @@ def _cross_function_chain(graph, start_function_id, max_depth):
             chains.append(new_hops)
             if len(new_hops) < max_depth:
                 frontier.append((nxt, new_hops))
-    return chains
+    status = 'completed' if chains else 'no_chain_found'
+    flat = [h for chain in chains for h in chain]
+    if any(h.get('resolution') != 'confirmed' for h in flat):
+        status = 'partial'
+    return {'status': status, 'chain': chains, 'diagnostics': []}
 
 
 def _ops_by_id(ctx):
@@ -1242,7 +1249,10 @@ def trace_cross_function_flow(
     build_repository_dfg (argument edges caller->callee, return edges
     callee->caller) up to max_depth hops, so a value crossing three or more
     files comes back as a chain list rather than a single hop. The one-hop
-    variable edges above keep their existing shape."""
+    variable edges above keep their existing shape.
+
+    Returns {'status', 'chain', 'diagnostics'} so DFG failures are visible
+    instead of silently looking like 'no chain found'."""
     try:
         from ..intelligence.dataflow.call_binding import bind_call
         parts = _split_variable_id(variable_id)
@@ -1349,14 +1359,19 @@ def trace_cross_function_flow(
                           (cs.get('result') or {}).get('disposition'))
             cs.setdefault('file', cs.get('file'))
             cs.setdefault('line', cs.get('line'))
-        chain = _cross_function_chain(graph, ctx['function_id'], max_depth)
+        res = _cross_function_chain(graph, ctx['function_id'], max_depth)
+        chain_status = res['status']
         return {
-            'status': 'ok',
+            'status': 'partial' if chain_status in ('partial', 'failed')
+                      else ('unsupported' if chain_status == 'unsupported'
+                            else 'ok'),
             'variable_id': variable_id,
             'function_id': ctx['function_id'],
             'outbound_argument_edges': outbound,
             'inbound_return_edges': call_sites,
-            'chain': chain,
+            'chain': res['chain'],
+            'chain_status': chain_status,
+            'diagnostics': res['diagnostics'],
             'max_depth': max_depth,
             'unresolved': unresolved + ret_unresolved,
             'evidence': 'def-use call operations + call-site edge callee resolution + call_shape binding'

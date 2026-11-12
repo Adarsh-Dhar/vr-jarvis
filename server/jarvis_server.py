@@ -5,6 +5,8 @@ import logging
 import json
 import os
 import subprocess
+import sys
+import traceback
 import uuid
 import hmac
 import time
@@ -15,12 +17,18 @@ from typing import Optional, Dict, Any, List
 from types import SimpleNamespace
 
 from fastapi import Depends, FastAPI, Header, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse, StreamingResponse
 from google.adk.events import Event, EventActions
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai import types
 from pydantic import BaseModel
+from starlette.exceptions import HTTPException as StarletteHTTPException
+
+sys.path.insert(0, str(Path(__file__).parent))
+from api_models import *  # noqa: F401,F403  (response models)
 
 from ai_agents.agent import root_agent
 from ai_agents import config, repository
@@ -103,17 +111,67 @@ def validate_security_config():
 # Validate security on import
 validate_security_config()
 
-try:
-    from google.adk.sessions import DatabaseSessionService
+# Explicit session backend: 'sqlite' (durable, default) or 'memory' (volatile,
+# for tests/dev). An unknown value fails startup instead of silently falling
+# back to whichever service happened to import.
+SESSION_BACKEND = os.getenv('JARVIS_SESSION_BACKEND', 'sqlite').lower()
+if SESSION_BACKEND not in ('sqlite', 'memory'):
+    raise RuntimeError('JARVIS_SESSION_BACKEND must be sqlite or memory')
+
+if SESSION_BACKEND == 'sqlite':
+    from google.adk.sessions import DatabaseSessionService   # ImportError fails startup
+    (config.ROOT / 'data').mkdir(parents=True, exist_ok=True)
     sessions = DatabaseSessionService(
-        db_url=os.getenv('JARVIS_SESSION_DB', 'sqlite+aiosqlite:///' + str(config.ROOT / 'data' / 'sessions.db')))
-except Exception:
-    # sqlalchemy/aiosqlite not installed: sessions live only for this process.
+        db_url=os.getenv('JARVIS_SESSION_DB',
+                         'sqlite+aiosqlite:///' + str(config.ROOT / 'data' / 'sessions.db')))
+else:
     sessions = InMemorySessionService()
 runner = Runner(agent=root_agent, app_name=APP, session_service=sessions)
 locks = defaultdict(asyncio.Lock)
 session_last_used = {}  # Track session last activity for eviction
 app = FastAPI(title='JARVIS bridge')
+
+
+def _rid(request):
+    return request.headers.get('x-request-id') or uuid.uuid4().hex
+
+
+_CODES = {400: 'BAD_REQUEST', 401: 'UNAUTHORIZED', 403: 'FORBIDDEN',
+          404: 'NOT_FOUND', 409: 'CONFLICT', 422: 'VALIDATION_ERROR',
+          429: 'CAPACITY_EXCEEDED', 503: 'UNAVAILABLE'}
+
+
+@app.exception_handler(StarletteHTTPException)
+async def _http_exc(request, exc):
+    detail = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
+    return JSONResponse(status_code=exc.status_code, content={
+        'status': 'error',
+        'error': {'code': _CODES.get(exc.status_code, 'ERROR'),
+                  'message': detail, 'details': {}},
+        'request_id': _rid(request),
+        # Unity still reads the legacy 'detail' field on errors.
+        'detail': detail})
+
+
+@app.exception_handler(RequestValidationError)
+async def _val_exc(request, exc):
+    return JSONResponse(status_code=422, content={
+        'status': 'error',
+        'error': {'code': 'VALIDATION_ERROR', 'message': 'Invalid request.',
+                  'details': {'errors': jsonable_encoder(exc.errors())}},
+        'request_id': _rid(request)})
+
+
+@app.exception_handler(Exception)
+async def _unhandled(request, exc):
+    rid = _rid(request)
+    logging.getLogger('uvicorn.error').error(
+        'unhandled %s: %s', rid, traceback.format_exc())
+    return JSONResponse(status_code=500, content={
+        'status': 'error',
+        'error': {'code': 'INTERNAL_ERROR',
+                  'message': 'Unexpected server error.', 'details': {}},
+        'request_id': rid})
 
 # Initialize all agents explicitly
 initialize_agents()
@@ -169,21 +227,62 @@ def _s(value):
     return value if isinstance(value, str) else json.dumps(value, default=str)
 
 
+_session_create_lock = asyncio.Lock()
+
+
+async def _session_is_safe_to_evict(sid) -> bool:
+    """A session may only be evicted when nothing in its real state would be
+    lost: no running turn (lock held), no worktree on disk, no pending
+    approval, no unpromoted commit, no in-flight design/plan work."""
+    if locks[sid].locked():
+        return False
+    sess = await sessions.get_session(app_name=APP, user_id=USER, session_id=sid)
+    if sess is None:
+        return True
+    st = sess.state
+    wt = st.get('worktree')
+    if wt and Path(str(wt)).is_dir():
+        return False
+    if st.get('pending_approval'):
+        return False
+    lc = st.get('last_commit')
+    if isinstance(lc, dict) and lc.get('branch'):
+        return False
+    if st.get('design_in_progress') or st.get('plan_in_progress'):
+        return False
+    return True
+
+
+async def _evict_one_safe_session() -> bool:
+    """Evict the oldest session that is past the idle timeout AND safe to
+    drop. Returns False when every expired session is still in use."""
+    now = time.time()
+    expired = sorted(
+        (t, s) for s, t in session_last_used.items()
+        if now - t >= SESSION_IDLE_TIMEOUT)
+    for _, sid in expired:
+        if await _session_is_safe_to_evict(sid):
+            await sessions.delete_session(app_name=APP, user_id=USER, session_id=sid)
+            session_last_used.pop(sid, None)
+            locks.pop(sid, None)
+            return True
+    return False
+
+
 async def ensure(session_id):
     session = await sessions.get_session(app_name=APP, user_id=USER, session_id=session_id)
     if session is None:
-        # Check session cap
-        active_sessions = len([s for s, t in session_last_used.items() 
-                            if time.time() - t < SESSION_IDLE_TIMEOUT])
-        if active_sessions >= MAX_SESSIONS:
-            # Evict oldest idle session
-            oldest = min(session_last_used.items(), key=lambda x: x[1])
-            await sessions.delete_session(app_name=APP, user_id=USER, session_id=oldest[0])
-            del session_last_used[oldest[0]]
-        
-        session = await sessions.create_session(app_name=APP, user_id=USER, session_id=session_id)
-    
-    # Update last used time
+        async with _session_create_lock:
+            session = await sessions.get_session(
+                app_name=APP, user_id=USER, session_id=session_id)
+            if session is None:
+                if len(session_last_used) >= MAX_SESSIONS:
+                    if not await _evict_one_safe_session():
+                        raise HTTPException(
+                            status_code=429,
+                            detail='Session capacity reached and no idle session can be safely removed.')
+                session = await sessions.create_session(
+                    app_name=APP, user_id=USER, session_id=session_id)
     session_last_used[session_id] = time.time()
     return session
 
@@ -229,6 +328,26 @@ async def _register_persisted_sessions():
     # stop the server at boot, not mid-run.
     from ai_agents.registry.tool_registry import get_tool_registry
     get_tool_registry()
+    # Fail-closed agent/tool contracts: a tool missing from a toolset, a bad
+    # instruction reference or a missing schema stops the server at boot.
+    from ai_agents.agents.validate_toolsets import validate_runtime_agent_contracts
+    validate_runtime_agent_contracts()
+    # Connectivity probe: prove the session backend can create and delete a
+    # session before serving traffic.
+    probe = '__startup_probe__'
+    await sessions.create_session(app_name=APP, user_id=USER, session_id=probe)
+    await sessions.delete_session(app_name=APP, user_id=USER, session_id=probe)
+
+    # Periodically reclaim finished runtime traces and their snapshots.
+    async def _trace_gc():
+        from ai_agents.runtime import trace_manager as _tm
+        while True:
+            await asyncio.sleep(300)
+            try:
+                _tm.cleanup_expired()
+            except Exception:
+                pass
+    asyncio.get_event_loop().create_task(_trace_gc())
     try:
         resp = await sessions.list_sessions(app_name=APP, user_id=USER)
         for sess in (getattr(resp, 'sessions', None) or []):
@@ -371,7 +490,7 @@ class ApproveBody(BaseModel):
     request_id: Optional[str] = None   # client-generated id; retries are ignored
 
 
-@app.post('/session', dependencies=[Depends(auth)])
+@app.post('/session', dependencies=[Depends(auth)], response_model=SessionResponse)
 async def new_session():
     session_id = uuid.uuid4().hex
     await ensure(session_id)
@@ -411,12 +530,14 @@ def _git(*args):
         return ''
 
 
-@app.get('/health')  # No authentication - public endpoint
+@app.get('/health', response_model=HealthResponse)  # No authentication - public endpoint
 async def health():
     """Public health check endpoint - no authentication required."""
     changed = len([line for line in _git('status', '--porcelain').splitlines() if line.strip()])
     return {'ok': True, 'cached_tests': USE_CACHED_TESTS, 'repo': config.REPO_ROOT.name,
             'branch': _git('rev-parse', '--abbrev-ref', 'HEAD') or '?', 'changed': changed,
+            'session_backend': SESSION_BACKEND,
+            'persistence_mode': 'durable' if SESSION_BACKEND == 'sqlite' else 'volatile',
             'semantic_languages': ['python', 'javascript', 'typescript'],
             'analysis_support': {
                 'python': {'structure': True, 'calls': True, 'cfg': True, 'dfg': True},
@@ -431,7 +552,7 @@ async def health():
             'persistence_warnings': list(_PERSIST_WARNINGS)}
 
 
-@app.get('/graph', dependencies=[Depends(auth)])
+@app.get('/graph', dependencies=[Depends(auth)], response_model=GraphResponse)
 async def graph(focus: Optional[str] = None, depth: int = 2, direction: str = 'both', resolution: Optional[str] = None):
     """Return the graph, optionally filtered by focus node, depth, direction, and resolution status."""
     if not config.GRAPH_PATH.is_file() and config.REPO_ROOT.name in repository.list_repos():
@@ -483,12 +604,12 @@ class RepoBody(BaseModel):
     name: str
 
 
-@app.get('/repos', dependencies=[Depends(auth)])
+@app.get('/repos', dependencies=[Depends(auth)], response_model=RepositoryListResponse)
 async def repos():
     return {'active': config.REPO_ROOT.name, 'repos': [repository.info(n) for n in repository.list_repos()]}
 
 
-@app.post('/repos/select', dependencies=[Depends(auth)])
+@app.post('/repos/select', dependencies=[Depends(auth)], response_model=RepositorySelectResponse)
 async def select_repo(body: RepoBody):
     # One active repository per server process. The check and the switch happen under repo_lock so no
     # request can slip in between them (asks refuse while repo_lock is held).
@@ -508,7 +629,7 @@ async def select_repo(body: RepoBody):
             'session_reset_required': True}
 
 
-@app.get('/repos/{repo_name}/tree', dependencies=[Depends(auth)])
+@app.get('/repos/{repo_name}/tree', dependencies=[Depends(auth)], response_model=RepositoryTreeResponse)
 async def repository_tree(repo_name: str, path: str = ''):
     try:
         return await asyncio.to_thread(repository.list_tree, repo_name, path)
@@ -522,7 +643,7 @@ async def repository_tree(repo_name: str, path: str = ''):
         raise HTTPException(status_code=400, detail=str(exc))
 
 
-@app.get('/repos/{repo_name}/file', dependencies=[Depends(auth)])
+@app.get('/repos/{repo_name}/file', dependencies=[Depends(auth)], response_model=RepositoryFileResponse)
 async def repository_file(repo_name: str, path: str):
     try:
         return await asyncio.to_thread(repository.read_browser_file, repo_name, path)
@@ -683,6 +804,14 @@ async def ask_stream(body: AskBody):
 
             # Send final state response
             final_response = _build_ask_response(reply, error, state)
+            try:
+                final_response = AskResponse.model_validate(
+                    final_response).model_dump(mode='json')
+            except Exception as exc:
+                yield 'data: ' + json.dumps(
+                    {'type': 'error',
+                     'error': 'Final response failed contract validation: %s' % exc}) + '\n\n'
+                return
             yield 'data: ' + json.dumps({'type': 'final_state', 'response': final_response}) + '\n\n'
 
     return StreamingResponse(gen(), media_type='text/event-stream', headers={'Cache-Control': 'no-cache'})
@@ -734,11 +863,37 @@ def _code_review_summary(state):
             'security': cr.get('security') or {'status': 'not_analysed'}}
 
 
+def _agent_result_view(state):
+    """Validate state['result_*'] payloads against the common AgentResult
+    contract. Returns (answer, limitations, degraded): the first specialist
+    answer found, evidence-path validation errors, and whether any result
+    failed validation."""
+    from ai_agents.agent_result import AgentResult, validate_evidence_paths
+    limitations, degraded, answer = [], False, ''
+    for key, value in state.items():
+        if not key.startswith('result_') or not isinstance(value, dict):
+            continue
+        try:
+            res = AgentResult.model_validate(value)
+        except Exception:
+            continue
+        errs = validate_evidence_paths(res, config.REPO_ROOT)
+        if errs:
+            degraded = True
+            limitations.extend('%s: %s' % (key, e) for e in errs)
+        if res.answer and not answer:
+            answer = res.answer
+    return answer, limitations, degraded
+
+
 def _build_ask_response(reply: str, error: str, state: dict) -> dict:
     """Build the standardized response for /ask and /ask/stream endpoints.
 
     This unified function ensures both endpoints return the same structure.
     """
+    agent_answer, result_limitations, results_degraded = _agent_result_view(state)
+    if not reply and agent_answer:
+        reply = agent_answer
     last = state.get('last_test_run') or {}
     commands = list(state.get('scene_commands', []))
     pending = _s(state.get('pending_approval'))
@@ -761,7 +916,7 @@ def _build_ask_response(reply: str, error: str, state: dict) -> dict:
             'kind': 'confirmed' if n else 'unsupported',
         })
 
-    return {
+    resp = {
         'reply': reply,
         'error': error,
         'scene_commands': commands,
@@ -782,6 +937,12 @@ def _build_ask_response(reply: str, error: str, state: dict) -> dict:
                             'proposed' if has_patch else 'none'),
         'tool_errors': [str(e) for e in (state.get('tool_errors') or [])],
     }
+    if results_degraded:
+        # Only present when an AgentResult payload failed validation, so the
+        # standard response shape is unchanged for healthy turns.
+        resp['status'] = 'partial'
+        resp['limitations'] = result_limitations
+    return resp
 
 
 async def _maybe_prompt_commit(session_id, state, error):
@@ -813,7 +974,7 @@ async def _seen_request(session_id, request_id):
     return False
 
 
-@app.post('/ask', dependencies=[Depends(auth)])
+@app.post('/ask', dependencies=[Depends(auth)], response_model=AskResponse)
 async def ask(body: AskBody):
     """Non-streaming endpoint for compatibility."""
     _refuse_if_switching()
@@ -855,7 +1016,7 @@ async def ask(body: AskBody):
     return _build_ask_response(reply, error, state)
 
 
-@app.post('/approve', dependencies=[Depends(auth)])
+@app.post('/approve', dependencies=[Depends(auth)], response_model=ApprovalResponse)
 async def approve(body: ApproveBody):
     _refuse_if_switching()
     _require_active_repo(body.repo)
@@ -933,7 +1094,7 @@ class PromoteBody(BaseModel):
     repo: Optional[str] = None
 
 
-@app.post('/promote', dependencies=[Depends(auth)])
+@app.post('/promote', dependencies=[Depends(auth)], response_model=PromotionResponse)
 async def promote(body: PromoteBody):
     _refuse_if_switching()
     _require_active_repo(body.repo)
@@ -951,6 +1112,7 @@ async def promote(body: PromoteBody):
         res = await asyncio.to_thread(promote_branch, last['branch'])
         if not res.get('ok'):
             return res
+        persisted = True
         g = await asyncio.to_thread(repository.activate, config.REPO_ROOT.name)   # re-index + clear caches
         await set_state(body.session_id, {'last_commit': {}, 'worktree': ''})
         # The promoted change belongs to the task that was in flight: mark only
@@ -987,11 +1149,12 @@ async def promote(body: PromoteBody):
                                                   'active_task_id': '',
                                                   'task_targets': {},
                                                   'validation_record': {}})
-                await _persist_design(body.session_id)
-        return {**res, 'graph_refreshed': True, 'nodes': len(g['nodes']), 'edges': len(g['edges'])}
+                persisted = await _persist_design(body.session_id)
+        return {**res, 'graph_refreshed': True, 'nodes': len(g['nodes']),
+                'edges': len(g['edges']), **_persist_fields(persisted)}
 
 
-@app.get('/task/{session_id}', dependencies=[Depends(auth)])
+@app.get('/task/{session_id}', dependencies=[Depends(auth)], response_model=TaskResponse)
 async def get_task_state(session_id: str):
     """Get current task state for a session in Unity-compatible format."""
     session = await ensure(session_id)
@@ -1136,7 +1299,10 @@ async def _design_view(session_id):
 _PERSIST_WARNINGS = []   # recent design-persistence failures, surfaced via /health
 
 
-async def _persist_design(session_id):
+async def _persist_design(session_id) -> bool:
+    """Persist design state to disk; returns False (and records a warning)
+    when the write fails so endpoints can surface it instead of silently
+    losing the design."""
     view = await _design_view(session_id)
     ok = save_design(session_id, {
         'requirements': view['requirements'],
@@ -1149,6 +1315,13 @@ async def _persist_design(session_id):
         _PERSIST_WARNINGS.append({'session_id': session_id,
                                   'at': datetime.datetime.utcnow().isoformat()})
         del _PERSIST_WARNINGS[:-20]
+    return ok
+
+
+def _persist_fields(persisted: bool) -> dict:
+    return {'persisted': persisted,
+            **({} if persisted else {'persistence_warning':
+               'Design state could not be saved to disk; it exists only in the active session.'})}
 
 
 class DesignIdeaBody(BaseModel):
@@ -1225,21 +1398,21 @@ def _question_matches(questions, text):
     return [i for i, q in enumerate(questions) if low in q.lower()]
 
 
-@app.post('/design/requirements', dependencies=[Depends(auth)])
+@app.post('/design/requirements', dependencies=[Depends(auth)], response_model=DesignResponse)
 async def design_requirements(body: DesignIdeaBody):
     await _check_session_repo(body.session_id)
     res = await asyncio.to_thread(extract_requirements, body.idea_text)
     await set_state(body.session_id, {'design_requirements': res['requirements']})
-    await _persist_design(body.session_id)
+    persisted = await _persist_design(body.session_id)
     # Never present a heuristic fallback as a clean AI result.
     if res.get('source') == 'heuristic':
         res = dict(res)
         res['warning'] = ('Requirements were produced by the heuristic '
                           'fallback, not the AI model.')
-    return res
+    return {**res, **_persist_fields(persisted)}
 
 
-@app.post('/design/propose', dependencies=[Depends(auth)])
+@app.post('/design/propose', dependencies=[Depends(auth)], response_model=DesignResponse)
 async def design_propose(body: DesignProposeBody):
     await _check_session_repo(body.session_id)
     req = None
@@ -1256,7 +1429,11 @@ async def design_propose(body: DesignProposeBody):
     if not req or not any(req.get(k) for k in ('goals', 'functional')):
         raise HTTPException(status_code=400, detail='No requirements: pass idea_text or call /design/requirements first.')
 
-    prop = await asyncio.to_thread(propose_architecture, req)
+    await set_state(body.session_id, {'design_in_progress': True})
+    try:
+        prop = await asyncio.to_thread(propose_architecture, req)
+    finally:
+        await set_state(body.session_id, {'design_in_progress': False})
     arch = _blank_architecture()
     arch['components'] = prop['components']
     arch['relationships'] = prop['relationships']
@@ -1270,22 +1447,23 @@ async def design_propose(body: DesignProposeBody):
     # A new proposal invalidates any previous comparison and plan.
     await set_state(body.session_id, {'design_requirements': req, 'design': arch,
                                       'design_compare': {}, 'implementation_plan': {}})
-    await _persist_design(body.session_id)
+    persisted = await _persist_design(body.session_id)
     out = {'status': 'ok', 'provenance': arch['provenance'],
            'requirements_source': req_source,
-           'requirements': req, 'architecture': arch}
+           'requirements': req, 'architecture': arch,
+           **_persist_fields(persisted)}
     if 'heuristic' in (arch['provenance'], req_source):
         out['warning'] = ('Part of this proposal came from the heuristic fallback, '
                           'not the AI model. Review it before relying on it.')
     return out
 
 
-@app.get('/design/{session_id}', dependencies=[Depends(auth)])
+@app.get('/design/{session_id}', dependencies=[Depends(auth)], response_model=DesignResponse)
 async def design_get(session_id: str):
     return await _design_view(session_id)
 
 
-@app.post('/design/{session_id}/edit', dependencies=[Depends(auth)])
+@app.post('/design/{session_id}/edit', dependencies=[Depends(auth)], response_model=DesignResponse)
 async def design_edit(session_id: str, body: DesignEditBody):
     await _check_session_repo(session_id)
     view = await _design_view(session_id)
@@ -1313,8 +1491,8 @@ async def design_edit(session_id: str, body: DesignEditBody):
         req['open_questions'] = list(working.get('open_questions') or [])
         delta['design_requirements'] = req
     await set_state(session_id, delta)
-    await _persist_design(session_id)
-    return {'ok': True, 'architecture': working}
+    persisted = await _persist_design(session_id)
+    return {'ok': True, 'architecture': working, **_persist_fields(persisted)}
 
 
 def _graph_path_for_repo(name: Optional[str]):
@@ -1336,7 +1514,7 @@ def _graph_path_for_repo(name: Optional[str]):
     return path
 
 
-@app.post('/design/{session_id}/compare', dependencies=[Depends(auth)])
+@app.post('/design/{session_id}/compare', dependencies=[Depends(auth)], response_model=DesignResponse)
 async def design_compare(session_id: str, repo: Optional[str] = None,
                          override_matches: Optional[Dict[str, str]] = None):
     await _check_session_repo(session_id)
@@ -1355,11 +1533,11 @@ async def design_compare(session_id: str, repo: Optional[str] = None,
     res['repo'] = repo or config.REPO_ROOT.name
     res['design_revision'] = arch.get('revision')
     await set_state(session_id, {'design_compare': res})
-    await _persist_design(session_id)
-    return res
+    persisted = await _persist_design(session_id)
+    return {**res, **_persist_fields(persisted)}
 
 
-@app.post('/design/{session_id}/approve', dependencies=[Depends(auth)])
+@app.post('/design/{session_id}/approve', dependencies=[Depends(auth)], response_model=DesignResponse)
 async def design_approve(session_id: str, body: DesignApproveBody):
     await _check_session_repo(session_id)
     view = await _design_view(session_id)
@@ -1402,14 +1580,16 @@ async def design_approve(session_id: str, body: DesignApproveBody):
                 'tasks': res['tasks'], 'circular': res.get('circular') or [],
                 'cycle_paths': res.get('cycle_paths') or []}
         await set_state(session_id, {'implementation_plan': plan, 'plan_stale': False})
-    await _persist_design(session_id)
-    out = {'ok': True, 'architecture': arch}
+    persisted = await _persist_design(session_id)
+    if not persisted:
+        raise HTTPException(status_code=503, detail='Design persistence failed')
+    out = {'ok': True, 'architecture': arch, **_persist_fields(persisted)}
     if plan is not None:
         out['plan'] = plan
     return out
 
 
-@app.post('/plan/generate', dependencies=[Depends(auth)])
+@app.post('/plan/generate', dependencies=[Depends(auth)], response_model=ImplementationPlanResponse)
 async def plan_generate(body: PlanGenerateBody):
     await _check_session_repo(body.session_id)
     view = await _design_view(body.session_id)
@@ -1421,9 +1601,13 @@ async def plan_generate(body: PlanGenerateBody):
     # Ground tasks in the same repository the comparison ran against.
     repo_name = (view.get('compare') or {}).get('repo')
     gpath = _graph_path_for_repo(repo_name)
-    res = await asyncio.to_thread(generate_implementation_plan,
-                                  {'architecture': arch}, None,
-                                  str(gpath) if gpath else None)
+    await set_state(body.session_id, {'plan_in_progress': True})
+    try:
+        res = await asyncio.to_thread(generate_implementation_plan,
+                                      {'architecture': arch}, None,
+                                      str(gpath) if gpath else None)
+    finally:
+        await set_state(body.session_id, {'plan_in_progress': False})
     plan = {'architecture_version': arch.get('version'),
             'architecture_revision': arch.get('revision'),
             'repo': repo_name or config.REPO_ROOT.name,
@@ -1431,8 +1615,10 @@ async def plan_generate(body: PlanGenerateBody):
             'tasks': res['tasks'], 'circular': res.get('circular') or [],
             'cycle_paths': res.get('cycle_paths') or []}
     await set_state(body.session_id, {'implementation_plan': plan, 'plan_stale': False})
-    await _persist_design(body.session_id)
-    return plan
+    persisted = await _persist_design(body.session_id)
+    if not persisted:
+        raise HTTPException(status_code=503, detail='Design persistence failed')
+    return {**plan, **_persist_fields(persisted)}
 
 
 @app.patch('/plan/{session_id}/tasks/{task_id}', dependencies=[Depends(auth)])
@@ -1541,11 +1727,11 @@ async def plan_update_task(session_id: str, task_id: str, body: PlanTaskPatch):
             task['evidence_check'] = check
         task['status'] = new_status
     await set_state(session_id, {'implementation_plan': plan})
-    await _persist_design(session_id)
-    return {'ok': True, 'task': task, 'plan': plan}
+    persisted = await _persist_design(session_id)
+    return {'ok': True, 'task': task, 'plan': plan, **_persist_fields(persisted)}
 
 
-@app.get('/agents', dependencies=[Depends(auth)])
+@app.get('/agents', dependencies=[Depends(auth)], response_model=AgentListResponse)
 async def get_agent_status():
     """Get status of all agents in Unity-compatible format."""
     from ai_agents.agents.registry import get_all_agent_statuses
@@ -1579,7 +1765,7 @@ async def get_agent_info(agent_name: str):
     return status
 
 
-@app.get('/progress/{session_id}', dependencies=[Depends(auth)])
+@app.get('/progress/{session_id}', dependencies=[Depends(auth)], response_model=ProgressResponse)
 async def progress(session_id: str, since: int = 0):
     """Get progress events for a session.
     Use this endpoint to light agent status dots in Unity.
@@ -1590,7 +1776,7 @@ async def progress(session_id: str, since: int = 0):
             'steps': [{'i': i, 'agent': e['agent'], 'kind': e['kind']} for i, e in enumerate(log) if i >= since]}
 
 
-@app.get('/tools', dependencies=[Depends(auth)])
+@app.get('/tools', dependencies=[Depends(auth)], response_model=ToolListResponse)
 async def list_tools():
     """List all available tools with metadata."""
     from ai_agents.agents.toolsets import TOOLSETS, TOOL_LEVELS, PERMISSION_CEILINGS

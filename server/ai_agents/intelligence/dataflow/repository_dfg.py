@@ -135,16 +135,32 @@ def _module_facts(file_path: str, source: str) -> DefUseFacts:
         return facts
     seq = [0]
 
-    def _def(variable, line, kind, meta=None):
+    # Compound statements whose bodies execute conditionally at module level.
+    _CONDITIONAL = (ast.If, ast.Try, ast.For, ast.While, ast.With,
+                    ast.AsyncFor, ast.AsyncWith)
+
+    def _walk_module(stmts, conditional=False):
+        """Yield (statement, conditional) for module-level statements,
+        descending into if/try/for/while/with bodies but never into
+        function or class bodies (those are function-scoped)."""
+        for node in stmts:
+            yield node, conditional
+            if isinstance(node, _CONDITIONAL):
+                for field in ('body', 'orelse', 'finalbody'):
+                    yield from _walk_module(getattr(node, field, None) or [],
+                                            True)
+
+    def _def(variable, line, kind, meta=None, conditional=False):
         seq[0] += 1
         facts.definitions.append(Definition(
             id='%s::top::%s:%d' % (file_path, variable, line),
             variable=variable, function_id=file_path, file=file_path,
             line=line, column=0, kind=kind, cfg_node_ids=[],
             binding_key='%s::%s' % (file_path, variable),
-            metadata=dict(meta or {}, scope='module')))
+            metadata=dict(meta or {}, scope='module'),
+            conditional=conditional))
 
-    for node in tree.body:
+    for node, cond in _walk_module(tree.body):
         if isinstance(node, ast.Import):
             facts.operations.append(ExpressionFact(
                 id='%s::imp:%d' % (file_path, node.lineno),
@@ -156,7 +172,7 @@ def _module_facts(file_path: str, source: str) -> DefUseFacts:
                 _def((a.asname or a.name).split('.')[0], node.lineno,
                      'import',
                      {'import_module': a.name, 'import_kind': 'import',
-                      'import_name': a.name})
+                      'import_name': a.name}, conditional=cond)
         elif isinstance(node, ast.ImportFrom):
             facts.operations.append(ExpressionFact(
                 id='%s::impf:%d' % (file_path, node.lineno),
@@ -169,18 +185,19 @@ def _module_facts(file_path: str, source: str) -> DefUseFacts:
                     _def(a.asname or a.name, node.lineno, 'import',
                          {'import_module': node.module or '',
                           'import_level': node.level,
-                          'import_kind': 'from', 'import_name': a.name})
+                          'import_kind': 'from', 'import_name': a.name},
+                         conditional=cond)
         elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            _def(node.name, node.lineno, 'function')
+            _def(node.name, node.lineno, 'function', conditional=cond)
         elif isinstance(node, ast.ClassDef):
-            _def(node.name, node.lineno, 'class')
+            _def(node.name, node.lineno, 'class', conditional=cond)
         elif isinstance(node, ast.Assign):
             for t in node.targets:
                 for n in ast.walk(t):
                     if isinstance(n, ast.Name):
-                        _def(n.id, node.lineno, 'assignment')
+                        _def(n.id, node.lineno, 'assignment', conditional=cond)
         elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
-            _def(node.target.id, node.lineno, 'assignment')
+            _def(node.target.id, node.lineno, 'assignment', conditional=cond)
     return facts
 
 

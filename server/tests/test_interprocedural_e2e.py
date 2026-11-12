@@ -356,7 +356,8 @@ def test_chain_query_includes_global_edges(tmp_path, monkeypatch):
                   'def f():\n    return LIMIT\n'})
     out = _dfg(graph)
     src_def = out.global_edges[0]['source']
-    chains = _cross_function_chain(graph, src_def, 3)
+    res = _cross_function_chain(graph, src_def, 3)
+    chains = res['chain'] if isinstance(res, dict) else res
     flat = [h for chain in chains for h in chain]
     assert any(h.get('kind') == 'global' for h in flat)
     g = next(h for h in flat if h.get('kind') == 'global')

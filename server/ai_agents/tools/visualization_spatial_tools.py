@@ -762,6 +762,11 @@ def _visualize_repository_unified(graph, function_id, node, tool_context,
     from ..intelligence.dataflow.unified_graph import UnifiedGraphBuilder
     from ..intelligence.dataflow.graph_summarizer import GraphSummarizer
 
+    if not (node.get('file') or '').endswith('.py'):
+        return {'status': 'unsupported', 'function_id': function_id,
+                'scope': 'repository',
+                'message': 'Repository DFG visualization is only supported for Python'}
+
     # Confirmed call neighbours only — possible edges never enter the graph.
     neighbour_ids = []
     for direction in ('callees', 'callers'):
@@ -827,6 +832,8 @@ def _visualize_repository_unified(graph, function_id, node, tool_context,
     # Interprocedural argument/return edges from the repository DFG pipeline.
     dfg_counts = {'argument_edges': 0, 'return_edges': 0,
                   'global_edges': 0, 'unresolved': 0}
+    dfg_status = 'completed'
+    dfg_diagnostics = []
     try:
         from ..intelligence.dataflow.repository_dfg import build_repository_dfg
         repo_dfg = build_repository_dfg(graph, function_ids=list(function_graphs))
@@ -905,23 +912,52 @@ def _visualize_repository_unified(graph, function_id, node, tool_context,
                     'scope': g.get('scope'),
                     'binding_key': g.get('binding_key')}})
             dfg_counts['global_edges'] += 1
-    except Exception:
-        pass
+    except Exception as exc:
+        dfg_status = 'failed'
+        dfg_diagnostics.append({'stage': 'global_edges',
+                                'error': type(exc).__name__,
+                                'message': str(exc)})
 
     repo_graph = UnifiedGraphBuilder().build_repository_graph(
         function_graphs, inter_edges)
 
+    # Serialize every node the merged repository graph actually contains —
+    # including module_data nodes added by global edges — so edge endpoints
+    # never dangle. Node and edge ids already share the '<fid>::<id>' scheme.
     unity_nodes, unity_edges = [], []
-    for fid, g in function_graphs.items():
-        for n in g.nodes:
-            unity_nodes.append({'id': '%s::%s' % (fid, n.id),
-                                'label': '%s (%s)' % (fid, n.kind),
-                                'kind': n.kind, 'layer': 'unified',
-                                'file': n.file, 'line': n.line})
+    for n in repo_graph.nodes:
+        meta = n.metadata or {}
+        unity_nodes.append({
+            'id': n.id,
+            'label': meta.get('variable') or meta.get('label') or n.id,
+            'kind': n.kind, 'layer': 'unified',
+            'file': n.file, 'line': n.line,
+            'function_id': n.function_id,
+            'metadata': meta})
     for e in repo_graph.edges:
         unity_edges.append({'src': e.source, 'dst': e.target,
                             'kind': e.kind, 'layer': 'unified',
                             'resolution': e.subkind})
+
+    node_ids = {n['id'] for n in unity_nodes}
+    dangling = [e for e in unity_edges
+                if e['src'] not in node_ids or e['dst'] not in node_ids]
+    if dangling:
+        # Never emit edges Unity cannot resolve; record them instead.
+        unity_edges = [e for e in unity_edges
+                       if e['src'] in node_ids and e['dst'] in node_ids]
+        dfg_diagnostics.append({'stage': 'serialize',
+                                'error': 'DanglingEdge',
+                                'message': '%d edge(s) reference missing nodes'
+                                           % len(dangling),
+                                'edges': [{'src': e['src'], 'dst': e['dst'],
+                                           'kind': e['kind']}
+                                          for e in dangling[:20]]})
+        if dfg_status == 'completed':
+            dfg_status = 'partial'
+    if dfg_status == 'completed' and any(
+            e.get('resolution') != 'confirmed' for e in unity_edges):
+        dfg_status = 'partial'
 
     was_summarized = False
     original_count = len(unity_nodes)
@@ -952,6 +988,8 @@ def _visualize_repository_unified(graph, function_id, node, tool_context,
         'truncated': repo_graph.metadata.get('truncated', False),
         'summarized': was_summarized,
         'original_node_count': original_count,
+        'dfg_status': dfg_status,
+        'diagnostics': dfg_diagnostics,
         **dfg_counts,
     }
 

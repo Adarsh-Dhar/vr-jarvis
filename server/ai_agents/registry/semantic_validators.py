@@ -4,7 +4,9 @@ JSON schemas cannot compare two arguments or touch the filesystem, so these
 rules run after schema validation on both call arguments and results.
 Validation fails closed: a rule that raises is itself an error.
 """
+import json
 import os
+from pathlib import Path
 from typing import Any, Dict, List
 
 # Per-tool argument rules: each returns an error string or None.
@@ -70,9 +72,25 @@ PATH_POLICIES: Dict[str, Dict[str, str]] = {
                        'directory': 'active_repository'},
     'find_tests_for_node': {'test_path': 'active_repository'},
     'run_security_scan': {'files': 'active_worktree'},
-    'start_runtime_trace': {'command': 'active_worktree'},
     'create_worktree': {'repository_path': 'registered_repository'},
 }
+
+
+def _validate_runtime_command(args):
+    """start_runtime_trace takes a command list, not paths: every element
+    used to be treated as a path by PATH_POLICIES, which rejected valid
+    argv like ['script.py', '--flag']. Containment of command[0] is verified
+    against the real trace root inside the tool itself."""
+    cmd = args.get('command')
+    if not isinstance(cmd, list) or not cmd \
+            or not all(isinstance(c, str) for c in cmd):
+        return ['command must be a non-empty list of strings']
+    if len(cmd) > 32 or any(len(c) > 512 for c in cmd):
+        return ['command too long']
+    script = cmd[0]
+    if Path(script).is_absolute() or not script.endswith('.py'):
+        return ['command[0] must be a relative .py path']
+    return []        # containment is verified against the real root inside the tool
 
 
 def _roots(scope: str):
@@ -186,6 +204,8 @@ def semantic_errors(tool_name: str, args: Dict[str, Any]) -> List[str]:
     """Argument rules: per-tool path policies, then per-tool rules."""
     errors = []
     errors.extend(_path_errors(tool_name, args or {}))
+    if tool_name == 'start_runtime_trace':
+        errors.extend(_validate_runtime_command(args or {}))
     for rule in ARG_RULES.get(tool_name, []):
         try:
             msg = rule(args or {})
@@ -202,22 +222,35 @@ def semantic_errors(tool_name: str, args: Dict[str, Any]) -> List[str]:
 # Result (output) semantic rules per tool family.
 # ----------------------------------------------------------------------
 def _graph_edges_reference_nodes(result):
-    nodes = result.get('nodes')
     edges = result.get('edges')
-    if not isinstance(nodes, list) or not isinstance(edges, list):
+    if not isinstance(edges, list) or not edges:
         return None
-    ids = set()
+    if result.get('status') not in ('ok', 'completed', 'partial'):
+        return None
+    nodes = result.get('nodes')
+    if not isinstance(nodes, list) or not nodes:
+        return 'graph has edges but no node list'
+    ids = []
     for n in nodes:
-        if isinstance(n, dict) and n.get('id'):
-            ids.add(n['id'])
-        elif isinstance(n, str):
-            ids.add(n)
-    if not ids:
-        return None
-    bad = [e for e in edges
-           if isinstance(e, dict)
-           and (e.get('source') not in ids or e.get('target') not in ids)]
-    return '%d edge(s) reference missing nodes' % len(bad) if bad else None
+        nid = n.get('id') if isinstance(n, dict) else n
+        if not nid:
+            return 'node without id'
+        ids.append(nid)
+    if len(ids) != len(set(ids)):
+        return 'duplicate node ids'
+    idset, bad = set(ids), 0
+    for e in edges:
+        if not isinstance(e, dict):
+            return 'edge is not an object'
+        s = e.get('source', e.get('src'))
+        t = e.get('target', e.get('dst'))
+        if not s or not t:
+            return 'edge missing source or target'
+        if s not in idset or t not in idset:
+            bad += 1
+        if e.get('resolution') == 'confirmed' and not e.get('kind'):
+            return 'confirmed edge without kind'
+    return '%d edge(s) reference missing nodes' % bad if bad else None
 
 
 def _call_graph_confirmed_resolved(result):
@@ -236,27 +269,44 @@ def _dfg_endpoints_have_evidence(result):
     graph = result.get('graph')
     if not isinstance(graph, dict):
         return None
-    edges = graph.get('edges')
+    edges, nodes = graph.get('edges'), graph.get('nodes') or []
     if not isinstance(edges, list):
         return None
-    bad = [e for e in edges if isinstance(e, dict)
-           and e.get('resolution') == 'confirmed'
-           and not (e.get('evidence') or e.get('source')
-                    or e.get('target'))]
-    return ('%d confirmed DFG edge(s) lack endpoint evidence' % len(bad)
+    ids = {n.get('id') if isinstance(n, dict) else n for n in nodes}
+    bad = 0
+    for e in edges:
+        if not isinstance(e, dict) or e.get('resolution') != 'confirmed':
+            continue
+        ev = e.get('evidence') or {}
+        ok = (e.get('source') and e.get('target') and e.get('kind')
+              and (not ids or (e['source'] in ids and e['target'] in ids))
+              and isinstance(ev, dict)
+              and (ev.get('source_file') or ev.get('file'))
+              and (ev.get('source_line') or ev.get('line'))
+              and (ev.get('target_file') or ev.get('file'))
+              and (ev.get('target_line') or ev.get('line')))
+        if not ok:
+            bad += 1
+    return ('%d confirmed DFG edge(s) lack source/target evidence' % bad
             if bad else None)
 
 
 def _test_counts_consistent(result):
     if result.get('status') not in ('ok', 'passed', 'failed'):
         return None
-    passed = result.get('passed')
-    failed = result.get('failed')
-    if isinstance(passed, list) and isinstance(failed, list):
-        total = result.get('total')
-        if isinstance(total, int) and total < len(passed) + len(failed):
-            return 'total %d < passed+failed %d' % (
-                total, len(passed) + len(failed))
+    def n(k):
+        v = result.get(k)
+        return len(v) if isinstance(v, list) else (v if isinstance(v, int) else 0)
+    p, f, s_, nr = n('passed'), n('failed'), n('skipped'), n('not_run')
+    total = result.get('total')
+    if isinstance(total, int) and total != p + f + s_ + nr:
+        return 'total %d != passed+failed+skipped+not_run %d' % (
+            total, p + f + s_ + nr)
+    if f > 0 and result.get('status') in ('ok', 'passed'):
+        return 'failed tests reported in a passing run'
+    ec = result.get('exit_code')
+    if isinstance(ec, int) and ec != 0 and result.get('status') in ('ok', 'passed'):
+        return 'non-zero exit code reported as success'
     return None
 
 
@@ -269,8 +319,116 @@ def _review_acceptance_coverage(result):
     acceptance = result.get('acceptance')
     if acceptance is not None and not isinstance(acceptance, list):
         return 'acceptance must be a list'
+    # Every declared acceptance criterion must appear in the review's
+    # acceptance coverage when the producer supplies the criteria list.
+    criteria = result.get('acceptance_criteria') or result.get('criteria')
+    if isinstance(criteria, list) and isinstance(acceptance, list):
+        blob = json.dumps(acceptance, default=str).lower()
+        missing = [str(c) for c in criteria
+                   if str(c).strip() and str(c).lower() not in blob]
+        if missing:
+            return '%d acceptance criterion/criteria not covered: %s' % (
+                len(missing), '; '.join(missing[:3]))
     return None
 
+
+def _runtime_events_valid(result):
+    evs = result.get('events')
+    if not isinstance(evs, list):
+        return None
+    last = 0
+    for e in evs:
+        if not isinstance(e, dict):
+            return 'event is not an object'
+        if e.get('kind') not in ('call', 'return', 'exception'):
+            return 'invalid event kind %r' % e.get('kind')
+        if not e.get('file') or not isinstance(e.get('line'), int):
+            return 'event %s missing source location' % e.get('sequence')
+        if e.get('sequence', 0) <= last:
+            return 'event sequence not increasing'
+        last = e['sequence']
+    return None
+
+
+def _node_id_set(result):
+    """Collect node ids from the shapes graph results use."""
+    ids = set()
+    for container in (result, result.get('graph')
+                      if isinstance(result.get('graph'), dict) else {},
+                      result.get('cfg') if isinstance(result.get('cfg'), dict)
+                      else {}):
+        nodes = container.get('nodes')
+        if isinstance(nodes, list):
+            for n in nodes:
+                nid = n.get('id') if isinstance(n, dict) else n
+                if nid:
+                    ids.add(nid)
+    return ids
+
+
+def _edge_endpoints_ok(e, idset):
+    s = e.get('source', e.get('src'))
+    t = e.get('target', e.get('dst'))
+    if not s or not t:
+        return False
+    return not idset or (s in idset and t in idset)
+
+
+def _cfg_branches_valid(result):
+    """Every CFG branch edge endpoint must be a known CFG node."""
+    branches = result.get('branches')
+    edges = result.get('edges')
+    if branches is None and edges is None:
+        graph = result.get('graph')
+        if isinstance(graph, dict):
+            edges = graph.get('edges')
+    edge_list = branches if isinstance(branches, list) else edges
+    if not isinstance(edge_list, list) or not edge_list:
+        return None
+    idset = _node_id_set(result)
+    bad = sum(1 for e in edge_list
+              if isinstance(e, dict) and not _edge_endpoints_ok(e, idset))
+    return '%d CFG edge(s) reference missing nodes' % bad if bad else None
+
+
+def _arch_relationships_valid(result):
+    """Every architecture relationship endpoint must name a component id."""
+    arch = result.get('architecture')
+    if not isinstance(arch, dict):
+        arch = result if 'components' in result else None
+    if not isinstance(arch, dict):
+        return None
+    comps = arch.get('components')
+    rels = arch.get('relationships')
+    if not isinstance(comps, list) or not isinstance(rels, list):
+        return None
+    ids = {c.get('id') for c in comps if isinstance(c, dict)}
+    ids.discard(None)
+    bad = 0
+    for r in rels:
+        if not isinstance(r, dict):
+            return 'relationship is not an object'
+        src = r.get('source', r.get('src'))
+        dst = r.get('target', r.get('dst'))
+        if src not in ids or dst not in ids:
+            bad += 1
+    return '%d relationship(s) reference missing components' % bad         if bad else None
+
+
+def _security_findings_valid(result):
+    findings = result.get('findings')
+    if not isinstance(findings, list):
+        return None
+    bad = 0
+    for f in findings:
+        if not isinstance(f, dict):
+            return 'finding is not an object'
+        if not f.get('file') or not isinstance(f.get('line'), int)                 or f.get('line') < 1:
+            bad += 1
+    return '%d security finding(s) lack file/line' % bad if bad else None
+
+
+RESULT_RULES['get_runtime_trace'] = [_runtime_events_valid]
 
 # Family -> result rules. Tools not listed still get the generic graph rule
 # when their result carries nodes+edges.
@@ -284,7 +442,8 @@ _FAMILY_RESULT_RULES: Dict[str, List] = {
     'build_data_flow_graph': [_dfg_endpoints_have_evidence,
                               _graph_edges_reference_nodes],
     'trace_cross_function_flow': [_graph_edges_reference_nodes],
-    'analyze_control_flow': [_graph_edges_reference_nodes],
+    'analyze_control_flow': [_cfg_branches_valid,
+                             _graph_edges_reference_nodes],
     'visualize_call_graph': [_graph_edges_reference_nodes],
     'visualize_dependency_graph': [_graph_edges_reference_nodes],
     'visualize_control_flow': [_graph_edges_reference_nodes],
@@ -298,6 +457,16 @@ _FAMILY_RESULT_RULES: Dict[str, List] = {
     'read_test_results': [_test_counts_consistent],
     'merge_agent_results': [_review_acceptance_coverage],
     'resolve_conflicting_findings': [_review_acceptance_coverage],
+    'propose_architecture': [_arch_relationships_valid],
+    'get_proposed_architecture': [_arch_relationships_valid],
+    'add_component': [_arch_relationships_valid],
+    'remove_component': [_arch_relationships_valid],
+    'update_component': [_arch_relationships_valid],
+    'add_relationship': [_arch_relationships_valid],
+    'remove_relationship': [_arch_relationships_valid],
+    'update_relationship': [_arch_relationships_valid],
+    'validate_architecture': [_arch_relationships_valid],
+    'run_security_scan': [_security_findings_valid],
 }
 
 # Generic fallback: any result with both nodes and edges gets the graph rule.

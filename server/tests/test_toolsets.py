@@ -169,7 +169,7 @@ def _minimal_valid_args(tool, reg):
         pschema = (schema.get('properties') or {}).get(pname) or {}
         t = pschema.get('type')
         if t == 'array' or (isinstance(t, list) and 'array' in t):
-            args[pname] = []
+            args[pname] = ['script.py'] if pname == 'command' else []
         elif t == 'integer' or (isinstance(t, list) and 'integer' in t):
             args[pname] = 1
         elif t == 'number' or (isinstance(t, list) and 'number' in t):

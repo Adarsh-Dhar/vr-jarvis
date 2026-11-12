@@ -525,16 +525,16 @@ class CrossModuleAnalyzer:
                 target_summary = summaries.get(target)
                 top_ids = set(target_summary.top_level_definitions) \
                     if target_summary else set()
-                by_var_top: Dict[str, Definition] = {}
-                by_var_mod: Dict[str, Definition] = {}
+                by_var_top: Dict[str, List[Definition]] = {}
+                by_var_mod: Dict[str, List[Definition]] = {}
                 if target_facts is not None:
-                    for d in target_facts.definitions:
-                        if d.variable in by_var_mod:
-                            continue
+                    for d in sorted(target_facts.definitions,
+                                    key=lambda x: (x.line,
+                                                   getattr(x, 'column', 0))):
                         if d.id in top_ids:
-                            by_var_top.setdefault(d.variable, d)
+                            by_var_top.setdefault(d.variable, []).append(d)
                         if d.function_id == target:
-                            by_var_mod.setdefault(d.variable, d)
+                            by_var_mod.setdefault(d.variable, []).append(d)
 
                 # Function-scope reaching evidence, computed once.
                 rd = reaching.get(scope) if not module_scope else None
@@ -580,7 +580,22 @@ class CrossModuleAnalyzer:
                     else:
                         tname = u.variable.split('.', 1)[1] \
                             if '.' in u.variable else None
-                    td = by_var_top.get(tname) or by_var_mod.get(tname)
+                    cands = by_var_top.get(tname) or by_var_mod.get(tname) or []
+                    td, res = None, 'unresolved'
+                    extra_possible = []
+                    if len(cands) == 1:
+                        td, res = cands[0], 'confirmed'
+                    elif len(cands) > 1:
+                        if all(not getattr(d, 'conditional', False)
+                               for d in cands):
+                            # straight-line: last assignment reaches the use
+                            td, res = cands[-1], 'confirmed'
+                        else:
+                            # branch-dependent: ambiguous; every conditional
+                            # candidate also yields a 'possible' edge
+                            td, res = cands[-1], 'possible'
+                            extra_possible = [d for d in cands
+                                              if getattr(d, 'conditional', False)]
 
                     if reassigned_to is not None:
                         # Module-level rebinding: the use connects to the
@@ -613,24 +628,45 @@ class CrossModuleAnalyzer:
                             'line': u.line,
                         })
                         continue
-                    resolution = 'confirmed' if confirmed and not ambiguous \
-                        else 'possible'
-                    edges.append({
-                        'source': td.id,
-                        'target': u.id,
-                        'kind': 'global',
-                        'resolution': resolution,
-                        'file': importer_file,
-                        'line': u.line,
-                        'target_file': target,
-                        'source_file': target,
-                        'source_line': td.line,
-                        'target_line': u.line,
-                        'target_function': u.function_id,
-                        'scope': scope,
-                        'binding_key': binding_key,
-                        'definition_id': import_def_id,
-                    })
+                    resolution = res if res != 'unresolved' else (
+                        'confirmed' if confirmed and not ambiguous
+                        else 'possible')
+                    if td is not None:
+                        edges.append({
+                            'source': td.id,
+                            'target': u.id,
+                            'kind': 'global',
+                            'resolution': resolution,
+                            'file': importer_file,
+                            'line': u.line,
+                            'target_file': target,
+                            'source_file': target,
+                            'source_line': td.line,
+                            'target_line': u.line,
+                            'target_function': u.function_id,
+                            'scope': scope,
+                            'binding_key': binding_key,
+                            'definition_id': import_def_id,
+                        })
+                    for cd in extra_possible:
+                        if cd is td:
+                            continue
+                        edges.append({
+                            'source': cd.id,
+                            'target': u.id,
+                            'kind': 'global',
+                            'resolution': 'possible',
+                            'file': importer_file,
+                            'line': u.line,
+                            'target_file': target,
+                            'source_file': target,
+                            'source_line': cd.line,
+                            'target_line': u.line,
+                            'target_function': u.function_id,
+                            'scope': scope,
+                            'binding_key': binding_key,
+                            'definition_id': import_def_id,
+                        })
 
         return {'edges': edges, 'unresolved': unresolved}
 

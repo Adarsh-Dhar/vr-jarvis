@@ -12,7 +12,8 @@ STATUSES = ['ok', 'error', 'not_found', 'unresolved', 'not_applicable',
             'blocked', 'ambiguous', 'verified', 'unverified', 'unknown',
             'unsupported_language', 'unavailable', 'resolved', 'possible',
             'failed', 'pending', 'none', 'no_path', 'missing', 'draft',
-            'awaiting_user_approval', 'active']
+            'awaiting_user_approval', 'active', 'partial', 'unsupported',
+            'completed', 'stopped', 'timed_out', 'running']
 
 # Parameters allowed to stay unrestricted (schema {} or x-unresolved) at
 # registration. Keyed by (tool_name, param_name); value is the reason.
@@ -721,31 +722,98 @@ OUTPUT_SCHEMAS['build_data_flow_graph']['properties']['graph'] = {
     'required': ['nodes', 'edges'],
     'properties': {'nodes': _LIST, 'edges': _LIST}}
 
-# Conversational / orchestration / spatial helpers: envelope contracts.
-# Their results are scene commands or text payloads consumed structurally;
-# the envelope still enforces the status field fail-closed.
-for _t in [
-    'answer_code_question', 'ask_clarifying_question', 'browse_vr_folder',
-    'check_task_completion', 'classify_request', 'collapse_graph_node',
-    'compare_before_after', 'create_graph', 'create_investigation_plan',
+# Tools whose payload is consumed by an agent or by Unity as data (not just
+# a scene command). These MUST carry data-bearing schemas — the generic
+# envelope is not enough for them.
+MVP_DATA_TOOLS = {
+    'answer_code_question', 'browse_vr_folder', 'explain_function',
+    'explain_class', 'explain_module', 'get_selected_node_details',
+    'create_investigation_plan', 'summarize_graph',
+    'retrieve_conversation_context',
+}
+
+# Action-only tools: their result is a status envelope plus scene commands;
+# the generic envelope() schema is sufficient.
+MVP_ACTION_ONLY_TOOLS = {
+    'ask_clarifying_question', 'check_task_completion', 'classify_request',
+    'collapse_graph_node', 'compare_before_after', 'create_graph',
     'dim_unrelated', 'expand_graph_neighborhood', 'expand_graph_node',
-    'explain_class', 'explain_function', 'explain_graph_edge',
-    'explain_module', 'explain_visualization', 'focus_camera',
+    'explain_graph_edge', 'explain_visualization', 'focus_camera',
     'focus_on_code_element', 'focus_on_graph_node',
     'get_current_selection', 'get_current_spatial_context',
-    'get_selected_node_details', 'highlight_callers', 'highlight_vr_path',
-    'infer_code_intent', 'isolate_subgraph', 'list_vr_repositories',
+    'highlight_callers', 'highlight_vr_path', 'infer_code_intent',
+    'isolate_subgraph', 'list_vr_repositories',
     'manage_conversation_preferences', 'move_graph', 'move_panel',
     'navigate_to_code_element', 'navigate_to_relationship',
     'open_code_panel', 'open_vr_file', 'open_vr_repository',
     'recenter_workspace', 'request_approval', 'request_more_evidence',
-    'reset_layout', 'retrieve_conversation_context',
-    'retrieve_investigation_context', 'scale_panel', 'set_edge_style',
-    'set_mode', 'set_panel_state', 'show_ghost_diff', 'show_test_badges',
-    'summarize_graph', 'summarize_investigation', 'understand_user_intent',
+    'reset_layout', 'retrieve_investigation_context', 'scale_panel',
+    'set_edge_style', 'set_mode', 'set_panel_state', 'show_ghost_diff',
+    'show_test_badges', 'summarize_investigation', 'understand_user_intent',
     'zoom_graph',
-]:
+}
+
+# Real data-bearing schemas for the MVP data tools.
+OUTPUT_SCHEMAS['answer_code_question'] = envelope(
+    ok_props={'answer': {'type': 'string'},
+              'evidence': {'type': 'array', 'minItems': 1}},
+    ok_required=['answer', 'evidence'])
+OUTPUT_SCHEMAS['browse_vr_folder'] = envelope(
+    ok_props={'repository': {'type': 'string'}, 'path': {'type': 'string'},
+              'entries': {'type': 'array'}},
+    ok_required=['repository', 'path', 'entries'])
+OUTPUT_SCHEMAS['explain_function'] = envelope(
+    ok_props={'function_id': {'type': 'string'},
+              'explanation': {'type': 'string', 'minLength': 1}},
+    ok_required=['function_id', 'explanation'])
+OUTPUT_SCHEMAS['explain_class'] = envelope(
+    ok_props={'class_id': {'type': 'string'},
+              'explanation': {'type': 'string', 'minLength': 1},
+              'methods': {'type': 'array'}},
+    ok_required=['class_id', 'explanation', 'methods'])
+OUTPUT_SCHEMAS['explain_module'] = envelope(
+    ok_props={'module': {'type': 'string'},
+              'explanation': {'type': 'string', 'minLength': 1}},
+    ok_required=['module', 'explanation'])
+OUTPUT_SCHEMAS['get_selected_node_details'] = envelope(
+    ok_props={'node_id': {'type': 'string'}, 'type': {'type': 'string'},
+              'details': _OBJ},
+    ok_required=['node_id', 'type', 'details'],
+    extra_statuses=['not_found'])
+OUTPUT_SCHEMAS['create_investigation_plan'] = envelope(
+    ok_props={'investigation_id': {'type': 'string'},
+              'steps': {'type': 'array', 'minItems': 1}},
+    ok_required=['investigation_id', 'steps'])
+OUTPUT_SCHEMAS['summarize_graph'] = envelope(
+    ok_props={'graph_id': {'type': 'string'},
+              'summary': {'type': 'string', 'minLength': 1}},
+    ok_required=['graph_id', 'summary'])
+OUTPUT_SCHEMAS['retrieve_conversation_context'] = envelope(
+    ok_props={'session_id': {'type': 'string'}, 'context': _OBJ},
+    ok_required=['session_id', 'context'])
+
+# Action-only tools get the generic envelope; the fallback is deliberately
+# restricted to them so a data tool can never silently end up with a weak
+# schema.
+for _t in sorted(MVP_ACTION_ONLY_TOOLS):
     OUTPUT_SCHEMAS.setdefault(_t, envelope())
+
+
+def _has_data_fields(schema) -> bool:
+    """True when the schema declares payload fields beyond status/error."""
+    props = set(((schema or {}).get('properties') or {}).keys())
+    return bool(props - {'status', 'error'})
+
+
+def assert_data_tool_schemas():
+    """Startup check: every MVP data tool must have a schema carrying real
+    data fields. Raises RuntimeError on violation."""
+    weak = [t for t in sorted(MVP_DATA_TOOLS)
+            if t not in OUTPUT_SCHEMAS
+            or not _has_data_fields(OUTPUT_SCHEMAS[t])]
+    if weak:
+        raise RuntimeError('Data tools without data-bearing schemas: %s'
+                           % weak)
 
 
 # ----------------------------------------------------------------------

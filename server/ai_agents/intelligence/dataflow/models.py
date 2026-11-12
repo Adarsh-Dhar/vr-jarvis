@@ -205,6 +205,10 @@ class Definition:
     binding_key: str
     expression: Optional[str] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
+    # True when the definition sits under a conditional module-level
+    # statement (if/try/for/while/with): which assignment reaches a use is
+    # then branch-dependent, not straight-line.
+    conditional: bool = False
 
 
 @dataclass

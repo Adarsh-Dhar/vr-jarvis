@@ -90,6 +90,33 @@ def validate_agent_bindings():
     return errors
 
 
+def validate_runtime_agent_contracts():
+    """Startup contract check: toolsets resolve, every live agent's tool
+    bindings satisfy the registry, and no agent instruction names a tool its
+    toolset does not contain. Raises RuntimeError on any violation — the
+    server refuses to start."""
+    from ai_agents.agents.toolsets import validate_toolsets as _vt, \
+        validate_instruction_tools
+    errors = []
+    try:
+        _vt()
+    except ValueError as e:
+        errors.append(('toolsets', '-', str(e)))
+    errors.extend(validate_agent_bindings())
+    for aname, agent in collect_active_agents().items():
+        instruction = getattr(agent, 'instruction', '')
+        if not isinstance(instruction, str):
+            instruction = ''
+        try:
+            errors.extend((aname, '-', e) for e in
+                          validate_instruction_tools({aname: instruction}))
+        except Exception as e:
+            errors.append((aname, '-', 'instruction/tool mismatch: %s' % e))
+    if errors:
+        raise RuntimeError('Agent/tool integration validation failed:\n'
+                           + '\n'.join(map(str, errors)))
+
+
 if __name__ == '__main__':
     success = validate_toolsets()
     sys.exit(0 if success else 1)
