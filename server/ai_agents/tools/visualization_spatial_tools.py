@@ -635,37 +635,9 @@ def visualize_control_flow(
 def _build_cfg_dfg_for_node(graph, node, function_id):
     """Build (cfg, dfg) for one graph function node.
     Returns (cfg, dfg) or raises; callers handle errors."""
-    from ..intelligence.controlflow.service import analyze_python_control_flow
-    from ._common import abs_repo_path
-
-    rel_file = node.get('file', '')
-    with open(abs_repo_path(rel_file), 'r', encoding='utf-8') as f:
-        source = f.read()
-
-    symbol = {
-        'id': node.get('id', function_id),
-        'name': node.get('name', ''),
-        'file': rel_file,
-        'source': source,
-        'qualname': node.get('qualname', node.get('id', function_id))
-    }
-    result = analyze_python_control_flow(graph, symbol, use_cache=False)
-    if result.get('error'):
-        raise ValueError(result['error'])
-    cfg = result['graph']
-    if not cfg:
-        raise ValueError('CFG build failed')
-
-    from ..intelligence.dataflow import PythonDefUseExtractor
-    from ..intelligence.dataflow.dependency_builder import DataFlowGraphBuilder
-    from ..intelligence.controlflow.models import CFGArtifact
-    extractor = PythonDefUseExtractor()
-    cfg_artifact = CFGArtifact(graph=cfg,
-                               metadata=result.get('metadata', {}))
-    facts = extractor.extract_function(
-        artifact=cfg_artifact, source=source, file_path=rel_file)
-    dfg = DataFlowGraphBuilder().build(cfg, facts)
-    return cfg, dfg
+    from ..intelligence.dataflow.repository_dfg import build_function_artifacts
+    art = build_function_artifacts(graph, node, function_id)
+    return art['cfg'], art['dfg']
 
 
 @safe
@@ -812,6 +784,7 @@ def _visualize_repository_unified(graph, function_id, node, tool_context,
 
     fids = [function_id] + neighbour_ids[:max_repository_functions - 1]
     function_graphs = {}
+    dfg_by_fid = {}
     inter_edges = []
     skipped = []
     for fid in fids:
@@ -825,6 +798,7 @@ def _visualize_repository_unified(graph, function_id, node, tool_context,
             skipped.append(fid)
             continue
         function_graphs[fid] = UnifiedGraphBuilder().build_unified(cfg, dfg)
+        dfg_by_fid[fid] = dfg
 
     # Interprocedural edges from the index's confirmed call edges.
     for fid in function_graphs:
@@ -849,6 +823,43 @@ def _visualize_repository_unified(graph, function_id, node, tool_context,
                     else 'possible',
                     'call_site_id': e.get('callsite_id'),
                     'evidence': {'file': e.get('file'), 'line': e.get('line')}})
+
+    # Interprocedural argument/return edges from the repository DFG pipeline.
+    dfg_counts = {'argument_edges': 0, 'return_edges': 0,
+                  'global_edges': 0, 'unresolved': 0}
+    try:
+        from ..intelligence.dataflow.repository_dfg import build_repository_dfg
+        repo_dfg = build_repository_dfg(graph, function_ids=list(function_graphs))
+        dfg_counts['global_edges'] = len(repo_dfg.global_edges)
+        dfg_counts['unresolved'] = len(repo_dfg.unresolved)
+        for e in repo_dfg.edges:
+            if e.source_kind == 'argument':
+                sf, tf = e.caller_function_id, e.callee_function_id
+            else:
+                sf, tf = e.callee_function_id, e.caller_function_id
+            if sf not in function_graphs or tf not in function_graphs:
+                continue
+            f2n_src = ((dfg_by_fid.get(sf).metadata or {}).get('fact_to_node', {})
+                       if dfg_by_fid.get(sf) is not None else {})
+            f2n_dst = ((dfg_by_fid.get(tf).metadata or {}).get('fact_to_node', {})
+                       if dfg_by_fid.get(tf) is not None else {})
+            inter_edges.append({
+                'source_function': sf, 'target_function': tf,
+                'kind': e.source_kind,
+                'resolution': e.resolution,
+                'call_site_id': e.call_site_id,
+                'source_node': f2n_src.get(e.source_id),
+                'target_node': f2n_dst.get(e.target_id),
+                'file': e.source_file, 'line': e.source_line,
+                'evidence': {'file': e.source_file, 'line': e.source_line,
+                             'target_file': e.target_file,
+                             'target_line': e.target_line}})
+            if e.source_kind == 'argument':
+                dfg_counts['argument_edges'] += 1
+            else:
+                dfg_counts['return_edges'] += 1
+    except Exception:
+        pass
 
     repo_graph = UnifiedGraphBuilder().build_repository_graph(
         function_graphs, inter_edges)
@@ -894,6 +905,7 @@ def _visualize_repository_unified(graph, function_id, node, tool_context,
         'truncated': repo_graph.metadata.get('truncated', False),
         'summarized': was_summarized,
         'original_node_count': original_count,
+        **dfg_counts,
     }
 
 

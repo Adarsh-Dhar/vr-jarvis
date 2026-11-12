@@ -18,3 +18,4 @@ tree-sitter-cpp
 aiosqlite
 sqlalchemy
 jsonschema
+bandit==1.8.3

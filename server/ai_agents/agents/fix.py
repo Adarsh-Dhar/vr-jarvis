@@ -4,6 +4,7 @@ from ..callbacks import permission_guard, evidence_collector
 from ..config import MODEL
 from ..tools.control_tools import exit_loop
 from ..tools.exec_tools import read_test_results, run_tests, run_typecheck
+from ..tools.security_tools import run_security_scan
 from ..tools.git_tools import (apply_patch_to_worktree, create_worktree, get_worktree_diff,
                                read_worktree_file)
 from ..tools.graph_tools import find_tests_for_node, get_callers, get_source, search_graph_symbols
@@ -99,6 +100,7 @@ error-handling defects, and test results are context, not your verdict.
 
 Patch under review: {proposed_patch}
 Test results (context only): {test_results}
+Security scan (deterministic, from run_security_scan): {security_scan}
 Active plan task (may be empty): {active_task}
 
 Process:
@@ -115,6 +117,7 @@ Process:
    criterion text verbatim and setting criterion_index to its position
    (0-based). An empty acceptance list is only valid when there are no criteria.
 5. If changed behaviour lacks test coverage, list concrete test cases to add.
+6. For every scanner finding in the security scan, add assessment: confirmed | false_positive | needs_human with a one-line reason. Never delete or downgrade a scanner finding. If the scan status is not completed, say so in summary and make no statement about the code being scanned.
 
 Rules:
 - You only review. Never modify files, never run tests, never commit.
@@ -131,9 +134,9 @@ Rules:
 
 Return a JSON object with keys: verdict (approve|changes_requested), summary,
 findings (list of {severity: blocker|warning|info, category: logic|error_handling|security|quality|tests, file, line, issue, suggestion}),
-security ({status: 'reviewed_by_model_only', findings: list of the category=security findings}),
+security ({status, scanner, scanner_version, findings (scanner findings plus assessment), model_findings (category=security findings from the model's own review)}),
 acceptance (list of {criterion_index, criterion, status: met|not_met|unknown, note}),
-suggested_tests (list of strings). The security block is a model review of the diff, not a vulnerability scan. Say so in summary when you report a security finding, and never claim the code is secure.
+suggested_tests (list of strings). The security block reports the deterministic scanner output plus your assessment of each finding; model_findings are your own security observations. Never claim the code is secure.
 ''',
     tools=[get_worktree_diff, read_worktree_file, read_file, read_file_range,
            search_code, get_source, find_tests_for_node, exit_loop],
@@ -235,8 +238,10 @@ Tests already known to be relevant: {tests_relevant}
 This patch may have just been modified by the review-repair agent. Re-verify it:
 1. Call run_tests with the test files from the patch plus the relevant tests above.
 2. Call run_typecheck.
+3. Call run_security_scan.
 
 Rules:
+- Report the scan status exactly as returned (completed, failed or unavailable). Never describe a failed or unavailable scan as clean.
 - Report exactly what the tools returned. Never say passed unless a tool result says passed.
 - If a tool errors or a test did not run, list it as not_run.
 - Do NOT call exit_loop and do NOT decide whether the review loop may end. The
@@ -255,7 +260,7 @@ def make_review_verifier(name='review_verifier_agent'):
         include_contents='none',
         description='Re-runs tests and type check on the patch after review-driven repair, without ending the loop.',
         instruction=REVIEW_VERIFIER_INSTRUCTION,
-        tools=[run_tests, run_typecheck, read_test_results],
+        tools=[run_tests, run_typecheck, run_security_scan, read_test_results],
         before_tool_callback=permission_guard,
         after_tool_callback=evidence_collector,
         output_key='test_results',

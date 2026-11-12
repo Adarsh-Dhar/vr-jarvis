@@ -14,7 +14,11 @@ class GraphCacheEntry:
     cfg_hash: str
     dfg_hash: str
     callee_hashes: Dict[str, str]
-    timestamp: float
+    # Digests of callee summaries this entry was computed against
+    # ({callee_id: digest}); an entry is valid only while every one still
+    # matches, so a change inside any transitive callee invalidates it.
+    dependency_digests: Dict[str, str] = field(default_factory=dict)
+    timestamp: float = 0.0
     metadata: Dict[str, Any] = field(default_factory=dict)
 
 
@@ -55,12 +59,23 @@ class GraphPersistenceManager:
         source: str,
         cfg: Dict[str, Any],
         dfg: Dict[str, Any],
-        callee_hashes: Dict[str, str]
+        callee_hashes: Dict[str, str],
+        dependency_digests: Optional[Dict[str, str]] = None,
+        import_hashes: Optional[Dict[str, str]] = None
     ) -> GraphCacheEntry:
-        """Cache a graph with its hashes."""
+        """Cache a graph with its hashes.
+
+        ``dependency_digests`` maps callee function ids to the summary
+        digests they had when this entry was computed. ``import_hashes``
+        maps imported file paths to their sha256 for module-level edges.
+        """
         content_hash = self.compute_content_hash(source)
         cfg_hash = self.compute_cfg_hash(cfg)
         dfg_hash = self.compute_dfg_hash(dfg)
+
+        metadata = {}
+        if import_hashes:
+            metadata['import_hashes'] = dict(import_hashes)
 
         entry = GraphCacheEntry(
             function_id=function_id,
@@ -68,8 +83,9 @@ class GraphPersistenceManager:
             cfg_hash=cfg_hash,
             dfg_hash=dfg_hash,
             callee_hashes=callee_hashes,
+            dependency_digests=dict(dependency_digests or {}),
             timestamp=__import__('time').time(),
-            metadata={}
+            metadata=metadata
         )
 
         self._cache[function_id] = entry
@@ -93,9 +109,18 @@ class GraphPersistenceManager:
         source: str,
         cfg: Dict[str, Any],
         dfg: Dict[str, Any],
-        callee_hashes: Dict[str, str]
+        callee_hashes: Dict[str, str],
+        dependency_digests: Optional[Dict[str, str]] = None,
+        import_hashes: Optional[Dict[str, str]] = None
     ) -> bool:
-        """Check if cached graph is still valid."""
+        """Check if cached graph is still valid.
+
+        Valid only when the entry's own content hash matches AND every
+        recorded dependency digest still matches the current one — a change
+        inside any callee (direct or transitive) invalidates the entry.
+        Module-level entries additionally require every recorded import
+        file hash to match.
+        """
         entry = self.get_cached_graph(function_id)
         if not entry:
             return False
@@ -107,6 +132,23 @@ class GraphPersistenceManager:
         # Check callee hashes
         if callee_hashes != entry.callee_hashes:
             return False
+
+        # Check dependency digests: every recorded digest must match, and
+        # no new dependencies may appear.
+        current_deps = dict(dependency_digests or {})
+        if current_deps != dict(entry.dependency_digests or {}):
+            return False
+        for callee_id, digest in (entry.dependency_digests or {}).items():
+            if current_deps.get(callee_id) != digest:
+                return False
+
+        # Module-level edges: imported file contents must be unchanged.
+        stored_imports = (entry.metadata or {}).get('import_hashes') or {}
+        if stored_imports:
+            current_imports = dict(import_hashes or {})
+            for path, digest in stored_imports.items():
+                if current_imports.get(path) != digest:
+                    return False
 
         return True
 
@@ -120,6 +162,7 @@ class GraphPersistenceManager:
                 'cfg_hash': entry.cfg_hash,
                 'dfg_hash': entry.dfg_hash,
                 'callee_hashes': entry.callee_hashes,
+                'dependency_digests': entry.dependency_digests,
                 'timestamp': entry.timestamp,
                 'metadata': entry.metadata
             }, f, indent=2)

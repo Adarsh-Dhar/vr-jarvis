@@ -343,6 +343,16 @@ class DataFlowGraphBuilder:
                             )
                             graph.add_edge(edge)
 
+        # fact id -> DFG node id, so interprocedural edges can name the
+        # graph nodes their use/definition endpoints became.
+        fact_to_node = {}
+        for use_id, node_id in use_nodes.items():
+            fact_to_node[use_id] = node_id
+        for def_id, node_id in def_nodes.items():
+            fact_to_node[def_id] = node_id
+        for op_id, node_id in operation_nodes.items():
+            fact_to_node[op_id] = node_id
+
         graph.metadata = {
             'language': 'python',
             'scope': 'intra_function',
@@ -351,6 +361,7 @@ class DataFlowGraphBuilder:
             'operation_count': len(facts.operations),
             'path_sensitive': path_sensitive,
             'phi_node_count': len(path_sensitive_result.phi_nodes) if path_sensitive_result else 0,
+            'fact_to_node': fact_to_node,
         }
 
         return graph

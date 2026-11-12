@@ -167,11 +167,14 @@ class UnifiedGraphBuilder:
         ``function_graphs`` maps function_id -> UnifiedGraph (built by
         build_unified). Node and edge ids are namespaced per function so they
         cannot collide. ``interprocedural_edges`` are dicts with keys
-        source_function, target_function, kind ('call'|'argument'|'return'),
-        resolution ('confirmed'|'possible'), call_site_id and evidence; each
-        becomes an edge between the functions' entry nodes labelled with its
-        resolution. The merge is capped at ``max_nodes``; when the cap is hit
-        the result reports ``metadata['truncated'] = True``.
+        source_function, target_function, kind ('call'|'argument'|'return'|
+        'global'), resolution ('confirmed'|'possible'), call_site_id,
+        evidence, and optionally source_node/target_node — DFG node ids that
+        the edge endpoints resolve to (mapped to the merged
+        '<fid>::unified_<node>' ids). Without them the edge falls back to
+        the functions' entry nodes. The merge is capped at ``max_nodes``;
+        when the cap is hit the result reports
+        ``metadata['truncated'] = True``.
         """
         nodes: List[UnifiedGraphNode] = []
         edges: List[UnifiedGraphEdge] = []
@@ -210,10 +213,16 @@ class UnifiedGraphBuilder:
             dst = ie.get('target_function')
             if src not in entry_of or dst not in entry_of:
                 continue
+            src_node = ie.get('source_node')
+            dst_node = ie.get('target_node')
+            source = ('%s::unified_%s' % (src, src_node)
+                      if src_node else entry_of[src])
+            target = ('%s::unified_%s' % (dst, dst_node)
+                      if dst_node else entry_of[dst])
             edges.append(UnifiedGraphEdge(
                 id='repo_edge_%d' % i,
-                source=entry_of[src],
-                target=entry_of[dst],
+                source=source,
+                target=target,
                 kind=ie.get('kind', 'call'),
                 subkind=ie.get('resolution', 'possible'),
                 call_site_id=ie.get('call_site_id'),

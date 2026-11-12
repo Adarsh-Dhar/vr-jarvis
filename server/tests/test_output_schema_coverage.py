@@ -29,35 +29,35 @@ ALLOWLIST_NO_EXPLICIT_SCHEMA = {
     # Conversational / orchestration helpers: text or plan payloads.
     'answer_code_question', 'ask_clarifying_question', 'check_task_completion',
     'classify_request', 'create_investigation_plan', 'exit_loop',
-    'explain_call_resolution', 'explain_class', 'explain_condition',
+     'explain_class', 
     'explain_function', 'explain_graph_edge', 'explain_module',
     'explain_visualization', 'infer_code_intent', 'manage_conversation_preferences',
-    'merge_agent_results', 'query_graph_path', 'request_approval',
-    'request_more_evidence', 'resolve_conflicting_findings',
+      'request_approval',
+    'request_more_evidence', 
     'retrieve_conversation_context', 'retrieve_investigation_context',
     'summarize_graph', 'summarize_investigation', 'understand_user_intent',
-    'verify_citations',
+    
     # Repository intelligence / navigation read helpers pending explicit
     # schemas (tracked for a follow-up pass).
-    'analyze_architecture_boundaries', 'analyze_control_flow',
+     
     'analyze_dependencies_manifest', 'analyze_repository_structure',
     'detect_build_system', 'detect_frameworks', 'detect_languages',
     'detect_package_manager', 'detect_project_type',
-    'detect_repository_changes', 'discover_tests',
-    'extract_function_contract', 'extract_symbols', 'find_all_paths_between_symbols',
-    'find_circular_dependencies', 'find_indirect_callers',
-    'find_interface_implementations', 'format_code', 'generate_class',
-    'generate_function', 'get_exports', 'get_imports',
-    'get_scope_information', 'get_symbol_definition', 'get_symbol_hover_info',
-    'get_symbol_references', 'get_type_hierarchy', 'identify_entry_points',
+     
+    'extract_function_contract',  
+     
+      
+      
+      
+      'identify_entry_points',
     'identify_external_services', 'identify_generated_files',
-    'identify_hidden_assumptions', 'identify_side_effects',
-    'identify_untested_paths', 'incremental_index_repository',
-    'map_tests_to_functions', 'measure_test_coverage', 'organize_imports',
-    'parse_source_code', 'read_test_results', 'record_task_targets',
-    'rename_symbol', 'resolve_types', 'trace_cross_module_relationships',
-    'trace_function_logic', 'verify_compilation', 'verify_lint',
-    'verify_task_evidence', 'verify_types', 'extract_function',
+    'identify_hidden_assumptions', 
+     
+      
+      'record_task_targets',
+     'resolve_types', 
+      
+      
     'compare_code_elements',
 }
 

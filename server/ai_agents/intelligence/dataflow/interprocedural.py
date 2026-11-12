@@ -7,6 +7,18 @@ from .models import DefUseFacts, Definition
 from .summaries import FunctionSummary as LibrarySummary, SummaryRegistry
 
 
+def _digest(s: 'FunctionSummary') -> str:
+    """Digest of a summary's computed result — content hash plus the sets
+    that callers actually consume. Used for fixed-point comparison and for
+    callee_hashes so a change anywhere in a callee's own callees propagates."""
+    return hashlib.sha256(repr((
+        s.content_hash,
+        sorted(s.returns_from),
+        sorted(s.mutates),
+        sorted(s.raises),
+    )).encode()).hexdigest()
+
+
 @dataclass
 class FunctionSummary:
     """
@@ -43,7 +55,9 @@ class InterproceduralSummaryBuilder:
     """
 
     def __init__(self, library_registry: Optional[SummaryRegistry] = None,
-                 graph=None, file_of: Optional[Dict[str, str]] = None):
+                 graph=None, file_of: Optional[Dict[str, str]] = None,
+                 source_hash_of: Optional[Dict[str, str]] = None,
+                 ast_of: Optional[Dict[Any, Any]] = None):
         self._library_registry = library_registry or SummaryRegistry()
         self._summaries: Dict[str, FunctionSummary] = {}
         self._call_graph: Optional[CallGraph] = None
@@ -52,6 +66,11 @@ class InterproceduralSummaryBuilder:
         # graph every call stays unresolved (previous stub behaviour).
         self._graph = graph
         self._file_of = dict(file_of or {})
+        # function_id -> sha256 of the function's source, and
+        # function_id -> ast.FunctionDef. Both feed content hashing and
+        # argument binding; without them summaries fall back to fact counts.
+        self._source_hash_of = dict(source_hash_of or {})
+        self._ast_of = dict(ast_of or {})
         self._unresolved: Dict[str, List[Dict[str, Any]]] = {}
 
     @property
@@ -171,9 +190,8 @@ class InterproceduralSummaryBuilder:
                         facts, callee_summaries, lookup)
 
                     old_summary = local.get(function_id)
-                    if old_summary is None or (
-                            summary.content_hash != old_summary.content_hash or
-                            summary.callee_hashes != old_summary.callee_hashes):
+                    if old_summary is None or _digest(summary) != _digest(old_summary) \
+                            or summary.callee_hashes != old_summary.callee_hashes:
                         changed = True
                         local[function_id] = summary
 
@@ -301,17 +319,23 @@ class InterproceduralSummaryBuilder:
                 if callee_id and callee_id in callee_summaries:
                     callee_summary = callee_summaries[callee_id]
                     if callee_summary:
-                        returns_from.update(callee_summary.returns_from)
-                        mutates.update(callee_summary.mutates)
+                        # Callee returns_from/mutates name the callee's
+                        # parameters — a different namespace. Map them back
+                        # to the caller's argument variables through the
+                        # recorded call_shape binding.
+                        self._merge_callee_effects(
+                            operation, callee_id, callee_summary,
+                            facts, uses_by_id, returns_from, mutates)
                         raises.update(callee_summary.raises)
                         sources.extend(callee_summary.sources)
                         sinks.extend(callee_summary.sinks)
 
-        # Compute callee hashes
+        # Compute callee hashes: digest the callee's computed result so a
+        # change anywhere inside the callee's own callees is visible here.
         callee_hashes = {}
         for callee_id, summary in callee_summaries.items():
             if summary:
-                callee_hashes[callee_id] = summary.content_hash
+                callee_hashes[callee_id] = _digest(summary)
 
         return FunctionSummary(
             function_id=facts.function_id,
@@ -326,24 +350,75 @@ class InterproceduralSummaryBuilder:
             metadata={}
         )
 
+    def _merge_callee_effects(
+        self,
+        operation,
+        callee_id: str,
+        callee_summary: FunctionSummary,
+        facts: DefUseFacts,
+        uses_by_id: Dict[str, Any],
+        returns_from: Set[str],
+        mutates: Set[str],
+    ) -> None:
+        """Map a callee summary's parameter-level effects onto the caller's
+        argument variables via call_binding.bind_call. Unbound or aggregate
+        arguments contribute nothing — never a guessed flow."""
+        from .call_binding import bind_call
+        call_shape = (operation.metadata or {}).get('call_shape')
+        callee_ast = self._ast_of.get(callee_id)
+        is_method = False
+        if isinstance(callee_ast, (ast.FunctionDef, ast.AsyncFunctionDef)) \
+                and callee_ast.args.args \
+                and callee_ast.args.args[0].arg in ('self', 'cls'):
+            is_method = True
+        binding = bind_call(call_shape, callee_ast, is_method=is_method)
+        param_names = {d.variable for d in facts.definitions
+                       if d.kind == 'parameter'}
+        for b in binding.get('bindings') or []:
+            if b.get('status') != 'bound':
+                continue
+            for uid in b.get('use_ids') or []:
+                u = uses_by_id.get(uid)
+                if not u or u.variable not in param_names:
+                    continue
+                if b.get('param') in callee_summary.returns_from:
+                    returns_from.add(u.variable)
+                if b.get('param') in callee_summary.mutates:
+                    mutates.add(u.variable)
+
     def _compute_content_hash(self, facts: DefUseFacts) -> str:
-        """Compute a hash of the function's content."""
-        # Hash the AST or source
-        # For now, use a simple hash of the function ID and definition count
-        data = f"{facts.function_id}:{len(facts.definitions)}:{len(facts.operations)}"
-        return hashlib.md5(data.encode()).hexdigest()
+        """Compute a hash of the function's real content.
+
+        Prefers the caller-supplied source hash (sha256 of the function
+        source); otherwise hashes every definition and operation so an edit
+        that changes neither count still changes the hash."""
+        h = self._source_hash_of.get(facts.function_id)
+        if h:
+            return h
+        parts = [facts.function_id]
+        parts += ['%s:%s:%s' % (d.id, d.variable, d.line)
+                  for d in facts.definitions]
+        parts += ['%s:%s:%s:%s' % (o.id, o.operation, o.line, o.expression)
+                  for o in facts.operations]
+        return hashlib.sha256('\n'.join(parts).encode()).hexdigest()
 
     def get_summary(self, function_id: str) -> Optional[FunctionSummary]:
         """Get a computed summary for a function."""
         return self._summaries.get(function_id)
 
-    def invalidate_function(self, function_id: str):
-        """Invalidate a function's summary (e.g., after edit)."""
-        if function_id in self._summaries:
-            del self._summaries[function_id]
+    def invalidate_function(self, function_id: str, _seen=None):
+        """Invalidate a function's summary (e.g., after edit).
+
+        Recurses into callers with a visited set so call-graph cycles
+        terminate instead of raising RecursionError."""
+        seen = _seen if _seen is not None else set()
+        if function_id in seen:
+            return
+        seen.add(function_id)
+        self._summaries.pop(function_id, None)
 
         # Recompute affected functions (callers)
         if self._call_graph:
             callers = self._call_graph.reverse_edges.get(function_id, set())
             for caller in callers:
-                self.invalidate_function(caller)
+                self.invalidate_function(caller, seen)

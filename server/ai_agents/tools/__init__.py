@@ -180,6 +180,7 @@ from .graph_tools import (
     verify_citations,
 )
 
+from .security_tools import run_security_scan
 from .exec_tools import (
     run_tests,
     run_typecheck,

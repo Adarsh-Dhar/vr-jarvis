@@ -12,7 +12,8 @@ KEYS = [
     'code_review',      # code_reviewer verdict on the proposed diff
     'verified_answer',  # critic output
     'worktree',         # path of the sandbox worktree
-    'last_test_run',    # raw test data for read_test_results
+    'last_test_run',
+    'security_scan',    # raw test data for read_test_results
     'impact_context',   # last turn's impact report, kept for the patch agent
     # Phase 1.5: New state keys for agent framework
     'plan',             # Orchestrator's investigation plan

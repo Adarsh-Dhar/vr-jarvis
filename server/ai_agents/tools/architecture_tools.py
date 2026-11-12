@@ -15,7 +15,7 @@ import math
 import re
 import subprocess
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from google.adk.tools import ToolContext
 
@@ -130,7 +130,7 @@ def extract_requirements(idea_text: str, tool_context: ToolContext = None) -> di
     return {'status': 'ok', 'source': source, 'requirements': req}
 
 
-def propose_architecture(requirements, tool_context: ToolContext = None) -> dict:
+def propose_architecture(requirements: Union[Dict[str, Any], str], tool_context: ToolContext = None) -> dict:
     """Propose a component architecture for a requirements document.
 
     `requirements` is the dict returned by extract_requirements (or the raw
@@ -558,8 +558,9 @@ EDGE_TYPES_FOR_KIND = {
 }
 
 
-def compare_to_repository(architecture, tool_context: ToolContext = None,
-                          graph_path=None, repo=None, override_matches=None) -> dict:
+def compare_to_repository(architecture: Union[Dict[str, Any], str], tool_context: ToolContext = None,
+                          graph_path: Optional[str] = None, repo: Optional[str] = None,
+                          override_matches: Optional[Union[Dict[str, Any], str]] = None) -> dict:
     """Map each proposed component onto repository graph nodes and check each
     proposed relationship against actual repository edges.
 
@@ -686,8 +687,8 @@ def _suggest_new_files(comp, grounding, layout, root, taken):
     return [path]
 
 
-def generate_implementation_plan(architecture, tool_context: ToolContext = None,
-                                 graph_path=None) -> dict:
+def generate_implementation_plan(architecture: Union[Dict[str, Any], str], tool_context: ToolContext = None,
+                                 graph_path: Optional[str] = None) -> dict:
     """Turn an approved architecture into a dependency-ordered task list.
 
     Tasks are ordered so a component's task depends on the tasks of the
@@ -984,7 +985,7 @@ def _load_node_ids(graph_path=None):
     return set()
 
 
-def verify_task_evidence(evidence: str, repo_root=None, graph_path=None) -> dict:
+def verify_task_evidence(evidence: str, repo_root: Optional[str] = None, graph_path: Optional[str] = None) -> dict:
     """Independently check the checkable claims inside a task-completion
     evidence string against the repository and its graph.
 

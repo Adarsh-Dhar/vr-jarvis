@@ -3,17 +3,27 @@ Findings Tools
 Tools for recording and managing findings across agents.
 """
 
+from typing import Annotated, Literal, TypedDict
 from typing import Dict, Any, List, Optional
 from google.adk.tools import ToolContext
 from ._safe import safe
+from ..contracts.tool import Min, Max
+
+
+class EvidenceRef(TypedDict, total=False):
+    file: str
+    line: int
+    start: int
+    end: int
+    node_id: str
 
 
 @safe
 def record_finding(
     claim: str,
-    status: str,
-    confidence: float,
-    evidence: List[Dict[str, Any]],
+    status: Literal['confirmed', 'inferred', 'unresolved'],
+    confidence: Annotated[float, Min(0), Max(1)],
+    evidence: List[EvidenceRef],
     unknowns: List[str],
     tool_context: ToolContext,
     repository_id: Optional[str] = None,

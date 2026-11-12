@@ -225,6 +225,10 @@ def _refuse_if_switching():
 async def _register_persisted_sessions():
     """Sessions persisted in the database survive a restart, but session_last_used does not. Re-register
     them so the repo-switch guard sees their worktrees / pending approvals / unpromoted commits."""
+    # Fail-closed tool contracts: a bad schema or a missing core schema must
+    # stop the server at boot, not mid-run.
+    from ai_agents.registry.tool_registry import get_tool_registry
+    get_tool_registry()
     try:
         resp = await sessions.list_sessions(app_name=APP, user_id=USER)
         for sess in (getattr(resp, 'sessions', None) or []):
@@ -699,6 +703,21 @@ def _unverified_evidence(state: dict) -> list:
     return [i for i in state.get('evidence', []) if i not in nodes]
 
 
+def _security_scan_summary(state):
+    """Compact record of the deterministic security scan for the validation
+    record — independent of whether a model review ran."""
+    from ai_agents.tools.exec_tools import security_blockers
+    scan = state.get('security_scan') or {}
+    fs = scan.get('findings') or []
+    new = [f for f in fs if f.get('introduced_by_current_change')]
+    return {'status': scan.get('status', 'not_run'),
+            'scanner': scan.get('scanner'),
+            'scanner_version': scan.get('scanner_version'),
+            'ruleset_version': scan.get('ruleset_version'),
+            'introduced': len(new), 'preexisting': len(fs) - len(new),
+            'blocking': security_blockers(state, state.get('worktree', ''))}
+
+
 def _code_review_summary(state):
     """Compact verdict + blocker count from the independent code review, for the
     validation record. None when no review ran this turn."""
@@ -712,8 +731,7 @@ def _code_review_summary(state):
     return {'verdict': cr.get('verdict'), 'summary': str(cr.get('summary') or '')[:300],
             'blockers': len(blockers),
             'suggested_tests': [str(t)[:120] for t in (cr.get('suggested_tests') or [])[:10]],
-            'security': cr.get('security') or {'status': 'not_analysed'},
-            'security_note': 'Model review only. No dedicated security scanner is integrated.'}
+            'security': cr.get('security') or {'status': 'not_analysed'}}
 
 
 def _build_ask_response(reply: str, error: str, state: dict) -> dict:
@@ -901,6 +919,7 @@ async def approve(body: ApproveBody):
                                    'skipped': last.get('skipped'), 'source': last.get('source')},
                       'typecheck': tc.get('typecheck'), 'source_tc': tc.get('source'),
                       'code_review': _code_review_summary(state),
+                      'security_scan': _security_scan_summary(state),
                       'checks_not_run': last.get('checks_not_run') or []}
             await set_state(body.session_id, {**cleared, 'approved': True,
                             'last_commit': {'branch': result['branch'], 'commit': result['commit']},

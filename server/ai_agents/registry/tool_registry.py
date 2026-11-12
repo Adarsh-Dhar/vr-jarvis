@@ -6,18 +6,13 @@ import pathlib
 import types
 import typing
 from typing import List, Dict, Any, Optional
-from ..contracts.tool import ToolSpec
+from ..contracts.tool import ToolSpec, Constraint
 from ..agents.toolsets import TOOL_LEVELS, TOOLSETS
-from .output_schemas import OUTPUT_SCHEMAS, UNRESTRICTED_PARAMS
+from .output_schemas import OUTPUT_SCHEMAS, UNRESTRICTED_PARAMS, CORE_TOOLS
 
-try:
-    import jsonschema
-    from jsonschema import Draft202012Validator, validators
-    _HAS_JSONSCHEMA = True
-except Exception:  # pragma: no cover - jsonschema is optional
-    _HAS_JSONSCHEMA = False
-    Draft202012Validator = None
-    validators = None
+import jsonschema
+from jsonschema import Draft202012Validator, validators
+_HAS_JSONSCHEMA = True
 
 
 def _tuple_ok(checker, inst):
@@ -61,9 +56,14 @@ def _py_type_to_schema(ann) -> Dict[str, Any]:
     if ann is typing.Any or ann is object:
         return {}
 
-    # Annotated[X, ...] -> schema of X
+    # Annotated[X, Constraint...] -> schema of X merged with each constraint
     if typing.get_origin(ann) is typing.Annotated:
-        return _py_type_to_schema(typing.get_args(ann)[0])
+        base, *meta = typing.get_args(ann)
+        schema = dict(_py_type_to_schema(base))
+        for m in meta:
+            if isinstance(m, Constraint):
+                schema.update(m.schema)
+        return schema
 
     origin = typing.get_origin(ann)
     args = typing.get_args(ann)
@@ -108,22 +108,23 @@ def _py_type_to_schema(ann) -> Dict[str, Any]:
                                and issubclass(ann, pathlib.PurePath)):
         return {'type': 'string'}
 
+    # TypedDict -> object with properties. Checked before inspect.isclass
+    # because TypedDict is not a real class on all supported versions.
+    if getattr(ann, '__required_keys__', None) is not None \
+            or getattr(ann, '__optional_keys__', None) is not None \
+            or (hasattr(ann, '__annotations__')
+                and hasattr(ann, '__total__')):
+        props = {}
+        hints = getattr(ann, '__annotations__', {})
+        for k, v in hints.items():
+            props[k] = _py_type_to_schema(v)
+        schema = {'type': 'object', 'properties': props}
+        required = [k for k in getattr(ann, '__required_keys__', ())]
+        if required:
+            schema['required'] = list(required)
+        return schema
+
     if inspect.isclass(ann):
-        # TypedDict -> object with properties (check first: issubclass on a
-        # TypedDict raises TypeError)
-        if getattr(ann, '__required_keys__', None) is not None \
-                or getattr(ann, '__optional_keys__', None) is not None \
-                or (hasattr(ann, '__annotations__')
-                    and hasattr(ann, '__total__')):
-            props = {}
-            hints = getattr(ann, '__annotations__', {})
-            for k, v in hints.items():
-                props[k] = _py_type_to_schema(v)
-            schema = {'type': 'object', 'properties': props}
-            required = [k for k in getattr(ann, '__required_keys__', ())]
-            if required:
-                schema['required'] = list(required)
-            return schema
         try:
             if issubclass(ann, enum.Enum):
                 return {'enum': [m.value for m in ann]}
@@ -140,7 +141,9 @@ def _py_type_to_schema(ann) -> Dict[str, Any]:
 
 def _resolve_hints(fn) -> Dict[str, Any]:
     try:
-        return typing.get_type_hints(fn)
+        # include_extras keeps Annotated[..., Constraint] metadata visible;
+        # without it every constraint branch below is dead code.
+        return typing.get_type_hints(fn, include_extras=True)
     except Exception:
         return {}
 
@@ -195,9 +198,6 @@ def _owner_agents() -> Dict[str, List[str]]:
 _FAMILY_OUTPUT_SCHEMAS = {
     'run_tests': {'type': 'object', 'properties': {'status': {'type': 'string'}}},
     'run_typecheck': {'type': 'object', 'properties': {'typecheck': {'type': 'string'}}},
-    'run_unit_tests': {'type': 'object', 'properties': {'status': {'type': 'string'}}},
-    'run_integration_tests': {'type': 'object', 'properties': {'status': {'type': 'string'}}},
-    'run_regression_tests': {'type': 'object', 'properties': {'status': {'type': 'string'}}},
     'generate_implementation_plan': {'type': 'object', 'properties': {'tasks': {'type': 'array'}}},
     'get_findings': {'type': 'array'},
 }
@@ -238,9 +238,15 @@ class ToolRegistry:
         at registration time, so a malformed schema fails at startup rather
         than mid-run. Explicit schemas in output_schemas.py win over the
         family table and the return-annotation fallback."""
-        schema = (OUTPUT_SCHEMAS.get(tool_name)
-                  or _FAMILY_OUTPUT_SCHEMAS.get(tool_name)
-                  or (_output_schema(fn) if callable(fn) else {'type': 'object'}))
+        schema = OUTPUT_SCHEMAS.get(tool_name)
+        if schema is None:
+            if tool_name in CORE_TOOLS:
+                raise ValueError(
+                    'core tool %s has no explicit OUTPUT_SCHEMAS entry'
+                    % tool_name)
+            schema = (_FAMILY_OUTPUT_SCHEMAS.get(tool_name)
+                      or (_output_schema(fn) if callable(fn)
+                          else {'type': 'object'}))
         if _HAS_JSONSCHEMA:
             jsonschema.Draft202012Validator.check_schema(schema)
         return schema
@@ -256,6 +262,12 @@ class ToolRegistry:
         if _HAS_JSONSCHEMA:
             _Validator.check_schema(schema)
         for pname, pschema in (schema.get('properties') or {}).items():
+            if isinstance(pschema, dict) and not pschema \
+                    and (tool_name, pname) not in UNRESTRICTED_PARAMS:
+                raise ValueError(
+                    'tool %s parameter %r has an unrestricted schema {}; '
+                    'annotate it or add it to UNRESTRICTED_PARAMS'
+                    % (tool_name, pname))
             if isinstance(pschema, dict) and pschema.get('x-unresolved'):
                 if (tool_name, pname) not in UNRESTRICTED_PARAMS:
                     raise ValueError(
@@ -269,6 +281,9 @@ class ToolRegistry:
         from .. import tools as tools_module
         for tool_name, level in TOOL_LEVELS.items():
             fn = getattr(tools_module, tool_name, None)
+            if fn is None or not callable(fn):
+                raise ValueError(
+                    'tool %s listed in TOOL_LEVELS is not exported' % tool_name)
             self._tools[tool_name] = ToolSpec(
                 name=tool_name,
                 group=_group_for(tool_name),
@@ -336,8 +351,10 @@ class ToolRegistry:
         """Validate call arguments against the tool's input schema.
         Returns a list of error strings; empty means valid."""
         spec = self._tools.get(tool_name)
-        if spec is None or spec.input_schema is None:
-            return []
+        if spec is None:
+            return ['tool %s is not registered' % tool_name]
+        if spec.input_schema is None:
+            return ['tool %s has no input schema' % tool_name]
         schema = spec.input_schema
         props = schema.get('properties', {})
         errors = []
@@ -358,21 +375,30 @@ class ToolRegistry:
                     errors.append('argument %s must not be null' % key)
                 continue
             if not pschema:
+                if (tool_name, key) not in UNRESTRICTED_PARAMS:
+                    errors.append(
+                        'argument %s has no type constraint and is not '
+                        'allowlisted in UNRESTRICTED_PARAMS' % key)
                 continue  # {} means declared but untyped: any value accepted
             errors.extend(self._type_errors(value, pschema, 'argument %s' % key))
+        from .semantic_validators import semantic_errors
+        errors.extend(semantic_errors(tool_name, args))
         return errors
 
     def validate_result(self, tool_name: str, result: Any) -> List[str]:
         """Validate a tool result against its output schema.
         Returns a list of error strings; empty means valid."""
         spec = self._tools.get(tool_name)
-        if spec is None or spec.output_schema is None:
-            return []
+        if spec is None:
+            return ['tool %s is not registered' % tool_name]
+        if spec.output_schema is None:
+            return ['tool %s has no output schema' % tool_name]
         if not _HAS_JSONSCHEMA:
             return ['output validator unavailable: jsonschema is not installed']
         try:
             jsonschema.validate(result, spec.output_schema)
-            return []
+            from .semantic_validators import semantic_result_errors
+            return semantic_result_errors(tool_name, result)
         except jsonschema.ValidationError as exc:
             return ['result failed output schema: %s' % exc.message]
         except jsonschema.SchemaError as exc:

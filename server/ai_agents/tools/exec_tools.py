@@ -42,7 +42,8 @@ def _worktree_fingerprint(cwd):
     return {'diff_hash': _hl.sha256(diff.encode()).hexdigest()[:16], 'head': head}
 
 
-def verification_blockers(state, worktree, allow_cached=False, require_review=True):
+def verification_blockers(state, worktree, allow_cached=False, require_review=True,
+                            require_security=True):
     """Every reason the recorded test/typecheck evidence cannot approve the CURRENT patch.
     Empty list means the evidence is acceptable. Used by /approve and by the auto approval prompt."""
     why = []
@@ -93,7 +94,34 @@ def verification_blockers(state, worktree, allow_cached=False, require_review=Tr
                 why.append('The worktree HEAD moved after the type check ran. Re-run it.')
     # Independent code review of the diff: an explicit rejection blocks commit.
     why.extend(review_blockers(state, require_review))
+    if require_security:
+        why.extend(security_blockers(state, worktree))
     return why
+
+
+_SEV = {'low': 1, 'medium': 2, 'high': 3, 'critical': 4}
+
+
+def security_blockers(state, worktree):
+    """Reasons the deterministic security scan cannot approve this patch.
+    Reads state['security_scan'] only — never model output."""
+    scan = state.get('security_scan')
+    if not isinstance(scan, dict) or not scan:
+        return ['No security scan is recorded for this patch. Run run_security_scan.']
+    status = scan.get('status')
+    if status != 'completed':
+        if status == 'unavailable' and os.getenv('JARVIS_ALLOW_UNAVAILABLE_SCANNER') == '1':
+            return []
+        return ['Security scan did not complete (status: %s). %s'
+                % (status, scan.get('error') or '')]
+    fp = _worktree_fingerprint(worktree) if worktree else {'diff_hash': ''}
+    if scan.get('diff_hash') != fp['diff_hash']:
+        return ['The patch changed after the security scan ran. Re-run it.']
+    floor = _SEV.get(os.getenv('JARVIS_SECURITY_BLOCK_SEVERITY', 'high'), 3)
+    return ['  - %s %s in %s:%s' % (f['severity'], f['rule_id'], f['file'], f['line'])
+            for f in scan.get('findings') or []
+            if f.get('introduced_by_current_change')
+            and _SEV.get(f.get('severity'), 0) >= floor]
 
 
 def verification_passed(state):
@@ -117,6 +145,7 @@ def _clear_verification(state):
         state['last_test_run'] = {}
         state['last_typecheck'] = {}
         state['code_review'] = {}
+        state['security_scan'] = {}
 
 
 _REVIEW_REJECT = {'changes_requested', 'rejected', 'request_changes', 'fail', 'failed', 'block'}
@@ -162,6 +191,15 @@ def review_blockers(state, require_review=True):
         if require_review:
             return ['No independent code review is recorded for this patch. Run the code reviewer before committing.']
         return []
+    # The reviewer's output is model JSON — it must satisfy the recorded
+    # contract before any of its fields are trusted.
+    try:
+        import jsonschema
+        from ..registry.output_schemas import CODE_REVIEW_SCHEMA
+        jsonschema.validate(cr, CODE_REVIEW_SCHEMA)
+    except Exception as exc:
+        return ['The recorded code review does not match the review '
+                'contract (%s). Re-run the reviewer.' % exc]
     verdict = str(cr.get('verdict') or '').strip().lower()
     if not verdict:
         return ['The code review has no verdict. Re-run the reviewer.']

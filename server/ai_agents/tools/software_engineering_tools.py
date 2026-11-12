@@ -3,7 +3,7 @@ Agent 10 - Software Engineering Tools
 The ability to actually work on the project.
 """
 
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, TypedDict
 from pathlib import Path
 import subprocess
 import os
@@ -517,8 +517,14 @@ def generate_class(
 
 @safe
 @heuristic('Produces a plan; does not perform the refactor.')
+class CodeRange(TypedDict):
+    file: str
+    start_line: int
+    end_line: int
+
+
 def extract_function(
-    code_range: Dict,
+    code_range: CodeRange,
     function_name: str,
     tool_context: ToolContext
 ) -> dict:

@@ -1133,6 +1133,52 @@ def _resolve_call_target(graph, ctx, op):
     return res
 
 
+def _cross_function_chain(graph, start_function_id, max_depth):
+    """Cross-file flow chain from the repository DFG pipeline.
+
+    Directed by data flow: 'argument' edges go caller -> callee, 'return'
+    edges go callee -> caller (a returned value feeding the next call).
+    BFS from ``start_function_id`` up to ``max_depth`` hops; each hop is
+    {source, target, kind, resolution, file, line}. Returns [] when the
+    pipeline cannot run — the one-hop edges above remain the evidence."""
+    try:
+        from ..intelligence.dataflow.repository_dfg import build_repository_dfg
+        repo_dfg = build_repository_dfg(graph)
+    except Exception:
+        return []
+
+    # function_id -> ordered list of (next_function, edge-dict) hops
+    adj: Dict[str, list] = {}
+    for e in repo_dfg.edges:
+        if e.source_kind == 'argument':
+            src, dst = e.caller_function_id, e.callee_function_id
+        else:
+            src, dst = e.callee_function_id, e.caller_function_id
+        if not src or not dst or src == dst:
+            continue
+        adj.setdefault(src, []).append((dst, {
+            'source': src, 'target': dst, 'kind': e.source_kind,
+            'resolution': e.resolution, 'file': e.source_file,
+            'line': e.source_line}))
+
+    # Each emitted path is one chain: a list of hop dicts from the queried
+    # function outward, up to max_depth.
+    chains = []
+    frontier = [(start_function_id, [])]
+    while frontier and len(chains) < 50:
+        cur, hops = frontier.pop(0)
+        if len(hops) >= max_depth:
+            continue
+        for nxt, hop in adj.get(cur, []):
+            if any(h['target'] == nxt for h in hops) or nxt == start_function_id:
+                continue
+            new_hops = hops + [hop]
+            chains.append(new_hops)
+            if len(new_hops) < max_depth:
+                frontier.append((nxt, new_hops))
+    return chains
+
+
 def _ops_by_id(ctx):
     return {o.id: o for o in ctx['facts'].operations if hasattr(o, 'id')}
 
@@ -1159,7 +1205,8 @@ def _expand_arg_uses(ctx, arg):
 @safe
 def trace_cross_function_flow(
     variable_id: str,
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    max_depth: int = 3
 ) -> dict:
     """Track data across function boundaries for Python.
 
@@ -1170,7 +1217,13 @@ def trace_cross_function_flow(
     edges: call sites of this function are followed to the caller's result
     assignment and its subsequent uses. Anything that cannot be established
     is reported in 'unresolved' — a reference is never claimed as a confirmed
-    flow edge."""
+    flow edge.
+
+    'chain' follows the repository-wide interprocedural edges produced by
+    build_repository_dfg (argument edges caller->callee, return edges
+    callee->caller) up to max_depth hops, so a value crossing three or more
+    files comes back as a chain list rather than a single hop. The one-hop
+    variable edges above keep their existing shape."""
     try:
         from ..intelligence.dataflow.call_binding import bind_call
         parts = _split_variable_id(variable_id)
@@ -1258,6 +1311,10 @@ def trace_cross_function_flow(
                                       'line': pd.line if pd else None},
                         'resolution': 'possible' if aggregate else 'confirmed',
                         'aggregate': aggregate,
+                        'source': ctx['function_id'],
+                        'target': callee_ctx['function_id'],
+                        'file': ctx['file'],
+                        'line': op.line,
                     })
             for u in hits:
                 if u.id not in bound_hit_ids:
@@ -1266,12 +1323,22 @@ def trace_cross_function_flow(
                                        'argument_uses': [_use_out(u)]})
 
         call_sites, ret_unresolved = _caller_result_flows(ctx)
+        for cs in call_sites:
+            cs.setdefault('source', cs.get('caller'))
+            cs.setdefault('target', ctx['function_id'])
+            cs.setdefault('resolution',
+                          (cs.get('result') or {}).get('disposition'))
+            cs.setdefault('file', cs.get('file'))
+            cs.setdefault('line', cs.get('line'))
+        chain = _cross_function_chain(graph, ctx['function_id'], max_depth)
         return {
             'status': 'ok',
             'variable_id': variable_id,
             'function_id': ctx['function_id'],
             'outbound_argument_edges': outbound,
             'inbound_return_edges': call_sites,
+            'chain': chain,
+            'max_depth': max_depth,
             'unresolved': unresolved + ret_unresolved,
             'evidence': 'def-use call operations + call-site edge callee resolution + call_shape binding'
         }

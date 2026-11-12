@@ -29,17 +29,21 @@ SOURCE_REF = {'type': 'object',
 
 
 def envelope(ok_props=None, ok_required=(), extra_statuses=(),
-             error_required=True):
+             error_required=True, statuses=None):
     """Standard result envelope: ``status`` required, ``error`` required when
     status is 'error', and ``ok_required`` fields required when the tool
-    reports success (``ok`` plus any ``extra_statuses``)."""
+    reports success (``ok`` plus any ``extra_statuses``).
+
+    ``statuses`` narrows the allowed status vocabulary per tool; without it
+    the full STATUSES enum plus ``extra_statuses`` is allowed."""
     ok_statuses = ['ok'] + list(extra_statuses)
+    allowed = list(statuses) if statuses else \
+        STATUSES + [s for s in extra_statuses if s not in STATUSES]
     schema = {
         'type': 'object',
         'required': ['status'],
         'properties': {
-            'status': {'enum': STATUSES + [s for s in extra_statuses
-                                           if s not in STATUSES]},
+            'status': {'enum': allowed},
             'error': {'type': 'string'},
             **(ok_props or {}),
         },
@@ -71,6 +75,115 @@ _EVIDENCE_ITEM = {'type': 'object'}
 _EVIDENCE_LIST = {'type': 'array', 'items': _EVIDENCE_ITEM}
 _EDGE_LIST = {'type': 'array',
               'items': {'type': 'object', 'properties': {'resolution': RESOLUTION}}}
+# Cross-function flow edge: {source, target, resolution, file, line}.
+_FLOW_EDGE = {'type': 'object',
+              'properties': {'source': _STR, 'target': _STR,
+                             'resolution': _STR, 'file': _STR,
+                             'line': _INT}}
+
+# Shared item contracts for list-valued result fields.
+FINDING_ITEM = {'type': 'object',
+                'required': ['severity', 'file', 'line', 'issue'],
+                'properties': {'severity': {'enum': ['blocker', 'warning', 'info']},
+                               'category': {'enum': ['logic', 'error_handling',
+                                                     'security', 'quality',
+                                                     'tests']},
+                               'file': {'type': 'string', 'minLength': 1},
+                               'line': {'type': 'integer', 'minimum': 1},
+                               'issue': {'type': 'string', 'minLength': 1},
+                               'suggestion': {'type': 'string'}}}
+CALL_EDGE = {'type': 'object',
+             'required': ['from', 'to', 'resolution'],
+             'properties': {'from': _STR, 'to': _STR, 'resolution': RESOLUTION,
+                            'file': _STR,
+                            'line': {'type': 'integer', 'minimum': 1}}}
+
+# The code reviewer's structured output (state['code_review']).
+CODE_REVIEW_SCHEMA = {
+    'type': 'object',
+    'required': ['verdict', 'findings'],
+    'properties': {
+        'verdict': {'enum': ['approve', 'request_changes', 'block']},
+        'summary': _STR,
+        'findings': {'type': 'array', 'items': FINDING_ITEM},
+        'acceptance': {'type': 'array',
+                       'items': {'type': 'object',
+                                 'required': ['criterion', 'status'],
+                                 'properties': {
+                                     'criterion_index': _INT,
+                                     'criterion': _STR,
+                                     'status': {'enum': ['met', 'not_met',
+                                                         'unknown']}}}},
+        'security': _OBJ,
+    },
+}
+
+SECURITY_FINDING = {'type': 'object',
+  'required': ['rule_id', 'category', 'severity', 'file', 'line', 'title',
+               'evidence', 'remediation', 'confidence',
+               'introduced_by_current_change'],
+  'properties': {'rule_id': {'type': 'string',
+                             'pattern': r'^PY-[A-Z]+-\d{3}$'},
+                 'category': {'enum': ['dynamic_code_execution',
+                     'command_execution', 'unsafe_deserialization',
+                     'hardcoded_credentials', 'weak_crypto',
+                     'certificate_verification_disabled', 'file_handling']},
+                 'severity': {'enum': ['low', 'medium', 'high', 'critical']},
+                 'file': {'type': 'string', 'minLength': 1},
+                 'line': {'type': 'integer', 'minimum': 1},
+                 'confidence': {'enum': ['low', 'medium', 'high']},
+                 'introduced_by_current_change': {'type': 'boolean'}}}
+
+# Tools that must have an explicit OUTPUT_SCHEMAS entry; a missing one fails
+# registry construction at startup.
+CORE_TOOLS = {
+    # repository / code reading
+    'get_symbol_definition', 'get_symbol_references', 'get_symbol_hover_info',
+    'extract_symbols', 'parse_source_code', 'extract_function', 'get_imports',
+    'get_exports', 'get_scope_information', 'get_type_hierarchy',
+    # architecture
+    'analyze_architecture_boundaries', 'verify_task_evidence',
+    # call graph
+    'find_indirect_callers', 'explain_call_resolution',
+    'find_all_paths_between_symbols', 'find_interface_implementations',
+    'query_graph_path', 'find_circular_dependencies',
+    # DFG
+    'trace_cross_module_relationships', 'identify_side_effects',
+    # CFG
+    'analyze_control_flow', 'trace_function_logic', 'explain_condition',
+    # change impact
+    'detect_repository_changes', 'incremental_index_repository',
+    # code modification
+    'generate_function', 'generate_class', 'rename_symbol',
+    'organize_imports', 'format_code',
+    # testing
+    'discover_tests', 'map_tests_to_functions', 'identify_untested_paths',
+    'measure_test_coverage', 'read_test_results', 'verify_compilation',
+    'verify_lint', 'verify_types', 'run_unit_tests', 'run_integration_tests',
+    'run_regression_tests',
+    # review
+    'merge_agent_results', 'resolve_conflicting_findings', 'verify_citations',
+    # security
+    'run_security_scan',
+}
+
+_RUN_TESTS_SCHEMA = {
+    'type': 'object',
+    'required': ['status'],
+    'properties': {
+        'status': {'enum': ['passed', 'failed', 'unverified', 'error', 'ok']},
+        'passed': {'type': 'array'}, 'failed': {'type': 'array'},
+        'skipped': {'type': 'array'}, 'checks_not_run': {'type': 'array'},
+        'not_run': {'type': 'array'},
+        'error': {'type': 'string'}, 'stderr': {'type': 'string'},
+    },
+    'allOf': [
+        {'if': {'properties': {'status': {'enum': ['passed', 'failed']}}},
+         'then': {'required': ['passed', 'failed']}},
+        {'if': {'properties': {'status': {'const': 'error'}}},
+         'then': {'required': ['error']}},
+    ],
+}
 
 OUTPUT_SCHEMAS = {
     # run_tests reports passed/failed/unverified/error, not the generic
@@ -100,23 +213,23 @@ OUTPUT_SCHEMAS = {
                   'metadata': _OBJ},
         ok_required=['graph', 'validation', 'diagnostics', 'metadata']),
     'trace_cross_function_flow': envelope(
-        ok_props={'outbound_argument_edges': _LIST,
-                  'inbound_return_edges': _LIST, 'unresolved': _LIST},
+        ok_props={'outbound_argument_edges': {'type': 'array', 'items': _FLOW_EDGE},
+                  'inbound_return_edges': {'type': 'array', 'items': _FLOW_EDGE},
+                  'chain': {'type': 'array',
+                            'items': {'type': 'array', 'items': _FLOW_EDGE}},
+                  'max_depth': _INT,
+                  'unresolved': _LIST},
         ok_required=['outbound_argument_edges', 'inbound_return_edges',
-                     'unresolved']),
+                     'chain', 'unresolved']),
     'generate_implementation_plan': envelope(
         ok_props={'tasks': _LIST, 'circular': _LIST, 'cycle_paths': _LIST},
         ok_required=['tasks']),
     # Worktree patch tools
-    # create_worktree/apply_patch_to_worktree report subprocess failures with
-    # 'stderr' and no 'error' key, so the error-requirement is relaxed there.
     'create_worktree': envelope(ok_props={'worktree': _STR},
-                                ok_required=['worktree'],
-                                error_required=False),
+                                ok_required=['worktree']),
     'apply_patch_to_worktree': envelope(ok_props={'applied': {'type': 'boolean'},
                                                   'task_id': _STR},
-                                        ok_required=['applied'],
-                                        error_required=False),
+                                        ok_required=['applied']),
     'get_worktree_diff': envelope(ok_props={'diff': _STR},
                                   ok_required=['diff']),
     'read_worktree_file': envelope(ok_props={'file': _STR, 'content': _STR},
@@ -322,4 +435,143 @@ OUTPUT_SCHEMAS = {
         ok_props={'repository_path': _STR, 'branches': _LIST,
                   'current': _STR},
         ok_required=['branches', 'current']),
+
+    # ------------------------------------------------------------------
+    # Core families (C8): explicit schemas so no core tool falls back to
+    # the generic annotation schema.
+    # ------------------------------------------------------------------
+    'get_symbol_definition': envelope(
+        ok_props={'symbol': _OBJ, 'definition': _OBJ}, ok_required=['symbol']),
+    'get_symbol_references': envelope(
+        ok_props={'references': _LIST, 'count': _INT},
+        ok_required=['references']),
+    'get_symbol_hover_info': envelope(
+        ok_props={'hover': _STR, 'info': _OBJ}, ok_required=['hover']),
+    'extract_symbols': envelope(
+        ok_props={'symbols': _LIST, 'file': _STR}, ok_required=['symbols']),
+    'parse_source_code': envelope(
+        ok_props={'ast': _OBJ, 'symbols': _LIST, 'file': _STR},
+        ok_required=['file']),
+    'extract_function': envelope(
+        ok_props={'function': _OBJ, 'code': _STR, 'file': _STR},
+        ok_required=['function']),
+    'get_imports': envelope(
+        ok_props={'imports': _LIST, 'file': _STR}, ok_required=['imports']),
+    'get_exports': envelope(
+        ok_props={'exports': _LIST, 'file': _STR}, ok_required=['exports']),
+    'get_scope_information': envelope(
+        ok_props={'scopes': _LIST, 'scope': _OBJ}, ok_required=['scopes']),
+    'get_type_hierarchy': envelope(
+        ok_props={'hierarchy': _OBJ, 'types': _LIST},
+        ok_required=['hierarchy']),
+    'analyze_architecture_boundaries': envelope(
+        ok_props={'boundaries': _LIST, 'modules': _LIST, 'violations': _LIST},
+        ok_required=['boundaries']),
+    'verify_task_evidence': envelope(
+        ok_props={'claims': _LIST, 'verified': _LIST, 'failed': _LIST},
+        ok_required=['claims']),
+    'find_indirect_callers': envelope(
+        ok_props={'callers': _LIST, 'indirect': _LIST},
+        ok_required=['callers']),
+    'explain_call_resolution': envelope(
+        ok_props={'resolution': _STR, 'steps': _LIST, 'target': _STR},
+        ok_required=['resolution']),
+    'find_all_paths_between_symbols': envelope(
+        ok_props={'paths': _LIST, 'source': _STR, 'target': _STR},
+        ok_required=['paths']),
+    'find_interface_implementations': envelope(
+        ok_props={'implementations': _LIST, 'interface': _STR},
+        ok_required=['implementations']),
+    'query_graph_path': envelope(
+        ok_props={'path': _LIST, 'nodes': _LIST, 'edges': _LIST},
+        ok_required=['path']),
+    'find_circular_dependencies': envelope(
+        ok_props={'cycles': _LIST, 'circular': _LIST},
+        ok_required=['cycles']),
+    'trace_cross_module_relationships': envelope(
+        ok_props={'relationships': _LIST, 'modules': _LIST},
+        ok_required=['relationships']),
+    'identify_side_effects': envelope(
+        ok_props={'side_effects': _LIST, 'function_id': _STR},
+        ok_required=['side_effects']),
+    'analyze_control_flow': envelope(
+        ok_props={'graph': _OBJ, 'paths': _LIST, 'node_count': _INT},
+        ok_required=['graph']),
+    'trace_function_logic': envelope(
+        ok_props={'logic': _LIST, 'steps': _LIST, 'trace': _LIST},
+        ok_required=['logic']),
+    'explain_condition': envelope(
+        ok_props={'condition': _STR, 'explanation': _STR, 'branches': _LIST},
+        ok_required=['explanation']),
+    'detect_repository_changes': envelope(
+        ok_props={'changes': _LIST, 'changed_files': _LIST},
+        ok_required=['changes']),
+    'incremental_index_repository': envelope(
+        ok_props={'indexed': _INT, 'updated': _LIST, 'node_count': _INT},
+        ok_required=['updated']),
+    'generate_function': envelope(
+        ok_props={'code': _STR, 'file': _STR, 'function': _STR},
+        ok_required=['code']),
+    'generate_class': envelope(
+        ok_props={'code': _STR, 'file': _STR, 'class_name': _STR},
+        ok_required=['code']),
+    'rename_symbol': envelope(
+        ok_props={'renamed': _BOOL, 'occurrences': _INT, 'file': _STR},
+        ok_required=['renamed']),
+    'organize_imports': envelope(
+        ok_props={'organized': _BOOL, 'file': _STR, 'changes': _LIST},
+        ok_required=['organized']),
+    'format_code': envelope(
+        ok_props={'formatted': _BOOL, 'file': _STR, 'changes': _LIST},
+        ok_required=['formatted']),
+    'discover_tests': envelope(
+        ok_props={'tests': _LIST, 'count': _INT, 'files': _LIST},
+        ok_required=['tests']),
+    'map_tests_to_functions': envelope(
+        ok_props={'mapping': _LIST, 'tests': _LIST, 'functions': _LIST},
+        ok_required=['mapping']),
+    'identify_untested_paths': envelope(
+        ok_props={'untested': _LIST, 'paths': _LIST, 'coverage': _OBJ},
+        ok_required=['untested']),
+    'measure_test_coverage': envelope(
+        ok_props={'coverage': _NUM, 'covered': _LIST, 'total': _INT},
+        ok_required=['coverage']),
+    'read_test_results': envelope(
+        ok_props={'results': _LIST, 'passed': _INT, 'failed': _INT},
+        ok_required=['results']),
+    'verify_compilation': envelope(
+        ok_props={'compiled': _BOOL, 'errors': _LIST, 'output': _STR},
+        ok_required=['compiled']),
+    'verify_lint': envelope(
+        ok_props={'lint': _STR, 'issues': _LIST, 'clean': _BOOL},
+        ok_required=['issues']),
+    'verify_types': envelope(
+        ok_props={'typecheck': _STR, 'errors': _LIST, 'clean': _BOOL},
+        ok_required=['errors']),
+    # run_unit/integration/regression reuse the run_tests shape.
+    'run_unit_tests': _RUN_TESTS_SCHEMA,
+    'run_integration_tests': _RUN_TESTS_SCHEMA,
+    'run_regression_tests': _RUN_TESTS_SCHEMA,
+    'merge_agent_results': envelope(
+        ok_props={'merged': _OBJ, 'total_results': _INT, 'result': _LIST},
+        ok_required=['merged']),
+    'resolve_conflicting_findings': envelope(
+        ok_props={'resolved': _LIST, 'conflicts': _LIST, 'result': _OBJ},
+        ok_required=['resolved']),
+    'verify_citations': envelope(
+        ok_props={'citations': _LIST, 'verified': _LIST, 'invalid': _LIST},
+        ok_required=['citations']),
+    'run_security_scan': envelope(
+        ok_props={'scanner': _STR, 'scanner_version': _STR,
+                  'ruleset_version': _STR, 'files_scanned': _INT,
+                  'diff_hash': _STR, 'counts': _OBJ,
+                  'findings': {'type': 'array', 'items': SECURITY_FINDING}},
+        ok_required=['scanner', 'findings', 'diff_hash'],
+        statuses=['completed', 'failed', 'unavailable', 'error']),
 }
+
+
+# run_security_scan: failed/unavailable results must carry 'error'.
+OUTPUT_SCHEMAS['run_security_scan'].setdefault('allOf', []).append(
+    {'if': {'properties': {'status': {'enum': ['failed', 'unavailable']}}},
+     'then': {'required': ['error']}})

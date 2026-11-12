@@ -3,7 +3,7 @@ Orchestrator Tools
 Delegation tools for the Orchestrator to invoke specialist agents.
 """
 
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from google.adk.tools import ToolContext
 from ._safe import safe
 
@@ -329,7 +329,7 @@ def retry_agent_task(
 
 @safe
 def merge_agent_results(
-    results: list,
+    results: List[Dict[str, Any]],
     tool_context: ToolContext
 ) -> dict:
     """Merge results from multiple agents."""
@@ -351,7 +351,7 @@ def merge_agent_results(
 
 @safe
 def resolve_conflicting_findings(
-    findings: list,
+    findings: List[Dict[str, Any]],
     tool_context: ToolContext
 ) -> dict:
     """Resolve conflicting findings from agents."""

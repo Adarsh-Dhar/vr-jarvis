@@ -278,29 +278,39 @@ def read_file_range(
 ) -> dict:
     """Read specific line ranges from a file."""
     try:
-        path = Path(file_path)
-        if not path.is_absolute():
-            path = resolve_in_repo(path)
-        
-        if not path.exists():
+        path = resolve_in_repo(file_path)  # always; raises outside the repo
+        if not path.is_file():
+            return {
+                'status': 'not_found',
+                'error': 'File does not exist: %s' % file_path
+            }
+        if start_line > end_line:
             return {
                 'status': 'error',
-                'error': f'File does not exist: {file_path}'
+                'error': 'start_line must be <= end_line'
             }
-        
+
         # Read file and extract line range
         try:
             lines = path.read_text(encoding='utf-8').splitlines()
         except UnicodeDecodeError:
             lines = path.read_text(encoding='latin-1').splitlines()
-        
+
+        if start_line > len(lines):
+            return {
+                'status': 'error',
+                'error': 'start_line %d is past end of file (%d lines)'
+                         % (start_line, len(lines))
+            }
+        end_line = min(end_line, len(lines))  # report the range actually returned
+
         # Adjust for 1-based indexing
         start_idx = max(0, start_line - 1)
         end_idx = min(len(lines), end_line)
-        
+
         content_lines = lines[start_idx:end_idx]
         content = '\n'.join(content_lines)
-        
+
         return {
             'status': 'ok',
             'file_path': str(path),

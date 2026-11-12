@@ -358,6 +358,142 @@ class CrossModuleAnalyzer:
         return {'global_usage': global_usage,
                 'unresolved_imports': unresolved_imports}
 
+    def resolve_symbol(
+        self,
+        importer_file: str,
+        local_name: str
+    ) -> Optional[Tuple[str, Optional[str]]]:
+        """Resolve a name used in ``importer_file`` to (target_file,
+        target_name) through that module's recorded imports.
+
+        Handles ``from x import y as z`` (local_name 'z' -> (x.py, 'y')),
+        relative imports and ``import mod`` / ``import mod as m``
+        (local_name 'm' -> (mod.py, None) — the module itself). Returns None
+        when no import binds the name or the target is not in the repo.
+        """
+        summary = self._module_summaries.get(importer_file)
+        if summary is None:
+            return None
+        for imp in (summary.metadata or {}).get('import_details') or []:
+            bound = imp.get('alias') or imp.get('name')
+            if bound != local_name:
+                continue
+            target = self.resolve_import(imp, importer_file)
+            if not target or target == EXTERNAL:
+                return None
+            if imp.get('kind') == 'from':
+                return (target, imp.get('name'))
+            return (target, None)
+        return None
+
+    def propagate_global_values(
+        self,
+        summaries: Dict[str, ModuleSummary],
+        facts_by_file: Dict[str, DefUseFacts]
+    ) -> Dict[str, Any]:
+        """Turn resolved imports into value-level 'global' edges.
+
+        For every import that resolves to an in-repo module, match the
+        imported name against the exporting module's top-level definitions
+        (by variable name), then to uses in the importing file whose
+        variable equals the local alias (or ``alias.attr`` for
+        ``import mod`` forms). Each confirmed match yields
+        {'source': def_id, 'target': use_id, 'kind': 'global',
+         'resolution': 'confirmed', 'file', 'line', 'target_file'}.
+        Unresolved or external imports are reported, never emitted as edges.
+        """
+        edges: List[Dict[str, Any]] = []
+        unresolved: List[Dict[str, Any]] = []
+
+        for importer_file, summary in summaries.items():
+            facts = facts_by_file.get(importer_file)
+            if facts is None:
+                continue
+            details = (summary.metadata or {}).get('import_details') or []
+            for imp in details:
+                local = imp.get('alias') or imp.get('name')
+                if not local:
+                    continue
+                kind = imp.get('kind')
+                target = self.resolve_import(imp, importer_file)
+                if target is None:
+                    # Fallback: module-level names (constants, __init__
+                    # re-exports) have no symbol node for the resolver, so
+                    # resolve the module file directly from module_files.
+                    mod = imp.get('module') or ''
+                    module_files = self._graph_ctx.get('module_files') or {}
+                    candidates = [mod]
+                    pkg = importer_file.rsplit('/', 1)[0].replace('/', '.') \
+                        if '/' in importer_file else ''
+                    if pkg:
+                        candidates.insert(0, '%s.%s' % (pkg, mod) if mod else pkg)
+                    for cand in candidates:
+                        if cand and cand in module_files:
+                            target = module_files[cand]
+                            break
+                if not target or target == EXTERNAL \
+                        or target not in summaries:
+                    unresolved.append({
+                        'module': importer_file,
+                        'import': '%s:%s' % (imp.get('module'), local),
+                        'reason': 'external' if target == EXTERNAL
+                                  else 'unresolved',
+                    })
+                    continue
+
+                # Uses of the local alias, including alias.attr for
+                # ``import mod`` style bindings.
+                uses = [u for u in facts.uses
+                        if u.variable == local
+                        or u.variable.startswith(local + '.')]
+                if not uses:
+                    continue
+
+                # Exporting module's top-level definitions by variable name.
+                target_facts = facts_by_file.get(target)
+                target_summary = summaries.get(target)
+                top_ids = set(target_summary.top_level_definitions) \
+                    if target_summary else set()
+                by_var_top: Dict[str, Definition] = {}
+                by_var_mod: Dict[str, Definition] = {}
+                if target_facts is not None:
+                    for d in target_facts.definitions:
+                        if d.variable in by_var_mod:
+                            continue
+                        if d.id in top_ids:
+                            by_var_top.setdefault(d.variable, d)
+                        if d.function_id == target:
+                            by_var_mod.setdefault(d.variable, d)
+
+                for u in uses:
+                    if kind == 'from':
+                        tname = imp.get('name')
+                    else:
+                        tname = u.variable.split('.', 1)[1] \
+                            if '.' in u.variable else None
+                    td = by_var_top.get(tname) or by_var_mod.get(tname)
+                    if td is None:
+                        unresolved.append({
+                            'module': importer_file,
+                            'import': local,
+                            'reason': 'no top-level definition %r in %s'
+                                      % (tname, target),
+                            'file': importer_file,
+                            'line': u.line,
+                        })
+                        continue
+                    edges.append({
+                        'source': td.id,
+                        'target': u.id,
+                        'kind': 'global',
+                        'resolution': 'confirmed',
+                        'file': importer_file,
+                        'line': u.line,
+                        'target_file': target,
+                    })
+
+        return {'edges': edges, 'unresolved': unresolved}
+
     def get_module_summary(self, module_id: str) -> Optional[ModuleSummary]:
         """Get a module summary by ID."""
         return self._module_summaries.get(module_id)

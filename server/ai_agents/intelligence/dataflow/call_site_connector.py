@@ -14,7 +14,7 @@ class CallSite:
     operation_id: str
     line: int
     actual_args: List[str]  # Use IDs of actual arguments
-    actual_kwargs: Dict[str, str]  # Keyword argument use IDs
+    actual_kwargs: Dict[str, List[str]]  # Keyword argument name -> use IDs
     resolution: str  # 'static_resolved', 'polymorphic', 'dynamic', 'external', 'unresolved'
     metadata: Dict[str, Any] = field(default_factory=dict)
 
@@ -29,6 +29,20 @@ class InterproceduralEdge:
     target_kind: str  # 'parameter', 'call_result'
     target_id: str  # Parameter definition ID or use ID
     resolution: str  # 'confirmed', 'possible', 'unknown'
+    # Endpoint functions: 'argument' edges flow caller -> callee,
+    # 'return' edges flow callee -> caller.
+    caller_function_id: Optional[str] = None
+    callee_function_id: Optional[str] = None
+    # Source location of each endpoint, so cross-function edges can be
+    # reported (and drawn) without a second lookup.
+    source_file: Optional[str] = None
+    source_line: int = 0
+    target_file: Optional[str] = None
+    target_line: int = 0
+    # DFG node ids resolved through the per-function fact_to_node map; None
+    # when the endpoint id is not a fact id (e.g. 'summary:x' sources).
+    source_node_id: Optional[str] = None
+    target_node_id: Optional[str] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
 
 
@@ -44,8 +58,6 @@ class CallSiteConnector:
 
     def __init__(self, summary_builder: InterproceduralSummaryBuilder):
         self._summary_builder = summary_builder
-        self._call_site_counter = 0
-        self._edge_counter = 0
 
     def identify_call_sites(
         self,
@@ -60,12 +72,21 @@ class CallSiteConnector:
 
         for operation in facts.operations:
             if operation.operation == 'Call':
-                self._call_site_counter += 1
-                call_site_id = f"{facts.function_id}_callsite_{self._call_site_counter}"
+                # Deterministic id: same call site -> same id on every run,
+                # so cached summaries and tests stay stable.
+                call_site_id = '%s@%s:%s' % (
+                    facts.function_id, operation.line,
+                    getattr(operation, 'column', 0) or 0)
 
-                # Extract actual arguments
-                actual_args = operation.input_use_ids
-                actual_kwargs = {}  # Would need to parse keyword arguments
+                # Extract actual arguments; keywords come from the recorded
+                # call_shape ({name, use_ids, starred, ...} per keyword arg).
+                actual_args = list(operation.input_use_ids or [])
+                shape = (operation.metadata or {}).get('call_shape') or {}
+                actual_kwargs = {
+                    k['name']: list(k.get('use_ids') or [])
+                    for k in shape.get('keywords') or []
+                    if k.get('name') is not None
+                }
 
                 # Resolve callee
                 callee_id = self._resolve_callee(operation, facts)
@@ -174,6 +195,7 @@ class CallSiteConnector:
 
         param_defs = {d.variable: d for d in callee_facts.definitions
                       if d.kind == 'parameter'}
+        uses_by_id = {u.id: u for u in caller_facts.uses}
         site_confirmed = call_site.resolution == 'static_resolved'
 
         for b in binding.get('bindings') or []:
@@ -183,10 +205,13 @@ class CallSiteConnector:
             confirmed = site_confirmed and b.get('status') == 'bound' \
                 and not aggregate
             resolution = 'confirmed' if confirmed else 'possible'
-            for use_id in b.get('use_ids') or [call_site.operation_id]:
-                self._edge_counter += 1
-                edge = InterproceduralEdge(
-                    edge_id=f"{call_site.call_site_id}_arg_{self._edge_counter}",
+            use_ids = b.get('use_ids') or [call_site.operation_id]
+            for i, use_id in enumerate(use_ids):
+                use = uses_by_id.get(use_id)
+                edges.append(InterproceduralEdge(
+                    edge_id='%s_arg_%s_%s' % (
+                        call_site.call_site_id,
+                        b.get('param') or 'arg', i),
                     call_site_id=call_site.call_site_id,
                     source_kind='argument',
                     source_id=use_id,
@@ -194,6 +219,12 @@ class CallSiteConnector:
                     target_id=param_def.id if param_def else
                               'unbound:%s' % (b.get('param') or 'arg'),
                     resolution=resolution,
+                    caller_function_id=caller_facts.function_id,
+                    callee_function_id=callee_facts.function_id,
+                    source_file=caller_facts.file,
+                    source_line=use.line if use else call_site.line,
+                    target_file=callee_facts.file,
+                    target_line=param_def.line if param_def else call_site.line,
                     metadata={
                         'param_name': b.get('param'),
                         'param_kind': b.get('param_kind'),
@@ -201,8 +232,7 @@ class CallSiteConnector:
                         'keyword': b.get('keyword'),
                         'aggregate': aggregate,
                     }
-                )
-                edges.append(edge)
+                ))
 
         # Return edges: each callee return feeds the caller's use (or the
         # definition) that consumes the call result.
@@ -215,23 +245,33 @@ class CallSiteConnector:
                               if call_op else []) or [])
         result_defs = [d for d in caller_facts.definitions
                        if d.id in result_def_ids]
+        callee_op_by_id = {o.id: o for o in callee_facts.operations}
         if return_sources and result_defs:
             for rdef in result_defs:
                 consumers = [u for u in caller_facts.uses
                              if u.binding_key == rdef.binding_key
                              and u.line >= call_site.line]
                 targets = [u.id for u in consumers] or [rdef.id]
-                for src in return_sources:
-                    for tgt in targets:
-                        self._edge_counter += 1
+                target_uses = {u.id: u for u in caller_facts.uses}
+                for si, src in enumerate(return_sources):
+                    src_op = callee_op_by_id.get(src)
+                    for ti, tgt in enumerate(targets):
+                        tgt_use = target_uses.get(tgt)
                         edges.append(InterproceduralEdge(
-                            edge_id=f"{call_site.call_site_id}_ret_{self._edge_counter}",
+                            edge_id='%s_ret_%s_%s' % (
+                                call_site.call_site_id, si, ti),
                             call_site_id=call_site.call_site_id,
                             source_kind='return',
                             source_id=src,
                             target_kind='call_result',
                             target_id=tgt,
                             resolution='confirmed' if site_confirmed else 'possible',
+                            caller_function_id=caller_facts.function_id,
+                            callee_function_id=callee_facts.function_id,
+                            source_file=callee_facts.file,
+                            source_line=src_op.line if src_op else call_site.line,
+                            target_file=caller_facts.file,
+                            target_line=tgt_use.line if tgt_use else rdef.line,
                             metadata={'result_definition': rdef.id,
                                       'param_name': rdef.variable}
                         ))
@@ -241,13 +281,22 @@ class CallSiteConnector:
     def connect_all_call_sites(
         self,
         all_facts: List[DefUseFacts],
-        summaries: Dict[str, FunctionSummary]
+        summaries: Dict[str, FunctionSummary],
+        ast_of: Optional[Dict[str, Any]] = None,
+        method_ids=frozenset()
     ) -> Dict[str, List[InterproceduralEdge]]:
         """
         Connect all call sites across all functions.
 
+        ``ast_of`` maps function_id -> ast.FunctionDef so bind_call can see
+        the callee signature; ``method_ids`` names callees whose leading
+        self/cls parameter binds to the receiver, not to an argument.
+        Without the AST every binding comes back unresolved and no argument
+        edge is ever created.
+
         Returns a mapping from function_id to list of interprocedural edges.
         """
+        ast_of = ast_of or {}
         all_edges: Dict[str, List[InterproceduralEdge]] = {}
 
         # Build function ID -> facts mapping
@@ -258,14 +307,17 @@ class CallSiteConnector:
             function_edges = []
 
             for call_site in call_sites:
-                callee_facts = facts_map.get(call_site.callee_function_id) if call_site.callee_function_id else None
-                callee_summary = summaries.get(call_site.callee_function_id) if call_site.callee_function_id else None
+                cid = call_site.callee_function_id
+                callee_facts = facts_map.get(cid) if cid else None
+                callee_summary = summaries.get(cid) if cid else None
 
                 edges = self.connect_call_site(
                     call_site,
                     facts,
                     callee_facts,
-                    callee_summary
+                    callee_summary,
+                    callee_func_ast=ast_of.get(cid),
+                    is_method=cid in method_ids
                 )
                 function_edges.extend(edges)
 

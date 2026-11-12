@@ -80,7 +80,7 @@ def create_worktree(tool_context: ToolContext, branch_name: str = 'jarvis/fix') 
             ['git', 'worktree', 'add', '-b', branch_name + '-' + suffix, str(path)],
             cwd=REPO_ROOT, capture_output=True, text=True)
         if proc.returncode != 0:
-            return {'status': 'error', 'stderr': proc.stderr[-1500:]}
+            return {'status': 'error', 'error': proc.stderr[-1500:], 'stderr': proc.stderr[-1500:]}
         _prune_worktrees()
     nm = REPO_ROOT / 'node_modules'        # worktrees do not contain untracked node_modules
     if nm.is_dir() and not (path / 'node_modules').exists():
@@ -104,11 +104,12 @@ def apply_patch_to_worktree(diff: str, tool_context: ToolContext) -> dict:
     proc = subprocess.run(['git', 'apply', '--whitespace=nowarn', '-'],
                           input=diff, cwd=wt, capture_output=True, text=True)
     if proc.returncode != 0:
-        return {'status': 'error', 'stderr': proc.stderr[-1500:]}
+        return {'status': 'error', 'error': proc.stderr[-1500:], 'stderr': proc.stderr[-1500:]}
     # The patch changed: earlier test/typecheck/review results no longer describe it.
     tool_context.state['last_test_run'] = {}
     tool_context.state['last_typecheck'] = {}
     tool_context.state['code_review'] = {}
+    tool_context.state['security_scan'] = {}
     tool_context.state['last_patch_task_id'] = str(tool_context.state.get('active_task_id') or '')
     return {'status': 'ok', 'applied': True,
             'task_id': tool_context.state.get('active_task_id') or ''}
