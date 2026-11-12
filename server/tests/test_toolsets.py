@@ -135,7 +135,13 @@ def test_review_loop_reviews_final_patch():
     fix = next(s for s in ag.root_agent.sub_agents if s.name == 'fix_pipeline')
     review = next(s for s in fix.sub_agents if s.name == 'review_loop')
     names = [getattr(s, 'name', '') for s in review.sub_agents]
-    assert names == ['patch_review_repair_agent', 'review_verifier_agent', 'code_reviewer']
+    assert names == ['patch_review_repair_agent', 'review_verifier_agent',
+                     'review_verify_gate', 'code_reviewer']
+    # The gate re-runs repair+verify until recorded verification passes;
+    # it sits between the verifier and the reviewer and never owns exit_loop.
+    gate = review.sub_agents[2]
+    assert [getattr(s, 'name', '') for s in gate.sub_agents] == [
+        'gate_patch_repair_agent', 'gate_review_verifier_agent']
 
     # The review verifier must NOT hold exit_loop — passing tests cannot end
     # the loop before the modified patch is reviewed again.
@@ -177,5 +183,8 @@ def test_tool_registry_contracts():
     # Output validation: a non-dict result for a dict tool fails.
     bad = reg.validate_result('run_tests', 'a string, not a dict')
     assert bad
-    good = reg.validate_result('run_tests', {'status': 'passed'})
+    good = reg.validate_result('run_tests',
+                               {'status': 'passed', 'passed': ['t1'],
+                                'failed': [], 'skipped': [],
+                                'checks_not_run': []})
     assert good == []

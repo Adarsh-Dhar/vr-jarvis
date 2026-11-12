@@ -96,6 +96,21 @@ def verification_blockers(state, worktree, allow_cached=False, require_review=Tr
     return why
 
 
+def verification_passed(state):
+    """True when the tool-recorded evidence says the current patch is verified:
+    last_test_run.status == 'passed' and, for worktrees that have a type
+    check, last_typecheck.typecheck == 'passed'. Missing or not_run evidence
+    never counts as passed."""
+    last = state.get('last_test_run') or {}
+    if not isinstance(last, dict) or last.get('status') != 'passed':
+        return False
+    wt = state.get('worktree')
+    if wt and _typecheck_kind(wt) is not None:
+        tc = state.get('last_typecheck') or {}
+        return tc.get('typecheck') == 'passed'
+    return True
+
+
 def _clear_verification(state):
     """A patch that changed invalidates every recorded test/typecheck result."""
     if state is not None:
@@ -121,6 +136,23 @@ def _review_verdict(state):
         except Exception:
             return None
     return cr if isinstance(cr, dict) and cr else None
+
+
+def _norm(s):
+    return ' '.join(str(s or '').lower().split())
+
+
+def _task_criteria(state):
+    """Acceptance criteria of the active plan task, as a list of strings.
+    active_task may be a dict or a JSON string depending on who wrote it."""
+    t = state.get('active_task')
+    if isinstance(t, str):
+        try:
+            t = json.loads(t)
+        except Exception:
+            return []
+    crit = (t or {}).get('acceptance_criteria') if isinstance(t, dict) else None
+    return [str(c).strip() for c in (crit or []) if str(c).strip()]
 
 
 def review_blockers(state, require_review=True):
@@ -151,7 +183,23 @@ def review_blockers(state, require_review=True):
         if status != 'met':
             blockers.append('  - acceptance criterion not met (status: %s): %s'
                             % (status or 'missing', str(a.get('criterion') or '')[:160]))
-    return blockers[:8]
+    # Completeness: every active-task criterion must be reviewed and met, even
+    # when the reviewer omitted it from the acceptance list entirely.
+    expected = _task_criteria(state)
+    if expected:
+        met = {}
+        for a in (cr.get('acceptance') or []):
+            if isinstance(a, dict):
+                key = _norm(a.get('criterion'))
+                met[key] = str(a.get('status') or '').strip().lower()
+                if isinstance(a.get('criterion_index'), int):
+                    met[a['criterion_index']] = met[key]
+        for i, c in enumerate(expected):
+            status = met.get(i, met.get(_norm(c)))
+            if status != 'met':
+                blockers.append('  - acceptance criterion not reviewed or not met: %s'
+                                % c[:160])
+    return blockers[:12]
 
 
 # Directories never worth walking when probing a worktree for tests, Python

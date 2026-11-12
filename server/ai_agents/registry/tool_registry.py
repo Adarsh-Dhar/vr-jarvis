@@ -1,9 +1,11 @@
 """Tool registry for managing tool specifications and contracts."""
 import inspect
+import types
 import typing
 from typing import List, Dict, Any, Optional
 from ..contracts.tool import ToolSpec
 from ..agents.toolsets import TOOL_LEVELS, TOOLSETS
+from .output_schemas import OUTPUT_SCHEMAS
 
 try:
     import jsonschema
@@ -20,13 +22,15 @@ def _py_type_to_schema(ann) -> Dict[str, Any]:
     args = typing.get_args(ann)
 
     # Optional[X] / Union[X, None] / X | None
-    if origin is typing.Union or str(origin) == 'types.UnionType':
+    if origin is typing.Union or origin is types.UnionType:
         non_null = [a for a in args if a is not type(None)]
-        if len(non_null) == 1 and len(non_null) != len(args):
-            inner = _py_type_to_schema(non_null[0])
-            inner.setdefault('type', inner.get('type', 'string'))
-            return {'anyOf': [inner, {'type': 'null'}]}
-        return {'anyOf': [_py_type_to_schema(a) for a in args] or [{}]}
+        members = [_py_type_to_schema(a) for a in non_null]
+        # A member that maps to {} accepts anything, so the whole union does.
+        if any(not m for m in members):
+            return {}
+        if len(non_null) != len(args):
+            members.append({'type': 'null'})
+        return members[0] if len(members) == 1 else {'anyOf': members}
 
     if origin in (list, typing.List, tuple, typing.Tuple, set, typing.Set, frozenset):
         item = _py_type_to_schema(args[0]) if args else {}
@@ -73,8 +77,10 @@ def _input_schema(fn):
         if p.default is inspect.Parameter.empty and p.kind not in (
                 inspect.Parameter.VAR_POSITIONAL,):
             required.append(name)
+    has_var_kw = any(p.kind is inspect.Parameter.VAR_KEYWORD
+                     for p in inspect.signature(fn).parameters.values())
     return {'type': 'object', 'properties': props, 'required': required,
-            'additionalProperties': True}
+            'additionalProperties': has_var_kw}
 
 
 def _output_schema(fn):
@@ -146,6 +152,19 @@ class ToolRegistry:
         self._owners = _owner_agents()
         self._load_tools()
 
+    @staticmethod
+    def _checked_output_schema(tool_name, fn):
+        """Resolve the output schema for a tool and validate the schema itself
+        at registration time, so a malformed schema fails at startup rather
+        than mid-run. Explicit schemas in output_schemas.py win over the
+        family table and the return-annotation fallback."""
+        schema = (OUTPUT_SCHEMAS.get(tool_name)
+                  or _FAMILY_OUTPUT_SCHEMAS.get(tool_name)
+                  or (_output_schema(fn) if callable(fn) else {'type': 'object'}))
+        if _HAS_JSONSCHEMA:
+            jsonschema.Draft202012Validator.check_schema(schema)
+        return schema
+
     def _load_tools(self):
         """Load tools from toolsets."""
         from .. import tools as tools_module
@@ -157,8 +176,7 @@ class ToolRegistry:
                 level=level,
                 owner_agents=list(self._owners.get(tool_name, [])),
                 input_schema=_input_schema(fn) if callable(fn) else None,
-                output_schema=(_FAMILY_OUTPUT_SCHEMAS.get(tool_name)
-                               or (_output_schema(fn) if callable(fn) else {'type': 'object'})),
+                output_schema=self._checked_output_schema(tool_name, fn),
             )
 
     def get(self, tool_name: str) -> Optional[ToolSpec]:
@@ -256,8 +274,12 @@ class ToolRegistry:
             if key == 'tool_context' or value is None:
                 continue
             pschema = props.get(key)
+            if pschema is None:
+                if schema.get('additionalProperties') is False:
+                    errors.append('unexpected argument: %s' % key)
+                continue
             if not pschema:
-                continue  # additionalProperties allowed
+                continue  # {} means declared but untyped: any value accepted
             errors.extend(self._type_errors(value, pschema, 'argument %s' % key))
         return errors
 
@@ -268,22 +290,16 @@ class ToolRegistry:
         if spec is None or spec.output_schema is None:
             return []
         if not _HAS_JSONSCHEMA:
-            # Fallback: check the declared top-level type only.
-            expected = spec.output_schema.get('type')
-            if expected == 'object' and not isinstance(result, dict):
-                return ['result must be an object, got %s' % type(result).__name__]
-            if expected == 'array' and not isinstance(result, (list, tuple)):
-                return ['result must be an array, got %s' % type(result).__name__]
-            if expected == 'string' and not isinstance(result, str):
-                return ['result must be a string, got %s' % type(result).__name__]
-            return []
+            return ['output validator unavailable: jsonschema is not installed']
         try:
             jsonschema.validate(result, spec.output_schema)
             return []
         except jsonschema.ValidationError as exc:
             return ['result failed output schema: %s' % exc.message]
-        except Exception:
-            return []
+        except jsonschema.SchemaError as exc:
+            return ['invalid output schema for %s: %s' % (tool_name, exc.message)]
+        except Exception as exc:
+            return ['output validation error for %s: %s' % (tool_name, exc)]
 
 
 _REGISTRY = None

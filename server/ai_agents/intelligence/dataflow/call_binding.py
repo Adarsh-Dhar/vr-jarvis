@@ -23,8 +23,10 @@ from typing import Any, Dict, List, Optional
 def _positional_params(func_ast) -> List[Dict[str, Any]]:
     args = func_ast.args
     params = []
+    posonly = {a.arg for a in (getattr(args, 'posonlyargs', []) or [])}
     for a in list(getattr(args, 'posonlyargs', []) or []) + list(args.args or []):
-        params.append({'name': a.arg, 'kind': 'positional', 'has_default': False})
+        params.append({'name': a.arg, 'kind': 'positional',
+                       'positional_only': a.arg in posonly, 'has_default': False})
     # defaults align to the tail of (posonlyargs + args)
     defaults = list(getattr(args, 'defaults', []) or [])
     if defaults:
@@ -95,9 +97,12 @@ def bind_call(call_shape: Optional[Dict[str, Any]], func_ast,
     params = formal_parameters(func_ast, is_method=is_method)
     positional = list(params['positional'])
     keywords = {p['name']: p for p in params['keywords']}
-    # positional-or-keyword params can also be filled by name
+    # positional-or-keyword params can also be filled by name; positional-only
+    # params cannot, so a keyword naming one is not found here.
+    posonly_names = {p['name'] for p in positional if p.get('positional_only')}
     for p in positional:
-        keywords.setdefault(p['name'], p)
+        if not p.get('positional_only'):
+            keywords.setdefault(p['name'], p)
 
     bindings: List[Dict[str, Any]] = []
     unbound: List[Dict[str, Any]] = []
@@ -163,6 +168,11 @@ def bind_call(call_shape: Optional[Dict[str, Any]], func_ast,
         name = arg.get('name')
         p = keywords.get(name)
         if p is None:
+            if name in posonly_names and not params['kwarg']:
+                # Python rejects this call; record why instead of guessing.
+                _unresolved_arg(arg, keyword=name)
+                bindings[-1]['reason'] = 'positional-only parameter passed by keyword'
+                continue
             if params['kwarg']:
                 _bind(params['kwarg'], 'kwarg', arg, keyword=name)
             else:

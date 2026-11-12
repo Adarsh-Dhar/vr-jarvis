@@ -28,8 +28,12 @@ PERMISSION_CEILINGS = {
     "patch_agent": 'write',
     "patch_repair_agent": 'write',
     "patch_review_repair_agent": 'write',
+    # Instances inside the review-verify gate get their own names (ADK agents
+    # have a single parent) but need the same ceilings.
+    "gate_patch_repair_agent": 'write',
     "verifier_agent": 'execute',
     "review_verifier_agent": 'execute',
+    "gate_review_verifier_agent": 'execute',
     "code_reviewer": 'read',
 }
 

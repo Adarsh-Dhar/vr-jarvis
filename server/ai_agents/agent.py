@@ -1,7 +1,9 @@
-from google.adk.agents import LlmAgent, LoopAgent, ParallelAgent, SequentialAgent
+from google.adk.agents import LlmAgent, LoopAgent, ParallelAgent, SequentialAgent, BaseAgent
 
 from .agents.critic import make_critic
-from .agents.fix import code_reviewer, patch_agent, patch_repair, make_patch_review_repair, make_review_verifier, verifier
+from .agents.fix import (code_reviewer, patch_agent, patch_repair,
+                         make_patch_repair, make_patch_review_repair,
+                         make_review_verifier, verifier)
 from .agents.impact import change_loader, impact_synthesizer, static_impact, test_mapper
 from .agents.investigator import investigator, make_investigator
 from .agents.navigator import make_navigator
@@ -12,7 +14,6 @@ from .agents.code_understanding import code_understanding_agent
 from .agents.relationship_intelligence import (relationship_intelligence_agent,
                                                build_relationship_intelligence_agent)
 from .agents.data_flow import data_flow_intelligence_agent, build_data_flow_agent
-from .agents.software_engineering import software_engineering_agent
 from .agents.testing_verification import testing_verification_agent
 from .agents.visualization import visualization_agent
 from .agents.conversational import conversational_agent
@@ -29,7 +30,6 @@ def _with_scene(agent, key):
 
 
 data_flow_pipeline = _with_scene(data_flow_intelligence_agent, 'result_data_flow')
-engineering_pipeline = _with_scene(software_engineering_agent, 'result_software_eng')
 testing_pipeline = _with_scene(testing_verification_agent, 'result_testing')
 
 investigate_pipeline = SequentialAgent(
@@ -86,15 +86,44 @@ verify_loop = LoopAgent(
     max_iterations=3,
 )
 
-# Review-repair-review order matters: each iteration repairs the findings from the
-# PREVIOUS review, re-runs tests/typecheck on the corrected patch, and only then does
-# the independent reviewer see the final diff. The reviewer owns exit_loop, so the
-# loop can only end on an approval of the exact patch that will be committed —
-# passing tests alone can never terminate the loop before re-review.
+class ReviewVerifyRepairGate(BaseAgent):
+    """Deterministic gate inside review_loop.
+
+    The loop's own repair+verifier pair only runs once per iteration; when the
+    verifier leaves failing test evidence behind, this gate re-runs repair and
+    verification (bounded by max_repairs) BEFORE the independent reviewer sees
+    the diff. A nested LoopAgent was rejected for this role: an escalate event
+    from a sub-agent inside a nested loop can propagate to the outer loop and
+    end review_loop before the review runs. This gate never escalates — it
+    only re-verifies, and exit_loop remains the reviewer's alone."""
+
+    max_repairs: int = 2
+
+    async def _run_async_impl(self, ctx):
+        from .tools.exec_tools import verification_passed
+        for _ in range(self.max_repairs):
+            if verification_passed(ctx.session.state):
+                return
+            for agent in self.sub_agents:
+                async for event in agent.run_async(ctx):
+                    yield event
+
+
+# Review-repair-verify-gate-review order matters: each iteration repairs the
+# findings from the PREVIOUS review, re-runs tests/typecheck on the corrected
+# patch, and the gate re-repairs until the recorded evidence passes (bounded).
+# Only then does the independent reviewer see the diff. The reviewer owns
+# exit_loop — and exit_loop itself refuses while verification has not passed —
+# so the loop can only end on an approval of a verified patch.
 review_loop = LoopAgent(
     name='review_loop',
-    description='Repairs review findings, re-verifies, and re-reviews the final patch, up to three rounds.',
-    sub_agents=[make_patch_review_repair(), make_review_verifier(), code_reviewer],
+    description='Repairs review findings, re-verifies until tests pass, and re-reviews the final patch, up to three rounds.',
+    sub_agents=[make_patch_review_repair(), make_review_verifier(),
+                ReviewVerifyRepairGate(
+                    name='review_verify_gate',
+                    sub_agents=[make_patch_repair(),
+                                make_review_verifier('gate_review_verifier_agent')]),
+                code_reviewer],
     max_iterations=3,
 )
 

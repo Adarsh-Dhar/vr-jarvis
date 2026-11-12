@@ -14,5 +14,10 @@ def request_approval(action_summary: str, tool_context: ToolContext) -> dict:
 
 def exit_loop(tool_context: ToolContext) -> dict:
     '''Stop the enclosing verify loop. Call only when tests have passed.'''
+    from .exec_tools import verification_passed
+    if not verification_passed(tool_context.state):
+        return {'status': 'error',
+                'error': 'Tests have not passed for the current patch; '
+                         'exit_loop refused.'}
     tool_context.actions.escalate = True
     return {'status': 'ok'}

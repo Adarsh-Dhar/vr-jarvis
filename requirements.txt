@@ -17,3 +17,4 @@ tree-sitter-c-sharp
 tree-sitter-cpp
 aiosqlite
 sqlalchemy
+jsonschema

@@ -110,7 +110,10 @@ Process:
    failure paths, swallowed exceptions, debug leftovers, unrelated or accidental
    changes, and missing regression tests for the new behaviour.
 4. If active_task is present, check every item in active_task.acceptance_criteria
-   against the diff and report each as met, not_met or unknown.
+   against the diff and report each as met, not_met or unknown. The acceptance
+   list MUST contain exactly one entry per criterion, in order, copying the
+   criterion text verbatim and setting criterion_index to its position
+   (0-based). An empty acceptance list is only valid when there are no criteria.
 5. If changed behaviour lacks test coverage, list concrete test cases to add.
 
 Rules:
@@ -118,15 +121,18 @@ Rules:
 - verdict is 'approve' only when you find no blocking issue; use 'changes_requested'
   when any blocker or unmet acceptance criterion exists.
 - You are the ONLY agent allowed to end this loop. Call exit_loop when — and only
-  when — your verdict on the CURRENT diff is 'approve'. The diff you approve is the
-  diff that gets committed, so never approve a patch you have not just re-read with
-  get_worktree_diff.
+  when — your verdict on the CURRENT diff is 'approve' AND the recorded test
+  results show the patch passed (test_results.status == 'passed' and its
+  typecheck passed). exit_loop itself refuses while verification has not
+  passed, so never approve a patch whose tests are failing or unrun.
+- The diff you approve is the diff that gets committed, so never approve a
+  patch you have not just re-read with get_worktree_diff.
 - Cite file and approximate line for every finding.
 
 Return a JSON object with keys: verdict (approve|changes_requested), summary,
 findings (list of {severity: blocker|warning|info, category: logic|error_handling|security|quality|tests, file, line, issue, suggestion}),
 security ({status: 'reviewed_by_model_only', findings: list of the category=security findings}),
-acceptance (list of {criterion, status: met|not_met|unknown, note}),
+acceptance (list of {criterion_index, criterion, status: met|not_met|unknown, note}),
 suggested_tests (list of strings). The security block is a model review of the diff, not a vulnerability scan. Say so in summary when you report a security finding, and never claim the code is secure.
 ''',
     tools=[get_worktree_diff, read_worktree_file, read_file, read_file_range,
@@ -136,12 +142,7 @@ suggested_tests (list of strings). The security block is a model review of the d
     output_key='code_review',
 )
 
-patch_repair = LlmAgent(
-    name='patch_repair_agent',
-    model=MODEL,
-    include_contents='none',
-    description='Repairs a failing patch using the test failure output.',
-    instruction='''
+PATCH_REPAIR_INSTRUCTION = '''
 Review verdict: {code_review}
 Current patch: {proposed_patch}
 Latest test results: {test_results}
@@ -155,12 +156,30 @@ Process:
 
 Return a JSON object in the same shape as the current patch (summary, files, diff, tests_added,
 assumptions, claims), with diff taken from get_worktree_diff and summary updated.
-''',
-    tools=[get_source, apply_patch_to_worktree, get_worktree_diff],
-    before_tool_callback=permission_guard,
-    after_tool_callback=evidence_collector,
-    output_key='proposed_patch',
-)
+'''
+
+
+def _patch_repair(name):
+    return LlmAgent(
+        name=name,
+        model=MODEL,
+        include_contents='none',
+        description='Repairs a failing patch using the test failure output.',
+        instruction=PATCH_REPAIR_INSTRUCTION,
+        tools=[get_source, apply_patch_to_worktree, get_worktree_diff],
+        before_tool_callback=permission_guard,
+        after_tool_callback=evidence_collector,
+        output_key='proposed_patch',
+    )
+
+
+patch_repair = _patch_repair('patch_repair_agent')
+
+
+def make_patch_repair():
+    """Fresh patch_repair instance for the review-verify gate. ADK agents can
+    only have one parent, so the gate cannot reuse the verify_loop instance."""
+    return _patch_repair('gate_patch_repair_agent')
 
 
 
@@ -229,9 +248,9 @@ objects with id and message), not_run (list), typecheck (passed, failed or not_r
 '''
 
 
-def make_review_verifier():
+def make_review_verifier(name='review_verifier_agent'):
     return LlmAgent(
-        name='review_verifier_agent',
+        name=name,
         model=MODEL,
         include_contents='none',
         description='Re-runs tests and type check on the patch after review-driven repair, without ending the loop.',
