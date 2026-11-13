@@ -80,3 +80,61 @@ def test_vr_root_policy(repo, monkeypatch):
     assert p == (repo / 'src' / 'a.py').resolve()
     with pytest.raises(PathResolutionError):
         resolve('/etc/hostname', PathPolicy.VR_ROOT)
+
+
+# ------------------------------------------------- PATH_POLICIES argument names
+
+def _policy_errors(tool, args, repo, monkeypatch, worktree=None):
+    """Run semantic_errors with repo_root pinned to `repo`."""
+    import ai_agents.tools._common as common
+    import ai_agents.config as config
+    monkeypatch.setattr(common, 'repo_root', lambda: repo)
+    monkeypatch.setattr(config, 'ACTIVE_WORKTREE',
+                        str(worktree) if worktree else None, raising=False)
+    monkeypatch.setattr(config, 'WORKTREE_DIR', None, raising=False)
+    monkeypatch.setattr(config, 'REPOSITORY_DIR', None, raising=False)
+    from ai_agents.registry.semantic_validators import semantic_errors
+    return semantic_errors(tool, args)
+
+
+def test_search_code_directory_policy(repo, monkeypatch):
+    errs = _policy_errors('search_code', {'directory': '../outside'},
+                          repo, monkeypatch)
+    assert errs
+    errs = _policy_errors('search_code', {'directory': 'src'},
+                          repo, monkeypatch)
+    assert not errs
+
+
+def test_verify_tools_use_repository_path(repo, monkeypatch, tmp_path):
+    wt = tmp_path / 'wt'
+    wt.mkdir()
+    # Inside the active worktree is allowed.
+    assert not _policy_errors('verify_lint',
+                              {'repository_path': str(wt)},
+                              repo, monkeypatch, worktree=wt)
+    # Traversal and absolute outsiders are rejected.
+    assert _policy_errors('verify_lint',
+                          {'repository_path': '../escape'},
+                          repo, monkeypatch, worktree=wt)
+    assert _policy_errors('verify_types',
+                          {'repository_path': '/etc'},
+                          repo, monkeypatch, worktree=wt)
+
+
+def test_symlink_escape_rejected(repo, monkeypatch, tmp_path):
+    outside = tmp_path.parent / (tmp_path.name + '_outside')
+    outside.mkdir(exist_ok=True)
+    (repo / 'link').symlink_to(outside, target_is_directory=True)
+    errs = _policy_errors('search_code', {'directory': 'link'},
+                          repo, monkeypatch)
+    assert errs
+
+
+def test_active_repository_policy_blocks_dotdot(repo, monkeypatch):
+    for tool, args in (
+            ('detect_languages', {'repository_path': '../x'}),
+            ('get_changed_files', {'repository_path': '/tmp'}),
+            ('trace_file_operations', {'file_path': '../../etc/passwd'})):
+        errs = _policy_errors(tool, args, repo, monkeypatch)
+        assert errs, (tool, args)

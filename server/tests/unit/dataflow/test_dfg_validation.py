@@ -164,3 +164,69 @@ def cfg_refs():
 
     validation = validate_dfg(dfg, facts)
     assert validation['valid'], f"DFG validation failed: {validation['errors']}"
+
+
+# ------------------------------------------------- semantic DFG endpoint rules
+
+def _dfg_result(nodes, edges):
+    return {'status': 'ok', 'graph': {'nodes': nodes, 'edges': edges}}
+
+
+def _confirmed_edge(src='n1', dst='n2', evidence=None):
+    return {'source': src, 'target': dst, 'kind': 'flows_to',
+            'resolution': 'confirmed',
+            'evidence': evidence if evidence is not None else {
+                'source_file': 'm.py', 'source_line': 1,
+                'target_file': 'm.py', 'target_line': 2}}
+
+
+def test_dfg_empty_nodes_with_confirmed_edge_rejected():
+    from ai_agents.registry.semantic_validators import (
+        _dfg_endpoints_have_evidence)
+    err = _dfg_endpoints_have_evidence(
+        _dfg_result([], [_confirmed_edge()]))
+    assert err
+
+
+def test_dfg_duplicate_node_ids_rejected():
+    from ai_agents.registry.semantic_validators import (
+        _dfg_endpoints_have_evidence)
+    err = _dfg_endpoints_have_evidence(
+        _dfg_result([{'id': 'n1'}, {'id': 'n1'}], []))
+    assert err
+
+
+def test_dfg_missing_endpoint_rejected():
+    from ai_agents.registry.semantic_validators import (
+        _dfg_endpoints_have_evidence)
+    err = _dfg_endpoints_have_evidence(
+        _dfg_result([{'id': 'n1'}], [_confirmed_edge(dst='ghost')]))
+    assert err
+
+
+def test_dfg_missing_evidence_rejected():
+    from ai_agents.registry.semantic_validators import (
+        _dfg_endpoints_have_evidence)
+    err = _dfg_endpoints_have_evidence(
+        _dfg_result([{'id': 'n1'}, {'id': 'n2'}],
+                    [_confirmed_edge(evidence={})]))
+    assert err
+
+
+def test_dfg_valid_confirmed_edge_passes():
+    from ai_agents.registry.semantic_validators import (
+        _dfg_endpoints_have_evidence)
+    err = _dfg_endpoints_have_evidence(
+        _dfg_result([{'id': 'n1'}, {'id': 'n2'}], [_confirmed_edge()]))
+    assert err is None
+
+
+def test_dfg_possible_edges_not_upgraded():
+    from ai_agents.registry.semantic_validators import (
+        _dfg_endpoints_have_evidence)
+    edge = _confirmed_edge()
+    edge['resolution'] = 'possible'
+    edge['evidence'] = {}
+    err = _dfg_endpoints_have_evidence(
+        _dfg_result([{'id': 'n1'}], [edge]))
+    assert err is None

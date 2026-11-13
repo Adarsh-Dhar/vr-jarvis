@@ -149,7 +149,7 @@ class TestPythonTypecheck:
         tc = exec_tools.run_typecheck(ctx)
         assert verification_blockers(
             {'last_test_run': _good(worktree), 'last_typecheck': tc, 'code_review': _review_approve()},
-            str(worktree)) == []
+            str(worktree), require_security=False) == []
 
     def test_no_sources_is_not_applicable(self, worktree):
         res = exec_tools.run_typecheck(self._ctx(worktree))
@@ -177,7 +177,7 @@ def _good(worktree):
 
 class TestVerificationBlockers:
     def test_good_run_has_no_blockers(self, worktree):
-        assert verification_blockers({'last_test_run': _good(worktree), 'code_review': _review_approve()}, str(worktree)) == []
+        assert verification_blockers({'last_test_run': _good(worktree), 'code_review': _review_approve()}, str(worktree), require_security=False) == []
 
     @pytest.mark.parametrize('field,value,needle', [
         ('exit_code', 1, 'exit 0'),
@@ -370,11 +370,11 @@ class TestTypecheckGate:
     def test_good_typecheck_has_no_blockers(self, ts_worktree):
         assert verification_blockers(
             {'last_test_run': _good(ts_worktree), 'last_typecheck': _ts_typecheck(ts_worktree), 'code_review': _review_approve()},
-            str(ts_worktree)) == []
+            str(ts_worktree), require_security=False) == []
 
     def test_no_tsconfig_means_no_typecheck_required(self, worktree):
         assert verification_blockers(
-            {'last_test_run': _good(worktree), 'code_review': _review_approve()}, str(worktree)) == []
+            {'last_test_run': _good(worktree), 'code_review': _review_approve()}, str(worktree), require_security=False) == []
 
     def test_missing_typecheck_blocks(self, ts_worktree):
         assert 'Type check has not been run' in self._why(ts_worktree, None)

@@ -6,9 +6,11 @@ set -e
 
 cd "$(dirname "$0")/.."
 
-# Load from .env if it exists
+# Load .env without printing secrets.
 if [ -f .env ]; then
-    export $(cat .env | grep -v '^#' | xargs)
+    set -a
+    . ./.env
+    set +a
 fi
 
 # Set defaults
@@ -53,6 +55,12 @@ if [ "$JARVIS_HOST" = "0.0.0.0" ]; then
     fi
 fi
 
+PYTHON_BIN="${PYTHON_BIN:-python3}"
+
 echo "Starting JARVIS server on http://$JARVIS_HOST:8000"
-echo "Token: $JARVIS_TOKEN"
-exec /Library/Frameworks/Python.framework/Versions/3.13/bin/python3 -m uvicorn jarvis_server:app --app-dir server --host "$JARVIS_HOST" --port 8000
+echo "Python: $("$PYTHON_BIN" --version)"
+exec "$PYTHON_BIN" -m uvicorn \
+    jarvis_server:app \
+    --app-dir server \
+    --host "$JARVIS_HOST" \
+    --port 8000

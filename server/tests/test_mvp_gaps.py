@@ -42,19 +42,66 @@ class TestCodeReviewGate:
         state = {'last_test_run': _good(worktree),
                  'code_review': {'verdict': 'changes_requested',
                                  'findings': [{'severity': 'blocker', 'file': 'a.py',
-                                               'issue': 'missing error handling'}]}}
+                                               'line': 1, 'issue': 'missing error handling'}],
+                                 'acceptance': []}}
         why = ' '.join(verification_blockers(state, str(worktree)))
         assert 'Code review' in why and 'missing error handling' in why
 
     def test_rejection_as_json_string_blocks(self, worktree):
         state = {'last_test_run': _good(worktree),
-                 'code_review': json.dumps({'verdict': 'rejected'})}
+                 'code_review': json.dumps({'verdict': 'rejected',
+                                            'findings': [], 'acceptance': []})}
         assert 'Code review' in ' '.join(verification_blockers(state, str(worktree)))
 
     def test_approval_verdict_does_not_block(self, worktree):
         state = {'last_test_run': _good(worktree),
+                 'code_review': {'verdict': 'approve', 'findings': [],
+                                 'acceptance': []}}
+        assert verification_blockers(state, str(worktree),
+                                     require_security=False) == []
+
+    def test_missing_acceptance_key_blocks_approval(self, worktree):
+        state = {'last_test_run': _good(worktree),
                  'code_review': {'verdict': 'approve', 'findings': []}}
-        assert verification_blockers(state, str(worktree)) == []
+        why = ' '.join(verification_blockers(state, str(worktree)))
+        assert 'code review' in why
+
+    def test_unknown_acceptance_status_blocks(self, worktree):
+        state = {'last_test_run': _good(worktree),
+                 'active_task': {'acceptance_criteria': ['handles errors']},
+                 'code_review': {'verdict': 'approve', 'findings': [],
+                                 'acceptance': [{'criterion_index': 0,
+                                                 'criterion': 'handles errors',
+                                                 'status': 'unknown'}]}}
+        why = ' '.join(verification_blockers(state, str(worktree)))
+        assert 'acceptance' in why
+
+    def test_not_met_acceptance_status_blocks(self, worktree):
+        state = {'last_test_run': _good(worktree),
+                 'active_task': {'acceptance_criteria': ['handles errors']},
+                 'code_review': {'verdict': 'approve', 'findings': [],
+                                 'acceptance': [{'criterion_index': 0,
+                                                 'criterion': 'handles errors',
+                                                 'status': 'not_met'}]}}
+        why = ' '.join(verification_blockers(state, str(worktree)))
+        assert 'acceptance' in why
+
+    def test_all_criteria_met_allows_gate(self, worktree):
+        state = {'last_test_run': _good(worktree),
+                 'active_task': {'acceptance_criteria': ['handles errors',
+                                                         'adds tests']},
+                 'code_review': {'verdict': 'approve',
+                                 'findings': [{'severity': 'info', 'file': 'a.py',
+                                               'line': 1, 'issue': 'note'}],
+                                 'acceptance': [
+                                     {'criterion_index': 0,
+                                      'criterion': 'handles errors',
+                                      'status': 'met'},
+                                     {'criterion_index': 1,
+                                      'criterion': 'adds tests',
+                                      'status': 'met'}]}}
+        assert verification_blockers(state, str(worktree),
+                                     require_security=False) == []
 
     def test_missing_review_blocks_commit(self, worktree):
         assert verification_blockers({'last_test_run': _good(worktree)}, str(worktree))

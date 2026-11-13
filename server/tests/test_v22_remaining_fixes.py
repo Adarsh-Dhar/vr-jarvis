@@ -406,7 +406,7 @@ def test_review_blockers_acceptance_completeness():
     task = {'acceptance_criteria': ['criterion one', 'criterion two']}
     # empty acceptance list with non-empty criteria blocks
     state = {'active_task': task,
-             'code_review': {'verdict': 'approve', 'acceptance': []}}
+             'code_review': {'verdict': 'approve', 'findings': [], 'acceptance': []}}
     assert review_blockers(state)
     # partial list blocks
     state['code_review']['acceptance'] = [
@@ -424,11 +424,11 @@ def test_review_blockers_acceptance_completeness():
         {'criterion': 'criterion two', 'status': 'met'}]
     assert review_blockers(state) == []
     # no active_task: behaviour unchanged
-    state2 = {'code_review': {'verdict': 'approve', 'acceptance': []}}
+    state2 = {'code_review': {'verdict': 'approve', 'findings': [], 'acceptance': []}}
     assert review_blockers(state2) == []
     # active_task as JSON string works too
     state3 = {'active_task': json.dumps(task),
-              'code_review': {'verdict': 'approve', 'acceptance': []}}
+              'code_review': {'verdict': 'approve', 'findings': [], 'acceptance': []}}
     assert review_blockers(state3)
 
 

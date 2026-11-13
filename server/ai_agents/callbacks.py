@@ -378,6 +378,31 @@ def evidence_collector(tool, args, tool_context, tool_response):
     """Phase 1.4: after_tool_callback that copies evidence from tool results into state
     and releases the concurrent-call slot taken by permission_guard."""
     state = tool_context.state
+    calling_agent = tool_context.agent_name
+
+    def release_slot():
+        concurrent_calls = state.get('concurrent_calls', {})
+        if (calling_agent in concurrent_calls
+                and concurrent_calls[calling_agent] > 0):
+            concurrent_calls[calling_agent] -= 1
+            state['concurrent_calls'] = concurrent_calls
+
+    # Tool-contract validation runs BEFORE evidence extraction: an invalid
+    # tool response must not leave evidence in state. A violation replaces
+    # the response with a structured error. Fail closed.
+    try:
+        from .registry.tool_registry import get_tool_registry
+        errors = get_tool_registry().validate_result(tool.name, tool_response)
+        if errors:
+            release_slot()
+            return {'status': 'error',
+                    'error': 'Tool %s returned an invalid result: %s' % (tool.name, '; '.join(errors)),
+                    'validation': 'output_schema'}
+    except Exception as exc:
+        release_slot()
+        return {'status': 'error',
+                'error': 'Result validation unavailable for %s: %s' % (tool.name, exc),
+                'validation': 'output_schema_unavailable'}
 
     # Initialize evidence list if needed
     if "evidence" not in state:
@@ -397,27 +422,7 @@ def evidence_collector(tool, args, tool_context, tool_response):
                     state["evidence"].append(tool_response[field])
 
     # Decrement concurrent call count
-    calling_agent = tool_context.agent_name
-    concurrent_calls = state.get('concurrent_calls', {})
-    if calling_agent in concurrent_calls and concurrent_calls[calling_agent] > 0:
-        concurrent_calls[calling_agent] -= 1
-        state['concurrent_calls'] = concurrent_calls
-
-    # Tool-contract validation: results must satisfy the registered output
-    # schema. A violation replaces the response with a structured error.
-    # Fail closed: a validation failure replaces the result rather than
-    # passing an unverified response downstream.
-    try:
-        from .registry.tool_registry import get_tool_registry
-        output_errors = get_tool_registry().validate_result(tool.name, tool_response)
-        if output_errors:
-            return {'status': 'error',
-                    'error': 'Tool %s returned an invalid result: %s' % (tool.name, '; '.join(output_errors)),
-                    'validation': 'output_schema'}
-    except Exception as exc:
-        return {'status': 'error',
-                'error': 'Result validation unavailable for %s: %s' % (tool.name, exc),
-                'validation': 'output_schema_unavailable'}
+    release_slot()
 
     return None
 

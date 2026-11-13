@@ -433,3 +433,28 @@ def test_repository_graph_dfg_status_completed_with_external_import(
     res = _repo_graph_result(graph, monkeypatch)
     assert res['status'] == 'ok'
     assert res['dfg_status'] == 'completed'
+
+
+def test_trace_cross_function_flow_from_module_definition(
+        tmp_path, monkeypatch):
+    """The public tool starts a chain at a module-level definition id and
+    reaches the consuming function through the global edge."""
+    from ai_agents.intelligence.graph_engine.codegraph import codegraph
+    from ai_agents.tools.data_flow_intelligence_tools import (
+        trace_cross_function_flow)
+    repo, graph = _build(tmp_path, monkeypatch, {
+        'config.py': 'LIMIT = 100\n',
+        'app.py': 'from config import LIMIT\n\n\n'
+                  'def f():\n    return LIMIT\n'})
+    out = _dfg(graph)
+    src_def = out.global_edges[0]['source']
+    monkeypatch.setattr(codegraph, 'load_current_graph', lambda: graph)
+
+    res = trace_cross_function_flow('', None, max_depth=3,
+                                    start_node_id=src_def)
+    assert res['status'] == 'ok'
+    assert res['start_node_id'] == src_def
+    flat = [h for chain in res['chain'] for h in chain]
+    consumers = {h.get('target_function') for h in flat
+                 if h.get('kind') == 'global'}
+    assert 'app.py::f' in consumers

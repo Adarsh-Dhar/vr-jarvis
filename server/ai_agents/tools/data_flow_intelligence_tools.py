@@ -1248,7 +1248,8 @@ def _expand_arg_uses(ctx, arg):
 def trace_cross_function_flow(
     variable_id: str,
     tool_context: ToolContext,
-    max_depth: int = 3
+    max_depth: int = 3,
+    start_node_id: Optional[str] = None
 ) -> dict:
     """Track data across function boundaries for Python.
 
@@ -1270,6 +1271,24 @@ def trace_cross_function_flow(
     Returns {'status', 'chain', 'diagnostics'} so DFG failures are visible
     instead of silently looking like 'no chain found'."""
     try:
+        if start_node_id:
+            from ..intelligence.graph_engine.codegraph import codegraph
+            graph = codegraph.load_current_graph()
+            result = _cross_function_chain(
+                graph,
+                start_node_id,
+                max_depth,
+            )
+            return {
+                'status': ('partial'
+                           if result['status'] in ('partial', 'failed')
+                           else 'ok'),
+                'start_node_id': start_node_id,
+                'chain': result['chain'],
+                'chain_status': result['status'],
+                'diagnostics': result['diagnostics'],
+                'max_depth': max_depth,
+            }
         from ..intelligence.dataflow.call_binding import bind_call
         parts = _split_variable_id(variable_id)
         if parts is None:

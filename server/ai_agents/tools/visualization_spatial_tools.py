@@ -792,15 +792,28 @@ def _visualize_repository_unified(graph, function_id, node, tool_context,
     dfg_by_fid = {}
     inter_edges = []
     skipped = []
+    dfg_diagnostics = []
     for fid in fids:
         n = graph.get(fid)
         if not n:
             skipped.append(fid)
+            dfg_diagnostics.append({
+                'stage': 'function_dfg',
+                'function_id': fid,
+                'error': 'MissingGraphNode',
+                'message': 'Function was not found in the active graph',
+            })
             continue
         try:
             cfg, dfg = _build_cfg_dfg_for_node(graph, n, fid)
-        except Exception:
+        except Exception as exc:
             skipped.append(fid)
+            dfg_diagnostics.append({
+                'stage': 'function_dfg',
+                'function_id': fid,
+                'error': type(exc).__name__,
+                'message': str(exc),
+            })
             continue
         function_graphs[fid] = UnifiedGraphBuilder().build_unified(cfg, dfg)
         dfg_by_fid[fid] = dfg
@@ -833,7 +846,6 @@ def _visualize_repository_unified(graph, function_id, node, tool_context,
     dfg_counts = {'argument_edges': 0, 'return_edges': 0,
                   'global_edges': 0, 'unresolved': 0}
     dfg_status = 'completed'
-    dfg_diagnostics = []
     repo_dfg = None
     try:
         from ..intelligence.dataflow.repository_dfg import build_repository_dfg

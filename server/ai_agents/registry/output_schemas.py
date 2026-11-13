@@ -102,9 +102,11 @@ CALL_EDGE = {'type': 'object',
 # The code reviewer's structured output (state['code_review']).
 CODE_REVIEW_SCHEMA = {
     'type': 'object',
-    'required': ['verdict', 'findings'],
+    'required': ['verdict', 'findings', 'acceptance'],
     'properties': {
-        'verdict': {'enum': ['approve', 'request_changes', 'block']},
+        'verdict': {'enum': ['approve', 'approved', 'pass', 'passed',
+                             'request_changes', 'changes_requested',
+                             'rejected', 'block', 'fail', 'failed']},
         'summary': _STR,
         'findings': {'type': 'array', 'items': FINDING_ITEM},
         'acceptance': {'type': 'array',
@@ -138,6 +140,7 @@ SECURITY_FINDING = {'type': 'object',
 # Tools that must have an explicit OUTPUT_SCHEMAS entry; a missing one fails
 # registry construction at startup.
 CORE_TOOLS = {
+    # repository / code reading
     # repository / code reading
     'get_symbol_definition', 'get_symbol_references', 'get_symbol_hover_info',
     'extract_symbols', 'parse_source_code', 'extract_function', 'get_imports',
@@ -214,7 +217,8 @@ OUTPUT_SCHEMAS = {
                   'metadata': _OBJ},
         ok_required=['graph', 'validation', 'diagnostics', 'metadata']),
     'trace_cross_function_flow': envelope(
-        ok_props={'outbound_argument_edges': {'type': 'array', 'items': _FLOW_EDGE},
+        ok_props={'start_node_id': _STR,
+                  'outbound_argument_edges': {'type': 'array', 'items': _FLOW_EDGE},
                   'inbound_return_edges': {'type': 'array', 'items': _FLOW_EDGE},
                   'chain': {'type': 'array',
                             'items': {'type': 'array', 'items': _FLOW_EDGE}},
@@ -730,6 +734,57 @@ MVP_DATA_TOOLS = {
     'explain_class', 'explain_module', 'get_selected_node_details',
     'create_investigation_plan', 'summarize_graph',
     'retrieve_conversation_context',
+    # Every remaining active tool returns data an agent or Unity consumes:
+    # repository reads, graphs, analyses, findings, test reports, diffs and
+    # architecture/design payloads. Action-only tools live in
+    # MVP_ACTION_ONLY_TOOLS; the invariant in assert_data_tool_schemas keeps
+    # the union exactly equal to MVP_TOOL_NAMES.
+    'add_component', 'add_relationship', 'analyze_architecture_boundaries',
+    'analyze_control_flow', 'analyze_dependencies',
+    'analyze_dependencies_manifest', 'analyze_repository_structure',
+    'build_call_graph', 'build_data_flow_graph', 'build_dependency_graph',
+    'calculate_change_impact', 'compare_code_elements',
+    'compare_to_repository', 'create_worktree',
+    'detect_build_system', 'detect_frameworks', 'detect_languages',
+    'detect_package_manager', 'detect_project_type',
+    'detect_repository_changes', 'discover_tests',
+    'explain_call_resolution', 'explain_condition',
+    'extract_function_contract', 'extract_requirements', 'extract_symbols',
+    'find_all_paths_between_symbols', 'find_callees', 'find_callers',
+    'find_circular_dependencies', 'find_dependents',
+    'find_indirect_callers', 'find_interface_implementations',
+    'find_tests_for_node', 'generate_implementation_plan',
+    'get_call_hierarchy', 'get_call_sites', 'get_callees', 'get_callers',
+    'get_changed_files', 'get_cluster', 'get_coverage', 'get_dependents',
+    'get_diff', 'get_exports', 'get_findings', 'get_imports', 'get_node',
+    'get_proposed_architecture', 'get_recent_commits',
+    'get_repository_metadata', 'get_runtime_trace', 'get_scope_information',
+    'get_source', 'get_symbol_definition', 'get_symbol_hover_info',
+    'get_symbol_references', 'get_type_hierarchy', 'get_worktree_diff',
+    'identify_entry_points', 'identify_external_services',
+    'identify_generated_files', 'identify_hidden_assumptions',
+    'identify_side_effects', 'identify_untested_paths',
+    'incremental_index_repository', 'index_repository',
+    'list_changed_nodes', 'list_files', 'map_tests_to_functions',
+    'measure_test_coverage', 'merge_agent_results', 'parse_source_code',
+    'propose_architecture', 'query_graph_path', 'read_file',
+    'read_file_range', 'read_test_results', 'read_worktree_file',
+    'record_finding', 'remove_component', 'remove_relationship',
+    'resolve_conflicting_findings', 'resolve_types', 'run_security_scan',
+    'run_tests', 'run_typecheck', 'search_code', 'search_graph_symbols',
+    'search_symbols', 'start_runtime_trace', 'stop_runtime_trace',
+    'trace_call_chain', 'trace_cross_function_flow',
+    'trace_cross_module_relationships', 'trace_file_operations',
+    'trace_function_logic', 'trace_parameter_flow', 'trace_path',
+    'trace_return_value_flow', 'trace_state_changes',
+    'trace_transformations', 'trace_variable_modifications',
+    'trace_variable_origin', 'trace_variable_usage', 'update_component',
+    'update_relationship', 'validate_architecture', 'verify_citations',
+    'verify_compilation', 'verify_lint', 'verify_types',
+    'visualize_architecture', 'visualize_call_graph',
+    'visualize_change_impact', 'visualize_control_flow',
+    'visualize_data_flow', 'visualize_dependency_graph',
+    'visualize_unified_graph',
 }
 
 # Action-only tools: their result is a status envelope plus scene commands;
@@ -751,6 +806,8 @@ MVP_ACTION_ONLY_TOOLS = {
     'set_edge_style', 'set_mode', 'set_panel_state', 'show_ghost_diff',
     'show_test_badges', 'summarize_investigation', 'understand_user_intent',
     'zoom_graph',
+    # Mutation/control actions whose result is a status confirmation.
+    'apply_patch_to_worktree', 'exit_loop', 'record_task_targets',
 }
 
 # Real data-bearing schemas for the MVP data tools.
@@ -807,7 +864,17 @@ def _has_data_fields(schema) -> bool:
 
 def assert_data_tool_schemas():
     """Startup check: every MVP data tool must have a schema carrying real
-    data fields. Raises RuntimeError on violation."""
+    data fields, and the classification sets must partition the active MVP
+    tool set exactly. Raises RuntimeError on violation."""
+    from ai_agents.agents.toolsets import MVP_TOOL_NAMES
+    overlap = MVP_DATA_TOOLS & MVP_ACTION_ONLY_TOOLS
+    missing = MVP_TOOL_NAMES - (MVP_DATA_TOOLS | MVP_ACTION_ONLY_TOOLS)
+    extra = (MVP_DATA_TOOLS | MVP_ACTION_ONLY_TOOLS) - MVP_TOOL_NAMES
+    if overlap or missing or extra:
+        raise RuntimeError(
+            'Tool classification invalid: '
+            'overlap=%s, missing=%s, extra=%s'
+            % (sorted(overlap), sorted(missing), sorted(extra)))
     weak = [t for t in sorted(MVP_DATA_TOOLS)
             if t not in OUTPUT_SCHEMAS
             or not _has_data_fields(OUTPUT_SCHEMAS[t])]

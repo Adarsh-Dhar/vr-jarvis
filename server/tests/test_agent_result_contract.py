@@ -147,3 +147,27 @@ def test_agent_result_view_valid_passes(repo, monkeypatch):
 def test_root_reply_stays_string():
     # conversational root output is plain text, not an AgentResult
     assert isinstance('done', str)
+
+
+def test_task_entry_invalid_evidence_path_marked_invalid(repo, monkeypatch):
+    """Acceptance: a specialist result with an evidence path escaping the
+    repository is marked invalid, not presented as a verified fact."""
+    import jarvis_server
+    monkeypatch.setattr(jarvis_server.config, 'REPO_ROOT', repo)
+    entry = jarvis_server._validated_agent_result_entry(
+        'code_understanding',
+        _result(evidence=[{'file': '../outside.py', 'line': 1}]))
+    assert entry['status'] == 'invalid'
+    assert entry['validated'] is False
+    assert entry['summary'] == ''
+    assert entry['validation_errors']
+
+
+def test_task_entry_valid_result_marked_validated(repo, monkeypatch):
+    import jarvis_server
+    monkeypatch.setattr(jarvis_server.config, 'REPO_ROOT', repo)
+    entry = jarvis_server._validated_agent_result_entry(
+        'code_understanding',
+        _result(evidence=[{'file': 'mod.py', 'line': 1}]))
+    assert entry['validated'] is True
+    assert entry['status'] == 'completed'

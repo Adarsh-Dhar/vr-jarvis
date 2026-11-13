@@ -157,9 +157,13 @@ def test_global_edge_uses_module_exit_definition():
     }
     result = analyzer.propagate_global_values(
         summaries, {'u.py': u_facts, 'm.py': m_facts},
-        module_exit_defs={'m.py': {'VAL': {
-            'definition_ids': ['m.py::top::VAL:2:0'],
-            'definitely_assigned': True}}})
+        module_exit_defs={
+            'u.py': {'VAL': {
+                'definition_ids': ['u.py::top::VAL:1:0'],
+                'definitely_assigned': True}},
+            'm.py': {'VAL': {
+                'definition_ids': ['m.py::top::VAL:2:0'],
+                'definitely_assigned': True}}})
 
     edges = result['edges']
     assert len(edges) == 1
@@ -200,10 +204,14 @@ def test_global_edge_ambiguous_exit_defs_emit_possible():
     }
     result = analyzer.propagate_global_values(
         summaries, {'u.py': u_facts, 'm.py': m_facts},
-        module_exit_defs={'m.py': {'VAL': {
-            'definition_ids': ['m.py::top::VAL:2:4',
-                               'm.py::top::VAL:4:4'],
-            'definitely_assigned': True}}})
+        module_exit_defs={
+            'u.py': {'VAL': {
+                'definition_ids': ['u.py::top::VAL:1:0'],
+                'definitely_assigned': True}},
+            'm.py': {'VAL': {
+                'definition_ids': ['m.py::top::VAL:2:4',
+                                   'm.py::top::VAL:4:4'],
+                'definitely_assigned': True}}})
     assert {e['resolution'] for e in result['edges']} == {'possible'}
     assert {e['source'] for e in result['edges']} == {
         'm.py::top::VAL:2:4', 'm.py::top::VAL:4:4'}
@@ -236,7 +244,11 @@ def test_global_edge_missing_exit_def_is_unresolved():
     }
     result = analyzer.propagate_global_values(
         summaries, {'u.py': u_facts, 'm.py': m_facts},
-        module_exit_defs={'m.py': {}})
+        module_exit_defs={
+            'u.py': {'VAL': {
+                'definition_ids': ['u.py::top::VAL:1:0'],
+                'definitely_assigned': True}},
+            'm.py': {}})
     assert result['edges'] == []
     assert any('no module-exit definition' in u['reason']
                for u in result['unresolved'])
@@ -274,10 +286,120 @@ def test_module_reassignment_edge_prefers_local_rebind():
     }
     result = analyzer.propagate_global_values(
         summaries, {'u.py': u_facts, 'm.py': m_facts},
-        module_exit_defs={'m.py': {'VAL': {
-            'definition_ids': ['m.py::top::VAL:2:0'],
-            'definitely_assigned': True}}})
+        module_exit_defs={
+            'u.py': {'VAL': {
+                'definition_ids': ['u.py::top::VAL:2:0'],
+                'definitely_assigned': True}},
+            'm.py': {'VAL': {
+                'definition_ids': ['m.py::top::VAL:2:0'],
+                'definitely_assigned': True}}})
     assert len(result['edges']) == 1
     assert result['edges'][0]['source'] == 'u.py::top::VAL:2:0'
     assert result['edges'][0]['via'] == 'reassignment'
     assert result['edges'][0]['resolution'] == 'confirmed'
+
+
+# ------------------------------------------------- same-line assignment identity
+
+def test_same_line_assignments_bind_to_own_commit_nodes():
+    """`X = 1; Y = X; X = 3` — three assignments on one line must map to
+    three distinct commit nodes; the Y = X use reaches only the first X."""
+    import ast
+    from ai_agents.intelligence.controlflow.python_cfg import (
+        PythonCFGBuilder)
+    from ai_agents.intelligence.dataflow.reaching_definitions import (
+        ReachingDefinitionsAnalyzer, reaching_definition_ids)
+
+    source = 'X = 1; Y = X; X = 3\n'
+    tree = ast.parse(source)
+    artifact = PythonCFGBuilder().build_module(
+        tree, 'm.py', source, 'm.py')
+    facts = _module_facts('m.py', source, artifact=artifact, tree=tree)
+
+    x_defs = [d for d in facts.definitions if d.variable == 'X']
+    assert len(x_defs) == 2
+    first_ids = set(x_defs[0].cfg_node_ids)
+    second_ids = set(x_defs[1].cfg_node_ids)
+    assert first_ids and second_ids
+    assert not (first_ids & second_ids)
+
+    commit_ids = {n.id for n in artifact.graph.nodes
+                  if n.metadata.get('is_commit')}
+    assert first_ids <= commit_ids
+    assert second_ids <= commit_ids
+
+    # The `Y = X` read is a single use of X on line 1.
+    x_uses = [u for u in facts.uses if u.variable == 'X' and u.line == 1]
+    assert len(x_uses) == 1
+    use = x_uses[0]
+    # Its CFG node is the evaluation node of the `Y = X` statement, not a
+    # commit node of either X assignment.
+    assert use.cfg_node_ids
+    assert not (set(use.cfg_node_ids) & (first_ids | second_ids))
+
+    analysis = ReachingDefinitionsAnalyzer().analyze(
+        artifact.graph, facts)
+    reached = reaching_definition_ids(analysis, facts, use)
+    assert x_defs[0].id in reached
+    assert x_defs[1].id not in reached
+
+
+# --------------------------------------- definition-time header expressions
+
+def test_function_decorator_and_defaults_emit_module_uses():
+    facts, _, _ = _analyze_module_reaching(
+        'm.py',
+        'LIMIT = 10\n'
+        'MODE = "r"\n'
+        'def register(f):\n'
+        '    return f\n'
+        '@register\n'
+        'def process(limit=LIMIT, *, mode=MODE):\n'
+        '    pass\n')
+    uses = {(u.variable, u.line) for u in facts.uses}
+    assert ('register', 5) in uses
+    assert ('LIMIT', 6) in uses
+    assert ('MODE', 6) in uses
+
+
+def test_class_decorator_bases_metaclass_emit_module_uses():
+    facts, _, _ = _analyze_module_reaching(
+        'm.py',
+        'def cdec(c):\n'
+        '    return c\n'
+        'class Base:\n'
+        '    pass\n'
+        'class Meta(type):\n'
+        '    pass\n'
+        '@cdec\n'
+        'class C(Base, metaclass=Meta):\n'
+        '    pass\n')
+    uses = {(u.variable, u.line) for u in facts.uses}
+    assert ('cdec', 7) in uses
+    assert ('Base', 8) in uses
+    assert ('Meta', 8) in uses
+
+
+def test_annotations_are_uses_without_future_import():
+    facts, _, _ = _analyze_module_reaching(
+        'm.py',
+        'T = int\n'
+        'R = str\n'
+        'def f(x: T) -> R:\n'
+        '    pass\n')
+    uses = {(u.variable, u.line) for u in facts.uses}
+    assert ('T', 3) in uses
+    assert ('R', 3) in uses
+
+
+def test_postponed_annotations_are_not_runtime_reads():
+    facts, _, _ = _analyze_module_reaching(
+        'm.py',
+        'from __future__ import annotations\n'
+        'T = int\n'
+        'R = str\n'
+        'def f(x: T) -> R:\n'
+        '    pass\n')
+    uses = {(u.variable, u.line) for u in facts.uses}
+    assert ('T', 4) not in uses
+    assert ('R', 4) not in uses

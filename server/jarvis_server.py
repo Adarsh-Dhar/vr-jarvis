@@ -950,6 +950,37 @@ def _agent_result_view(state):
     return answer, limitations, degraded
 
 
+def _validated_agent_result_entry(agent_name, value):
+    """One /task agent_results entry. The raw payload is validated against
+    the AgentResult envelope and repository evidence-path rules before any
+    of it is presented: an invalid result is marked 'invalid' with its
+    validation errors and an empty summary — never a verified code fact."""
+    from ai_agents.agent_result import AgentResult, validate_evidence_paths
+    entry = {
+        'agent': agent_name,
+        'summary': value.get('summary', ''),
+        'confidence': value.get('confidence', 0),
+        'status': value.get('status', 'unknown')
+    }
+    try:
+        res = _parse_agent_result(value)
+        path_errs = validate_evidence_paths(res, config.REPO_ROOT)
+        if path_errs:
+            entry.update(status='invalid', validated=False,
+                         validation_errors=path_errs, summary='')
+        elif res.status in ('partial', 'unsupported', 'failed'):
+            entry.update(status=res.status, validated=False,
+                         validation_errors=[
+                             res.reason or 'specialist reported %s'
+                             % res.status])
+        else:
+            entry['validated'] = True
+    except Exception as exc:
+        entry.update(status='invalid', validated=False,
+                     validation_errors=[str(exc)], summary='')
+    return entry
+
+
 def _build_ask_response(reply: str, error: str, state: dict) -> dict:
     """Build the standardized response for /ask and /ask/stream endpoints.
 
@@ -1224,7 +1255,9 @@ async def get_task_state(session_id: str):
     session = await ensure(session_id)
     state = session.state
 
-    # Flatten results into a list for Unity
+    # Flatten results into a list for Unity. Every specialist result is
+    # parsed and validated against the AgentResult contract first; an
+    # invalid result is reported as invalid, never as a completed answer.
     agent_results = []
     for key in ['result_repository', 'result_code_understanding', 'result_relationship',
                 'result_data_flow', 'result_software_eng', 'result_testing',
@@ -1232,12 +1265,7 @@ async def get_task_state(session_id: str):
         value = state.get(key, {})
         if value and isinstance(value, dict):
             agent_name = key.replace('result_', '')
-            agent_results.append({
-                'agent': agent_name,
-                'summary': value.get('summary', ''),
-                'confidence': value.get('confidence', 0),
-                'status': value.get('status', 'unknown')
-            })
+            agent_results.append(_validated_agent_result_entry(agent_name, value))
 
     # Extract plan summary and task list (implementation plans from /plan/generate win over ad-hoc plans)
     plan = state.get('implementation_plan') or state.get('plan') or {}

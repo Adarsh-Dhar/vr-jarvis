@@ -482,21 +482,47 @@ class CrossModuleAnalyzer:
                        'level': ib.get('import_level', 0),
                        'kind': kind}
 
-                # Module-scope reassignment: the effective module binding is
-                # the LAST top-level definition of the name in this file. If
-                # it is not the import definition, uses connect to the
-                # reassignment, not the import.
+                # Module-scope reassignment: the importer's module-exit
+                # reaching definitions decide which definition the module
+                # binding resolves to. Line order is never used — branches,
+                # same-line assignments and conditional rebinding all make
+                # "last in source" wrong.
                 reassigned_to = None
+                module_binding_error = None
                 if module_scope:
-                    top_defs = [d for d in facts.definitions
-                                if d.function_id == importer_file
-                                and d.variable == local
-                                and not (d.metadata or {})
-                                .get('is_kill_only')]
-                    if top_defs:
-                        latest = max(top_defs, key=lambda d: d.line)
-                        if latest.id != import_def_id:
-                            reassigned_to = latest
+                    importer_exit = (
+                        (module_exit_defs or {}).get(importer_file) or {}
+                    )
+                    binding_exit = importer_exit.get(local)
+                    if binding_exit is None:
+                        module_binding_error = (
+                            "importer module exit definitions unavailable"
+                        )
+                    else:
+                        importer_defs_by_id = {
+                            definition.id: definition
+                            for definition in facts.definitions
+                            if definition.function_id == importer_file
+                            and definition.variable == local
+                            and not (definition.metadata or {})
+                            .get('is_kill_only')
+                        }
+                        reached = [
+                            importer_defs_by_id[definition_id]
+                            for definition_id in
+                            binding_exit.get("definition_ids", [])
+                            if definition_id in importer_defs_by_id
+                        ]
+                        if (len(reached) == 1
+                                and binding_exit.get("definitely_assigned")):
+                            if reached[0].id != import_def_id:
+                                reassigned_to = reached[0]
+                        else:
+                            module_binding_error = (
+                                "importer module binding for %r is "
+                                "ambiguous or not definitely assigned"
+                                % local
+                            )
 
                 # Resolve the import target module once per binding.
                 target = self.resolve_import(imp, importer_file)
@@ -546,6 +572,16 @@ class CrossModuleAnalyzer:
                 rd = reaching.get(scope) if not module_scope else None
 
                 for u in uses:
+                    if module_scope and module_binding_error:
+                        unresolved.append({
+                            'module': importer_file,
+                            'import': local,
+                            'scope': scope,
+                            'reason': module_binding_error,
+                            'file': importer_file,
+                            'line': u.line,
+                        })
+                        continue
                     # Reaching-definition evidence for the use.
                     if module_scope:
                         confirmed = reassigned_to is None
@@ -643,19 +679,18 @@ class CrossModuleAnalyzer:
                             # for every reaching definition.
                             td, res = reached_defs[0], 'possible'
                             extra_possible = reached_defs[1:]
-                    elif len(cands) == 1:
-                        td, res = cands[0], 'confirmed'
-                    elif len(cands) > 1:
-                        if all(not getattr(d, 'conditional', False)
-                               for d in cands):
-                            # straight-line: last assignment reaches the use
-                            td, res = cands[-1], 'confirmed'
-                        else:
-                            # branch-dependent: ambiguous; every conditional
-                            # candidate also yields a 'possible' edge
-                            td, res = cands[-1], 'possible'
-                            extra_possible = [d for d in cands
-                                              if getattr(d, 'conditional', False)]
+                    else:
+                        # No authoritative module-exit information: never
+                        # confirm an edge from source-line ordering.
+                        unresolved.append({
+                            'module': importer_file,
+                            'import': local,
+                            'reason': 'module-exit definitions unavailable '
+                                      'for %s' % target,
+                            'file': importer_file,
+                            'line': u.line,
+                        })
+                        continue
 
                     if reassigned_to is not None:
                         # Module-level rebinding: the use connects to the

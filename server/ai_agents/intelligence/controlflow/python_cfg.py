@@ -587,6 +587,14 @@ class PythonCFGBuilder:
                 metadata={'is_commit': True, 'commits': commit_expr, 'target_type': type(target).__name__}
             )
             cfg.add_node(commit_node)
+            for name_node in ast.walk(target):
+                if (isinstance(name_node, ast.Name)
+                        and isinstance(name_node.ctx, ast.Store)):
+                    ctx.ast_index.bind(
+                        name_node,
+                        commit_id,
+                        "assignment_commit",
+                    )
             commit_nodes.append(commit_id)
             
             # Connect from target evaluation to commit
@@ -677,7 +685,14 @@ class PythonCFGBuilder:
             metadata={'is_commit': True, 'commits': commit_expr, 'operation': op_type}
         )
         cfg.add_node(commit_node)
-        
+        if (isinstance(statement.target, ast.Name)
+                and isinstance(statement.target.ctx, ast.Store)):
+            ctx.ast_index.bind(
+                statement.target,
+                commit_id,
+                "assignment_commit",
+            )
+
         # Connect compute to commit
         self._add_edge(cfg, ctx, compute_id, commit_id, 'next')
         

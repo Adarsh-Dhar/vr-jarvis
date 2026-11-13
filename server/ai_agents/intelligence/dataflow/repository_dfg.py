@@ -158,7 +158,7 @@ def _walk_module(stmts, conditional=False):
                                         True)
 
 
-def _header_exprs(stmt):
+def _header_exprs(stmt, _has_future_annotations=False):
     """Expressions evaluated by a compound statement's own header (not its
     nested bodies, which are yielded separately)."""
     if isinstance(stmt, ast.If):
@@ -173,9 +173,40 @@ def _header_exprs(stmt):
         return [stmt.subject]
     if isinstance(stmt, (ast.Try, ast.TryStar)):
         return []
-    if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef,
-                         ast.ClassDef)):
-        return []
+    if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        expressions = list(stmt.decorator_list)
+        expressions.extend(stmt.args.defaults)
+        expressions.extend(
+            value for value in stmt.args.kw_defaults
+            if value is not None
+        )
+        # Annotations are evaluated at definition time unless
+        # `from __future__ import annotations` is active.
+        if not _has_future_annotations:
+            all_args = (
+                list(stmt.args.posonlyargs)
+                + list(stmt.args.args)
+                + list(stmt.args.kwonlyargs)
+            )
+            if stmt.args.vararg:
+                all_args.append(stmt.args.vararg)
+            if stmt.args.kwarg:
+                all_args.append(stmt.args.kwarg)
+            expressions.extend(
+                arg.annotation for arg in all_args
+                if arg.annotation is not None
+            )
+            if stmt.returns is not None:
+                expressions.append(stmt.returns)
+        return expressions
+    if isinstance(stmt, ast.ClassDef):
+        expressions = list(stmt.decorator_list)
+        expressions.extend(stmt.bases)
+        if stmt.keywords:
+            expressions.extend(
+                keyword.value for keyword in stmt.keywords
+            )
+        return expressions
     return [stmt]
 
 
@@ -228,26 +259,27 @@ def _module_facts(file_path: str, source: str,
     ast_index = getattr(artifact, 'ast_index', None) if artifact else None
 
     def _stmt_nodes(stmt):
-        """Primary CFG node(s) for a module-level statement."""
+        """Return CFG nodes mapped to this exact AST statement."""
         if cfg is None:
             return []
-        ids = []
-        nid = cfg.ast_node_map.get(id(stmt))
-        if nid:
-            ids.append(nid)
-        if isinstance(stmt, (ast.Assign, ast.AugAssign)):
-            # The binding commits on is_commit nodes for this statement.
-            for n in cfg.nodes:
-                if n.metadata.get('is_commit') \
-                        and n.start_line == stmt.lineno:
-                    ids.append(n.id)
-        # de-dup, keep order
-        out, seen = [], set()
-        for i in ids:
-            if i not in seen:
-                seen.add(i)
-                out.append(i)
-        return out
+        node_id = cfg.ast_node_map.get(id(stmt))
+        return [node_id] if node_id else []
+
+    def _definition_nodes(name_node, stmt):
+        """Return the exact commit node for a module-level binding."""
+        if cfg is None:
+            return []
+        if ast_index is not None:
+            node_ids = ast_index.get_cfg_nodes(name_node)
+            roles = ast_index.get_roles(name_node)
+            commit_ids = [
+                node_id
+                for node_id, role in zip(node_ids, roles)
+                if role == "assignment_commit"
+            ]
+            if commit_ids:
+                return list(dict.fromkeys(commit_ids))
+        return _stmt_nodes(stmt)
 
     def _use_nodes(name_node, stmt, header_map):
         if cfg is None:
@@ -285,6 +317,12 @@ def _module_facts(file_path: str, source: str,
             metadata=dict(meta or {}, scope='module'),
             conditional=conditional))
 
+    _has_future_annotations = any(
+        isinstance(stmt, ast.ImportFrom)
+        and stmt.module == "__future__"
+        and any(alias.name == "annotations" for alias in stmt.names)
+        for stmt in tree.body)
+
     for node, cond in _walk_module(tree.body):
         if isinstance(node, ast.ExceptHandler):
             # `except E as e`: E is evaluated (use), e is bound then deleted.
@@ -313,7 +351,9 @@ def _module_facts(file_path: str, source: str,
             continue
 
         stmt_nodes = _stmt_nodes(node)
-        header_roots = _header_exprs(node)
+        header_roots = _header_exprs(
+            node,
+            _has_future_annotations,)
         # map every expression node under each header root to that root so
         # uses can fall back to the header's CFG node.
         hmap = {}
@@ -361,7 +401,8 @@ def _module_facts(file_path: str, source: str,
             for t in node.targets:
                 for n in _store_names(t):
                     _def(n.id, node.lineno, 'assignment', conditional=cond,
-                         column=n.col_offset, node_ids=stmt_nodes)
+                         column=n.col_offset,
+                         node_ids=_definition_nodes(n, node))
         elif isinstance(node, ast.AnnAssign):
             if node.value is not None and isinstance(node.target, ast.Name):
                 _def(node.target.id, node.lineno, 'assignment',
@@ -370,7 +411,8 @@ def _module_facts(file_path: str, source: str,
         elif isinstance(node, ast.AugAssign) and isinstance(
                 node.target, ast.Name):
             _def(node.target.id, node.lineno, 'assignment', conditional=cond,
-                 column=node.target.col_offset, node_ids=stmt_nodes)
+                 column=node.target.col_offset,
+                 node_ids=_definition_nodes(node.target, node))
         elif isinstance(node, (ast.For, ast.AsyncFor)):
             for n in _store_names(node.target):
                 _def(n.id, node.lineno, 'assignment', conditional=cond,
@@ -510,6 +552,14 @@ def _analyze_module_reaching(file_path: str, source: str):
     if isinstance(analysis, dict) and analysis.get('error'):
         raise ValueError('module reaching-definitions failed for %s: %s'
                          % (file_path, analysis['error']))
+    analysis_diagnostics = (
+        analysis.get("diagnostics", [])
+        if isinstance(analysis, dict)
+        else [])
+    for diagnostic in analysis_diagnostics:
+        if diagnostic not in facts.diagnostics:
+            facts.diagnostics.append(diagnostic)
+    diagnostics.extend(analysis_diagnostics)
 
     cfg_node_ids = {n.id for n in cfg.nodes}
     for fact in list(facts.definitions) + list(facts.uses):
@@ -663,8 +713,15 @@ def build_repository_dfg(
             if source is None:
                 source = _repo_path(rel_file).read_text(encoding='utf-8')
             try:
-                mfacts, exit_defs, _mdiag = _analyze_module_reaching(
+                mfacts, exit_defs, module_diags = _analyze_module_reaching(
                     rel_file, source)
+                for diagnostic in module_diags:
+                    unresolved.append({
+                        "file": rel_file,
+                        "stage": "module_reaching",
+                        "reason": "module analysis diagnostic",
+                        "diagnostic": diagnostic,
+                    })
                 module_exit_definitions[rel_file] = exit_defs
             except Exception as exc:
                 # CFG/fact failure: record it; cross-module resolution must

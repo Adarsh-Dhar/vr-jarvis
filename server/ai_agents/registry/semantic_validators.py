@@ -34,8 +34,7 @@ RESULT_RULES: Dict[str, List] = {
 PATH_POLICIES: Dict[str, Dict[str, str]] = {
     'read_file': {'file_path': 'active_repository'},
     'read_file_range': {'file_path': 'active_repository'},
-    'search_code': {'file_path': 'active_repository',
-                    'path': 'active_repository'},
+    'search_code': {'directory': 'active_repository'},
     'list_files': {'directory': 'active_repository',
                    'path': 'active_repository'},
     'extract_symbols': {'file_path': 'active_repository'},
@@ -52,9 +51,9 @@ PATH_POLICIES: Dict[str, Dict[str, str]] = {
     'run_unit_tests': {'test_files': 'active_worktree'},
     'run_integration_tests': {'test_files': 'active_worktree'},
     'run_regression_tests': {'test_files': 'active_worktree'},
-    'verify_compilation': {'file_path': 'active_worktree'},
-    'verify_lint': {'file_path': 'active_worktree'},
-    'verify_types': {'file_path': 'active_worktree'},
+    'verify_compilation': {'repository_path': 'active_worktree'},
+    'verify_lint': {'repository_path': 'active_worktree'},
+    'verify_types': {'repository_path': 'active_worktree'},
     'open_repository': {'repository_path': 'registered_repository'},
     'open_vr_repository': {'repository_path': 'registered_repository'},
     'get_repository_metadata': {'repository_path': 'registered_repository'},
@@ -74,6 +73,36 @@ PATH_POLICIES: Dict[str, Dict[str, str]] = {
     'run_security_scan': {'files': 'active_worktree'},
     'create_worktree': {'repository_path': 'registered_repository'},
 }
+
+PATH_POLICIES.update({
+    'search_code': {
+        'directory': 'active_repository',
+    },
+    'discover_tests': {
+        'repository_path': 'active_repository',
+    },
+    'measure_test_coverage': {
+        'repository_path': 'active_worktree',
+    },
+    'verify_compilation': {
+        'repository_path': 'active_worktree',
+    },
+    'verify_lint': {
+        'repository_path': 'active_worktree',
+    },
+    'verify_types': {
+        'repository_path': 'active_worktree',
+    },
+    'get_changed_files': {
+        'repository_path': 'active_repository',
+    },
+    'detect_languages': {
+        'repository_path': 'active_repository',
+    },
+    'trace_file_operations': {
+        'file_path': 'active_repository',
+    },
+})
 
 
 def _validate_runtime_command(args):
@@ -269,17 +298,39 @@ def _dfg_endpoints_have_evidence(result):
     graph = result.get('graph')
     if not isinstance(graph, dict):
         return None
-    edges, nodes = graph.get('edges'), graph.get('nodes') or []
+    edges = graph.get('edges')
+    nodes = graph.get('nodes')
     if not isinstance(edges, list):
-        return None
-    ids = {n.get('id') if isinstance(n, dict) else n for n in nodes}
+        return 'DFG edges must be a list'
+    if not isinstance(nodes, list):
+        return 'DFG nodes must be a list'
+    confirmed = [
+        edge for edge in edges
+        if isinstance(edge, dict)
+        and edge.get('resolution') == 'confirmed'
+    ]
+    if confirmed and not nodes:
+        return 'Confirmed DFG edges require graph nodes'
+    node_ids = []
+    for node in nodes:
+        node_id = (
+            node.get('id')
+            if isinstance(node, dict)
+            else node if isinstance(node, str)
+            else None
+        )
+        if not isinstance(node_id, str) or not node_id.strip():
+            return 'DFG node has a missing or invalid ID'
+        node_ids.append(node_id)
+    if len(node_ids) != len(set(node_ids)):
+        return 'DFG node IDs must be unique'
+    idset = set(node_ids)
     bad = 0
-    for e in edges:
-        if not isinstance(e, dict) or e.get('resolution') != 'confirmed':
-            continue
+    for e in confirmed:
         ev = e.get('evidence') or {}
-        ok = (e.get('source') and e.get('target') and e.get('kind')
-              and (not ids or (e['source'] in ids and e['target'] in ids))
+        s, t = e.get('source'), e.get('target')
+        ok = (s and t
+              and s in idset and t in idset
               and isinstance(ev, dict)
               and (ev.get('source_file') or ev.get('file'))
               and (ev.get('source_line') or ev.get('line'))
@@ -292,21 +343,34 @@ def _dfg_endpoints_have_evidence(result):
 
 
 def _test_counts_consistent(result):
-    if result.get('status') not in ('ok', 'passed', 'failed'):
+    status = result.get('status')
+    if status not in ('ok', 'passed', 'failed', 'unverified'):
         return None
-    def n(k):
-        v = result.get(k)
-        return len(v) if isinstance(v, list) else (v if isinstance(v, int) else 0)
-    p, f, s_, nr = n('passed'), n('failed'), n('skipped'), n('not_run')
+
+    def count(key):
+        value = result.get(key)
+        if isinstance(value, list):
+            return len(value)
+        if isinstance(value, int):
+            return value
+        return 0
+
+    passed = count('passed')
+    failed = count('failed')
+    skipped = count('skipped')
+    not_run = count('not_run') + count('checks_not_run')
     total = result.get('total')
-    if isinstance(total, int) and total != p + f + s_ + nr:
-        return 'total %d != passed+failed+skipped+not_run %d' % (
-            total, p + f + s_ + nr)
-    if f > 0 and result.get('status') in ('ok', 'passed'):
-        return 'failed tests reported in a passing run'
-    ec = result.get('exit_code')
-    if isinstance(ec, int) and ec != 0 and result.get('status') in ('ok', 'passed'):
-        return 'non-zero exit code reported as success'
+    if isinstance(total, int):
+        actual = passed + failed + skipped + not_run
+        if total != actual:
+            return ('total %d does not match '
+                    'the reported result count %d' % (total, actual))
+    if status in ('ok', 'passed'):
+        if failed > 0:
+            return 'failed tests reported in a passing run'
+        ec = result.get('exit_code')
+        if isinstance(ec, int) and ec != 0:
+            return 'non-zero exit code reported as success'
     return None
 
 
