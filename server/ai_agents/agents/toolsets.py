@@ -394,12 +394,19 @@ def validate_toolsets():
     return True
 
 
-def validate_instruction_tools(instructions):
+def validate_instruction_tools(instructions, delegated_routes=None):
+    delegated_routes = delegated_routes or {}
     errors = []
-    for agent, text in instructions.items():
-        allowed = set(TOOLSETS.get(agent, []))
+    for agent_name, instruction in instructions.items():
+        direct = set(TOOLSETS.get(agent_name, []))
+        delegated = set(delegated_routes.get(agent_name, {}).keys())
         for name in sorted(TOOL_LEVELS):
             pattern = r'(?<![A-Za-z0-9_])%s(?![A-Za-z0-9_])' % re.escape(name)
-            if re.search(pattern, text) and name not in allowed:
-                errors.append('%s: instruction mentions %s but its toolset lacks it' % (agent, name))
+            if not re.search(pattern, instruction or ""):
+                continue
+            if name not in direct and name not in delegated:
+                errors.append(
+                    f"{agent_name}: instruction mentions {name}, "
+                    "but it is neither a direct tool nor an approved delegated tool"
+                )
     return errors

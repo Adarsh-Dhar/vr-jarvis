@@ -15,13 +15,12 @@ from ._common import heuristic, repo_root, resolve_in_repo
 
 
 def _safe_worktree_path(file_path, worktree):
-    """Resolve file_path inside the sandbox worktree. Rejects escapes, .git, and node_modules (which is a
-    symlink to the MAIN checkout's node_modules, so a write there would leave the sandbox)."""
-    path = resolve_in_repo(file_path, root=Path(worktree))
-    rel = path.resolve().relative_to(Path(worktree).resolve())
-    if rel.parts and rel.parts[0] in ('.git', 'node_modules'):
-        raise ValueError('Path is not writable in the sandbox: ' + str(file_path))
-    return path
+    """Resolve file_path inside the sandbox worktree via the centralized
+    path resolver (WORKTREE_WRITE policy): rejects escapes, .git, and
+    node_modules (which is a symlink to the MAIN checkout's node_modules,
+    so a write there would leave the sandbox)."""
+    from .path_resolver import resolve_worktree_write
+    return resolve_worktree_write(file_path, root=Path(worktree))
 
 
 def _verification_stale(tool_context):

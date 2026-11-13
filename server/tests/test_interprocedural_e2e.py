@@ -364,3 +364,72 @@ def test_chain_query_includes_global_edges(tmp_path, monkeypatch):
     assert g['resolution'] == 'confirmed'
     assert g['source_file'] and g['target_file']
     assert g['source_line'] >= 1 and g['target_line'] >= 1
+
+
+def test_chain_from_function_traverses_module_definitions(
+        tmp_path, monkeypatch):
+    """A chain starting at a function reaches the module-level definitions
+    feeding it (global edges are traversable inbound)."""
+    from ai_agents.tools.data_flow_intelligence_tools import (
+        _cross_function_chain)
+    repo, graph = _build(tmp_path, monkeypatch, {
+        'config.py': 'LIMIT = 100\n',
+        'app.py': 'from config import LIMIT\n\n\n'
+                  'def f():\n    return LIMIT\n'})
+    out = _dfg(graph)
+    src_def = out.global_edges[0]['source']
+    res = _cross_function_chain(graph, 'app.py::f', 3)
+    chains = res['chain'] if isinstance(res, dict) else res
+    flat = [h for chain in chains for h in chain]
+    inbound = [h for h in flat if h.get('kind') == 'global'
+               and h.get('direction') == 'inbound']
+    assert inbound, 'expected an inbound global hop into a module def'
+    assert inbound[0]['source'] == src_def
+    assert inbound[0]['target_function'] == 'app.py::f'
+
+
+def _repo_graph_result(graph, monkeypatch, fid='app.py::f'):
+    from ai_agents.intelligence.graph_engine.codegraph import codegraph
+    from ai_agents.tools.visualization_spatial_tools import (
+        visualize_unified_graph)
+    monkeypatch.setattr(codegraph, 'load_current_graph', lambda: graph)
+    return visualize_unified_graph(fid, None, repository_scope=True)
+
+
+def test_repository_graph_dfg_status_completed(tmp_path, monkeypatch):
+    repo, graph = _build(tmp_path, monkeypatch, {
+        'config.py': 'LIMIT = 100\n',
+        'app.py': 'from config import LIMIT\n\n\n'
+                  'def f():\n    return LIMIT\n'})
+    res = _repo_graph_result(graph, monkeypatch)
+    assert res['status'] == 'ok'
+    assert res['dfg_status'] == 'completed'
+    assert res['diagnostics'] == []
+
+
+def test_repository_graph_dfg_status_partial_on_unresolved_import(
+        tmp_path, monkeypatch):
+    """`from config import X` where config.py has no X: the import
+    resolves to a module but the name has no definition — recorded as
+    unresolved and must downgrade dfg_status to partial."""
+    repo, graph = _build(tmp_path, monkeypatch, {
+        'config.py': 'LIMIT = 100\n',
+        'app.py': 'from config import X\n\n\n'
+                  'def f():\n    return X\n'})
+    res = _repo_graph_result(graph, monkeypatch)
+    assert res['status'] == 'ok'
+    assert res['dfg_status'] == 'partial'
+    assert any(d.get('stage') == 'repository_dfg'
+               for d in res['diagnostics'])
+
+
+def test_repository_graph_dfg_status_completed_with_external_import(
+        tmp_path, monkeypatch):
+    """Stdlib/third-party imports are 'external' unresolved — expected,
+    not incomplete analysis, so they must not downgrade dfg_status."""
+    repo, graph = _build(tmp_path, monkeypatch, {
+        'app.py': 'import os\n\n\n'
+                  'def f():\n    return os.name\n'})
+    res = _repo_graph_result(graph, monkeypatch)
+    assert res['status'] == 'ok'
+    assert res['dfg_status'] == 'completed'

@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from ... import config
-from .models import DefUseFacts, Definition, ExpressionFact
+from .models import DefUseFacts, Definition, ExpressionFact, VariableUse
 from .interprocedural import FunctionSummary, InterproceduralSummaryBuilder
 from .call_site_connector import CallSiteConnector, InterproceduralEdge
 from .cross_module import CrossModuleAnalyzer, ModuleSummary
@@ -32,10 +32,19 @@ class RepositoryDFG:
     # retained so summaries, call-site connection and cross-module propagation
     # can resolve uses to the definitions that actually reach them.
     reaching: Dict[str, ReachingDefs] = None
+    # Module-level reaching artifacts: file -> variable -> exit-state
+    # definition ids, plus the set of files whose module analysis failed
+    # (callers must not treat those as clean).
+    module_exit_definitions: Dict[str, Dict[str, Dict[str, Any]]] = None
+    module_analysis_failed: set = None
 
     def __post_init__(self):
         if self.reaching is None:
             self.reaching = {}
+        if self.module_exit_definitions is None:
+            self.module_exit_definitions = {}
+        if self.module_analysis_failed is None:
+            self.module_analysis_failed = set()
 
 
 def _repo_path(rel_file: str) -> Path:
@@ -124,60 +133,214 @@ def build_function_artifacts(graph, node: Dict[str, Any],
             'analysis': analysis}
 
 
-def _module_facts(file_path: str, source: str) -> DefUseFacts:
+# Compound statements whose bodies execute conditionally at module level.
+_MODULE_CONDITIONAL = (ast.If, ast.Try, ast.TryStar, ast.For, ast.While,
+                       ast.With, ast.AsyncFor, ast.AsyncWith, ast.Match)
+
+
+def _walk_module(stmts, conditional=False):
+    """Yield (statement, conditional) for module-level statements,
+    descending into if/try/for/while/with/match bodies and except-handler
+    bodies but never into function or class bodies (those are
+    function-scoped)."""
+    for node in stmts:
+        yield node, conditional
+        if isinstance(node, _MODULE_CONDITIONAL):
+            for field in ('body', 'orelse', 'finalbody'):
+                yield from _walk_module(getattr(node, field, None) or [],
+                                        True)
+            for handler in getattr(node, 'handlers', None) or []:
+                yield handler, True
+                yield from _walk_module(getattr(handler, 'body', None) or [],
+                                        True)
+            for case in getattr(node, 'cases', None) or []:
+                yield from _walk_module(getattr(case, 'body', None) or [],
+                                        True)
+
+
+def _header_exprs(stmt):
+    """Expressions evaluated by a compound statement's own header (not its
+    nested bodies, which are yielded separately)."""
+    if isinstance(stmt, ast.If):
+        return [stmt.test]
+    if isinstance(stmt, (ast.For, ast.AsyncFor)):
+        return [stmt.iter]
+    if isinstance(stmt, ast.While):
+        return [stmt.test]
+    if isinstance(stmt, (ast.With, ast.AsyncWith)):
+        return [i.context_expr for i in stmt.items]
+    if isinstance(stmt, ast.Match):
+        return [stmt.subject]
+    if isinstance(stmt, (ast.Try, ast.TryStar)):
+        return []
+    if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef,
+                         ast.ClassDef)):
+        return []
+    return [stmt]
+
+
+def _load_names(root):
+    """Name(Load) nodes under ``root``, pruning nested def/class/lambda
+    bodies which do not execute at module level."""
+    stack = [root]
+    while stack:
+        node = stack.pop()
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef,
+                             ast.ClassDef, ast.Lambda)):
+            continue
+        if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load):
+            yield node
+        stack.extend(ast.iter_child_nodes(node))
+
+
+def _store_names(root):
+    """Name(Store/Del) binding targets under ``root``."""
+    for node in ast.walk(root):
+        if isinstance(node, ast.Name) and isinstance(
+                node.ctx, (ast.Store, ast.Del)):
+            yield node
+
+
+def _module_facts(file_path: str, source: str,
+                  artifact=None, tree: Optional[ast.AST] = None) -> DefUseFacts:
     """Module-level DefUseFacts: top-level imports as Import/ImportFrom
     operations and top-level bindings as definitions, for
-    CrossModuleAnalyzer.analyze_module."""
+    CrossModuleAnalyzer.analyze_module.
+
+    When ``artifact`` (a CFGBuildArtifact from
+    PythonCFGBuilder.build_module) is supplied, every fact carries the CFG
+    node ids of the statement that creates/uses it and module-level reads
+    are emitted as VariableUse facts, so ReachingDefinitionsAnalyzer can
+    run over the module CFG. Without an artifact the legacy line-only facts
+    are produced (no uses, empty cfg_node_ids)."""
     facts = DefUseFacts(function_id=file_path, file=file_path)
     try:
-        tree = ast.parse(source)
+        # Reuse the caller's tree when supplied: the CFG artifact's
+        # ast_node_map / ast_index are keyed by id() of that tree's nodes,
+        # so re-parsing here would silently break every node lookup.
+        tree = tree if tree is not None else ast.parse(source)
     except Exception:
         return facts
     seq = [0]
+    used_ids = set()
 
-    # Compound statements whose bodies execute conditionally at module level.
-    _CONDITIONAL = (ast.If, ast.Try, ast.For, ast.While, ast.With,
-                    ast.AsyncFor, ast.AsyncWith)
+    cfg = getattr(artifact, 'graph', None) if artifact else None
+    ast_index = getattr(artifact, 'ast_index', None) if artifact else None
 
-    def _walk_module(stmts, conditional=False):
-        """Yield (statement, conditional) for module-level statements,
-        descending into if/try/for/while/with bodies but never into
-        function or class bodies (those are function-scoped)."""
-        for node in stmts:
-            yield node, conditional
-            if isinstance(node, _CONDITIONAL):
-                for field in ('body', 'orelse', 'finalbody'):
-                    yield from _walk_module(getattr(node, field, None) or [],
-                                            True)
+    def _stmt_nodes(stmt):
+        """Primary CFG node(s) for a module-level statement."""
+        if cfg is None:
+            return []
+        ids = []
+        nid = cfg.ast_node_map.get(id(stmt))
+        if nid:
+            ids.append(nid)
+        if isinstance(stmt, (ast.Assign, ast.AugAssign)):
+            # The binding commits on is_commit nodes for this statement.
+            for n in cfg.nodes:
+                if n.metadata.get('is_commit') \
+                        and n.start_line == stmt.lineno:
+                    ids.append(n.id)
+        # de-dup, keep order
+        out, seen = [], set()
+        for i in ids:
+            if i not in seen:
+                seen.add(i)
+                out.append(i)
+        return out
 
-    def _def(variable, line, kind, meta=None, conditional=False):
+    def _use_nodes(name_node, stmt, header_map):
+        if cfg is None:
+            return []
+        ids = list(ast_index.get_cfg_nodes(name_node)) if ast_index else []
+        if not ids:
+            expr = header_map.get(id(name_node))
+            if expr is not None:
+                nid = cfg.ast_node_map.get(id(expr))
+                if nid:
+                    ids.append(nid)
+        if not ids:
+            nid = cfg.ast_node_map.get(id(stmt))
+            if nid:
+                ids.append(nid)
+        return ids
+
+    def _fact_id(prefix, *parts):
         seq[0] += 1
+        base = '%s::%s::%s' % (file_path, prefix, ':'.join(
+            str(p) for p in parts))
+        if base in used_ids:
+            base = '%s#%d' % (base, seq[0])
+        used_ids.add(base)
+        return base
+
+    def _def(variable, line, kind, meta=None, conditional=False,
+             column=0, node_ids=None):
         facts.definitions.append(Definition(
-            id='%s::top::%s:%d' % (file_path, variable, line),
+            id=_fact_id('top', variable, line, column),
             variable=variable, function_id=file_path, file=file_path,
-            line=line, column=0, kind=kind, cfg_node_ids=[],
+            line=line, column=column, kind=kind,
+            cfg_node_ids=list(node_ids or []),
             binding_key='%s::%s' % (file_path, variable),
             metadata=dict(meta or {}, scope='module'),
             conditional=conditional))
 
     for node, cond in _walk_module(tree.body):
+        if isinstance(node, ast.ExceptHandler):
+            # `except E as e`: E is evaluated (use), e is bound then deleted.
+            stmt_nodes = _stmt_nodes(node)
+            header_roots = [node.type] if node.type is not None else []
+            hmap = {}
+            for r in header_roots:
+                for n in ast.walk(r):
+                    hmap[id(n)] = r
+            if ast_index is not None or cfg is not None:
+                for nm in _load_names_from_roots(header_roots):
+                    ids = _use_nodes(nm, node, hmap)
+                    if ids:
+                        facts.uses.append(VariableUse(
+                            id=_fact_id('use', nm.id, nm.lineno,
+                                        nm.col_offset),
+                            variable=nm.id, function_id=file_path,
+                            file=file_path, line=nm.lineno,
+                            column=nm.col_offset, cfg_node_ids=ids,
+                            binding_key='%s::%s' % (file_path, nm.id),
+                            metadata={'scope': 'module'}))
+            if node.name:
+                _def(node.name, node.lineno, 'assignment',
+                     conditional=cond, column=node.col_offset,
+                     node_ids=stmt_nodes)
+            continue
+
+        stmt_nodes = _stmt_nodes(node)
+        header_roots = _header_exprs(node)
+        # map every expression node under each header root to that root so
+        # uses can fall back to the header's CFG node.
+        hmap = {}
+        for r in header_roots:
+            if r is None:
+                continue
+            for n in ast.walk(r):
+                hmap[id(n)] = r
+
         if isinstance(node, ast.Import):
             facts.operations.append(ExpressionFact(
-                id='%s::imp:%d' % (file_path, node.lineno),
+                id=_fact_id('imp', node.lineno),
                 function_id=file_path, file=file_path,
-                line=node.lineno, column=0, cfg_node_ids=[],
+                line=node.lineno, column=0, cfg_node_ids=stmt_nodes,
                 expression=ast.unparse(node), operation='Import',
                 metadata={'scope': 'module'}))
             for a in node.names:
                 _def((a.asname or a.name).split('.')[0], node.lineno,
                      'import',
                      {'import_module': a.name, 'import_kind': 'import',
-                      'import_name': a.name}, conditional=cond)
+                      'import_name': a.name}, conditional=cond,
+                     column=node.col_offset, node_ids=stmt_nodes)
         elif isinstance(node, ast.ImportFrom):
             facts.operations.append(ExpressionFact(
-                id='%s::impf:%d' % (file_path, node.lineno),
+                id=_fact_id('impf', node.lineno),
                 function_id=file_path, file=file_path,
-                line=node.lineno, column=0, cfg_node_ids=[],
+                line=node.lineno, column=0, cfg_node_ids=stmt_nodes,
                 expression=ast.unparse(node), operation='ImportFrom',
                 metadata={'scope': 'module'}))
             for a in node.names:
@@ -186,19 +349,196 @@ def _module_facts(file_path: str, source: str) -> DefUseFacts:
                          {'import_module': node.module or '',
                           'import_level': node.level,
                           'import_kind': 'from', 'import_name': a.name},
-                         conditional=cond)
+                         conditional=cond, column=node.col_offset,
+                         node_ids=stmt_nodes)
         elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            _def(node.name, node.lineno, 'function', conditional=cond)
+            _def(node.name, node.lineno, 'function', conditional=cond,
+                 column=node.col_offset, node_ids=stmt_nodes)
         elif isinstance(node, ast.ClassDef):
-            _def(node.name, node.lineno, 'class', conditional=cond)
+            _def(node.name, node.lineno, 'class', conditional=cond,
+                 column=node.col_offset, node_ids=stmt_nodes)
         elif isinstance(node, ast.Assign):
             for t in node.targets:
-                for n in ast.walk(t):
-                    if isinstance(n, ast.Name):
-                        _def(n.id, node.lineno, 'assignment', conditional=cond)
-        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
-            _def(node.target.id, node.lineno, 'assignment', conditional=cond)
+                for n in _store_names(t):
+                    _def(n.id, node.lineno, 'assignment', conditional=cond,
+                         column=n.col_offset, node_ids=stmt_nodes)
+        elif isinstance(node, ast.AnnAssign):
+            if node.value is not None and isinstance(node.target, ast.Name):
+                _def(node.target.id, node.lineno, 'assignment',
+                     conditional=cond, column=node.target.col_offset,
+                     node_ids=stmt_nodes)
+        elif isinstance(node, ast.AugAssign) and isinstance(
+                node.target, ast.Name):
+            _def(node.target.id, node.lineno, 'assignment', conditional=cond,
+                 column=node.target.col_offset, node_ids=stmt_nodes)
+        elif isinstance(node, (ast.For, ast.AsyncFor)):
+            for n in _store_names(node.target):
+                _def(n.id, node.lineno, 'assignment', conditional=cond,
+                     column=n.col_offset, node_ids=stmt_nodes)
+        elif isinstance(node, (ast.With, ast.AsyncWith)):
+            for item in node.items:
+                if item.optional_vars is not None:
+                    for n in _store_names(item.optional_vars):
+                        _def(n.id, node.lineno, 'assignment',
+                             conditional=cond, column=n.col_offset,
+                             node_ids=stmt_nodes)
+        elif isinstance(node, ast.Delete):
+            for t in node.targets:
+                for n in _store_names(t):
+                    _def(n.id, node.lineno, 'deletion',
+                         {'is_deletion': True, 'is_kill_only': True},
+                         conditional=cond, column=n.col_offset,
+                         node_ids=stmt_nodes)
+
+        # Walrus bindings inside header expressions (e.g. `if (x := f()):`).
+        if cfg is not None:
+            for r in header_roots:
+                if r is None:
+                    continue
+                for n in ast.walk(r):
+                    if isinstance(n, ast.NamedExpr) and isinstance(
+                            n.target, ast.Name):
+                        _def(n.target.id, n.lineno, 'assignment',
+                             conditional=cond, column=n.target.col_offset,
+                             node_ids=stmt_nodes)
+
+        # Module-level reads: Load names in this statement's header/scope.
+        if cfg is not None:
+            seen_use = set()
+            for r in header_roots:
+                if r is None:
+                    continue
+                for nm in _load_names(r):
+                    key = (nm.id, nm.lineno, nm.col_offset)
+                    if key in seen_use:
+                        continue
+                    seen_use.add(key)
+                    ids = _use_nodes(nm, node, hmap)
+                    if not ids:
+                        continue
+                    facts.uses.append(VariableUse(
+                        id=_fact_id('use', nm.id, nm.lineno,
+                                    nm.col_offset),
+                        variable=nm.id, function_id=file_path,
+                        file=file_path, line=nm.lineno,
+                        column=nm.col_offset, cfg_node_ids=ids,
+                        binding_key='%s::%s' % (file_path, nm.id),
+                        metadata={'scope': 'module'}))
     return facts
+
+
+def _load_names_from_roots(roots):
+    for r in roots:
+        if r is None:
+            continue
+        yield from _load_names(r)
+
+
+def _must_assigned_bindings(cfg, facts) -> set:
+    """Binding keys definitely assigned on every normal path to the module
+    exit. Must-analysis over binding keys (any definition of the binding
+    counts), with unreachable nodes excluded."""
+    from .reaching_definitions import ReachingDefinitionsAnalyzer
+    analyzer = ReachingDefinitionsAnalyzer()
+    reachable = analyzer._calculate_reachability(cfg)
+    if not cfg.entry_node_id or cfg.entry_node_id not in reachable:
+        return set()
+
+    gen_keys: Dict[str, set] = {}
+    for d in facts.definitions:
+        for nid in d.cfg_node_ids or []:
+            gen_keys.setdefault(nid, set()).add(d.binding_key)
+
+    predecessors: Dict[str, List[str]] = {}
+    for e in cfg.edges:
+        predecessors.setdefault(e.target, []).append(e.source)
+
+    all_out = {n.id: set() for n in cfg.nodes}
+    in_sets: Dict[str, set] = {n.id: set() for n in cfg.nodes}
+    worklist = [n.id for n in cfg.nodes if n.id in reachable]
+    in_work = set(worklist)
+
+    while worklist:
+        node_id = worklist.pop(0)
+        in_work.discard(node_id)
+        preds = [p for p in predecessors.get(node_id, [])
+                 if p in reachable]
+        if node_id == cfg.entry_node_id or not preds:
+            new_in = set()
+        else:
+            new_in = set.intersection(
+                *(all_out[p] for p in preds)) if len(preds) > 1 \
+                else set(all_out[preds[0]])
+        new_out = gen_keys.get(node_id, set()) | new_in
+        if new_in != in_sets[node_id] or new_out != all_out[node_id]:
+            in_sets[node_id] = new_in
+            all_out[node_id] = new_out
+            for e in cfg.edges:
+                if e.source == node_id and e.target in reachable \
+                        and e.target not in in_work:
+                    worklist.append(e.target)
+                    in_work.add(e.target)
+
+    return in_sets.get(cfg.exit_node_id, set())
+
+
+def _analyze_module_reaching(file_path: str, source: str):
+    """Build the module CFG, extract module facts, run reaching-definitions
+    and compute per-variable exit definitions.
+
+    Returns (facts, exit_defs, diagnostics). ``exit_defs`` maps variable
+    name -> {'definition_ids', 'definitely_assigned', 'diagnostics'}.
+    Raises on unrecoverable failure; callers record it as a partial/failed
+    module analysis rather than falling back to line heuristics.
+    """
+    from ..controlflow.python_cfg import PythonCFGBuilder
+    from .reaching_definitions import ReachingDefinitionsAnalyzer
+
+    diagnostics: List[Dict[str, Any]] = []
+    tree = ast.parse(source, filename=file_path)
+    artifact = PythonCFGBuilder().build_module(
+        tree, file_path, source, file_path)
+    cfg = artifact.graph
+    for d in getattr(cfg, 'metadata', {}).get('diagnostics', []) or []:
+        diagnostics.append(d)
+
+    facts = _module_facts(file_path, source, artifact=artifact, tree=tree)
+    facts.metadata['scope'] = 'module'
+    facts.diagnostics.extend(diagnostics)
+
+    analysis = ReachingDefinitionsAnalyzer().analyze(cfg, facts)
+    if isinstance(analysis, dict) and analysis.get('error'):
+        raise ValueError('module reaching-definitions failed for %s: %s'
+                         % (file_path, analysis['error']))
+
+    cfg_node_ids = {n.id for n in cfg.nodes}
+    for fact in list(facts.definitions) + list(facts.uses):
+        bad = [i for i in (fact.cfg_node_ids or []) if i not in cfg_node_ids]
+        if bad:
+            raise ValueError('fact %s references invalid CFG node(s) %s'
+                             % (fact.id, bad))
+
+    defs_by_id = {d.id: d for d in facts.definitions}
+    exit_in = (analysis.get('in_sets') or {}).get(cfg.exit_node_id, set())
+    must_keys = _must_assigned_bindings(cfg, facts)
+
+    exit_defs: Dict[str, Dict[str, Any]] = {}
+    for def_id in exit_in:
+        d = defs_by_id.get(def_id)
+        if d is None or d.metadata.get('is_kill_only'):
+            continue
+        entry = exit_defs.setdefault(
+            d.variable, {'definition_ids': [], 'definitely_assigned': False,
+                         'diagnostics': []})
+        if def_id not in entry['definition_ids']:
+            entry['definition_ids'].append(def_id)
+    for var, entry in exit_defs.items():
+        binding_key = '%s::%s' % (file_path, var)
+        entry['definitely_assigned'] = binding_key in must_keys
+        entry['definition_ids'].sort(
+            key=lambda i: (defs_by_id[i].line,
+                           defs_by_id[i].column))
+    return facts, exit_defs, diagnostics
 
 
 def _graph_ctx_from_codegraph(graph) -> Dict[str, Any]:
@@ -315,17 +655,31 @@ def build_repository_dfg(
     all_module_files = sorted(set(list(facts_by_file) + list(module_sources)
                                   + [f for f in module_files
                                      if f.endswith('.py')]))
+    module_exit_definitions: Dict[str, Dict[str, Dict[str, Any]]] = {}
+    module_analysis_failed: set = set()
     for rel_file in all_module_files:
         try:
             source = module_sources.get(rel_file)
             if source is None:
                 source = _repo_path(rel_file).read_text(encoding='utf-8')
-            mfacts = _module_facts(rel_file, source)
+            try:
+                mfacts, exit_defs, _mdiag = _analyze_module_reaching(
+                    rel_file, source)
+                module_exit_definitions[rel_file] = exit_defs
+            except Exception as exc:
+                # CFG/fact failure: record it; cross-module resolution must
+                # not fall back to line-order heuristics for this module.
+                module_analysis_failed.add(rel_file)
+                unresolved.append({'file': rel_file,
+                                   'reason': 'module reaching-definitions '
+                                             'failed: %s' % exc})
+                mfacts = _module_facts(rel_file, source)
             fb = facts_by_file.get(rel_file)
             if fb is not None:
                 # Module-level facts first so analyze_module sees imports
                 # and top-level bindings; function facts add the uses.
                 fb.definitions[:0] = mfacts.definitions
+                fb.uses[:0] = mfacts.uses
                 fb.operations[:0] = mfacts.operations
             else:
                 fb = mfacts
@@ -363,7 +717,9 @@ def build_repository_dfg(
 
     # (5) global value propagation
     global_result = analyzer.propagate_global_values(
-        modules, facts_by_file, reaching=reaching)
+        modules, facts_by_file, reaching=reaching,
+        module_exit_defs=module_exit_definitions,
+        module_analysis_failed=module_analysis_failed)
     unresolved.extend(global_result.get('unresolved') or [])
 
     return RepositoryDFG(
@@ -373,4 +729,6 @@ def build_repository_dfg(
         summaries=summaries,
         modules=modules,
         converged=converged,
-        reaching=reaching)
+        reaching=reaching,
+        module_exit_definitions=module_exit_definitions,
+        module_analysis_failed=module_analysis_failed)

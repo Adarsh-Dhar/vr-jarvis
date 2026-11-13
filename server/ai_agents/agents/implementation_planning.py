@@ -45,7 +45,7 @@ Rules:
 - Report only what the tools return; mark unresolved items as unresolved.
 - Use record_finding for plan-level claims that need evidence.
 
-Write your output_key value as JSON: {"status": "completed|partial|unsupported|failed", "answer": str, "findings": [], "evidence": [{"file": str, "line": int}], "unresolved": [], "limitations": [], "reason": str|null}. partial/unsupported/failed require reason or limitations.
+Write your output_key value as JSON: {"status": "completed|partial|unsupported|failed", "answer": str, "findings": [], "evidence": [{"file": str, "line": int}], "unresolved": [], "limitations": [], "diagnostics": [], "reason": str|null}. partial/unsupported/failed require reason or limitations.
 Return your plan summary to state['result_implementation_planning']
 '''
 

@@ -28,7 +28,9 @@ _CATEGORIES = {rid: cat for rid, (cat, _) in RULES.items()}
 
 _SINKS = {'open', 'remove', 'unlink', 'rmtree', 'copy', 'copyfile', 'move'}
 _GUARDS = {'resolve_in_repo', 'abs_repo_path', '_safe_worktree_path',
-           'realpath'}
+           'resolve_repo_read', 'resolve_repo_write',
+           'resolve_worktree_read', 'resolve_worktree_write',
+           'path_resolver.resolve', 'realpath'}
 
 _TITLE = {
     'PY-EXEC-001': 'Dynamic code execution',

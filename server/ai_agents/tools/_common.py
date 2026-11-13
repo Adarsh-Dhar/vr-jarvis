@@ -30,38 +30,20 @@ def repo_root():
 
 def resolve_in_repo(path, root=None):
     """Resolve a relative path against the repository root and ensure it stays inside.
-    
+
     Args:
         path: A relative path (string or Path object)
         root: Optional root directory. If None, uses repo_root().
-    
+
     Returns:
         Absolute Path object resolved against the repository root.
-    
+
     Raises:
         ValueError: If the resolved path escapes the repository root.
     """
+    from .path_resolver import resolve_repo_read
     from pathlib import Path
-    
-    if root is None:
-        root = repo_root()
-    else:
-        root = Path(root)
-    
-    # Convert to Path if needed
-    if not isinstance(path, Path):
-        path = Path(path)
-    
-    # Resolve the path against the root
-    resolved = (root / path).resolve()
-    
-    # Ensure the resolved path is inside the root (no symlink escapes)
-    try:
-        resolved.relative_to(root.resolve())
-    except ValueError:
-        raise ValueError(f"Path {path} resolves outside repository root: {resolved}")
-    
-    return resolved
+    return resolve_repo_read(path, root=Path(root) if root is not None else None)
 
 
 def abs_repo_path(rel_path):

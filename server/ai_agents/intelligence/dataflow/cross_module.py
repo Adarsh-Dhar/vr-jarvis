@@ -433,7 +433,9 @@ class CrossModuleAnalyzer:
         self,
         summaries: Dict[str, ModuleSummary],
         facts_by_file: Dict[str, DefUseFacts],
-        reaching: Optional[Dict[str, Any]] = None
+        reaching: Optional[Dict[str, Any]] = None,
+        module_exit_defs: Optional[Dict[str, Dict[str, Dict[str, Any]]]] = None,
+        module_analysis_failed: Optional[set] = None,
     ) -> Dict[str, Any]:
         """Turn resolved imports into value-level 'global' edges.
 
@@ -536,6 +538,10 @@ class CrossModuleAnalyzer:
                         if d.function_id == target:
                             by_var_mod.setdefault(d.variable, []).append(d)
 
+                module_failed = bool(
+                    module_analysis_failed
+                    and target in module_analysis_failed)
+
                 # Function-scope reaching evidence, computed once.
                 rd = reaching.get(scope) if not module_scope else None
 
@@ -583,7 +589,61 @@ class CrossModuleAnalyzer:
                     cands = by_var_top.get(tname) or by_var_mod.get(tname) or []
                     td, res = None, 'unresolved'
                     extra_possible = []
-                    if len(cands) == 1:
+                    reached_defs = []
+                    if module_exit_defs is not None:
+                        # Authoritative path: the exporting module's
+                        # module-exit reaching definitions decide which
+                        # definitions can reach an importer.
+                        entry = (module_exit_defs.get(target) or {}).get(
+                            tname)
+                        if module_failed:
+                            unresolved.append({
+                                'module': importer_file,
+                                'import': local,
+                                'reason': 'target module analysis failed: '
+                                          '%s' % target,
+                                'file': importer_file,
+                                'line': u.line,
+                            })
+                            continue
+                        if entry is None:
+                            unresolved.append({
+                                'module': importer_file,
+                                'import': local,
+                                'reason': 'no module-exit definition %r in '
+                                          '%s' % (tname, target),
+                                'file': importer_file,
+                                'line': u.line,
+                            })
+                            continue
+                        defs_by_id = {d.id: d
+                                      for d in (target_facts.definitions
+                                                if target_facts else [])}
+                        reached_defs = [defs_by_id[i] for i in
+                                        entry.get('definition_ids') or []
+                                        if i in defs_by_id]
+                        if not reached_defs:
+                            unresolved.append({
+                                'module': importer_file,
+                                'import': local,
+                                'reason': 'module-exit definitions for %r '
+                                          'in %s reference unknown ids'
+                                          % (tname, target),
+                                'file': importer_file,
+                                'line': u.line,
+                            })
+                            continue
+                        definitely = bool(entry.get('definitely_assigned'))
+                        if len(reached_defs) == 1 and definitely:
+                            td, res = reached_defs[0], 'confirmed'
+                        else:
+                            # Multiple reaching definitions, or a single
+                            # definition not assigned on every path: the
+                            # import is ambiguous — emit 'possible' edges
+                            # for every reaching definition.
+                            td, res = reached_defs[0], 'possible'
+                            extra_possible = reached_defs[1:]
+                    elif len(cands) == 1:
                         td, res = cands[0], 'confirmed'
                     elif len(cands) > 1:
                         if all(not getattr(d, 'conditional', False)

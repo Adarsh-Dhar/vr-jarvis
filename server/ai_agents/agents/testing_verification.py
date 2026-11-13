@@ -41,7 +41,7 @@ Runtime tracing (only when the developer explicitly asks to execute or trace):
 6. Always report timed_out, failed, truncated and exit_code when present.
 7. Do not describe any event that get_runtime_trace did not return.
 
-Write your output_key value as JSON: {"status": "completed|partial|unsupported|failed", "answer": str, "findings": [], "evidence": [{"file": str, "line": int}], "unresolved": [], "limitations": [], "reason": str|null}. partial/unsupported/failed require reason or limitations.
+Write your output_key value as JSON: {"status": "completed|partial|unsupported|failed", "answer": str, "findings": [], "evidence": [{"file": str, "line": int}], "unresolved": [], "limitations": [], "diagnostics": [], "reason": str|null}. partial/unsupported/failed require reason or limitations.
 Return your analysis to state['result_testing']
 '''
 

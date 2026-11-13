@@ -834,6 +834,7 @@ def _visualize_repository_unified(graph, function_id, node, tool_context,
                   'global_edges': 0, 'unresolved': 0}
     dfg_status = 'completed'
     dfg_diagnostics = []
+    repo_dfg = None
     try:
         from ..intelligence.dataflow.repository_dfg import build_repository_dfg
         repo_dfg = build_repository_dfg(graph, function_ids=list(function_graphs))
@@ -918,6 +919,37 @@ def _visualize_repository_unified(graph, function_id, node, tool_context,
                                 'error': type(exc).__name__,
                                 'message': str(exc)})
 
+    # dfg_status must reflect every way the DFG evidence is incomplete:
+    # functions skipped before the pipeline ran, per-function/module
+    # analysis failures recorded as unresolved, failed module reaching
+    # analysis, and non-converged interprocedural summaries.
+    if dfg_status == 'completed':
+        if skipped:
+            dfg_status = 'partial'
+            dfg_diagnostics.append({
+                'stage': 'function_dfg', 'error': 'SkippedFunctions',
+                'message': '%d function(s) skipped before DFG analysis: %s'
+                           % (len(skipped), skipped[:10])})
+        if repo_dfg is not None:
+            # 'external' unresolved entries (stdlib/third-party imports)
+            # are expected — they are not incomplete analysis.
+            unresolved = [u for u in (repo_dfg.unresolved or [])
+                          if u.get('reason') != 'external']
+            module_failed = sorted(
+                getattr(repo_dfg, 'module_analysis_failed', None) or ())
+            converged = getattr(repo_dfg, 'converged', True)
+            if unresolved or module_failed or not converged:
+                dfg_status = 'partial'
+                dfg_diagnostics.append({
+                    'stage': 'repository_dfg',
+                    'error': 'IncompleteAnalysis',
+                    'message': '%d unresolved item(s), %d module file(s) '
+                               'failed analysis, converged=%s'
+                               % (len(unresolved), len(module_failed),
+                                  converged),
+                    'unresolved': unresolved[:10],
+                    'module_analysis_failed': module_failed[:10]})
+
     repo_graph = UnifiedGraphBuilder().build_repository_graph(
         function_graphs, inter_edges)
 
@@ -956,7 +988,9 @@ def _visualize_repository_unified(graph, function_id, node, tool_context,
         if dfg_status == 'completed':
             dfg_status = 'partial'
     if dfg_status == 'completed' and any(
-            e.get('resolution') != 'confirmed' for e in unity_edges):
+            e.get('resolution') is not None
+            and e.get('resolution') != 'confirmed'
+            for e in unity_edges):
         dfg_status = 'partial'
 
     was_summarized = False

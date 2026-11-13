@@ -29,7 +29,7 @@ Rules:
 - Mark inferred paths as inferred
 - Use record_finding for all data flow claims
 
-Write your output_key value as JSON: {"status": "completed|partial|unsupported|failed", "answer": str, "findings": [], "evidence": [{"file": str, "line": int}], "unresolved": [], "limitations": [], "reason": str|null}. partial/unsupported/failed require reason or limitations.
+Write your output_key value as JSON: {"status": "completed|partial|unsupported|failed", "answer": str, "findings": [], "evidence": [{"file": str, "line": int}], "unresolved": [], "limitations": [], "diagnostics": [], "reason": str|null}. partial/unsupported/failed require reason or limitations.
 Return your analysis to state['result_data_flow']
 '''
 

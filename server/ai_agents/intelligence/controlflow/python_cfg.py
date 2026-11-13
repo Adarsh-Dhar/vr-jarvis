@@ -44,6 +44,7 @@ class BuildContext:
     def __init__(self, function_id: str, file: str):
         self.function_id = function_id
         self.file = file
+        self.module_scope = False
         self.node_counter = 0
         self.edge_counter = 0
         self.completion_counter = 0
@@ -120,6 +121,103 @@ class BuildContext:
 
 class PythonCFGBuilder:
     """Build control-flow graphs from Python AST using FlowResult interface."""
+
+    def build_module(
+        self,
+        module_ast: ast.Module,
+        module_id: str,
+        source: str,
+        file_path: str
+    ) -> CFGBuildArtifact:
+        """Build a CFG for module-level execution.
+
+        Reuses the function statement builders so module-level if/try/for/
+        while/with/match keep their real control flow. FunctionDef,
+        AsyncFunctionDef and ClassDef statements are bound as single
+        module-initialization nodes: a top-level ``def``/``class`` binds its
+        name when the statement executes; the body is not module-execution
+        code and is never descended into.
+        """
+        cfg = ControlFlowGraph(function_id=module_id, file=file_path)
+        ctx = BuildContext(module_id, file_path)
+        ctx.module_scope = True
+
+        entry_id = ctx.generate_node_id()
+        entry_node = CFGNode(
+            id=entry_id, kind='entry', label='module_entry',
+            function_id=module_id, file=file_path,
+            start_line=getattr(module_ast, 'lineno', 1) or 1,
+            end_line=getattr(module_ast, 'end_lineno', None)
+                     or getattr(module_ast, 'lineno', 1) or 1,
+            ast_kind='Module',
+        )
+        cfg.add_node(entry_node)
+        cfg.entry_node_id = entry_id
+
+        exit_id = ctx.generate_node_id()
+        exit_node = CFGNode(
+            id=exit_id, kind='exit', label='module_exit',
+            function_id=module_id, file=file_path,
+            start_line=getattr(module_ast, 'end_lineno', None)
+                     or getattr(module_ast, 'lineno', 1) or 1,
+            end_line=getattr(module_ast, 'end_lineno', None)
+                     or getattr(module_ast, 'lineno', 1) or 1,
+            ast_kind='Module',
+        )
+        cfg.add_node(exit_node)
+        cfg.exit_node_id = exit_id
+
+        exception_exit_id = ctx.generate_node_id()
+        exception_exit_node = CFGNode(
+            id=exception_exit_id, kind='exception_exit',
+            label='module_exception_exit',
+            function_id=module_id, file=file_path,
+            start_line=entry_node.start_line, end_line=entry_node.end_line,
+            ast_kind='Module',
+        )
+        cfg.add_node(exception_exit_node)
+        cfg.exception_exit_node_id = exception_exit_id
+
+        result = self._build_suite(module_ast.body, cfg, ctx)
+
+        if not result.entry_nodes and not result.normal_exits:
+            self._add_edge(cfg, ctx, entry_id, exit_id, 'next')
+        else:
+            if result.entry_nodes:
+                self._add_edge(cfg, ctx, entry_id,
+                               result.entry_nodes[0], 'next')
+            for normal_exit in result.normal_exits:
+                self._add_edge(cfg, ctx, normal_exit, exit_id, 'next')
+
+        for completion in result.abrupt_exits:
+            if completion.kind == 'return':
+                target = completion.intended_target or exit_id
+                self._add_edge(cfg, ctx, completion.node_id, target,
+                               'return')
+            elif completion.kind == 'raise':
+                target = completion.intended_target or exception_exit_id
+                self._add_edge(cfg, ctx, completion.node_id, target,
+                               'raise')
+            elif completion.kind == 'break' and completion.intended_target:
+                self._add_edge(cfg, ctx, completion.node_id,
+                               completion.intended_target, 'break')
+            elif completion.kind == 'continue' and completion.intended_target:
+                self._add_edge(cfg, ctx, completion.node_id,
+                               completion.intended_target, 'continue')
+
+        cfg.metadata = {
+            'module_name': file_path,
+            'source_file': file_path,
+            'scope': 'module',
+            'diagnostics': ctx.diagnostics,
+        }
+        cfg.ast_node_map = ctx.ast_node_map
+
+        return CFGBuildArtifact(
+            graph=cfg,
+            ast_index=ctx.ast_index,
+            function_ast=module_ast,
+        )
 
     def build_function(
         self,
@@ -285,6 +383,10 @@ class PythonCFGBuilder:
         )
 
     def _build_statement(self, statement, cfg, ctx) -> FlowResult:
+        if getattr(ctx, 'module_scope', False) and isinstance(
+                statement, (ast.FunctionDef, ast.AsyncFunctionDef,
+                             ast.ClassDef)):
+            return self._build_module_binding(statement, cfg, ctx)
         if isinstance(statement, ast.If):
             return self._build_if(statement, cfg, ctx)
         elif isinstance(statement, ast.For):
@@ -330,6 +432,22 @@ class PythonCFGBuilder:
             return self._build_simple_statement(statement, cfg, ctx)
         else:
             return self._build_simple_statement(statement, cfg, ctx)
+
+    def _build_module_binding(self, statement, cfg, ctx) -> FlowResult:
+        """Module-scope def/class: a single binding node, body not executed."""
+        kind = 'class' if isinstance(statement, ast.ClassDef) else 'function'
+        node_id = self._create_statement_node(
+            statement, 'statement', '%s %s' % (kind, statement.name),
+            cfg, ctx)
+        ctx.ast_index.bind(statement, node_id, 'module_binding')
+        if isinstance(statement, ast.ClassDef):
+            ctx.add_diagnostic(
+                'module_class_body_not_modeled', statement.lineno,
+                'Class body statements are not modeled as module-execution '
+                'flow; only the class name binding is represented.',
+                'info')
+        return FlowResult(entry_nodes=[node_id], normal_exits=[node_id],
+                          abrupt_exits=[])
 
     def _create_statement_node(self, statement, kind, label, cfg, ctx) -> str:
         node_id = ctx.generate_node_id()

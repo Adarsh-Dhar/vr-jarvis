@@ -28,7 +28,7 @@ Rules:
 - Never fabricate graph elements
 - Rendering is done by Unity, not by you
 
-Write your output_key value as JSON: {"status": "completed|partial|unsupported|failed", "answer": str, "findings": [], "evidence": [{"file": str, "line": int}], "unresolved": [], "limitations": [], "reason": str|null}. partial/unsupported/failed require reason or limitations.
+Write your output_key value as JSON: {"status": "completed|partial|unsupported|failed", "answer": str, "findings": [], "evidence": [{"file": str, "line": int}], "unresolved": [], "limitations": [], "diagnostics": [], "reason": str|null}. partial/unsupported/failed require reason or limitations.
 Return your analysis to state['result_visualization']
 '''
 

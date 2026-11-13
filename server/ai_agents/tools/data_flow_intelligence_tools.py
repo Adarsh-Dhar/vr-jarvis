@@ -1138,9 +1138,14 @@ def _cross_function_chain(graph, start_function_id, max_depth):
 
     Directed by data flow: 'argument' edges go caller -> callee, 'return'
     edges go callee -> caller (a returned value feeding the next call).
-    BFS from ``start_function_id`` up to ``max_depth`` hops; each hop is
-    {source, target, kind, resolution, file, line}. Returns [] when the
-    pipeline cannot run — the one-hop edges above remain the evidence."""
+    'global' edges connect a module-level definition to each use inside a
+    function; they are traversable in both directions so a chain starting
+    at a function reaches the module definitions feeding it (marked
+    direction='inbound') and a chain starting at a definition reaches its
+    consumers. BFS from ``start_function_id`` up to ``max_depth`` hops;
+    each hop is {source, target, kind, resolution, file, line}. Returns
+    [] when the pipeline cannot run — the one-hop edges above remain the
+    evidence."""
     try:
         from ..intelligence.dataflow.repository_dfg import build_repository_dfg
         repo_dfg = build_repository_dfg(graph)
@@ -1173,7 +1178,7 @@ def _cross_function_chain(graph, start_function_id, max_depth):
         src_def = g.get('source')
         if not tf or not src_def:
             continue
-        adj.setdefault(src_def, []).append((tf, {
+        hop = {
             'source': src_def, 'target': g.get('target'),
             'kind': 'global', 'resolution': g.get('resolution'),
             'source_function': None, 'target_function': tf,
@@ -1181,23 +1186,34 @@ def _cross_function_chain(graph, start_function_id, max_depth):
             'source_line': g.get('source_line'),
             'target_file': g.get('target_file') or g.get('file'),
             'target_line': g.get('target_line'),
-            'file': g.get('file'), 'line': g.get('line')}))
+            'file': g.get('file'), 'line': g.get('line')}
+        adj.setdefault(src_def, []).append((tf, hop))
+        # Reverse hop: a chain starting at the consuming function can
+        # traverse into the module-level definition feeding it (and onward
+        # to that definition's other consumers). The hop keeps its
+        # data-flow direction (source=definition, target=use) so callers
+        # can still tell which way the value moves.
+        adj.setdefault(tf, []).append(
+            (src_def, dict(hop, direction='inbound')))
 
     # Each emitted path is one chain: a list of hop dicts from the queried
     # function outward, up to max_depth.
     chains = []
-    frontier = [(start_function_id, [])]
+    # Visited sets track node ids (function ids and module-definition ids),
+    # not hop targets: global hops target a use id, so target comparison
+    # alone cannot detect cycles through module definitions.
+    frontier = [(start_function_id, [], frozenset([start_function_id]))]
     while frontier and len(chains) < 50:
-        cur, hops = frontier.pop(0)
+        cur, hops, visited = frontier.pop(0)
         if len(hops) >= max_depth:
             continue
         for nxt, hop in adj.get(cur, []):
-            if any(h['target'] == nxt for h in hops) or nxt == start_function_id:
+            if nxt in visited:
                 continue
             new_hops = hops + [hop]
             chains.append(new_hops)
             if len(new_hops) < max_depth:
-                frontier.append((nxt, new_hops))
+                frontier.append((nxt, new_hops, visited | {nxt}))
     status = 'completed' if chains else 'no_chain_found'
     flat = [h for chain in chains for h in chain]
     if any(h.get('resolution') != 'confirmed' for h in flat):

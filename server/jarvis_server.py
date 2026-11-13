@@ -229,9 +229,30 @@ def _s(value):
 
 _session_create_lock = asyncio.Lock()
 
+# Lease-based session management: sessions carry a '_lease' record in
+# their state (holder + expiry) so eviction and repo-switch guards only
+# touch sessions whose lease is live. Works on both the sqlite and the
+# in-memory backend because the record lives in session state.
+from ai_agents.intelligence.session_leases import SessionLeaseManager
+_session_leases = SessionLeaseManager()
+
+
+async def _session_lease_state(sid):
+    """(has_live_lease, lease_dict) for eviction decisions."""
+    sess = await sessions.get_session(app_name=APP, user_id=USER,
+                                      session_id=sid)
+    if sess is None:
+        return False, None
+    lease = (sess.state or {}).get('_lease')
+    if not isinstance(lease, dict):
+        return False, None
+    live = float(lease.get('expires_at', 0)) > time.time()
+    return live, lease
+
 
 async def _session_is_safe_to_evict(sid) -> bool:
-    """A session may only be evicted when nothing in its real state would be
+    """A session may only be evicted when its lease is live-or-absent,
+    it is past the idle timeout, and nothing in its real state would be
     lost: no running turn (lock held), no worktree on disk, no pending
     approval, no unpromoted commit, no in-flight design/plan work."""
     if locks[sid].locked():
@@ -284,6 +305,12 @@ async def ensure(session_id):
                 session = await sessions.create_session(
                     app_name=APP, user_id=USER, session_id=session_id)
     session_last_used[session_id] = time.time()
+    # Renew the session lease on every access; a live lease held by a
+    # different holder is reported but not stolen.
+    try:
+        await _session_leases.acquire_async(sessions, session)
+    except Exception:
+        pass  # lease bookkeeping must never break session access
     return session
 
 
@@ -350,8 +377,20 @@ async def _register_persisted_sessions():
     asyncio.get_event_loop().create_task(_trace_gc())
     try:
         resp = await sessions.list_sessions(app_name=APP, user_id=USER)
-        for sess in (getattr(resp, 'sessions', None) or []):
+        persisted = list(getattr(resp, 'sessions', None) or [])
+        for sess in persisted:
             session_last_used.setdefault(sess.id, time.time())
+        # Lease migration: pre-lease persisted sessions get an initial
+        # lease record so they are never treated as unowned/abandoned.
+        from ai_agents.intelligence.session_leases import (
+            migrate_legacy_sessions)
+        migrated = await migrate_legacy_sessions(
+            sessions, APP, USER,
+            list_sessions=lambda app_name, user_id: sessions.list_sessions(
+                app_name=app_name, user_id=user_id))
+        if migrated:
+            logging.getLogger('uvicorn.error').info(
+                'migrated %d session(s) to lease records', migrated)
     except Exception as exc:   # in-memory service or empty DB
         logging.getLogger('uvicorn.error').info('no persisted sessions registered: %s', exc)
 
@@ -863,20 +902,45 @@ def _code_review_summary(state):
             'security': cr.get('security') or {'status': 'not_analysed'}}
 
 
+def _parse_agent_result(value):
+    """Fail-closed adapter: dicts, JSON strings and AgentResult instances are
+    accepted; anything else raises TypeError."""
+    from ai_agents.agent_result import AgentResult
+
+    if isinstance(value, AgentResult):
+        return value
+    if isinstance(value, dict):
+        return AgentResult.model_validate(value)
+    if isinstance(value, str):
+        return AgentResult.model_validate_json(value)
+    raise TypeError(f"unsupported specialist result type: {type(value).__name__}")
+
+
 def _agent_result_view(state):
     """Validate state['result_*'] payloads against the common AgentResult
     contract. Returns (answer, limitations, degraded): the first specialist
     answer found, evidence-path validation errors, and whether any result
-    failed validation."""
+    failed validation. Malformed populated results degrade the response
+    rather than disappearing silently."""
     from ai_agents.agent_result import AgentResult, validate_evidence_paths
     limitations, degraded, answer = [], False, ''
     for key, value in state.items():
-        if not key.startswith('result_') or not isinstance(value, dict):
+        if not key.startswith('result_'):
             continue
+        if value is None or value == '' or value == {} or value == []:
+            continue  # specialist did not run / produced nothing
         try:
-            res = AgentResult.model_validate(value)
-        except Exception:
+            res = _parse_agent_result(value)
+        except Exception as exc:
+            degraded = True
+            limitations.append('%s: result failed AgentResult validation: %s'
+                               % (key, exc))
             continue
+        if res.status in ('partial', 'unsupported', 'failed'):
+            degraded = True
+            if res.reason:
+                limitations.append('%s: %s' % (key, res.reason))
+            limitations.extend('%s: %s' % (key, lim) for lim in res.limitations)
         errs = validate_evidence_paths(res, config.REPO_ROOT)
         if errs:
             degraded = True
