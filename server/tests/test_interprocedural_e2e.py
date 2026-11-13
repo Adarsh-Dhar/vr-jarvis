@@ -458,3 +458,48 @@ def test_trace_cross_function_flow_from_module_definition(
     consumers = {h.get('target_function') for h in flat
                  if h.get('kind') == 'global'}
     assert 'app.py::f' in consumers
+
+
+def test_trace_cross_function_flow_module_start_passes_output_contract(
+        tmp_path, monkeypatch):
+    """The module-global trace response must satisfy the registered output
+    schema — the same validation evidence_collector runs after the tool."""
+    from ai_agents.intelligence.graph_engine.codegraph import codegraph
+    from ai_agents.tools.data_flow_intelligence_tools import (
+        trace_cross_function_flow)
+    from ai_agents.registry.tool_registry import get_tool_registry
+    repo, graph = _build(tmp_path, monkeypatch, {
+        'config.py': 'LIMIT = 100\n',
+        'app.py': 'from config import LIMIT\n\n\n'
+                  'def f():\n    return LIMIT\n'})
+    out = _dfg(graph)
+    src_def = out.global_edges[0]['source']
+    monkeypatch.setattr(codegraph, 'load_current_graph', lambda: graph)
+
+    res = trace_cross_function_flow('', None, max_depth=3,
+                                    start_node_id=src_def)
+    assert res['status'] == 'ok'
+    assert get_tool_registry().validate_result(
+        'trace_cross_function_flow', res) == []
+
+
+def test_trace_cross_function_flow_no_path_passes_output_contract(
+        tmp_path, monkeypatch):
+    """A start node with no interprocedural chain reports 'unresolved' and
+    must still satisfy the output contract."""
+    from ai_agents.intelligence.graph_engine.codegraph import codegraph
+    from ai_agents.tools.data_flow_intelligence_tools import (
+        trace_cross_function_flow)
+    from ai_agents.registry.tool_registry import get_tool_registry
+    repo, graph = _build(tmp_path, monkeypatch, {
+        'config.py': 'LIMIT = 100\n',
+        'app.py': 'from config import LIMIT\n\n\n'
+                  'def f():\n    return LIMIT\n'})
+    monkeypatch.setattr(codegraph, 'load_current_graph', lambda: graph)
+
+    res = trace_cross_function_flow('', None, max_depth=3,
+                                    start_node_id='missing.py::nope')
+    assert res['status'] == 'unresolved'
+    assert res['chain'] == []
+    assert get_tool_registry().validate_result(
+        'trace_cross_function_flow', res) == []

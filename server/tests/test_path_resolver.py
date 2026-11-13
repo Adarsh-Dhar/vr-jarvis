@@ -138,3 +138,25 @@ def test_active_repository_policy_blocks_dotdot(repo, monkeypatch):
             ('trace_file_operations', {'file_path': '../../etc/passwd'})):
         errs = _policy_errors(tool, args, repo, monkeypatch)
         assert errs, (tool, args)
+
+
+def test_repository_selection_policy(tmp_path, monkeypatch):
+    """index_repository / incremental_index_repository take a repository
+    name ('.' or '' = active repo), validated against registered repos —
+    not resolved as a path inside the active repository."""
+    import ai_agents.config as config
+    repos = tmp_path / 'repos'
+    (repos / 'alpha').mkdir(parents=True)
+    (repos / 'beta').mkdir()
+    monkeypatch.setattr(config, 'REPOSITORY_DIR', repos)
+    from ai_agents.registry.semantic_validators import semantic_errors
+    for tool in ('index_repository', 'incremental_index_repository'):
+        assert semantic_errors(tool, {'repository_path': 'alpha'}) == []
+        assert semantic_errors(tool, {'repository_path': '.'}) == []
+        assert semantic_errors(tool, {'repository_path': ''}) == []
+        assert semantic_errors(tool, {'repository_path': 'gamma'})
+        assert semantic_errors(tool, {'repository_path': 42})
+        # The tools reduce the value to Path(...).name before activate(),
+        # so a path whose basename is registered selects that repository.
+        assert semantic_errors(
+            tool, {'repository_path': 'some/dir/beta'}) == []

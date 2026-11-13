@@ -35,6 +35,53 @@ class AgentSpec:
         self.skills = skills or []
 
 
+def _result_contract_callback(output_key: str):
+    """after_agent_callback enforcing the AgentResult contract at the
+    specialist boundary.
+
+    output_key is written to session state before this callback runs, so
+    the payload is parsed and its evidence paths checked immediately —
+    before another agent or the API treats it as a trusted result. An
+    invalid payload is replaced by a structured 'failed' AgentResult and
+    the violation is appended to state['specialist_validation_errors']; the
+    API-side validation in jarvis_server still runs as a second layer."""
+    def _check(callback_context):
+        from .. import config
+        from ..agent_result import AgentResult, validate_evidence_paths
+        state = callback_context.state
+        raw = state.get(output_key)
+        if raw is None or raw == '' or raw == {} or raw == []:
+            return None
+        try:
+            if isinstance(raw, AgentResult):
+                res = raw
+            elif isinstance(raw, dict):
+                res = AgentResult.model_validate(raw)
+            elif isinstance(raw, str):
+                res = AgentResult.model_validate_json(raw)
+            else:
+                raise TypeError('unsupported result type: %s'
+                                % type(raw).__name__)
+            path_errs = validate_evidence_paths(res, config.REPO_ROOT)
+            if path_errs:
+                raise ValueError('; '.join(path_errs))
+        except Exception as exc:
+            degraded = AgentResult(
+                status='failed',
+                reason='Result failed AgentResult validation for %s: %s'
+                       % (output_key, exc))
+            state[output_key] = degraded.model_dump_json()
+            log = state.get('specialist_validation_errors')
+            if not isinstance(log, list):
+                log = []
+            log.append({'agent': callback_context.agent_name,
+                        'key': output_key, 'error': str(exc),
+                        'raw': str(raw)[:500]})
+            state['specialist_validation_errors'] = log
+        return None
+    return _check
+
+
 def make_specialist(spec: AgentSpec) -> LlmAgent:
     """
     Build an LlmAgent from a specification.
@@ -85,6 +132,7 @@ def make_specialist(spec: AgentSpec) -> LlmAgent:
         before_agent_callback=log_agent_start,
         before_tool_callback=permission_guard,
         after_tool_callback=evidence_collector,
+        after_agent_callback=_result_contract_callback(spec.output_key),
     )
 
     # Store permission ceiling and tool budget in registry for callbacks

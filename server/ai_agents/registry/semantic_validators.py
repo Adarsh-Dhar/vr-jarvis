@@ -9,11 +9,39 @@ import os
 from pathlib import Path
 from typing import Any, Dict, List
 
+def _repository_selection(args):
+    """index_repository / incremental_index_repository take a repository
+    name — or '.'/'' for the active repository — not a path inside the
+    active repository, so the generic relative-path resolver does not
+    apply. The tools reduce the value to Path(...).name and store.activate
+    requires it to be a direct child of REPOSITORY_DIR; validate the same
+    basename against the registered repository list."""
+    raw = args.get('repository_path')
+    if raw is None:
+        return None
+    if not isinstance(raw, str):
+        return 'repository_path must be a string'
+    value = raw.strip()
+    if value in ('', '.'):
+        return None
+    try:
+        from ..intelligence.graph_engine.store import list_repos
+        names = set(list_repos())
+    except Exception as exc:
+        return 'repository selection could not be validated: %s' % exc
+    if Path(value).name not in names:
+        return ('repository_path must select a registered repository: %s'
+                % raw)
+    return None
+
+
 # Per-tool argument rules: each returns an error string or None.
 ARG_RULES: Dict[str, List] = {
     'read_file_range': [
         lambda a: 'start_line must be <= end_line'
         if a.get('start_line', 0) > a.get('end_line', 0) else None],
+    'index_repository': [_repository_selection],
+    'incremental_index_repository': [_repository_selection],
 }
 
 # Per-tool result rules.
@@ -365,12 +393,25 @@ def _test_counts_consistent(result):
         if total != actual:
             return ('total %d does not match '
                     'the reported result count %d' % (total, actual))
+    not_run_value = (result.get('checks_not_run')
+                     if 'checks_not_run' in result
+                     else result.get('not_run'))
+    not_run_seen = (len(not_run_value) if isinstance(not_run_value, list)
+                    else not_run_value or 0)
     if status in ('ok', 'passed'):
-        if failed > 0:
-            return 'failed tests reported in a passing run'
-        ec = result.get('exit_code')
-        if isinstance(ec, int) and ec != 0:
-            return 'non-zero exit code reported as success'
+        if passed == 0:
+            return 'Passing status requires at least one passed test'
+        if failed:
+            return 'Failed tests reported in a passing run'
+        if not_run_seen:
+            return 'A passing run contains tests that were not executed'
+        exit_code = result.get('exit_code')
+        if isinstance(exit_code, int) and exit_code != 0:
+            return 'Non-zero exit code reported as success'
+    if status == 'failed':
+        exit_code = result.get('exit_code')
+        if not failed and exit_code in (None, 0):
+            return 'Failed status has no failed tests or non-zero exit code'
     return None
 
 

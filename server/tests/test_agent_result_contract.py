@@ -171,3 +171,65 @@ def test_task_entry_valid_result_marked_validated(repo, monkeypatch):
         _result(evidence=[{'file': 'mod.py', 'line': 1}]))
     assert entry['validated'] is True
     assert entry['status'] == 'completed'
+
+
+# ------------------------------------------------- specialist boundary check
+
+def _boundary_ctx(state):
+    from types import SimpleNamespace
+    return SimpleNamespace(state=state, agent_name='code_understanding')
+
+
+def test_boundary_callback_keeps_valid_result(repo, monkeypatch):
+    """A contract-valid output_key payload passes through unchanged."""
+    import ai_agents.config as config
+    from ai_agents.agents.base import _result_contract_callback
+    monkeypatch.setattr(config, 'REPO_ROOT', repo)
+    payload = json.dumps(_result(evidence=[{'file': 'mod.py', 'line': 1}]))
+    state = {'result_code_understanding': payload}
+    _result_contract_callback('result_code_understanding')(
+        _boundary_ctx(state))
+    assert state['result_code_understanding'] == payload
+    assert not state.get('specialist_validation_errors')
+
+
+def test_boundary_callback_rewrites_malformed_json(repo, monkeypatch):
+    """Malformed specialist output is replaced by a structured 'failed'
+    AgentResult at write time, before any consumer sees it."""
+    import ai_agents.config as config
+    from ai_agents.agents.base import _result_contract_callback
+    monkeypatch.setattr(config, 'REPO_ROOT', repo)
+    state = {'result_code_understanding': '{broken json'}
+    _result_contract_callback('result_code_understanding')(
+        _boundary_ctx(state))
+    rewritten = json.loads(state['result_code_understanding'])
+    assert rewritten['status'] == 'failed'
+    assert 'AgentResult validation' in rewritten['reason']
+    errs = state['specialist_validation_errors']
+    assert errs and errs[0]['key'] == 'result_code_understanding'
+
+
+def test_boundary_callback_rejects_evidence_escape(repo, monkeypatch):
+    """An AgentResult whose evidence path escapes the repository is
+    degraded at the boundary, not just at API response time."""
+    import ai_agents.config as config
+    from ai_agents.agents.base import _result_contract_callback
+    monkeypatch.setattr(config, 'REPO_ROOT', repo)
+    state = {'result_code_understanding': json.dumps(
+        _result(evidence=[{'file': '../outside.py', 'line': 1}]))}
+    _result_contract_callback('result_code_understanding')(
+        _boundary_ctx(state))
+    rewritten = json.loads(state['result_code_understanding'])
+    assert rewritten['status'] == 'failed'
+    assert state['specialist_validation_errors']
+
+
+def test_boundary_callback_ignores_empty_result(repo, monkeypatch):
+    import ai_agents.config as config
+    from ai_agents.agents.base import _result_contract_callback
+    monkeypatch.setattr(config, 'REPO_ROOT', repo)
+    state = {'result_code_understanding': ''}
+    _result_contract_callback('result_code_understanding')(
+        _boundary_ctx(state))
+    assert state['result_code_understanding'] == ''
+    assert 'specialist_validation_errors' not in state

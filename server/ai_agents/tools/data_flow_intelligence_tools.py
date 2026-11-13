@@ -1279,16 +1279,30 @@ def trace_cross_function_flow(
                 start_node_id,
                 max_depth,
             )
-            return {
-                'status': ('partial'
-                           if result['status'] in ('partial', 'failed')
-                           else 'ok'),
+            chain_status = result.get('status', 'failed')
+            status_map = {
+                'completed': 'ok',
+                'partial': 'partial',
+                'failed': 'error',
+                'unsupported': 'unsupported',
+                'no_chain_found': 'unresolved',
+            }
+            response = {
+                'status': status_map.get(chain_status, 'error'),
                 'start_node_id': start_node_id,
-                'chain': result['chain'],
-                'chain_status': result['status'],
-                'diagnostics': result['diagnostics'],
+                'outbound_argument_edges': [],
+                'inbound_return_edges': [],
+                'chain': result.get('chain', []),
+                'unresolved': result.get('diagnostics', []),
+                'diagnostics': result.get('diagnostics', []),
+                'chain_status': chain_status,
                 'max_depth': max_depth,
             }
+            if response['status'] == 'error':
+                response['error'] = '; '.join(
+                    str(d) for d in response['diagnostics']
+                ) or 'Cross-function flow analysis failed'
+            return response
         from ..intelligence.dataflow.call_binding import bind_call
         parts = _split_variable_id(variable_id)
         if parts is None:

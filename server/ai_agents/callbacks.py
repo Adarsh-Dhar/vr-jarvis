@@ -13,7 +13,7 @@ PER_TURN_KEYS = ['security_scan', 'changed_nodes', 'impact_static', 'tests_relev
                  'result_repository', 'result_code_understanding', 'result_relationship',
                  'result_data_flow', 'result_software_eng', 'result_testing',
                  'result_visualization', 'result_orchestrator', 'result_conversational',
-                 'result_implementation_planning']
+                 'result_implementation_planning', 'specialist_validation_errors']
 
 
 def init_state(callback_context):

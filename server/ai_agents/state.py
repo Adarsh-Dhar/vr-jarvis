@@ -27,6 +27,7 @@ KEYS = [
     'result_visualization', # Visualization output
     'result_orchestrator',  # Orchestrator output
     'result_conversational', # Conversational output
+    'specialist_validation_errors',  # AgentResult contract violations at the specialist boundary
     'task_log',         # History of tasks and their status
     'tool_budgets',     # Tool budget tracking per agent (session state)
     # Prompt state keys
@@ -43,6 +44,7 @@ DEFAULT_STATE = {key: '' for key in KEYS}
 DEFAULT_STATE.update({
     'evidence': [],
     'findings': [],
+    'specialist_validation_errors': [],
     'scene_commands': [],
     'approved': False,
     'pending_approval': '',

@@ -180,6 +180,10 @@ def _minimal_valid_args(tool, reg):
             args[pname] = {}
         elif pschema.get('enum'):
             args[pname] = pschema['enum'][0]
+        elif _tool_callable_name(tool) in (
+                'index_repository', 'incremental_index_repository') \
+                and pname == 'repository_path':
+            args[pname] = '.'   # repository name, not a repo-relative path
         else:
             args[pname] = 'x'
     return args
@@ -260,3 +264,37 @@ def test_tool_registry_contracts():
                                 'failed': [], 'skipped': [],
                                 'checks_not_run': []})
     assert good == []
+
+
+def test_test_result_semantic_rules():
+    """_test_counts_consistent must reject semantically impossible runs,
+    not just count mismatches."""
+    from ai_agents.registry.semantic_validators import (
+        semantic_result_errors)
+    base = {'status': 'passed', 'passed': ['t::a'], 'failed': [],
+            'skipped': [], 'checks_not_run': [], 'exit_code': 0}
+    assert semantic_result_errors('run_tests', dict(base)) == []
+    # passing status with zero passed tests
+    assert semantic_result_errors('run_tests', dict(base, passed=[]))
+    # passing status with failed tests reported
+    assert semantic_result_errors('run_tests', dict(base, failed=['t::b']))
+    # passing status with requested checks not executed
+    assert semantic_result_errors(
+        'run_tests', dict(base, checks_not_run=['tests/x.py']))
+    assert semantic_result_errors(
+        'run_tests', {'status': 'passed', 'passed': ['t::a'], 'failed': [],
+                      'skipped': [], 'not_run': ['tests/x.py'],
+                      'exit_code': 0})
+    # non-zero exit code reported as success
+    assert semantic_result_errors('run_tests', dict(base, exit_code=1))
+    # failed status with no failed tests and a zero/missing exit code
+    assert semantic_result_errors('run_tests',
+                                  {'status': 'failed', 'passed': [],
+                                   'failed': [], 'exit_code': 0})
+    assert semantic_result_errors('run_tests',
+                                  {'status': 'failed', 'passed': [],
+                                   'failed': []})
+    # failed status backed by a real failure is consistent
+    assert semantic_result_errors(
+        'run_tests', {'status': 'failed', 'passed': ['t::a'],
+                      'failed': ['t::b'], 'exit_code': 1}) == []
