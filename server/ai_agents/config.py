@@ -53,3 +53,7 @@ MAX_EDIT_BYTES = int(os.getenv('JARVIS_MAX_EDIT_BYTES', '524288'))
 # instead of running the independent reviewer agent. Off by default: the
 # independent check should not be silently skipped.
 ALLOW_HUMAN_REVIEW = os.getenv('JARVIS_ALLOW_HUMAN_REVIEW', '0') == '1'
+
+# Scale limits: cap indexed files and page large /graph responses.
+MAX_FILES = int(os.getenv('JARVIS_MAX_FILES', '20000'))
+GRAPH_PAGE_LIMIT = int(os.getenv('JARVIS_GRAPH_LIMIT', '2000'))   # above this, /graph returns a module overview

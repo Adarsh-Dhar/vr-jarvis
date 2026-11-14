@@ -1,6 +1,9 @@
 """Graph storage and repository management."""
+import hashlib
 import json
+import os
 import subprocess
+import time
 from pathlib import Path, PurePosixPath
 
 from ... import config
@@ -18,21 +21,61 @@ def list_repos():
     return sorted(d.name for d in root.iterdir() if d.is_dir() and not d.is_symlink() and not d.name.startswith('.'))
 
 
+def _fingerprint(repo):
+    """Cheap change detector: sha1 over rel path, size and mtime of every source file."""
+    h = hashlib.sha1()
+    for p, rel in _source_files(repo):
+        try:
+            st = p.stat()
+        except OSError:
+            continue
+        h.update(('%s:%d:%d;' % (rel, st.st_size, st.st_mtime_ns)).encode())
+    return h.hexdigest()
+
+
 def build_graph(name):
-    """Hand-written <name>.graph.json next to the repo wins; otherwise index the files."""
+    """Hand-written <name>.graph.json next to the repo wins; otherwise index the files,
+    skipping the re-index when the on-disk graph's fingerprint still matches."""
     from .indexer import index_repo
     curated = config.REPOSITORY_DIR / (name + '.graph.json')
-    graph = json.loads(curated.read_text()) if curated.is_file() else index_repo(name)
     config.INDEX_DIR.mkdir(parents=True, exist_ok=True)
     out = config.INDEX_DIR / (name + '.json')
-    out.write_text(json.dumps(graph, indent=1))
+    if curated.is_file():
+        graph, fresh = json.loads(curated.read_text()), True
+    else:
+        fp = _fingerprint(config.REPOSITORY_DIR / name)
+        graph, fresh = None, False
+        if out.is_file():
+            try:
+                old = json.loads(out.read_text())
+                meta = old.get('meta', {})
+                if meta.get('fingerprint') == fp and meta.get('schema_version') == 3:
+                    graph = old
+            except Exception:
+                graph = None
+        if graph is None:
+            graph = index_repo(name)
+            graph.setdefault('meta', {})['fingerprint'] = fp
+            fresh = True
+    if fresh:
+        tmp = out.with_suffix('.tmp')
+        tmp.write_text(json.dumps(graph, separators=(',', ':')))
+        os.replace(tmp, out)
     return out, graph
+
+
+_INFO_CACHE = {}
 
 
 def info(name):
     """Get repository information."""
     repo = config.REPOSITORY_DIR / name
-    files = sum(1 for _ in _source_files(repo))
+    hit = _INFO_CACHE.get(name)
+    if hit and time.time() - hit[0] < 60:
+        files = hit[1]
+    else:
+        files = sum(1 for _ in _source_files(repo))
+        _INFO_CACHE[name] = (time.time(), files)
     try:
         branch = subprocess.run(['git', 'rev-parse', '--abbrev-ref', 'HEAD'], cwd=repo, capture_output=True,
                                 text=True, timeout=3).stdout.strip()
@@ -81,14 +124,23 @@ MAX_BROWSER_FILE_BYTES = 512_000
 
 
 def _source_files(repo):
-    """Yield (path, rel) for all source files in repo."""
-    for p in sorted(repo.rglob('*')):
-        if not p.is_file() or p.suffix not in EXTS:
-            continue
-        rel = p.relative_to(repo)
-        if any(part in SKIP_DIRS for part in rel.parts) or p.stat().st_size > MAX_FILE_BYTES:
-            continue
-        yield p, rel.as_posix()
+    """Yield (path, rel) for source files. Prunes SKIP_DIRS without entering them."""
+    count = 0
+    for root, dirs, files in os.walk(repo):
+        dirs[:] = sorted(d for d in dirs if d not in SKIP_DIRS)
+        for fname in sorted(files):
+            p = Path(root) / fname
+            if p.suffix not in EXTS:
+                continue
+            try:
+                if p.stat().st_size > MAX_FILE_BYTES:
+                    continue
+            except OSError:
+                continue
+            if count >= config.MAX_FILES:
+                return
+            count += 1
+            yield p, p.relative_to(repo).as_posix()
 
 
 # ---------------------------------------------------------------------------

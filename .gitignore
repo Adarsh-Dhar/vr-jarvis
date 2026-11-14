@@ -96,3 +96,4 @@ server/ai_agents/data/*
 !server/ai_agents/data/demo_change.json
 !server/ai_agents/data/cached_test_results.json
 fixtures/test-git-repo/
+repository/

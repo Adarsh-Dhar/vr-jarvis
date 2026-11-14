@@ -44,10 +44,17 @@ def _dotted(rel):
     return re.sub(r'\.[^./]+$', '', rel).replace('/', '.')
 
 
+_CONTAINERS = {'packages', 'apps', 'src', 'libs', 'services', 'modules', 'lib', 'internal', 'cmd'}
+
+
 def _cluster(rel):
-    """Extract cluster name from path."""
+    """Extract cluster name from path: first two levels under generic containers."""
     parts = rel.split('/')
-    return parts[0] if len(parts) > 1 else 'root'
+    if len(parts) <= 1:
+        return 'root'
+    if parts[0] in _CONTAINERS and len(parts) > 2:
+        return parts[0] + '/' + parts[1]
+    return parts[0]
 
 
 def _compute_layer(rel, texts):
@@ -186,8 +193,8 @@ def index_repo(name):
 
         # Create file node
         file_id = f'file::{rel}'
-        file_parts = rel.split('/')
-        module_name = file_parts[0] if len(file_parts) > 1 else 'root'
+        # The module is the cluster: module overview nodes line up with file clusters.
+        module_name = _cluster(rel)
 
         file_nodes[file_id] = {
             'id': file_id,
@@ -332,33 +339,52 @@ def index_repo(name):
                 'kind': 'confirmed'
             })
 
-    # Add aggregated imports edges at file level
+    # Add aggregated imports edges at file level. Match on the file's base name
+    # (or a folder's index/__init__) instead of a substring scan: nearest folder
+    # wins on ties and the edge is marked 'inferred' rather than 'confirmed'.
+    by_base = {}
+    for fid, fn in file_nodes.items():
+        stem = fn['file'].rsplit('.', 1)[0]
+        base = stem.rsplit('/', 1)[-1]
+        by_base.setdefault(base, []).append(fid)
+        if base in ('index', '__init__') and '/' in stem:      # import of a folder
+            by_base.setdefault(stem.rsplit('/', 2)[-2], []).append(fid)
+
+    def _pick(src_file, cands):
+        cands = [c for c in cands if file_nodes[c]['file'] != src_file]
+        if not cands:
+            return None, None
+        if len(cands) == 1:
+            return cands[0], 'confirmed'
+        src_parts = src_file.split('/')
+        def shared(c):
+            n = 0
+            for x, y in zip(src_parts, file_nodes[c]['file'].split('/')):
+                if x != y:
+                    break
+                n += 1
+            return n
+        return max(cands, key=shared), 'inferred'      # nearest folder wins; marked inferred
+
     for file_id, file_node in file_nodes.items():
         file_path = file_node['file']
-        imports = _imports(texts.get(file_path, ''))
-        for imp in imports:
-            for target_file_id, target_file_node in file_nodes.items():
-                target_file = target_file_node['file']
-                if imp in target_file or imp in target_file.rsplit('/', 1)[-1]:
-                    if file_id != target_file_id:
-                        edges.append({
-                            'src': file_id,
-                            'dst': target_file_id,
-                            'type': 'imports',
-                            'kind': 'confirmed',
-                            'file': file_path,
-                            'line': 1
-                        })
-                    break
+        for imp in _imports(texts.get(file_path, '')):
+            target, kind = _pick(file_path, by_base.get(imp, []))
+            if target:
+                edges.append({'src': file_id, 'dst': target, 'type': 'imports', 'kind': kind,
+                              'file': file_path, 'line': 1})
 
-    # Add aggregated imports edges at module level (with count)
+    # Add aggregated imports edges at module level (with count). File import edges
+    # are rolled up to their module endpoints so the module overview can show them.
+    file_module = {fid: fn.get('parent') for fid, fn in file_nodes.items()}
     module_imports = {}
     for edge in edges:
-        if edge['type'] == 'imports':
-            src, dst = edge['src'], edge['dst']
-            if src.startswith('module.') and dst.startswith('module.'):
-                key = (src, dst)
-                module_imports[key] = module_imports.get(key, 0) + 1
+        if edge.get('type') != 'imports':
+            continue
+        ms, md = file_module.get(edge['src']), file_module.get(edge['dst'])
+        if ms and md and ms != md:
+            key = (ms, md)
+            module_imports[key] = module_imports.get(key, 0) + 1
     for (src, dst), count in module_imports.items():
         edges.append({
             'src': src, 'dst': dst, 'type': 'imports',
@@ -577,6 +603,8 @@ def index_repo(name):
             'schema_version': 3,
             'revision': revision,
             'indexed_at': time.time(),
-            'languages': sorted(languages)
+            'languages': sorted(languages),
+            'files_indexed': len(file_nodes),
+            'file_limit': config.MAX_FILES,
         }
     }

@@ -210,7 +210,12 @@ namespace JarvisVR
     public System.Collections.Generic.List<GraphNodeDto> nodes = new System.Collections.Generic.List<GraphNodeDto>();
     public System.Collections.Generic.List<GraphEdgeDto> edges = new System.Collections.Generic.List<GraphEdgeDto>();
     public string graph_type;
+    // Large-repo paging/overview fields (absent on small graphs and focus responses)
+    public int total_nodes, total_edges, next_offset;
+    public bool truncated;
+    public string level, cluster;
   }
+  [Serializable] public class GraphSearchDto { public GraphNodeDto[] matches; }
   [Serializable] public class RepoInfoDto { public string name, branch; public int files; }
   [Serializable] public class ReposDto { public string active; public System.Collections.Generic.List<RepoInfoDto> repos = new System.Collections.Generic.List<RepoInfoDto>(); }
   [Serializable] public class RepoTreeEntryDto { public string name, path, type; public long size; }
@@ -333,6 +338,8 @@ namespace JarvisVR
     void GetHealth(Action<HealthDto> ok, Action<string> fail);
     void GetGraph(Action<GraphDto> ok);
     void GetGraphWithFocus(string focusId, int depth, Action<GraphDto> ok, Action<string> fail);
+    void GetGraphCluster(string cluster, int offset, int limit, Action<GraphDto> ok, Action<string> fail);
+    void SearchGraph(string q, Action<GraphSearchDto> ok, Action<string> fail);
     void GetRepos(Action<ReposDto> ok, Action<string> fail);
     void GetTree(string repo, string path, Action<RepoTreeDto> ok, Action<string> fail);
     void GetFile(string repo, string path, Action<RepoFileDto> ok, Action<string> fail);
@@ -480,6 +487,18 @@ namespace JarvisVR
     {
       string url = "/graph?focus=" + UnityWebRequest.EscapeURL(focusId) + "&depth=" + depth;
       StartCoroutine(Send("GET", url, null, b => ok(JsonUtility.FromJson<GraphDto>(b)), fail));
+    }
+
+    public void GetGraphCluster(string cluster, int offset, int limit, Action<GraphDto> ok, Action<string> fail)
+    {
+      string url = "/graph?cluster=" + UnityWebRequest.EscapeURL(cluster) + "&offset=" + offset + "&limit=" + limit;
+      StartCoroutine(Send("GET", url, null, b => ok(JsonUtility.FromJson<GraphDto>(b)), fail));
+    }
+
+    public void SearchGraph(string q, Action<GraphSearchDto> ok, Action<string> fail)
+    {
+      StartCoroutine(Send("GET", "/graph/search?q=" + UnityWebRequest.EscapeURL(q), null,
+        b => ok(JsonUtility.FromJson<GraphSearchDto>(b)), fail));
     }
 
     public void GetProgress(int since, Action<ProgressDto> ok) =>

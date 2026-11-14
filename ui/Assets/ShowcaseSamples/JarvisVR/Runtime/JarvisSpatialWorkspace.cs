@@ -28,7 +28,7 @@ namespace JarvisVR
       public ClusterView Cluster; public int In, Out; public JarvisNodeFx Fx;
     }
     private sealed class EdgeView { public GraphEdgeDto Dto; public NodeView From, To; public LineRenderer Line; public Color Base; public string Style; }
-    private sealed class ClusterView { public string Name; public readonly List<NodeView> Members = new List<NodeView>(); public Transform Shell; public TextMesh Label; public bool Collapsed; }
+    private sealed class ClusterView { public string Name; public readonly List<NodeView> Members = new List<NodeView>(); public readonly List<GraphNodeDto> Pending = new List<GraphNodeDto>(); public Transform Shell; public TextMesh Label; public bool Collapsed; }
 
     // ---- scene ----
     private Camera _cam;
@@ -361,9 +361,9 @@ namespace JarvisVR
       _quickChange = caption.AddButton("What breaks if I change this?", 20, 128, 400, 50, () => Ask(QuickChangeQuestion()));   // label follows the selection
       caption.AddButton("Show risky paths", 430, 128, 190, 50, () => Ask("Show me the risky paths in this change."));
       caption.AddButton("Run tests", 630, 128, 170, 50, () => Ask("Run the tests for this change."));
-      caption.AddButton("TYPE", 810, 128, 150, 50, OpenKeyboard);
+      caption.AddButton("TYPE", 810, 128, 150, 50, () => OpenKeyboard());
 
-      JarvisSpatialPanel nav = AddPanel("nav", "Navigate", 1000, 110, 0.15f, -0.80f, pal.Cyan);
+      JarvisSpatialPanel nav = AddPanel("nav", "Navigate", 1300, 110, 0.15f, -0.80f, pal.Cyan);
       float x = 12f;
       foreach (string m in NavModes)
       {
@@ -373,6 +373,8 @@ namespace JarvisVR
       }
       nav.AddButton("CENTER", x, 52, 100, 46, () => { Recenter(); ResetGraphView(); });
       nav.AddButton("FX", x + 108f, 52, 100, 46, CycleIsolation);
+      nav.AddButton("MORE", x + 216f, 52, 100, 46, LoadMoreSelectedCluster);
+      nav.AddButton("SEARCH", x + 324f, 52, 100, 46, () => { _kbOp = "graph_search"; OpenKeyboard(); });
 
       // View tools: graph filters, rotation, runtime trace, settings, exit
       JarvisSpatialPanel tools = AddPanel("tools", "View", 900, 110, 0.15f, -0.66f, pal.Cyan);
@@ -440,129 +442,45 @@ namespace JarvisVR
       _agentEvidence = null; _agentTestResults = null; _unverifiedEvidence = null;   // ids from another repository would not resolve
       for (int i = _graphRoot.childCount - 1; i >= 0; i--) Destroy(_graphRoot.GetChild(i).gameObject);
       _nodes.Clear(); _edges.Clear(); _clusters.Clear(); _pulses.Clear();
+      _dtoById.Clear(); _edgesByNode.Clear(); _edgeKeys.Clear();
+      _clusterLru.Clear(); _clusterNext.Clear(); _lodList = new List<NodeView>();
       BuildGraph();
+      if (g != null && g.truncated && g.total_nodes > 0)
+        Say("Overview of " + g.total_nodes + " nodes. Expand a cluster to load it.");
       RefreshRepo();
     }
 
     private void BuildGraph()
     {
-      JarvisPalette pal = JarvisPalette.Current;
-      Dictionary<string, Vector3> layout = JarvisGraphModel.Layout(_graph);
+      _layout = JarvisGraphModel.Layout(_graph);
+      IndexGraphData(_graph);
 
+      // Only the first node of each cluster is built up front (the anchor);
+      // every other node stays as data in cv.Pending until the cluster opens.
+      if (_graph.nodes != null)
       foreach (GraphNodeDto dto in _graph.nodes)
       {
+        if (dto == null || string.IsNullOrEmpty(dto.id)) continue;
         string cname = string.IsNullOrEmpty(dto.cluster) ? "other" : dto.cluster;
-        if (!_clusters.TryGetValue(cname, out ClusterView cv)) _clusters[cname] = cv = new ClusterView { Name = cname, Collapsed = true };
-
-        var nv = new NodeView { Dto = dto, Cluster = cv };
-        var rootGo = new GameObject("Node " + dto.id);
-        rootGo.transform.SetParent(_graphRoot, false);
-        rootGo.transform.localPosition = layout[dto.id];
-        nv.Root = rootGo.transform;
-
-        // Choose primitive based on level (module, file, class, function, layer, external)
-        PrimitiveType shape = dto.level == "module" ? PrimitiveType.Cube
-          : dto.level == "file" ? PrimitiveType.Cube
-          : dto.level == "class" ? PrimitiveType.Cylinder
-          : dto.level == "layer" ? PrimitiveType.Capsule
-          : dto.kind == "external" ? PrimitiveType.Cube
-          : PrimitiveType.Sphere;
-
-        GameObject body = GameObject.CreatePrimitive(shape);
-        body.name = "Body";
-        body.transform.SetParent(rootGo.transform, false);
-
-        // Scale based on level
-        float scale = dto.level == "module" ? 0.12f
-          : dto.level == "file" ? 0.10f
-          : dto.level == "class" ? 0.08f
-          : dto.level == "layer" ? 0.14f
-          : dto.kind == "external" ? 0.06f
-          : 0.075f;
-        body.transform.localScale = Vector3.one * scale;
-
-        // Rotate layer nodes (ring-like)
-        if (dto.level == "layer")
-        {
-          body.transform.localRotation = Quaternion.Euler(0f, 0f, 45f);
-        }
-        // Rotate external nodes (diamond-like)
-        else if (dto.kind == "external")
-        {
-          body.transform.localRotation = Quaternion.Euler(45f, 45f, 0f);
-        }
-
-        nv.BodyT = body.transform;
-        nv.Body = body.GetComponent<Renderer>();
-        nv.Body.sharedMaterial = JarvisSpatialGfx.Neon(Color.white, 1.5f, true);
-        JarvisSpatialGfx.Flat(nv.Body);
-        
-        // Ensure the node collider is not a trigger so it can be raycast against
-        Collider nodeCollider = body.GetComponent<Collider>();
-        if (nodeCollider != null) nodeCollider.isTrigger = false;
-
-        Color baseColor = dto.level == "module" ? pal.Amber
-          : dto.level == "file" ? pal.Violet
-          : dto.level == "class" ? pal.Green
-          : dto.level == "layer" ? pal.Red
-          : dto.kind == "external" ? pal.Gray
-          : dto.kind == "test" ? pal.Violet
-          : pal.Cyan;
-
-        nv.Base = baseColor;
-        body.AddComponent<JarvisGraphNode>().Initialize(dto.id, Select, DragCluster, ShowNodeMenu);
-        // Invisible pinch target: the rendered node is only a few centimetres wide, which is
-        // hard to hit reliably at arm's length. Parent it to Body so it grows with the pop animation.
-        var hitArea = new GameObject("HitArea");
-        hitArea.transform.SetParent(body.transform, false);
-        hitArea.transform.localScale = Vector3.one * 2.4f;
-        hitArea.AddComponent<SphereCollider>();
-        nv.Fx = rootGo.AddComponent<JarvisNodeFx>();
-        nv.Fx.Begin(nv.BodyT, 0.06f * _nodes.Count, nv.Base);
-
-        nv.Label = MakeLabel(rootGo.transform, dto.name, pal.Text, LabelSize, new Vector3(0f, -0.085f, 0f));
-        cv.Members.Add(nv);
-        _nodes[dto.id] = nv;
-      }
-
-      foreach (GraphEdgeDto e in _graph.edges)
-      {
-        if (!_nodes.TryGetValue(e.src ?? "", out NodeView a) || !_nodes.TryGetValue(e.dst ?? "", out NodeView b)) continue;
-        a.Out++; b.In++;
-        var ev = new EdgeView { Dto = e, From = a, To = b };
-        DrawEdge(ev);
-        _edges.Add(ev);
+        ClusterView cv = GetOrCreateCluster(cname);
+        if (cv.Members.Count == 0 && cv.Pending.Count == 0)
+          CreateNodeView(dto, cv, _layout.TryGetValue(dto.id, out Vector3 pos) ? pos : Vector3.zero);
+        else
+          cv.Pending.Add(dto);
       }
 
       foreach (ClusterView cv in _clusters.Values)
       {
-        var shell = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-        shell.name = "ClusterShell " + cv.Name;
-        Destroy(shell.GetComponent<Collider>());   // never blocks node pinch rays
-        shell.transform.SetParent(_graphRoot, false);
-        Renderer r = shell.GetComponent<Renderer>();
-        Material shellMat = JarvisSpatialGfx.Shell(pal.Cyan, 0.03f, 0.45f, 3.5f);
-        if (shellMat == null) { Destroy(shell); cv.Shell = null; }   // never leave a default silver sphere
-        else { r.sharedMaterial = shellMat; JarvisSpatialGfx.Flat(r); cv.Shell = shell.transform; }
-        cv.Label = MakeLabel(_graphRoot, cv.Name.ToUpperInvariant(), pal.TextMuted, LabelSize * 0.9f, Vector3.zero);
+        cv.Collapsed = true;   // clusters start collapsed; the anchor stays visible
+        TouchCluster(cv.Name);
       }
-
-      UpdateClusters();
+      foreach (NodeView nv in _nodes.Values) TryCreateEdges(nv.Dto.id);
+      _lodList = new List<NodeView>(_nodes.Values);
       RefreshStyles();
-      _edgesDirty = true;
-      
-      // Collapse all clusters by default
-      foreach (ClusterView cv in _clusters.Values)
-      {
-        cv.Collapsed = true;
-        for (int i = 1; i < cv.Members.Count; i++)   // member 0 stays as the cluster anchor
-        {
-          cv.Members[i].Fx.SetShown(false);
-          cv.Members[i].Label.gameObject.SetActive(false);
-        }
-      }
       if (_kindFilter != 0) ApplyFilters();   // a filter chosen earlier survives a graph reload
+      UpdateClusters();
       RefreshEdgeVisibility();
+      _edgesDirty = true;
     }
 
     // ---- edges: solid = static, dashed = inferred, dotted = ambiguous
@@ -781,25 +699,6 @@ namespace JarvisVR
       _edgesDirty = true;
     }
 
-    private void RedrawEdges()
-    {
-      const int N = 20;
-      foreach (EdgeView ev in _edges)
-      {
-        if (ev.Line == null) continue;
-        Vector3 a = ev.From.Root.localPosition, b = ev.To.Root.localPosition;
-        float d = Vector3.Distance(a, b);
-        Vector3 mid = (a + b) * 0.5f + new Vector3(0f, 0.04f + 0.10f * d, -0.10f * d);   // bow toward the viewer
-        ev.Line.positionCount = N + 1;
-        for (int i = 0; i <= N; i++)
-        {
-          float t = i / (float)N, u = 1f - t;
-          ev.Line.SetPosition(i, u * u * a + 2f * u * t * mid + t * t * b);
-        }
-      }
-      _edgesDirty = false;
-    }
-
     private void UpdateClusters()
     {
       foreach (ClusterView cv in _clusters.Values)
@@ -835,7 +734,8 @@ namespace JarvisVR
 
     private void Select(string id)
     {
-      if (string.IsNullOrEmpty(id) || !_nodes.ContainsKey(id)) return;
+      if (string.IsNullOrEmpty(id)) return;
+      if (!EnsureNode(id)) return;
       _selected = id;
       RefreshStyles();
       RefreshEvidence();
@@ -910,12 +810,12 @@ namespace JarvisVR
     private void ExpandNode(string nodeId)
     {
       // Same behaviour as expanding a cluster from the node menu: reveal what is loaded
-      // and fetch a deeper neighbourhood from the server, merged via MergeGraph.
+      // and fetch a deeper neighbourhood from the server, merged via AppendGraph.
       if (!_nodes.TryGetValue(nodeId, out NodeView n)) return;
       ClusterView cv = n.Cluster;
       if (cv.Collapsed) SetClusterCollapsed(cv, false);
       if (_bridge != null && !IsDesignNode(nodeId))
-        _bridge.GetGraphWithFocus(nodeId, 2, g => { if (g != null && g.nodes != null) MergeGraph(g); },
+        _bridge.GetGraphWithFocus(nodeId, 2, g => { if (g != null && g.nodes != null) AppendGraph(g); },
           e => Say("Could not fetch more of the graph: " + e));
       Log("expanded node: " + nodeId);
     }
@@ -1937,7 +1837,7 @@ namespace JarvisVR
           return true;
         case "open_code_panel":
         case "focus_camera":
-          if (!string.IsNullOrEmpty(c.node_id) && _nodes.ContainsKey(c.node_id)) Select(c.node_id);
+          if (!string.IsNullOrEmpty(c.node_id) && EnsureNode(c.node_id)) Select(c.node_id);
           return false;
         case "set_edge_style":
           foreach (EdgeView e in _edges)
@@ -2039,7 +1939,7 @@ namespace JarvisVR
             _agentMode = c.mode;
           return false;   // false: don't let the "graph changed -> MAP" fallback fire
         case "select_node":
-          if (!string.IsNullOrEmpty(c.node_id) && _nodes.ContainsKey(c.node_id)) Select(c.node_id);
+          if (!string.IsNullOrEmpty(c.node_id) && EnsureNode(c.node_id)) Select(c.node_id);
           return true;
         case "move_graph":
           _graphRoot.localPosition = Vector3.ClampMagnitude(_graphRoot.localPosition + new Vector3(c.dx, c.dy, c.dz), 3f);
@@ -2094,14 +1994,14 @@ namespace JarvisVR
           if (!string.IsNullOrEmpty(c.path)) { _pendingOpenLine = c.line; OpenRepoFile(c.path); }
           return false;
         case "expand_node":
-          if (!string.IsNullOrEmpty(c.node_id) && _nodes.ContainsKey(c.node_id))
+          if (!string.IsNullOrEmpty(c.node_id) && EnsureNode(c.node_id))
           {
             ExpandNode(c.node_id);
             return true;
           }
           return false;
         case "collapse_node":
-          if (!string.IsNullOrEmpty(c.node_id) && _nodes.ContainsKey(c.node_id))
+          if (!string.IsNullOrEmpty(c.node_id) && EnsureNode(c.node_id))
           {
             CollapseNode(c.node_id);
             return true;
@@ -2248,7 +2148,12 @@ namespace JarvisVR
       string branch = _health != null && !string.IsNullOrEmpty(_health.branch) ? _health.branch : "-";
       int changed = _health != null ? _health.changed : 0;
       string server = _serverOnline ? "<color=#" + Hex(pal.Green) + ">server online</color>" : "<color=#" + Hex(pal.Amber) + ">server offline</color>";
-      _panels["status"].SetBody(repo + "  ·  " + branch + "  ·  " + changed + " changed  ·  " + server + "  ·  " + _mode);
+      int visibleEdges = 0;
+      foreach (EdgeView e in _edges) if (e.Line != null && e.Line.gameObject.activeSelf) visibleEdges++;
+      string total = _graph != null && _graph.total_nodes > 0 ? " / " + _graph.total_nodes : "";
+      _panels["status"].SetBody(repo + "  ·  " + branch + "  ·  " + changed + " changed  ·  " + server + "  ·  " + _mode
+        + "\nNODES " + _nodes.Count + " shown / " + _dtoById.Count + " loaded" + total
+        + "  ·  EDGES " + visibleEdges + "  ·  " + (1f / Mathf.Max(Time.smoothDeltaTime, 0.0001f)).ToString("F0") + " fps");
     }
 
     private void FetchRepos()
@@ -3051,47 +2956,22 @@ namespace JarvisVR
       string focusId = n.Dto.id;
       _menu.Show(false);
       if (!cv.Collapsed) { SetClusterCollapsed(cv, true); return; }
-      SetClusterCollapsed(cv, false);
-      if (_bridge != null && !IsDesignNode(focusId))
-        _bridge.GetGraphWithFocus(focusId, 2, g => { if (g != null && g.nodes != null) MergeGraph(g); },
-          e => Say("Could not fetch more of the graph: " + e));
-    }
-
-    private void MergeGraph(GraphDto extra)
-    {
-      var haveN = new HashSet<string>(); foreach (var x in _graph.nodes) haveN.Add(x.id);
-      var haveE = new HashSet<string>(); foreach (var x in _graph.edges) haveE.Add(EdgeKey(x));
-      var touched = new HashSet<string>();
-      int addedN = 0, addedE = 0;
-      foreach (var x in extra.nodes)
-        if (haveN.Add(x.id)) { _graph.nodes.Add(x); addedN++; touched.Add(string.IsNullOrEmpty(x.cluster) ? "other" : x.cluster); }
-      if (extra.edges != null)
-        foreach (var x in extra.edges) if (haveE.Add(EdgeKey(x))) { _graph.edges.Add(x); addedE++; }
-      if (addedN + addedE == 0) { Say("Nothing more to expand here."); return; }
-
-      var open = new HashSet<string>(touched);              // LoadGraph collapses every cluster, so remember what was open
-      foreach (var kv in _clusters) if (!kv.Value.Collapsed) open.Add(kv.Key);
-      var ev = _agentEvidence; var tr = _agentTestResults; var ue = _unverifiedEvidence;
-      string sel = _selected;
-
-      LoadGraph(_graph);
-
-      _agentEvidence = ev; _agentTestResults = tr; _unverifiedEvidence = ue;   // same repository: keep them
-      foreach (string name in open)
-        if (_clusters.TryGetValue(name, out ClusterView c)) SetClusterCollapsed(c, false);
-      if (!string.IsNullOrEmpty(sel) && _nodes.ContainsKey(sel)) Select(sel);
-      RefreshAll();
-      Log("expanded: +" + addedN + " nodes, +" + addedE + " edges");
+      SetClusterCollapsed(cv, false);                     // opens whatever is already loaded
+      if (_bridge == null || IsDesignNode(focusId)) return;
+      if (_graph != null && _graph.truncated) FetchClusterPage(cv.Name, 0);   // overview mode: fetch this cluster
+      else _bridge.GetGraphWithFocus(focusId, 2, g => { if (g != null && g.nodes != null) AppendGraph(g); },
+        e => Say("Could not fetch more of the graph: " + e));
     }
 
     private void SetClusterCollapsed(ClusterView cv, bool collapsed)
     {
       cv.Collapsed = collapsed;
+      if (!collapsed && cv.Pending.Count > 0) MaterializeCluster(cv);
       for (int i = 1; i < cv.Members.Count; i++)   // member 0 stays as the cluster anchor
       {
         bool vis = !collapsed && NodePasses(cv.Members[i].Dto);
         cv.Members[i].Fx.SetShown(vis);
-        cv.Members[i].Label.gameObject.SetActive(vis);
+        if (!vis) cv.Members[i].Label.gameObject.SetActive(false);   // shown labels are managed by UpdateLabelLod
       }
       RefreshEdgeVisibility();
     }
@@ -3112,13 +2992,6 @@ namespace JarvisVR
       _agentShown.Clear();
       ResetGraphView();
       Recenter();
-    }
-
-    private void RefreshEdgeVisibility()
-    {
-      foreach (EdgeView e in _edges)
-        if (e.Line != null) e.Line.gameObject.SetActive(e.From.Fx.Shown && e.To.Fx.Shown && EdgePasses(e.Dto));
-      _edgesDirty = true;
     }
 
     // =========================================================== render isolation (FX button)
@@ -3358,7 +3231,7 @@ namespace JarvisVR
         bool anchor = n.Cluster != null && n.Cluster.Members.Count > 0 && n.Cluster.Members[0] == n;
         bool vis = NodePasses(n.Dto) && (n.Cluster == null || !n.Cluster.Collapsed || anchor);
         n.Fx.SetShown(vis);
-        n.Label.gameObject.SetActive(vis);
+        if (!vis) n.Label.gameObject.SetActive(false);   // shown labels are managed by UpdateLabelLod
       }
       _edgesDirty = true;
       RefreshEdgeVisibility();
@@ -3513,6 +3386,7 @@ namespace JarvisVR
               else if (t.EndsWith("\n")) t = t.Substring(0, t.Length - 1);
               ApplyEditTextOp(t);
             }
+            else if (_kbOp == "graph_search") GraphSearchSubmit(t);
             else ApplyDesignTextOp(t);
             _kbOp = null; _kbOpId = null;
           }
@@ -3523,6 +3397,7 @@ namespace JarvisVR
         _kb = null;
       }
       AnimateOrb();
+      UpdateLabelLod();
       if (_edgesDirty) { RedrawEdges(); UpdateClusters(); }
       if (CurrentOrb() == OrbState.Thinking && Time.unscaledTime > _progressAt)
       {

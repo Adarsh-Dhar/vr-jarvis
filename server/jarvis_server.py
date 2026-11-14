@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import binascii
+import gzip
 import hashlib
 import logging
 import json
@@ -18,7 +19,7 @@ from typing import Optional, Dict, Any, List, Literal
 
 from types import SimpleNamespace
 
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -630,27 +631,50 @@ async def feedback(body: FeedbackBody):
     return {'ok': True}
 
 
-@app.get('/graph', dependencies=[Depends(auth)], response_model=GraphResponse)
-async def graph(focus: Optional[str] = None, depth: int = 2, direction: str = 'both', resolution: Optional[str] = None):
-    """Return the graph, optionally filtered by focus node, depth, direction, and resolution status."""
+_GRAPH_MEM = {'path': None, 'mtime': None, 'data': None}
+
+
+def _graph_data():
+    """The active graph JSON, re-read only when the file changes on disk."""
+    p = config.GRAPH_PATH
+    m = p.stat().st_mtime_ns
+    if _GRAPH_MEM['path'] != p or _GRAPH_MEM['mtime'] != m:
+        _GRAPH_MEM.update(path=p, mtime=m, data=json.loads(p.read_text()))
+    return _GRAPH_MEM['data']
+
+
+def _gz_json(request, obj):
+    raw = json.dumps(obj, separators=(',', ':')).encode()
+    headers = {'Content-Type': 'application/json'}
+    if len(raw) > 1024 and 'gzip' in request.headers.get('accept-encoding', ''):
+        raw = gzip.compress(raw, compresslevel=5)
+        headers['Content-Encoding'] = 'gzip'
+    return Response(content=raw, headers=headers)
+
+
+@app.get('/graph', dependencies=[Depends(auth)])
+async def graph(request: Request, focus: Optional[str] = None, depth: int = 2, direction: str = 'both',
+                resolution: Optional[str] = None, level: Optional[str] = None,
+                cluster: Optional[str] = None, offset: int = 0, limit: int = 0):
+    """Return the graph: full for small repos, a module overview or a cluster page for large ones."""
     if not config.GRAPH_PATH.is_file() and config.REPO_ROOT.name in repository.list_repos():
         repository.activate(config.REPO_ROOT.name)
-    
-    graph_data = json.loads(config.GRAPH_PATH.read_text())
-    
+
+    data = _graph_data()
+
     # If focus is specified, return a subgraph around that node
     if focus:
         from ai_agents.intelligence.graph_engine.codegraph import load_current_graph
         codegraph = load_current_graph()
-        
+
         focus_node = codegraph.get(focus)
         if not focus_node:
             raise HTTPException(status_code=404, detail=f"Focus node not found: {focus}")
-        
+
         # Use neighborhood method with filters
         include_unresolved = resolution is None or resolution in ['unresolved', 'all']
         hide_external = resolution == 'internal' if resolution else False
-        
+
         neighborhood = codegraph.neighborhood(
             node_id=focus_node['id'],
             depth=depth,
@@ -659,23 +683,39 @@ async def graph(focus: Optional[str] = None, depth: int = 2, direction: str = 'b
             hide_external=hide_external,
             max_nodes=1000
         )
-        
-        return {
+
+        return _gz_json(request, {
             'nodes': neighborhood['nodes'],
             'edges': neighborhood['edges'],
-            'meta': graph_data.get('meta', {}),
+            'meta': data.get('meta', {}),
             'focus': focus,
             'depth': depth,
             'direction': direction,
             'truncated': neighborhood['truncated']
-        }
-    
-    # Return full graph with meta
-    return {
-        'nodes': graph_data.get('nodes', []),
-        'edges': graph_data.get('edges', []),
-        'meta': graph_data.get('meta', {})
-    }
+        })
+
+    from graph_view import graph_view
+    cap = limit if limit > 0 else config.GRAPH_PAGE_LIMIT
+    out = graph_view(data, level=level, cluster=cluster, offset=offset, cap=cap,
+                     page_limit=config.GRAPH_PAGE_LIMIT)
+    return _gz_json(request, out)
+
+
+@app.get('/graph/search', dependencies=[Depends(auth)])
+async def graph_search(q: str, limit: int = 20):
+    """Find graph nodes by name/file/id so the UI can jump to ones not yet loaded."""
+    words = q.lower().split()
+    if not words:
+        return {'matches': []}
+    scored = []
+    for n in _graph_data().get('nodes', []):
+        hay = ' '.join([n.get('id', ''), n.get('name', ''), n.get('file', '')]).lower()
+        s = sum(1 for w in words if w in hay)
+        if s:
+            scored.append((s, n))
+    scored.sort(key=lambda t: -t[0])
+    keep = ('id', 'name', 'file', 'cluster', 'kind', 'level', 'start', 'end')
+    return {'matches': [{k: n.get(k) for k in keep} for _, n in scored[:max(1, min(limit, 50))]]}
 
 
 class RepoBody(BaseModel):
