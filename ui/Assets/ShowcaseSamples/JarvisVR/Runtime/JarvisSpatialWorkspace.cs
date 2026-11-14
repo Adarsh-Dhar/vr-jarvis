@@ -115,6 +115,7 @@ namespace JarvisVR
 
     // ---- conversation history, symbol outline, graph filters, settings ----
     private readonly List<string> _chat = new List<string>();   // "Y|text" = developer, "J|text" = JARVIS (active session only)
+    private string _lastQuestion = "", _lastReply = "";         // last ask/answer, for the GOOD/WRONG feedback buttons
     private int _chatOffset, _chatShown;
     private const int ChatMaxEntries = 60;
     private int _outlineSel;
@@ -337,10 +338,12 @@ namespace JarvisVR
       // Rejecting sends the architecture back to draft and discards the plan generated from it (server clears it too).
       _designActPanel.AddButton("REJECT DESIGN", 20, 252, 200, 50, () => DesignApprove(false), 0f, pal.Red);
 
-      JarvisSpatialPanel chat = AddPanel("chat", "Conversation", 440, 330, -1.12f, -0.46f, pal.Violet);
+      JarvisSpatialPanel chat = AddPanel("chat", "Conversation", 440, 430, -1.12f, -0.46f, pal.Violet);
       chat.SetBodyBox(56, 220); chat.Body.fontSize = 16;
       chat.AddButton("< OLDER", 14, 280, 200, 40, () => { _chatOffset += Mathf.Max(1, _chatShown); RefreshChat(); }, 0f, pal.Violet);
       chat.AddButton("NEWER >", 226, 280, 200, 40, () => { _chatOffset = Mathf.Max(0, _chatOffset - Mathf.Max(1, _chatShown)); RefreshChat(); }, 0f, pal.Violet);
+      chat.AddButton("GOOD", 14, 336, 200, 40, () => SendFeedback("up"), 0f, pal.Green);
+      chat.AddButton("WRONG", 226, 336, 200, 40, () => SendFeedback("down"), 0f, pal.Red);
       RefreshChat();
 
       JarvisSpatialPanel outline = AddPanel("outline", "Outline", 440, 330, -1.12f, -0.46f, pal.Cyan);
@@ -980,6 +983,8 @@ namespace JarvisVR
       _progressSeen = 0;
       Say("Thinking…");
       Log("ask: " + text);
+      _lastQuestion = text;
+      _lastReply = "";
       AddChat(true, text);
       _bridge.Ask(text, _selected, OnAnswer, err => { Say(err); Log("error: " + err); AddChat(false, "[error] " + err); _errorUntil = Time.unscaledTime + 4f; }, taskId);
     }
@@ -1798,6 +1803,14 @@ namespace JarvisVR
       RefreshDesignReq(); RefreshDesignCmp(); RefreshDesignAct();
     }
 
+    /// <summary>GOOD/WRONG on the last answer — posted to /feedback and logged server-side.</summary>
+    private void SendFeedback(string rating)
+    {
+      if (_bridge == null || string.IsNullOrEmpty(_bridge.LastRequestId)) return;
+      _bridge.Feedback(_bridge.LastRequestId, rating, _lastQuestion, _lastReply);
+      AddChat(false, "[feedback] answer marked " + (rating == "up" ? "good" : "wrong"));
+    }
+
     private void OnAnswer(AskResponse r)
     {
       if (!string.IsNullOrEmpty(r.error) && !r.error.Contains("took too long")) AddChat(false, "[error] " + r.error);
@@ -1829,6 +1842,7 @@ namespace JarvisVR
       if (!string.IsNullOrEmpty(r.pending_approval)) _pending = r.pending_approval;
       string reply = r.reply ?? "";
       if (r.test_source == "cached") reply += "  (Test results are SIMULATED.)";
+      _lastReply = reply;
       Say(reply);
       if (!string.IsNullOrWhiteSpace(reply)) AddChat(false, reply);
       Log("JARVIS answered");

@@ -1,6 +1,6 @@
 from google.adk.agents import LlmAgent
 
-from ..config import MODEL
+from ..config import model_for
 from ..tools.git_tools import get_diff, list_changed_nodes
 from ..tools.graph_tools import (find_tests_for_node, get_callers, get_coverage, get_dependents,
                                  get_node, trace_path)
@@ -8,7 +8,7 @@ from ..callbacks import permission_guard, evidence_collector
 
 change_loader = LlmAgent(
     name='change_loader_agent',
-    model=MODEL,
+    model=model_for('impact'),
     include_contents='none',
     description='Loads the change under review, or the selected node as a hypothetical change.',
     instruction='''
@@ -28,7 +28,7 @@ diff_summary (at most two sentences).
 
 static_impact = LlmAgent(
     name='static_impact_agent',
-    model=MODEL,
+    model=model_for('impact'),
     include_contents='none',
     description='Finds everything that depends on the changed nodes using the code graph.',
     instruction='''
@@ -51,7 +51,7 @@ unresolved (same, plus reason), counts (confirmed and unresolved totals).
 
 test_mapper = LlmAgent(
     name='test_mapper_agent',
-    model=MODEL,
+    model=model_for('impact'),
     include_contents='none',
     description='Finds which tests cover the changed nodes and their callers, and which paths are untested.',
     instruction='''
@@ -70,7 +70,7 @@ tests), low_coverage_nodes (node ids with coverage below 0.5).
 
 impact_synthesizer = LlmAgent(
     name='impact_synthesizer_agent',
-    model=MODEL,
+    model=model_for('impact'),
     include_contents='none',
     description='Merges static impact and test mapping into one ranked impact report.',
     instruction='''

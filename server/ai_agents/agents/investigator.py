@@ -1,6 +1,6 @@
 from google.adk.agents import LlmAgent
 
-from ..config import MODEL
+from ..config import model_for
 from ..tools.graph_tools import (find_tests_for_node, get_callees, get_callers, get_cluster,
                                  get_dependents, get_node, get_source, search_graph_symbols, trace_path)
 from ..tools.repository_tools import (list_files, read_file, search_code, search_symbols as repo_search_symbols)
@@ -48,7 +48,7 @@ def make_investigator() -> LlmAgent:
     two parents — pipelines that each need an investigator must not share one."""
     agent = LlmAgent(
         name='investigator_agent',
-        model=MODEL,
+        model=model_for('investigator'),
         include_contents='none',
         description=('Answers where, how and why questions about existing code by searching the code graph '
                      'and reading source. Use for explaining flows, finding where something happens, and '

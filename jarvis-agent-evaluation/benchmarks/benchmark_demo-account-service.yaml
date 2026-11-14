@@ -1,0 +1,131 @@
+repo: demo-account-service
+cases:
+- id: callers-e6c98c21
+  repo: demo-account-service
+  category: callers
+  split: dev
+  question: Which functions call query? List them.
+  expect:
+    target: query
+    names:
+    - deleteUser
+- id: callers-14d60f24
+  repo: demo-account-service
+  category: callers
+  split: dev
+  question: Which functions call verifyToken? List them.
+  expect:
+    target: verifyToken
+    names:
+    - requireAuth
+- id: callers-36c53582
+  repo: demo-account-service
+  category: callers
+  split: test
+  question: Which functions call deleteAccount? List them.
+  expect:
+    target: deleteAccount
+    names:
+    - handler
+- id: callees-19785c9e
+  repo: demo-account-service
+  category: callees
+  split: test
+  question: Which functions does requireAuth call? List them.
+  expect:
+    target: requireAuth
+    names:
+    - verifyToken
+- id: callees-312f3b20
+  repo: demo-account-service
+  category: callees
+  split: dev
+  question: Which functions does deleteUser call? List them.
+  expect:
+    target: deleteUser
+    names:
+    - query
+- id: callees-28673c10
+  repo: demo-account-service
+  category: callees
+  split: test
+  question: Which functions does handler call? List them.
+  expect:
+    target: handler
+    names:
+    - deleteAccount
+- id: where_defined-8fec0931
+  repo: demo-account-service
+  category: where_defined
+  split: test
+  question: In which file is checkOwner defined?
+  expect:
+    target: checkOwner
+    file: auth/owner.ts
+- id: where_defined-19785c9e
+  repo: demo-account-service
+  category: where_defined
+  split: dev
+  question: In which file is requireAuth defined?
+  expect:
+    target: requireAuth
+    file: auth/requireAuth.ts
+- id: where_defined-e6c98c21
+  repo: demo-account-service
+  category: where_defined
+  split: dev
+  question: In which file is query defined?
+  expect:
+    target: query
+    file: db/client.ts
+- id: where_defined-312f3b20
+  repo: demo-account-service
+  category: where_defined
+  split: test
+  question: In which file is deleteUser defined?
+  expect:
+    target: deleteUser
+    file: db/users.repo.ts
+- id: where_defined-14d60f24
+  repo: demo-account-service
+  category: where_defined
+  split: test
+  question: In which file is verifyToken defined?
+  expect:
+    target: verifyToken
+    file: lib/token.ts
+- id: negative-75dde3a0
+  repo: demo-account-service
+  category: negative
+  split: dev
+  question: Which functions call processRefund?
+  expect:
+    target: processRefund
+- id: negative-097f0fc1
+  repo: demo-account-service
+  category: negative
+  split: test
+  question: Which functions call syncLedger?
+  expect:
+    target: syncLedger
+- id: negative-836aca66
+  repo: demo-account-service
+  category: negative
+  split: test
+  question: Which functions call rotateKeys?
+  expect:
+    target: rotateKeys
+- id: negative-031041e5
+  repo: demo-account-service
+  category: negative
+  split: dev
+  question: Which functions call buildReport?
+  expect:
+    target: buildReport
+- id: negative-76622101
+  repo: demo-account-service
+  category: negative
+  split: dev
+  question: Which functions call purgeCache?
+  expect:
+    target: purgeCache

@@ -5,6 +5,7 @@ import hashlib
 import logging
 import json
 import os
+import re
 import subprocess
 import sys
 import traceback
@@ -603,6 +604,32 @@ async def health():
             'persistence_warnings': list(_PERSIST_WARNINGS)}
 
 
+@app.get('/metrics/llm', dependencies=[Depends(auth)])
+async def metrics_llm():
+    """Cumulative model-call counters for this process (see ai_agents/llm.py)."""
+    return dict(llm.stats)
+
+
+class FeedbackBody(BaseModel):
+    session_id: str
+    request_id: Optional[str] = None
+    rating: Literal['up', 'down']
+    note: str = ''
+    question: str = ''
+    reply: str = ''
+
+
+@app.post('/feedback', dependencies=[Depends(auth)])
+async def feedback(body: FeedbackBody):
+    """Thumbs up/down on an answer; appended to data/feedback.jsonl for review."""
+    _append_jsonl(_FEEDBACK_PATH, {
+        'ts': int(time.time()), 'session': body.session_id[:8],
+        'request_id': body.request_id or '', 'rating': body.rating,
+        'note': body.note[:500], 'question': body.question[:300],
+        'reply': body.reply[:500]})
+    return {'ok': True}
+
+
 @app.get('/graph', dependencies=[Depends(auth)], response_model=GraphResponse)
 async def graph(focus: Optional[str] = None, depth: int = 2, direction: str = 'both', resolution: Optional[str] = None):
     """Return the graph, optionally filtered by focus node, depth, direction, and resolution status."""
@@ -871,9 +898,13 @@ async def ask_stream(body: AskBody):
 async def _run_turn(body):
     message = types.Content(role='user', parts=[types.Part(text=body.text)])
     reply = ''
+    agents = []
     async for event in runner.run_async(user_id=USER, session_id=body.session_id, new_message=message):
+        if event.author and event.author not in agents:
+            agents.append(event.author)
         if event.is_final_response() and event.content and event.content.parts:
             reply = ' '.join(p.text for p in event.content.parts if getattr(p, 'text', None))
+    _last_agents[body.session_id] = agents
     return reply
 
 
@@ -1139,13 +1170,90 @@ async def _seen_request(session_id, request_id):
     return False
 
 
+_METRICS_PATH = config.ROOT / 'data' / 'metrics.jsonl'
+_FEEDBACK_PATH = config.ROOT / 'data' / 'feedback.jsonl'
+_last_agents = {}   # session_id -> agents that spoke in the last turn
+
+
+def _llm_snapshot():
+    return {k: llm.stats.get(k, 0) for k in
+            ('requests', 'prompt_tokens', 'output_tokens', 'model_ms', 'pace_ms')}
+
+
+def _ask_metrics(before, t_start, session_id):
+    now = _llm_snapshot()
+    return {'model_calls': now['requests'] - before['requests'],
+            'prompt_tokens': now['prompt_tokens'] - before['prompt_tokens'],
+            'output_tokens': now['output_tokens'] - before['output_tokens'],
+            'model_ms': now['model_ms'] - before['model_ms'],
+            'pace_ms': now['pace_ms'] - before['pace_ms'],
+            'latency_ms': int((time.monotonic() - t_start) * 1000),
+            'agents': _last_agents.pop(session_id, []),
+            'model': config.MODEL_NAME, 'lite_model': config.LITE_MODEL_NAME}
+
+
+def _append_jsonl(path, row):
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open('a', encoding='utf-8') as f:
+            print(json.dumps(row), file=f)
+    except Exception:
+        pass   # metrics must never break a request
+
+
+def _log_metrics(body, resp):
+    row = {'ts': int(time.time()), 'session': body.session_id[:8],
+           'request_id': body.request_id or '',
+           'error': bool(resp.get('error')),
+           'evidence': len(resp.get('evidence_items') or []),
+           'unverified': len(resp.get('unverified_evidence') or []),
+           'tool_errors': len(resp.get('tool_errors') or []),
+           'proposal_status': resp.get('proposal_status', ''),
+           **resp.get('metrics', {})}
+    if os.getenv('JARVIS_LOG_PROMPTS') == '1':   # off by default: prompts can hold code
+        row['text'] = body.text[:300]
+    _append_jsonl(_METRICS_PATH, row)
+
+
+_FAST_CALLERS = re.compile('^[ ]*(?:who|what)[ ]+calls[ ]+`?([A-Za-z_][A-Za-z0-9_.]*)`?[ ]*[?]?[ ]*$', re.I)
+
+
+def _fast_answer(text):
+    """Deterministic answer for simple 'who calls X' questions, straight from the
+    graph index — no model calls. Off unless JARVIS_FAST_PATH=1. Returns None when
+    disabled, unmatched, or the name is unknown/ambiguous (agents handle those)."""
+    if os.getenv('JARVIS_FAST_PATH') != '1':
+        return None
+    m = _FAST_CALLERS.match(text or '')
+    if not m:
+        return None
+    from ai_agents.tools.graph_tools import _graph
+    g = _graph()
+    hits = [n for n in g['nodes'].values()
+            if n.get('name') == m.group(1) and n.get('kind') in ('function', 'method')]
+    if len(hits) != 1:
+        return None                    # unknown or ambiguous: let the agents handle it
+    t = hits[0]
+    callers = [g['nodes'][e['src']] for e in g['in'].get(t['id'], [])
+               if e.get('type') == 'calls' and e['src'] in g['nodes']]
+    if callers:
+        lines = ['%s (%s)' % (c['name'], c.get('file', '?')) for c in callers[:20]]
+        reply = '%s is called by: %s.' % (t['name'], '; '.join(lines))
+    else:
+        reply = 'No callers of %s were found in the index.' % t['name']
+    return {'reply': reply,
+            'evidence': [t['id']] + [c['id'] for c in callers[:20]],
+            'commands': [{'type': 'highlight_callers', 'node_id': t['id']}]}
+
+
 @app.post('/ask', dependencies=[Depends(auth)], response_model=AskResponse)
 async def ask(body: AskBody):
     """Non-streaming endpoint for compatibility."""
     _refuse_if_switching()
     _require_active_repo(body.repo)
     await _check_session_repo(body.session_id)
-    calls_before = llm.stats['requests']
+    before = _llm_snapshot()
+    t_start = time.monotonic()
     reply = ''
     async with locks[body.session_id]:
         # Re-check under the session lock (see /ask/stream): the switch guard in
@@ -1162,12 +1270,19 @@ async def ask(body: AskBody):
         session = await ensure(body.session_id)
         await set_state(body.session_id, _turn_state(body, session.state))
         error = ''
-        try:
-            reply = await asyncio.wait_for(_run_turn(body), TURN_TIMEOUT)
-        except asyncio.TimeoutError:
-            error = 'JARVIS timed out on this request. Nothing was changed. Try again.'
-        except Exception as exc:
-            error = f'{type(exc).__name__}: {str(exc)[:200]}'
+        fast = _fast_answer(body.text)          # deterministic path; None unless JARVIS_FAST_PATH=1
+        if fast:
+            reply = fast['reply']
+            _last_agents[body.session_id] = ['fast_path']
+            await set_state(body.session_id, {'evidence': fast['evidence'],
+                                              'scene_commands': fast['commands']})
+        else:
+            try:
+                reply = await asyncio.wait_for(_run_turn(body), TURN_TIMEOUT)
+            except asyncio.TimeoutError:
+                error = 'JARVIS timed out on this request. Nothing was changed. Try again.'
+            except Exception as exc:
+                error = f'{type(exc).__name__}: {str(exc)[:200]}'
         state = (await ensure(body.session_id)).state
 
         # Offer commit approval only when the same evidence /approve requires is present
@@ -1175,10 +1290,13 @@ async def ask(body: AskBody):
         state = (await ensure(body.session_id)).state
 
     logger = logging.getLogger('uvicorn.error')
-    logger.info('ask: %d model calls, %s', llm.stats['requests'] - calls_before, 'error' if error else 'ok')
+    logger.info('ask: %d model calls, %s', llm.stats['requests'] - before['requests'],
+                'error' if error else 'ok')
     logger.info('reply: %s', reply[:200] if reply else error)
-
-    return _build_ask_response(reply, error, state)
+    resp = _build_ask_response(reply, error, state)
+    resp['metrics'] = _ask_metrics(before, t_start, body.session_id)
+    _log_metrics(body, resp)
+    return resp
 
 
 @app.post('/approve', dependencies=[Depends(auth)], response_model=ApprovalResponse)

@@ -35,8 +35,12 @@ RETRY = types.HttpRetryOptions(
     http_status_codes=[429, 500, 503, 504],
 )
 
-# Counts every model call this process makes. Read it before and after a request to see how many calls the request cost.
-stats = {'requests': 0}
+# Counts every model call this process makes, plus token usage and where time goes
+# (model_ms = inside the API call, pace_ms = waiting on the RPM limiter).
+# Read it before and after a request to see what the request cost; per-request
+# numbers are exact only for sequential requests.
+stats = {'requests': 0, 'prompt_tokens': 0, 'output_tokens': 0,
+         'model_ms': 0, 'pace_ms': 0, 'by_model': {}}
 
 _state = {'loop': None, 'pace_lock': None, 'next_at': 0.0, 'sem': None}
 
@@ -56,6 +60,7 @@ async def _pace(rpm):
         now = time.monotonic()
         wait = _state['next_at'] - now
         if wait > 0:
+            stats['pace_ms'] += int(wait * 1000)
             await asyncio.sleep(wait)
         _state['next_at'] = max(now, _state['next_at']) + interval
 
@@ -64,17 +69,25 @@ class PacedGemini(Gemini):
     '''Gemini with call counting, optional pacing and an optional cap on concurrent calls. Retries come from retry_options.'''
 
     async def _logged(self, llm_request, stream):
+        t0 = time.monotonic()
         last = None
         async for response in super().generate_content_async(llm_request, stream=stream):
             last = response
             yield response
         usage = getattr(last, 'usage_metadata', None) if last is not None else None
+        p = int(getattr(usage, 'prompt_token_count', 0) or 0)
+        o = int(getattr(usage, 'candidates_token_count', 0) or 0)
+        name = str(getattr(llm_request, 'model', '') or '?')
+        stats['prompt_tokens'] += p
+        stats['output_tokens'] += o
+        stats['model_ms'] += int((time.monotonic() - t0) * 1000)
+        m = stats['by_model'].setdefault(name, {'calls': 0, 'prompt_tokens': 0, 'output_tokens': 0})
+        m['calls'] += 1
+        m['prompt_tokens'] += p
+        m['output_tokens'] += o
         if usage is not None:
             log.info('llm call model=%s prompt_tokens=%s output_tokens=%s total_tokens=%s',
-                     getattr(llm_request, 'model', '?'),
-                     getattr(usage, 'prompt_token_count', '?'),
-                     getattr(usage, 'candidates_token_count', '?'),
-                     getattr(usage, 'total_token_count', '?'))
+                     name, p, o, getattr(usage, 'total_token_count', '?'))
 
     async def generate_content_async(self, llm_request, stream=False):
         rpm = float(os.getenv('JARVIS_LLM_RPM', '10'))  # Default to 10 RPM to avoid rate limiting

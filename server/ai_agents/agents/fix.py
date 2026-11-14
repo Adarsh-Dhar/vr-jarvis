@@ -1,7 +1,7 @@
 from google.adk.agents import LlmAgent
 
 from ..callbacks import permission_guard, evidence_collector
-from ..config import MODEL
+from ..config import model_for
 from ..tools.control_tools import exit_loop
 from ..tools.exec_tools import read_test_results, run_tests, run_typecheck
 from ..tools.security_tools import run_security_scan
@@ -16,7 +16,7 @@ from ..tools.navigation_tools import (get_symbol_definition, get_symbol_referenc
 
 patch_agent = LlmAgent(
     name='patch_agent',
-    model=MODEL,
+    model=model_for('fix'),
     include_contents='none',
     description='Proposes a minimal code change with a test, applied only inside a sandbox worktree.',
     instruction='''
@@ -63,7 +63,7 @@ confidence).
 
 verifier = LlmAgent(
     name='verifier_agent',
-    model=MODEL,
+    model=model_for('fix'),
     include_contents='none',
     description='Runs the relevant tests and type check on the sandbox patch and reports exact results.',
     instruction='''
@@ -90,7 +90,7 @@ objects with id and message), not_run (list), typecheck (passed, failed or not_r
 
 code_reviewer = LlmAgent(
     name='code_reviewer',
-    model=MODEL,
+    model=model_for('fix'),
     include_contents='none',
     description='Independently reviews the proposed diff for logic, error handling and acceptance criteria before commit.',
     instruction='''
@@ -165,7 +165,7 @@ assumptions, claims), with diff taken from get_worktree_diff and summary updated
 def _patch_repair(name):
     return LlmAgent(
         name=name,
-        model=MODEL,
+        model=model_for('fix'),
         include_contents='none',
         description='Repairs a failing patch using the test failure output.',
         instruction=PATCH_REPAIR_INSTRUCTION,
@@ -219,7 +219,7 @@ you addressed and how.
 def make_patch_review_repair():
     return LlmAgent(
         name='patch_review_repair_agent',
-        model=MODEL,
+        model=model_for('fix'),
         include_contents='none',
         description='Repairs a patch so every code-review finding and unmet acceptance criterion is addressed.',
         instruction=REVIEW_REPAIR_INSTRUCTION,
@@ -256,7 +256,7 @@ objects with id and message), not_run (list), typecheck (passed, failed or not_r
 def make_review_verifier(name='review_verifier_agent'):
     return LlmAgent(
         name=name,
-        model=MODEL,
+        model=model_for('fix'),
         include_contents='none',
         description='Re-runs tests and type check on the patch after review-driven repair, without ending the loop.',
         instruction=REVIEW_VERIFIER_INSTRUCTION,

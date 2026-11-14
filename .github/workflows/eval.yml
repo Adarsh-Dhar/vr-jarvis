@@ -1,0 +1,49 @@
+name: eval
+on:
+  push:
+  schedule:
+    - cron: '0 3 * * *'
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - run: pip install -r requirements.txt pytest
+      - run: python -m pytest server/tests -q -x
+  live-eval:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    env:
+      GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+      JARVIS_TOKEN: ${{ secrets.JARVIS_TOKEN }}
+      JARVIS_CACHED_TESTS: '0'
+      JARVIS_LLM_RPM: '30'
+      JARVIS_LLM_ATTEMPTS: '3'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - run: pip install -r requirements.txt pyyaml
+      - run: ./scripts/run_server.sh &
+      - run: sleep 60 && curl -f http://127.0.0.1:8000/health
+      # CHECK before relying on this job: repository/ must be populated and indexed
+      # on a fresh runner (run_server.sh only bootstraps demo-account-service when
+      # its .git exists; the graph index may need a first indexing pass), and the
+      # repo may need POST /repos/select before /ask accepts questions.
+      - name: Resolve graph path and select repo
+        run: |
+          GRAPH_PATH=$(cd server && python -c "from ai_agents import config; print(config.GRAPH_PATH)")
+          echo "GRAPH_PATH=$GRAPH_PATH" >> "$GITHUB_ENV"
+          curl -sf -X POST http://127.0.0.1:8000/repos/select \
+            -H "Authorization: Bearer $JARVIS_TOKEN" -H 'Content-Type: application/json' \
+            -d '{"name": "demo-account-service"}' || true
+      - run: python scripts/gen_benchmark.py "$GRAPH_PATH" demo-account-service --per-kind 15
+      - run: |
+          python jarvis-agent-evaluation/runner/http_runner.py \
+            --benchmark jarvis-agent-evaluation/benchmarks/benchmark_demo-account-service.yaml \
+            --graph "$GRAPH_PATH" --split dev --repeats 2 --tag nightly
+      - run: python scripts/eval_compare.py jarvis-agent-evaluation/baseline/summary.json jarvis-agent-evaluation/reports/*_nightly/summary.json
+      - uses: actions/upload-artifact@v4
+        with: { name: eval-reports, path: jarvis-agent-evaluation/reports }

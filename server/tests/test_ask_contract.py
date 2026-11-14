@@ -72,6 +72,8 @@ def test_ask_response_contract():
             # v11 contract additions
             "evidence_items", "task_id", "active_task", "proposal_status",
             "tool_errors", "test_run",
+            # per-request metrics (model calls, tokens, latency, agents)
+            "metrics",
         }
         assert set(data.keys()) == expected_fields, f"Response has unexpected fields: {set(data.keys())}"
 

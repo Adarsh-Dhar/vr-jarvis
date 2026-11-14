@@ -168,6 +168,7 @@ namespace JarvisVR
   [Serializable] internal class DesignApproveRequest { public string session_id; public bool approved; public string approved_by; }
   [Serializable] internal class PlanSessionRequest { public string session_id; }
   [Serializable] internal class PlanTaskPatchRequest { public string status, title, evidence, cycle_rationale, request_id; public bool accept_cycles; }
+  [Serializable] internal class FeedbackRequest { public string session_id, request_id, rating, note, question, reply; }
   [Serializable] public class AgentResultDto { public string agent, summary, status; public float confidence; }
   [Serializable] public class TaskResponse { public bool busy; public string plan_summary; public TaskDto[] tasks; public string[] circular; public AgentResultDto[] agent_results; public string[] findings; }
   [Serializable] internal class SessionResponse { public string session_id; }
@@ -356,6 +357,8 @@ namespace JarvisVR
     void WorkspaceVerify(string[] testFiles, Action<WsVerifyDto> ok, Action<string> fail);
     void WorkspaceReview(Action<WsReviewDto> ok, Action<string> fail);
     void WorkspaceSubmit(Action<WsSubmitDto> ok, Action<string> fail);
+    string LastRequestId { get; }
+    void Feedback(string requestId, string rating, string question, string reply);
   }
 
   /// <summary>HTTP client for server/jarvis_server.py. On a Quest, 127.0.0.1 is the headset itself:
@@ -367,6 +370,8 @@ namespace JarvisVR
     public int TimeoutSeconds = 180;   // keep above JARVIS_ASK_TIMEOUT (170) on the server
 
     private string _session;
+    /// <summary>Request id of the most recent /ask, for the feedback endpoint.</summary>
+    public string LastRequestId { get; private set; } = "";
     private int _reqSeq;
     private string NewRequestId() => "u" + (++_reqSeq) + "-" + DateTime.UtcNow.Ticks.ToString("x");
     /// <summary>Active repository name, kept in sync from /repos and /repos/select. Sent with ask/approve so the
@@ -496,7 +501,9 @@ namespace JarvisVR
       yield return EnsureSession(e => { failed = true; fail(e); });
       if (!failed)
       {
-        string json = JsonUtility.ToJson(new AskRequest { session_id = _session, text = text, selection = selection ?? "", repo = ActiveRepo, task_id = taskId ?? "", request_id = NewRequestId() });
+        string rid = NewRequestId();
+        LastRequestId = rid;
+        string json = JsonUtility.ToJson(new AskRequest { session_id = _session, text = text, selection = selection ?? "", repo = ActiveRepo, task_id = taskId ?? "", request_id = rid });
         yield return Send("POST", "/ask", json, b =>
         {
           try { ok(JsonUtility.FromJson<AskResponse>(b)); }
@@ -593,6 +600,21 @@ namespace JarvisVR
         sb.Append(JsonUtility.ToJson(kv.Key)).Append(':').Append(JsonUtility.ToJson(kv.Value ?? ""));
       }
       return sb.Append('}').ToString();
+    }
+
+    /// <summary>Thumbs up/down on the last answer; logged server-side to data/feedback.jsonl.</summary>
+    public void Feedback(string requestId, string rating, string question, string reply) =>
+      StartCoroutine(FeedbackRoutine(requestId, rating, question, reply));
+
+    private IEnumerator FeedbackRoutine(string requestId, string rating, string question, string reply)
+    {
+      bool failed = false;
+      yield return EnsureSession(e => { failed = true; Debug.LogWarning("JARVIS feedback: " + e); });
+      if (failed) yield break;
+      string json = JsonUtility.ToJson(new FeedbackRequest
+        { session_id = _session, request_id = requestId ?? "", rating = rating, note = "",
+          question = question ?? "", reply = reply ?? "" });
+      yield return Send("POST", "/feedback", json, b => { }, e => Debug.LogWarning("JARVIS feedback: " + e));
     }
 
     public void DesignApprove(bool approved, Action<ArchitectureDto> ok, Action<string> fail) =>

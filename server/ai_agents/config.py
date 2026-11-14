@@ -12,6 +12,14 @@ MODEL_NAME = os.getenv('JARVIS_MODEL', 'gemini-3.5-flash-lite')
 LITE_MODEL_NAME = os.getenv('JARVIS_MODEL_LITE', MODEL_NAME)
 MODEL = make_model(MODEL_NAME)
 LITE_MODEL = make_model(LITE_MODEL_NAME)
+
+
+def model_for(agent_key, tier='full'):
+    '''JARVIS_MODEL_<AGENT> (for example JARVIS_MODEL_IMPACT=gemini-...) overrides the model of one agent.'''
+    override = os.getenv('JARVIS_MODEL_' + agent_key.upper())
+    if override:
+        return make_model(override)
+    return MODEL if tier == 'full' else LITE_MODEL
 MONTHLY_BUDGET_LIMIT = float(os.getenv('JARVIS_MONTHLY_BUDGET', '100.0'))  # USD
 
 # Every folder inside REPOSITORY_DIR is one code repository the VR UI can show.
