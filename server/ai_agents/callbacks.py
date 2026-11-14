@@ -408,18 +408,25 @@ def evidence_collector(tool, args, tool_context, tool_response):
     if "evidence" not in state:
         state["evidence"] = []
 
-    # Extract evidence from tool result
+    # Extract evidence from tool result. state['evidence'] holds node ids
+    # (strings); tool payloads may embed whole node dicts or scalars, so
+    # unwrap dicts to their 'id' and drop anything that is not an id.
     if isinstance(tool_response, dict):
         # Common evidence fields
         evidence_fields = ["node_id", "file", "start", "end", "evidence", "nodes", "references"]
 
+        def _id_values(value):
+            if isinstance(value, dict):
+                value = value.get('id')
+            if isinstance(value, (list, tuple)):
+                for item in value:
+                    yield from _id_values(item)
+            elif isinstance(value, str) and value:
+                yield value
+
         for field in evidence_fields:
             if field in tool_response and tool_response[field]:
-                # Add to evidence list
-                if isinstance(tool_response[field], list):
-                    state["evidence"].extend(tool_response[field])
-                else:
-                    state["evidence"].append(tool_response[field])
+                state["evidence"].extend(_id_values(tool_response[field]))
 
     # Decrement concurrent call count
     release_slot()

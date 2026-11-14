@@ -143,7 +143,8 @@ async def migrate_legacy_sessions(session_service, app_name: str,
     unowned-and-abandoned. Returns the number of sessions migrated."""
     migrated = 0
     manager = SessionLeaseManager(ttl_seconds)
-    for session in await list_sessions(app_name=app_name, user_id=user_id):
+    resp = await list_sessions(app_name=app_name, user_id=user_id)
+    for session in getattr(resp, 'sessions', None) or []:
         if manager._lease_of(session) is not None:
             continue
         lease = {'holder': 'legacy', 'acquired_at': _now(),

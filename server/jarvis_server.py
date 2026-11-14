@@ -379,7 +379,10 @@ async def _register_persisted_sessions():
         resp = await sessions.list_sessions(app_name=APP, user_id=USER)
         persisted = list(getattr(resp, 'sessions', None) or [])
         for sess in persisted:
-            session_last_used.setdefault(sess.id, time.time())
+            # Stamp with the session's real last activity, not restart time,
+            # so the idle-timeout eviction still applies after a restart.
+            session_last_used.setdefault(
+                sess.id, float(getattr(sess, 'last_update_time', 0) or 0))
         # Lease migration: pre-lease persisted sessions get an initial
         # lease record so they are never treated as unowned/abandoned.
         from ai_agents.intelligence.session_leases import (
@@ -865,10 +868,16 @@ async def _run_turn(body):
     return reply
 
 
+def _evidence_ids(state: dict) -> list:
+    """Evidence entries usable as graph node ids. Older turns or buggy writers
+    may leave dicts/scalars in state['evidence']; only strings are ids."""
+    return [e for e in state.get('evidence', []) if isinstance(e, str)]
+
+
 def _unverified_evidence(state: dict) -> list:
     from ai_agents.tools.graph_tools import _graph
     nodes = _graph()['nodes']
-    return [i for i in state.get('evidence', []) if i not in nodes]
+    return [i for i in _evidence_ids(state) if i not in nodes]
 
 
 def _security_scan_summary(state):
@@ -1001,7 +1010,7 @@ def _build_ask_response(reply: str, error: str, state: dict) -> dict:
     from ai_agents.tools.graph_tools import _graph as _g
     nodes = _g()['nodes']
     evidence_items = []
-    for eid in state.get('evidence', []):
+    for eid in _evidence_ids(state):
         n = nodes.get(eid) or {}
         evidence_items.append({
             'node_id': str(eid),
