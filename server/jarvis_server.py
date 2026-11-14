@@ -38,7 +38,9 @@ from ai_agents import llm
 from ai_agents.tools.git_tools import (
     commit_worktree, create_worktree, promote_branch)
 from ai_agents.tools.exec_tools import (
-    _clear_verification, _worktree_fingerprint, verification_blockers)
+    _clear_verification, _review_verdict, _worktree_fingerprint,
+    verification_blockers, review_blockers, run_tests, run_typecheck)
+from ai_agents.tools.security_tools import run_security_scan
 from ai_agents.tools.path_resolver import (
     PathResolutionError, resolve_worktree_read, resolve_worktree_write)
 from ai_agents.tools.workspace_tools import (
@@ -2506,3 +2508,191 @@ async def ws_status(session_id: str, repo: Optional[str] = None):
         'review': _ws_evidence_state(state.get('code_review'), fp, False),
     }
     return out
+
+
+# ---------------------------------------------------------------------------
+# Verification and approval for human workspace edits. /workspace/verify runs
+# the deterministic checks directly (no model turn), /workspace/review runs
+# the independent reviewer agent on the worktree diff, and /workspace/submit
+# moves a fully verified edit into the same pending_approval flow /approve
+# already gates. All three take the session lock and refuse while an agent
+# turn holds it, exactly like the write routes.
+
+_WS_VERIFY_STEPS = {'tests', 'typecheck', 'security'}
+
+
+class WsVerifyBody(BaseModel):
+    session_id: str
+    steps: List[str] = []           # subset of tests/typecheck/security; empty = all
+    test_files: List[str] = []
+    repo: Optional[str] = None
+    request_id: Optional[str] = None
+
+
+class WsReviewBody(BaseModel):
+    session_id: str
+    repo: Optional[str] = None
+    request_id: Optional[str] = None
+
+
+class WsSubmitBody(BaseModel):
+    session_id: str
+    repo: Optional[str] = None
+    request_id: Optional[str] = None
+
+
+def _ws_verify_view(state, fp):
+    """The evidence keys plus their fresh/stale/missing status, in the shape
+    /workspace/status reports so the UI renders both identically."""
+    return {
+        'test_run': state.get('last_test_run') or {},
+        'typecheck': state.get('last_typecheck') or {},
+        'security_scan': state.get('security_scan') or {},
+        'verification': {
+            'tests': _ws_evidence_state(state.get('last_test_run'), fp, True),
+            'typecheck': _ws_evidence_state(state.get('last_typecheck'), fp, True),
+            'security': _ws_evidence_state(state.get('security_scan'), fp, True),
+            'review': _ws_evidence_state(state.get('code_review'), fp, False),
+        },
+    }
+
+
+@app.post('/workspace/verify', dependencies=[Depends(auth)])
+async def ws_verify(body: WsVerifyBody):
+    """Run test/typecheck/security verification directly against the worktree
+    and record the evidence under the same state keys the agent tools write,
+    so /approve treats a human edit exactly like an agent patch."""
+    await _ws_guard(body.session_id, body.repo)
+    _ws_refuse_busy(body.session_id)
+    if USE_CACHED_TESTS:
+        # /approve rejects cached results anyway; refuse up front instead of
+        # recording evidence that can never approve.
+        raise HTTPException(
+            status_code=409,
+            detail='Cached test results are enabled (JARVIS_CACHED_TESTS=1); '
+                   'verification must run live.')
+    steps = [s for s in (body.steps or sorted(_WS_VERIFY_STEPS))
+             if s in _WS_VERIFY_STEPS]
+    if not steps:
+        raise HTTPException(status_code=400,
+                            detail='No valid steps; use tests, typecheck, security.')
+    async with locks[body.session_id]:
+        if await _seen_request(body.session_id, body.request_id):
+            state = (await ensure(body.session_id)).state
+            fp = await _ws_fingerprint(state)
+            return {'ok': True, 'duplicate': True, **_ws_verify_view(state, fp)}
+        state = (await ensure(body.session_id)).state
+        wt = _ws_worktree(state)
+        # The tools mutate tool_context.state; a plain dict copy keeps the real
+        # session state untouched until we copy the evidence keys back.
+        ctx = SimpleNamespace(state=dict(state), agent_name='workspace')
+        ran = []
+        try:
+            if 'tests' in steps:
+                await asyncio.to_thread(run_tests, list(body.test_files or []), ctx)
+                ran.append('last_test_run')
+            if 'typecheck' in steps:
+                await asyncio.to_thread(run_typecheck, ctx)
+                ran.append('last_typecheck')
+            if 'security' in steps:
+                await asyncio.to_thread(run_security_scan, ctx)
+                ran.append('security_scan')
+        finally:
+            delta = {k: ctx.state.get(k, {}) for k in ran}
+            if delta:
+                await set_state(body.session_id, delta)
+        state = (await ensure(body.session_id)).state
+        fp = await _ws_fingerprint(state)
+        return {'ok': True, **_ws_verify_view(state, fp)}
+
+
+async def _ws_fingerprint(state):
+    wt = state.get('worktree')
+    if not wt or not Path(str(wt)).is_dir():
+        return {}
+    try:
+        return await asyncio.to_thread(_worktree_fingerprint, str(wt))
+    except Exception:
+        return {}
+
+
+@app.post('/workspace/review', dependencies=[Depends(auth)])
+async def ws_review(body: WsReviewBody):
+    """Independent review of the worktree diff for a human edit.
+
+    Default: run the code_reviewer agent against this session — it writes
+    state['code_review'] through the same output_key contract the fix pipeline
+    uses, so review_blockers and /approve see no difference. With
+    JARVIS_ALLOW_HUMAN_REVIEW=1 a human acceptance is recorded instead (the
+    independent check is skipped; keep it off unless you accept that)."""
+    await _ws_guard(body.session_id, body.repo)
+    _ws_refuse_busy(body.session_id)
+    async with locks[body.session_id]:
+        if await _seen_request(body.session_id, body.request_id):
+            return {'ok': True, 'duplicate': True}
+        state = (await ensure(body.session_id)).state
+        _ws_worktree(state)
+        if config.ALLOW_HUMAN_REVIEW:
+            review = {'verdict': 'approve',
+                      'summary': 'Human review accepted (JARVIS_ALLOW_HUMAN_REVIEW).',
+                      'findings': [], 'acceptance': []}
+            await set_state(body.session_id, {'code_review': review})
+            state = dict(state)
+            state['code_review'] = review
+            return {'ok': True, 'source': 'human', 'verdict': 'approve',
+                    'summary': review['summary'],
+                    'blockers': review_blockers(state)}
+        from ai_agents.agents.fix import code_reviewer
+        reviewer_runner = Runner(agent=code_reviewer, app_name=APP,
+                                 session_service=sessions)
+        message = types.Content(role='user', parts=[types.Part(text=(
+            'Review the current sandbox worktree diff for commit. '
+            'Follow your review instructions exactly and return the review JSON.'))])
+
+        async def _run():
+            async for _event in reviewer_runner.run_async(
+                    user_id=USER, session_id=body.session_id,
+                    new_message=message):
+                pass
+        try:
+            await asyncio.wait_for(_run(), TURN_TIMEOUT)
+        except asyncio.TimeoutError:
+            raise HTTPException(status_code=504,
+                                detail='Review agent timed out.')
+        except HTTPException:
+            raise
+        except Exception as exc:
+            logging.getLogger('uvicorn.error').exception('workspace review failed')
+            raise HTTPException(status_code=500,
+                                detail='Review agent failed: %s' % str(exc)[:200])
+        state = (await ensure(body.session_id)).state
+        cr = _review_verdict(state) or {}
+        blockers = review_blockers(state)
+        return {'ok': not blockers, 'source': 'agent',
+                'verdict': str(cr.get('verdict') or ''),
+                'summary': str(cr.get('summary') or '')[:500],
+                'blockers': blockers}
+
+
+@app.post('/workspace/submit', dependencies=[Depends(auth)])
+async def ws_submit(body: WsSubmitBody):
+    """Move a verified human edit into the commit approval flow. Runs the same
+    verification_blockers gate /approve uses, then sets pending_approval so the
+    existing HOLD-TO-APPROVE / PROMOTE path works unchanged."""
+    await _ws_guard(body.session_id, body.repo)
+    _ws_refuse_busy(body.session_id)
+    async with locks[body.session_id]:
+        if await _seen_request(body.session_id, body.request_id):
+            return {'ok': True, 'duplicate': True}
+        state = (await ensure(body.session_id)).state
+        wt = _ws_worktree(state)
+        why = await asyncio.to_thread(verification_blockers, state, str(wt), False)
+        if why:
+            return JSONResponse(status_code=409,
+                                content={'ok': False, 'blockers': why})
+        pending = 'Commit your edit to a sandbox branch'
+        await set_state(body.session_id, {'pending_approval': pending,
+                                          'approved': False,
+                                          'approval_type': 'commit'})
+        review = await asyncio.to_thread(_worktree_review, state)
+        return {'ok': True, 'pending_approval': pending, 'review': review}

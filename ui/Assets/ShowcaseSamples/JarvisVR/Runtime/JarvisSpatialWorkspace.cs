@@ -12,7 +12,7 @@ namespace JarvisVR
   /// Spatial JARVIS workspace: a 3D code graph in the middle and independent floating panels around it.
   /// Talks to the real JARVIS server through JarvisBridge.
   /// </summary>
-  public sealed class JarvisSpatialWorkspace : MonoBehaviour
+  public sealed partial class JarvisSpatialWorkspace : MonoBehaviour
   {
 
     private const float WorkspaceDistance = 1.5f;   // metres in front of the user
@@ -192,7 +192,7 @@ namespace JarvisVR
     {
       { "REPOS",  new[] { "repo" } },
       { "MAP",    new[] { "repo", "evidence", "legend", "chat" } },
-      { "CODE",   new[] { "repo", "code", "outline", "evidence", "legend" } },
+      { "CODE",   new[] { "repo", "code", "edit", "outline", "evidence", "legend" } },
       { "FLOW",   new[] { "activity", "evidence" } },
       { "TESTS",  new[] { "tests", "code", "legend" } },
       { "IMPACT", new[] { "repo", "impact", "evidence", "legend", "chat" } },
@@ -213,6 +213,7 @@ namespace JarvisVR
       { "nav",      new Vector3(   0f, -54f, 1.25f) },
       { "repo",     new Vector3( -65f,   6f, 1.9f) },
       { "code",     new Vector3(  65f,   6f, 1.9f) },
+      { "edit",     new Vector3(  95f,  10f, 1.9f) },
       { "ghost",    new Vector3(  65f,   6f, 1.9f) },
       { "evidence", new Vector3(  65f, -28f, 1.8f) },
       { "approval", new Vector3( 65f, -28f, 1.8f) },
@@ -350,6 +351,8 @@ namespace JarvisVR
       outline.AddButton("IN MAP", 346, 280, 80, 40, () => OutlineGo(true), 0f, pal.Violet);
       RefreshOutline();
 
+      BuildEditPanel();   // human line editing in the sandbox worktree (partial class)
+
       JarvisSpatialPanel caption = AddPanel("caption", "JARVIS", 980, 190, 0.15f, -0.52f, pal.Cyan);
       caption.SetBodyBox(54, 70); caption.Body.fontSize = 26;
       _quickChange = caption.AddButton("What breaks if I change this?", 20, 128, 400, 50, () => Ask(QuickChangeQuestion()));   // label follows the selection
@@ -412,7 +415,7 @@ namespace JarvisVR
       string[] visible = ModePanels.ContainsKey(mode) ? ModePanels[mode] : ModePanels["MAP"];
       int shown = 0;
       bool awaiting = !string.IsNullOrEmpty(_pending) || !string.IsNullOrEmpty(_lastCommitBranch);
-      foreach (string key in new[] { "repo", "code", "evidence", "tests", "activity", "legend", "ghost", "approval", "impact", "design_req", "design_cmp", "design_act", "chat", "outline" })
+      foreach (string key in new[] { "repo", "code", "edit", "evidence", "tests", "activity", "legend", "ghost", "approval", "impact", "design_req", "design_cmp", "design_act", "chat", "outline" })
       {
         bool on = visible.Contains(key) || _agentShown.Contains(key);
         // approval shares its slot with evidence and tests: while something is pending or a
@@ -947,10 +950,10 @@ namespace JarvisVR
 
     private void ToggleVoice() { if (_voice != null && _voiceEnabled) _voice.ToggleListening(); }
 
-    private void OpenKeyboard()
+    private void OpenKeyboard(string initial = "")
     {
       if (_kb != null || (_bridge != null && _bridge.Busy)) return;
-      _kb = TouchScreenKeyboard.Open("", TouchScreenKeyboardType.Default);
+      _kb = TouchScreenKeyboard.Open(initial ?? "", TouchScreenKeyboardType.Default);
     }
 
     // Push-to-talk on the orb: hold the pinch while you speak, let go to send the message.
@@ -1818,7 +1821,7 @@ namespace JarvisVR
       _agentMode = null;
       _agentEvidence = r.evidence;
       _agentTestResults = r.test_results;
-      _lastTestRun = r.test_run;
+      ApplyTestRun(r.test_run);
       _validated = r.validated;
       _unverifiedEvidence = r.unverified_evidence;
       bool graphChanged = false;
@@ -1841,7 +1844,7 @@ namespace JarvisVR
       else if (graphChanged) SetMode("MAP");
     }
 
-    private void RefreshAll() { RefreshStyles(); RefreshEvidence(); RefreshCode(); RefreshGhost(); RefreshApproval(); RefreshTests(); RefreshQuickButtons(); RefreshDesign(); RefreshChat(); RefreshOutline(); SetMode(_mode); }
+    private void RefreshAll() { RefreshStyles(); RefreshEvidence(); RefreshCode(); RefreshGhost(); RefreshApproval(); RefreshTests(); RefreshQuickButtons(); RefreshDesign(); RefreshChat(); RefreshOutline(); RefreshEdit(); SetMode(_mode); }
 
     /// <summary>The function the quick question is about: the selected node, else the most connected one in this repository.</summary>
     private string QuickTarget()
@@ -2293,6 +2296,7 @@ namespace JarvisVR
       _browserPath = "";
       _browserPage = 0;
       _repoTree = null;
+      ExitEditMode();
       _openFile = null;
       SetMode("REPOS");
       // Load the file tree independently: browsing must not depend on graph indexing succeeding.
@@ -2338,6 +2342,7 @@ namespace JarvisVR
       _repoTree = null;
       _browserPage = 0;
       _treeLoading = false;
+      ExitEditMode();
       _openFile = null;
       if (_codePrev != null)
       {
@@ -2477,7 +2482,7 @@ namespace JarvisVR
     {
       if (string.IsNullOrEmpty(_browserRepo) || _bridge == null) return;
       Say("Opening " + path + "...");
-      _bridge.GetFile(_browserRepo, path, file =>
+      Action<RepoFileDto> apply = file =>
       {
         if (file == null || file.status != "ok") { Say("Could not open " + path + "."); return; }
         _openFile = file;
@@ -2489,7 +2494,20 @@ namespace JarvisVR
         RefreshOpenFile();
         HighlightFileNodes(path);
         Log("opened " + path);
-      }, error => Say("Could not open file: " + error));
+      };
+      // Prefer the workspace read: when a sandbox worktree exists it returns the
+      // edited (uncommitted) text; without one it falls back to the main checkout.
+      _bridge.WorkspaceGetFile(path, wf =>
+      {
+        if (wf == null) { _bridge.GetFile(_browserRepo, path, apply, e => Say("Could not open file: " + e)); return; }
+        _wsReady = wf.source == "worktree";
+        apply(new RepoFileDto
+        {
+          status = "ok", path = wf.path ?? path, content = wf.content ?? "",
+          size = wf.size, total_lines = (wf.content ?? "").Split('\n').Length,
+          truncated = wf.truncated
+        });
+      }, _ => _bridge.GetFile(_browserRepo, path, apply, e => Say("Could not open file: " + e)));
     }
 
     private void ChangeEditorPage(int delta)
@@ -2512,16 +2530,41 @@ namespace JarvisVR
       _codePanel.SetTitle(_openFile.path);
       string[] hl = JarvisSyntax.HighlightLines(_openFile.content, _openFile.path);
       int pages = Mathf.Max(1, Mathf.CeilToInt(hl.Length / (float)EditorLinesPerPage));
+      // In edit mode the cursor line drives the page, like OutlineGo does.
+      if (_editMode && _editLine > 0)
+        _openFilePage = Mathf.Clamp((_editLine - 1) / EditorLinesPerPage, 0, pages - 1);
       int first = _openFilePage * EditorLinesPerPage;
       int last = Mathf.Min(hl.Length, first + EditorLinesPerPage);
       int width = hl.Length.ToString().Length;
       var sb = new StringBuilder();
-      sb.Append("<color=#").Append(Hex(JarvisPalette.Current.TextMuted)).Append(">READ-ONLY VIEW  ·  ")
-        .Append(hl.Length).Append(" lines  ·  page ").Append(_openFilePage + 1).Append('/').Append(pages).Append("</color>\n\n");
+      JarvisPalette ep = JarvisPalette.Current;
+      if (_editMode)
+      {
+        int errCount = _editSyntax != null ? _editSyntax.Length : 0;
+        sb.Append("<color=#").Append(Hex(ep.TextMuted)).Append(">EDIT MODE  ·  line ").Append(_editLine)
+          .Append('/').Append(hl.Length).Append("  ·  ").Append(errCount).Append(" syntax error")
+          .Append(errCount == 1 ? "" : "s").Append("  ·  page ").Append(_openFilePage + 1).Append('/').Append(pages).Append("</color>\n\n");
+      }
+      else
+      {
+        sb.Append("<color=#").Append(Hex(ep.TextMuted)).Append(">READ-ONLY VIEW  ·  ")
+          .Append(hl.Length).Append(" lines  ·  page ").Append(_openFilePage + 1).Append('/').Append(pages).Append("</color>\n\n");
+      }
       for (int i = first; i < last; i++)
       {
-        sb.Append("<color=#").Append(Hex(JarvisPalette.Current.TextMuted)).Append('>')
-          .Append((i + 1).ToString().PadLeft(width)).Append("</color>  ").Append(hl[i]).Append('\n');
+        int lineNo = i + 1;
+        bool cursor = _editMode && lineNo == _editLine;
+        bool synErr = _editMode && HasEditSyntaxError(lineNo);
+        string num = lineNo.ToString().PadLeft(width);
+        if (cursor) sb.Append("<color=#").Append(Hex(ep.Amber)).Append('>').Append(num).Append(" »</color>  ");
+        else if (synErr) sb.Append("<color=#").Append(Hex(ep.Red)).Append('>').Append(num).Append(" !</color>  ");
+        else sb.Append("<color=#").Append(Hex(ep.TextMuted)).Append('>').Append(num).Append("  </color>");
+        sb.Append(hl[i]);
+        if (synErr && _editSyntax != null)
+          foreach (SyntaxErrorDto se in _editSyntax)
+            if (se != null && se.line == lineNo && !string.IsNullOrEmpty(se.message))
+            { sb.Append("  <color=#").Append(Hex(ep.Red)).Append(">⚠ ").Append(Esc(se.message)).Append("</color>"); break; }
+        sb.Append('\n');
       }
       if (_openFile.truncated) sb.Append("\n<color=#").Append(Hex(JarvisPalette.Current.Amber)).Append(">File truncated at 512 KB.</color>");
       _codePanel.SetBody(sb.ToString());
@@ -2540,6 +2583,7 @@ namespace JarvisVR
 
     private void CloseOpenFile()
     {
+      ExitEditMode();
       _openFile = null;
       _codePrev.gameObject.SetActive(false); _codeClose.gameObject.SetActive(false); _codeNext.gameObject.SetActive(false);
       RefreshCode();
@@ -3445,7 +3489,19 @@ namespace JarvisVR
         if (_kb.status == TouchScreenKeyboard.Status.Done)
         {
           string t = _kb.text != null ? _kb.text.Trim() : "";
-          if (_kbOp != null) { ApplyDesignTextOp(t); _kbOp = null; _kbOpId = null; }
+          if (_kbOp != null)
+          {
+            if (_kbOp.StartsWith("edit_"))
+            {
+              // Code keeps its leading whitespace: strip only a trailing newline.
+              t = _kb.text ?? "";
+              if (t.EndsWith("\r\n")) t = t.Substring(0, t.Length - 2);
+              else if (t.EndsWith("\n")) t = t.Substring(0, t.Length - 1);
+              ApplyEditTextOp(t);
+            }
+            else ApplyDesignTextOp(t);
+            _kbOp = null; _kbOpId = null;
+          }
           else if (t.Length > 0) { Ask(t); Say("Sent."); }
           else Say("Nothing to send.");
         }
@@ -3463,6 +3519,13 @@ namespace JarvisVR
       {
         _taskAt = Time.unscaledTime + 2f;
         RefreshTasks();
+      }
+      // Poll workspace verification status every 2 s in edit mode; this also
+      // catches edits made in an IDE (evidence goes stale without a UI write).
+      if (_editMode && Time.unscaledTime > _editPollAt)
+      {
+        _editPollAt = Time.unscaledTime + 2f;
+        PollEditStatus();
       }
     }
   }

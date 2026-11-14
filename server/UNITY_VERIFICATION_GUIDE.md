@@ -400,3 +400,32 @@ After completing Unity/device verification, create a report with:
 This guide provides complete instructions for completing the Unity runtime and device verification steps. These steps are essential for the final release gate but cannot be performed in the current command-line environment due to the requirement for Unity Editor GUI access and physical device access.
 
 Once these steps are completed, the JARVIS CFG/DFG system will meet the full "Implemented — Basic" or better status for both control-flow and data-flow visualization in VR.
+
+---
+
+## Workspace Edit Loop (VR line editing → verify → review → submit → approve → promote)
+
+The Edit panel (CODE mode, right side) edits files inside the sandbox worktree. Every write goes through `POST /workspace/edit` with `base_hash` conflict detection — never whole-file PUT, so a truncated view cannot corrupt a file.
+
+### Steps to verify in the headset
+
+1. **Open a file**: REPOS → pick a repository → open a small source file.
+2. **EDIT: ON**: press EDIT ON in the Edit panel. The file reloads from the worktree (`source == "worktree"`). Truncated files refuse edit mode.
+3. **Line edits**: LINE ^ / LINE v moves the cursor (amber `»` gutter, page follows). EDIT LINE opens the keyboard prefilled with the line — leading whitespace is preserved. ADD LINE BELOW inserts after the cursor. DELETE LINE removes it. UNDO reverses the last op (inverse line edits only).
+4. **Conflict handling**: if the file changes in an IDE, the next edit returns 409 and the panel reloads automatically.
+5. **Syntax feedback**: per-edit `syntax_errors` mark bad lines red with the message.
+6. **VERIFY**: runs `/workspace/verify` (tests + typecheck + security, live — refused when `JARVIS_CACHED_TESTS=1`). The TESTS panel shows the same run shape as an agent turn.
+7. **REVIEW**: runs `/workspace/review` — the independent `code_reviewer` agent on the worktree diff. With `JARVIS_ALLOW_HUMAN_REVIEW=1` the server records a human acceptance instead (off by default).
+8. **Status polling**: the Edit panel polls `/workspace/status` every 2 s; all four evidence keys must read `fresh` before SUBMIT enables. An IDE edit makes them `stale`/`missing` again.
+9. **SUBMIT**: calls `/workspace/submit`, which runs the same `verification_blockers` gate as `/approve` and sets `pending_approval`. On 409 the blockers are shown via the status poll.
+10. **Approve/promote**: unchanged — HOLD 2s TO APPROVE commits to the sandbox branch, PROMOTE TO MAIN merges and re-indexes.
+
+### Server routes added
+
+- `POST /workspace/verify` — `{session_id, steps?, test_files?, repo?, request_id?}`
+- `POST /workspace/review` — `{session_id, repo?, request_id?}`
+- `POST /workspace/submit` — `{session_id, repo?, request_id?}`
+
+### Tests
+
+`server/tests/test_workspace_verify.py` covers evidence recording, cached-mode and busy-turn refusal, submit gating on all four fresh evidence keys, `pending_approval`, and staleness after a new edit.

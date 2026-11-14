@@ -230,6 +230,96 @@ namespace JarvisVR
   [Serializable] internal class RepoSelectResponse { public string active; public bool session_reset_required; }
   [Serializable] public class HealthDto { public bool ok, cached_tests; public string repo, branch; public int changed; }
 
+  // ---- workspace editing: human edits inside the sandbox worktree ----
+  // Field names match the /workspace/* JSON exactly (snake_case).
+  [Serializable] public class SyntaxErrorDto { public int line, col; public string message; }
+  [Serializable] public class WsSymbolDto { public string name, kind, file, signature; public int start, end, line; }
+  [Serializable] public class WsOpenDto { public bool ok, dirty; public string worktree_name, branch, detail; }
+  [Serializable] public class WsFileDto
+  {
+    public string status, path, content, hash, source, error;
+    public bool truncated;
+    public long size;
+    public int total_lines;
+  }
+  [Serializable] public class WsEditResponse
+  {
+    public bool ok, duplicate, conflict, reverted;
+    public string hash, detail, current_hash, current_content, verification;
+    public int lines, size;
+    public SyntaxErrorDto[] syntax_errors;
+    public WsSymbolDto[] symbols;
+  }
+  [Serializable] public class WsVerificationDto { public string tests, typecheck, review, security; }
+  [Serializable] public class WsStatusDto
+  {
+    public bool ok, busy, worktree, dirty;
+    public string[] files;
+    public string diff_hash, head;
+    public WsVerificationDto verification;
+  }
+  [Serializable] public class WsDiffDto
+  {
+    public bool ok, worktree;
+    public string diff, branch, diff_hash;
+    public string[] files;
+    public int additions, deletions;
+  }
+  [Serializable] public class WsTypecheckDto
+  {
+    public string status, typecheck, command, source, checker, language, note, diff_hash, head;
+    public int exit_code;
+    public string[] errors;
+  }
+  [Serializable] public class WsSecurityFindingDto
+  {
+    public string rule_id, category, severity, file, title, evidence, description, remediation, confidence;
+    public int line;
+    public bool introduced_by_current_change;
+  }
+  [Serializable] public class WsSecurityDto
+  {
+    public string status, scanner, scanner_version, ruleset_version, error, diff_hash;
+    public int files_scanned;
+    public WsSecurityFindingDto[] findings;
+  }
+  [Serializable] public class WsVerifyDto
+  {
+    public bool ok, duplicate;
+    public TestRunDto test_run;
+    public WsTypecheckDto typecheck;
+    public WsSecurityDto security_scan;
+    public WsVerificationDto verification;
+    public string detail;
+  }
+  [Serializable] public class WsReviewDto
+  {
+    public bool ok, duplicate;
+    public string source, verdict, summary;
+    public string[] blockers;
+    public string detail;
+  }
+  [Serializable] public class WsSubmitDto
+  {
+    public bool ok, duplicate;
+    public string pending_approval, detail;
+    public string[] blockers;
+    public WsDiffDto review;
+  }
+  [Serializable] internal class WsSessionRequest { public string session_id, repo; }
+  [Serializable] internal class WsSubmitRequest { public string session_id, repo, request_id; }
+  [Serializable] internal class WsPathRequest { public string session_id, path, repo, request_id; }
+  [Serializable] internal class WsEditRequest
+  {
+    public string session_id, path, op, text, base_hash, repo, request_id;
+    public int start, end;
+  }
+  [Serializable] internal class WsVerifyRequest
+  {
+    public string session_id, repo, request_id;
+    public string[] steps, test_files;
+  }
+
   /// <summary>What the spatial workspace needs from a backend. Implemented by JarvisBridge.</summary>
   public interface IJarvisBackend
   {
@@ -256,6 +346,16 @@ namespace JarvisVR
     void PlanGenerate(Action<ImplementationPlanDto> ok, Action<string> fail);
     void PlanUpdateTask(string taskId, string status, Action<bool> ok, Action<string> fail,
                         string evidence = null, bool acceptCycles = false, string cycleRationale = null);
+    void WorkspaceOpen(Action<WsOpenDto> ok, Action<string> fail);
+    void WorkspaceGetFile(string path, Action<WsFileDto> ok, Action<string> fail);
+    void WorkspaceEditLines(string path, string op, int start, int end, string text, string baseHash,
+                            Action<WsEditResponse> ok, Action<string> fail);
+    void WorkspaceRevert(string path, Action<WsEditResponse> ok, Action<string> fail);
+    void WorkspaceDiff(Action<WsDiffDto> ok, Action<string> fail);
+    void WorkspaceStatus(Action<WsStatusDto> ok, Action<string> fail);
+    void WorkspaceVerify(string[] testFiles, Action<WsVerifyDto> ok, Action<string> fail);
+    void WorkspaceReview(Action<WsReviewDto> ok, Action<string> fail);
+    void WorkspaceSubmit(Action<WsSubmitDto> ok, Action<string> fail);
   }
 
   /// <summary>HTTP client for server/jarvis_server.py. On a Quest, 127.0.0.1 is the headset itself:
@@ -535,6 +635,129 @@ namespace JarvisVR
           cycle_rationale = cycleRationale ?? "", request_id = NewRequestId() });
       yield return Send("PATCH", "/plan/" + _session + "/tasks/" + UnityWebRequest.EscapeURL(taskId), json,
         b => ok(true), fail);
+    }
+
+    // ---- workspace editing: human edits inside the sandbox worktree ----
+
+    public void WorkspaceOpen(Action<WsOpenDto> ok, Action<string> fail) =>
+      StartCoroutine(WsOpenRoutine(ok, fail));
+
+    private IEnumerator WsOpenRoutine(Action<WsOpenDto> ok, Action<string> fail)
+    {
+      bool failed = false;
+      yield return EnsureSession(e => { failed = true; fail(e); });
+      if (failed) yield break;
+      string json = JsonUtility.ToJson(new WsSessionRequest { session_id = _session, repo = ActiveRepo });
+      yield return Send("POST", "/workspace/open", json, b => ok(JsonUtility.FromJson<WsOpenDto>(b)), fail);
+    }
+
+    public void WorkspaceGetFile(string path, Action<WsFileDto> ok, Action<string> fail)
+    {
+      StartCoroutine(WsGetRoutine("/workspace/file", "path", path, ok, fail));
+    }
+
+    public void WorkspaceEditLines(string path, string op, int start, int end, string text, string baseHash,
+                                  Action<WsEditResponse> ok, Action<string> fail) =>
+      StartCoroutine(WsEditRoutine(path, op, start, end, text, baseHash, ok, fail));
+
+    private IEnumerator WsEditRoutine(string path, string op, int start, int end, string text, string baseHash,
+                                      Action<WsEditResponse> ok, Action<string> fail)
+    {
+      bool failed = false;
+      yield return EnsureSession(e => { failed = true; fail(e); });
+      if (failed) yield break;
+      // end is a plain int: callers pass end == start for single-line ops
+      // (JsonUtility cannot send a null/absent field the way int? would need).
+      string json = JsonUtility.ToJson(new WsEditRequest
+      {
+        session_id = _session, path = path ?? "", op = op ?? "", start = start, end = end,
+        text = text ?? "", base_hash = baseHash ?? "", repo = ActiveRepo,
+        request_id = NewRequestId()
+      });
+      yield return Send("POST", "/workspace/edit", json,
+        b => ok(JsonUtility.FromJson<WsEditResponse>(b)), fail);
+    }
+
+    public void WorkspaceRevert(string path, Action<WsEditResponse> ok, Action<string> fail) =>
+      StartCoroutine(WsRevertRoutine(path, ok, fail));
+
+    private IEnumerator WsRevertRoutine(string path, Action<WsEditResponse> ok, Action<string> fail)
+    {
+      bool failed = false;
+      yield return EnsureSession(e => { failed = true; fail(e); });
+      if (failed) yield break;
+      string json = JsonUtility.ToJson(new WsPathRequest
+      { session_id = _session, path = path ?? "", repo = ActiveRepo, request_id = NewRequestId() });
+      yield return Send("POST", "/workspace/revert", json,
+        b => ok(JsonUtility.FromJson<WsEditResponse>(b)), fail);
+    }
+
+    public void WorkspaceDiff(Action<WsDiffDto> ok, Action<string> fail) =>
+      StartCoroutine(WsGetRoutine("/workspace/diff", null, null, ok, fail));
+
+    public void WorkspaceStatus(Action<WsStatusDto> ok, Action<string> fail) =>
+      StartCoroutine(WsGetRoutine("/workspace/status", null, null, ok, fail));
+
+    public void WorkspaceVerify(string[] testFiles, Action<WsVerifyDto> ok, Action<string> fail) =>
+      StartCoroutine(WsVerifyRoutine(testFiles, ok, fail));
+
+    private IEnumerator WsVerifyRoutine(string[] testFiles, Action<WsVerifyDto> ok, Action<string> fail)
+    {
+      bool failed = false;
+      yield return EnsureSession(e => { failed = true; fail(e); });
+      if (failed) yield break;
+      string json = JsonUtility.ToJson(new WsVerifyRequest
+      {
+        session_id = _session, repo = ActiveRepo, request_id = NewRequestId(),
+        steps = null, test_files = testFiles ?? new string[0]
+      });
+      yield return Send("POST", "/workspace/verify", json,
+        b => ok(JsonUtility.FromJson<WsVerifyDto>(b)), fail);
+    }
+
+    public void WorkspaceReview(Action<WsReviewDto> ok, Action<string> fail) =>
+      StartCoroutine(WsReviewRoutine(ok, fail));
+
+    private IEnumerator WsReviewRoutine(Action<WsReviewDto> ok, Action<string> fail)
+    {
+      bool failed = false;
+      yield return EnsureSession(e => { failed = true; fail(e); });
+      if (failed) yield break;
+      string json = JsonUtility.ToJson(new WsPathRequest
+      { session_id = _session, path = null, repo = ActiveRepo, request_id = NewRequestId() });
+      yield return Send("POST", "/workspace/review", json,
+        b => ok(JsonUtility.FromJson<WsReviewDto>(b)), fail);
+    }
+
+    public void WorkspaceSubmit(Action<WsSubmitDto> ok, Action<string> fail) =>
+      StartCoroutine(WsSubmitRoutine(ok, fail));
+
+    private IEnumerator WsSubmitRoutine(Action<WsSubmitDto> ok, Action<string> fail)
+    {
+      bool failed = false;
+      yield return EnsureSession(e => { failed = true; fail(e); });
+      if (failed) yield break;
+      string json = JsonUtility.ToJson(new WsSubmitRequest
+      { session_id = _session, repo = ActiveRepo, request_id = NewRequestId() });
+      yield return Send("POST", "/workspace/submit", json,
+        b => ok(JsonUtility.FromJson<WsSubmitDto>(b)), fail);
+    }
+
+    /// <summary>GET a /workspace/* endpoint. extraParam/extraValue add one query
+    /// parameter (e.g. path=...) when the route needs it.</summary>
+    private IEnumerator WsGetRoutine<T>(string route, string extraParam, string extraValue,
+                                        Action<T> ok, Action<string> fail) where T : class
+    {
+      bool failed = false;
+      yield return EnsureSession(e => { failed = true; fail(e); });
+      if (failed) yield break;
+      string url = route + "?session_id=" + UnityWebRequest.EscapeURL(_session ?? "");
+      if (!string.IsNullOrEmpty(ActiveRepo)) url += "&repo=" + UnityWebRequest.EscapeURL(ActiveRepo);
+      if (!string.IsNullOrEmpty(extraParam))
+        url += "&" + extraParam + "=" + UnityWebRequest.EscapeURL(extraValue ?? "");
+      yield return Send("GET", url, null,
+        b => { try { ok(JsonUtility.FromJson<T>(b)); } catch (Exception ex) { fail("Bad response: " + ex.Message); } },
+        fail);
     }
 
     private IEnumerator SourceRoutine(string nodeId, Action<SourceResponse> ok)

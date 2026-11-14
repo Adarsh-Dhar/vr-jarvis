@@ -40,3 +40,8 @@ USE_CACHED_TESTS = os.getenv('JARVIS_CACHED_TESTS', '0') == '1'   # live by defa
 
 # Largest file a human workspace edit may write (PUT /workspace/file).
 MAX_EDIT_BYTES = int(os.getenv('JARVIS_MAX_EDIT_BYTES', '524288'))
+
+# When 1, POST /workspace/review records a human-accepted approving review
+# instead of running the independent reviewer agent. Off by default: the
+# independent check should not be silently skipped.
+ALLOW_HUMAN_REVIEW = os.getenv('JARVIS_ALLOW_HUMAN_REVIEW', '0') == '1'
