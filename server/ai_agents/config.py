@@ -37,3 +37,6 @@ WORKTREE_DIR = ROOT / 'work'
 
 # Cached mode returns prepared test results. Use it for the judged demo.
 USE_CACHED_TESTS = os.getenv('JARVIS_CACHED_TESTS', '0') == '1'   # live by default
+
+# Largest file a human workspace edit may write (PUT /workspace/file).
+MAX_EDIT_BYTES = int(os.getenv('JARVIS_MAX_EDIT_BYTES', '524288'))

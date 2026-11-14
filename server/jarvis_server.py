@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import binascii
+import hashlib
 import logging
 import json
 import os
@@ -12,7 +13,7 @@ import hmac
 import time
 from collections import defaultdict
 from pathlib import Path
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Literal
 
 from types import SimpleNamespace
 
@@ -34,8 +35,14 @@ from ai_agents.agent import root_agent
 from ai_agents import config, repository
 from ai_agents.config import USE_CACHED_TESTS
 from ai_agents import llm
-from ai_agents.tools.git_tools import commit_worktree, promote_branch
-from ai_agents.tools.exec_tools import _worktree_fingerprint, verification_blockers
+from ai_agents.tools.git_tools import (
+    commit_worktree, create_worktree, promote_branch)
+from ai_agents.tools.exec_tools import (
+    _clear_verification, _worktree_fingerprint, verification_blockers)
+from ai_agents.tools.path_resolver import (
+    PathResolutionError, resolve_worktree_read, resolve_worktree_write)
+from ai_agents.tools.workspace_tools import (
+    apply_line_edit, quick_syntax_check, worktree_symbols)
 from ai_agents.tools.graph_tools import get_source
 from ai_agents.agents.registry import initialize_agents
 
@@ -2135,3 +2142,367 @@ async def call_tool(tool_name: str, body: ToolCallBody):
         log_audit('direct_call', tool_name, body.parameters, f'error_{type(e).__name__}', time.time() - start_time)
         raise HTTPException(status_code=500, detail=str(e))
 
+
+
+# ---------------------------------------------------------------------------
+# Workspace editing: a human edits files in the sandbox worktree directly (VR
+# keyboard or IDE). Every write goes through resolve_worktree_write, is
+# conflict-checked with base_hash, carries a request_id so retries cannot
+# double-apply, is refused while an agent turn holds the session lock, and
+# clears all four verification evidence keys so /approve stays honest.
+# The worktree absolute path is never returned to the client.
+
+class WsOpenBody(BaseModel):
+    session_id: str
+    repo: Optional[str] = None
+
+
+class WsFileBody(BaseModel):
+    session_id: str
+    path: str
+    content: str
+    base_hash: str            # hash of the file text the client edited from
+    repo: Optional[str] = None
+    request_id: Optional[str] = None
+
+
+class WsLineEditBody(BaseModel):
+    session_id: str
+    path: str
+    op: Literal['replace', 'insert_after', 'delete']
+    start: int                # 1-based first line
+    end: Optional[int] = None  # 1-based last line (replace/delete)
+    text: str = ''
+    base_hash: str
+    repo: Optional[str] = None
+    request_id: Optional[str] = None
+
+
+class WsRevertBody(BaseModel):
+    session_id: str
+    path: str
+    repo: Optional[str] = None
+    request_id: Optional[str] = None
+
+
+def _ws_hash(text):
+    return hashlib.sha256(text.encode('utf-8')).hexdigest()
+
+
+def _ws_read_text(path):
+    """Full decoded text of a worktree file plus a truncation flag. The hash is
+    always computed over the FULL text so base_hash stays stable for big files."""
+    raw = Path(path).read_bytes()
+    text = raw.decode('utf-8', errors='replace')
+    cap = repository.MAX_BROWSER_FILE_BYTES
+    return text, len(raw) > cap or len(text) > cap
+
+
+def _ws_content(text):
+    return text[:repository.MAX_BROWSER_FILE_BYTES]
+
+
+async def _ws_guard(session_id, repo):
+    """Shared checks for every workspace route."""
+    _refuse_if_switching()
+    _require_active_repo(repo)
+    await _check_session_repo(session_id)
+
+
+def _ws_worktree(state):
+    wt = state.get('worktree')
+    if not wt or not Path(str(wt)).is_dir():
+        raise HTTPException(status_code=409,
+                            detail='No sandbox worktree. Call /workspace/open first.')
+    return Path(str(wt))
+
+
+def _ws_refuse_busy(session_id):
+    """Writes are refused while an agent turn holds the session lock. Must run
+    BEFORE acquiring the lock: inside it locked() is always true."""
+    if locks[session_id].locked():
+        raise HTTPException(status_code=409,
+                            detail='An agent turn is running for this session. Try again when it finishes.')
+
+
+async def _ws_clear_evidence(session_id):
+    """A human edit invalidates the same four evidence keys an agent patch does."""
+    await set_state(session_id, {'last_test_run': {}, 'last_typecheck': {},
+                                 'code_review': {}, 'security_scan': {}})
+
+
+def _ws_write_atomic(target, content):
+    target.parent.mkdir(parents=True, exist_ok=True)
+    tmp = target.with_name(target.name + '.jarvis-tmp')
+    tmp.write_text(content, encoding='utf-8')
+    os.replace(tmp, target)
+
+
+def _ws_rel(target, wt):
+    return target.relative_to(Path(wt).resolve()).as_posix()
+
+
+@app.post('/workspace/open', dependencies=[Depends(auth)])
+async def ws_open(body: WsOpenBody):
+    """Ensure the session has a sandbox worktree; create one on branch
+    jarvis/edit when missing. Never returns the absolute path."""
+    await _ws_guard(body.session_id, body.repo)
+    state = (await ensure(body.session_id)).state
+    wt = state.get('worktree')
+    if not wt or not Path(str(wt)).is_dir():
+        ctx = SimpleNamespace(state=dict(state), agent_name='workspace')
+        res = await asyncio.to_thread(create_worktree, ctx, 'jarvis/edit')
+        if res.get('status') != 'ok':
+            raise HTTPException(status_code=500,
+                                detail=res.get('error') or 'could not create worktree')
+        new_wt = ctx.state.get('worktree')
+        await set_state(body.session_id, {
+            'worktree': new_wt,
+            'last_test_run': {}, 'last_typecheck': {},
+            'code_review': {}, 'security_scan': {}})
+        wt = new_wt
+    wt_path = Path(str(wt))
+
+    def _info():
+        branch = subprocess.run(['git', 'rev-parse', '--abbrev-ref', 'HEAD'],
+                                cwd=str(wt_path), capture_output=True, text=True,
+                                timeout=10).stdout.strip()
+        dirty = bool(subprocess.run(['git', 'status', '--porcelain'],
+                                    cwd=str(wt_path), capture_output=True, text=True,
+                                    timeout=10).stdout.strip())
+        return branch, dirty
+
+    branch, dirty = await asyncio.to_thread(_info)
+    return {'ok': True, 'worktree_name': wt_path.name, 'branch': branch, 'dirty': dirty}
+
+
+@app.get('/workspace/file', dependencies=[Depends(auth)])
+async def ws_get_file(session_id: str, path: str, repo: Optional[str] = None):
+    """Read a file from the session worktree when one exists, else from the
+    main checkout. Returns content, its sha256 hash and the read source."""
+    await _ws_guard(session_id, repo)
+    state = (await ensure(session_id)).state
+    wt = state.get('worktree')
+    if wt and Path(str(wt)).is_dir():
+        wt_root = Path(str(wt)).resolve()
+        try:
+            target = resolve_worktree_read(path, root=wt_root)
+        except PathResolutionError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        rel = target.relative_to(wt_root)
+        if rel.parts and rel.parts[0] in ('.git', 'node_modules'):
+            raise HTTPException(status_code=400, detail='path is not readable: ' + path)
+        if not target.is_file():
+            raise HTTPException(status_code=404, detail='file not found: ' + path)
+        text, truncated = await asyncio.to_thread(_ws_read_text, target)
+        truncated = truncated or len(text) > repository.MAX_BROWSER_FILE_BYTES
+        return {'path': rel.as_posix(), 'content': _ws_content(text),
+                'hash': _ws_hash(text), 'truncated': truncated,
+                'size': len(text.encode('utf-8')), 'source': 'worktree'}
+    try:
+        data = await asyncio.to_thread(repository.read_browser_file,
+                                       config.REPO_ROOT.name, path)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail='file not found: ' + path)
+    except KeyError:
+        raise HTTPException(status_code=404, detail='unknown repository')
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    content = data.get('content') or ''
+    return {'path': data.get('path') or path, 'content': content,
+            'hash': _ws_hash(content), 'truncated': bool(data.get('truncated')),
+            'size': data.get('size', len(content)), 'source': 'main'}
+
+
+@app.put('/workspace/file', dependencies=[Depends(auth)])
+async def ws_put_file(body: WsFileBody):
+    """Whole-file write into the worktree with base_hash conflict detection."""
+    await _ws_guard(body.session_id, body.repo)
+    _ws_refuse_busy(body.session_id)
+    start = time.time()
+    async with locks[body.session_id]:
+        if await _seen_request(body.session_id, body.request_id):
+            return {'ok': True, 'duplicate': True}
+        state = (await ensure(body.session_id)).state
+        wt = _ws_worktree(state)
+        try:
+            target = resolve_worktree_write(body.path, root=wt)
+        except PathResolutionError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        payload = body.content.encode('utf-8')
+        if len(payload) > config.MAX_EDIT_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail='content is larger than JARVIS_MAX_EDIT_BYTES (%d bytes)'
+                       % config.MAX_EDIT_BYTES)
+        if target.exists():
+            if target.is_dir():
+                raise HTTPException(status_code=400,
+                                    detail='path is a directory: ' + body.path)
+            current_text = (await asyncio.to_thread(_ws_read_text, target))[0]
+            if _ws_hash(current_text) != body.base_hash:
+                return JSONResponse(status_code=409, content={
+                    'ok': False, 'conflict': True,
+                    'current_hash': _ws_hash(current_text),
+                    'current_content': _ws_content(current_text),
+                    'detail': 'File changed outside the editor.'})
+        elif body.base_hash not in ('', _ws_hash('')):
+            return JSONResponse(status_code=409, content={
+                'ok': False, 'conflict': True, 'current_hash': '',
+                'current_content': '',
+                'detail': 'File was deleted outside the editor.'})
+        rel = _ws_rel(target, wt)
+        await asyncio.to_thread(_ws_write_atomic, target, body.content)
+        await _ws_clear_evidence(body.session_id)
+        syn = await asyncio.to_thread(quick_syntax_check, wt, rel)
+        symbols = await asyncio.to_thread(worktree_symbols, wt, rel)
+        log_audit('user', 'workspace_write',
+                  {'path': body.path, 'bytes': len(payload)}, 'ok',
+                  time.time() - start)
+        return {'ok': True, 'hash': _ws_hash(body.content), 'size': len(payload),
+                'syntax_errors': syn['errors'], 'checked': syn['checked'],
+                'symbols': symbols, 'verification': 'stale'}
+
+
+@app.post('/workspace/edit', dependencies=[Depends(auth)])
+async def ws_edit_lines(body: WsLineEditBody):
+    """Line-range edit for the VR UI; same guarantees as PUT /workspace/file."""
+    await _ws_guard(body.session_id, body.repo)
+    _ws_refuse_busy(body.session_id)
+    start = time.time()
+    async with locks[body.session_id]:
+        if await _seen_request(body.session_id, body.request_id):
+            return {'ok': True, 'duplicate': True}
+        state = (await ensure(body.session_id)).state
+        wt = _ws_worktree(state)
+        try:
+            target = resolve_worktree_write(body.path, root=wt)
+        except PathResolutionError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        if not target.is_file():
+            raise HTTPException(status_code=404,
+                                detail='file not found: ' + body.path)
+        current_text = (await asyncio.to_thread(_ws_read_text, target))[0]
+        if _ws_hash(current_text) != body.base_hash:
+            return JSONResponse(status_code=409, content={
+                'ok': False, 'conflict': True,
+                'current_hash': _ws_hash(current_text),
+                'current_content': _ws_content(current_text),
+                'detail': 'File changed outside the editor.'})
+        new_text, err = apply_line_edit(current_text, body.op,
+                                       body.start, body.end, body.text)
+        if err:
+            raise HTTPException(status_code=400, detail=err)
+        rel = _ws_rel(target, wt)
+        await asyncio.to_thread(_ws_write_atomic, target, new_text)
+        await _ws_clear_evidence(body.session_id)
+        syn = await asyncio.to_thread(quick_syntax_check, wt, rel)
+        symbols = await asyncio.to_thread(worktree_symbols, wt, rel)
+        log_audit('user', 'workspace_edit',
+                  {'path': body.path, 'op': body.op, 'start': body.start,
+                   'end': body.end}, 'ok', time.time() - start)
+        return {'ok': True, 'hash': _ws_hash(new_text),
+                'size': len(new_text.encode('utf-8')),
+                'lines': len(new_text.splitlines()),
+                'syntax_errors': syn['errors'], 'checked': syn['checked'],
+                'symbols': symbols, 'verification': 'stale'}
+
+
+@app.post('/workspace/revert', dependencies=[Depends(auth)])
+async def ws_revert(body: WsRevertBody):
+    """Restore a worktree file to HEAD, or delete it when it is untracked."""
+    await _ws_guard(body.session_id, body.repo)
+    _ws_refuse_busy(body.session_id)
+    start = time.time()
+    async with locks[body.session_id]:
+        if await _seen_request(body.session_id, body.request_id):
+            return {'ok': True, 'duplicate': True}
+        state = (await ensure(body.session_id)).state
+        wt = _ws_worktree(state)
+        try:
+            target = resolve_worktree_write(body.path, root=wt)
+        except PathResolutionError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        rel = _ws_rel(target, wt)
+
+        def _do_revert():
+            in_head = subprocess.run(
+                ['git', 'cat-file', '-e', 'HEAD:' + rel],
+                cwd=str(wt), capture_output=True).returncode == 0
+            existed = in_head or target.exists()
+            if in_head:
+                subprocess.run(['git', 'checkout', 'HEAD', '--', rel],
+                               cwd=str(wt), capture_output=True)
+            elif target.exists():
+                target.unlink()
+            return existed
+
+        existed = await asyncio.to_thread(_do_revert)
+        if not existed:
+            raise HTTPException(status_code=404,
+                                detail='nothing to revert: ' + body.path)
+        await _ws_clear_evidence(body.session_id)
+        log_audit('user', 'workspace_revert', {'path': body.path}, 'ok',
+                  time.time() - start)
+        new_hash = ''
+        if target.is_file():
+            new_hash = _ws_hash((await asyncio.to_thread(_ws_read_text, target))[0])
+        return {'ok': True, 'hash': new_hash, 'reverted': True,
+                'verification': 'stale'}
+
+
+@app.get('/workspace/diff', dependencies=[Depends(auth)])
+async def ws_diff(session_id: str, repo: Optional[str] = None):
+    """The cumulative worktree diff plus the fingerprint /approve compares."""
+    await _ws_guard(session_id, repo)
+    state = (await ensure(session_id)).state
+    review = await asyncio.to_thread(_worktree_review, state)
+    if not review:
+        return {'ok': True, 'worktree': False, 'diff': '', 'files': [],
+                'branch': '', 'diff_hash': '', 'additions': 0, 'deletions': 0}
+    return {'ok': True, 'worktree': True, **review}
+
+
+def _ws_evidence_state(record, fp, fingerprinted):
+    """fresh / stale / missing for one piece of verification evidence."""
+    if not record:
+        return 'missing'
+    if record.get('diff_hash') and fp.get('diff_hash') \
+            and record['diff_hash'] != fp['diff_hash']:
+        return 'stale'
+    if fingerprinted and record.get('head') and fp.get('head') \
+            and record['head'] != fp['head']:
+        return 'stale'
+    return 'fresh'
+
+
+@app.get('/workspace/status', dependencies=[Depends(auth)])
+async def ws_status(session_id: str, repo: Optional[str] = None):
+    """Worktree state plus the freshness of each verification evidence key.
+    Used by the UI and for IDE-change polling (diff_hash changes without a
+    UI write mean the file changed on disk)."""
+    await _ws_guard(session_id, repo)
+    state = (await ensure(session_id)).state
+    wt = state.get('worktree')
+    has_wt = bool(wt) and Path(str(wt)).is_dir()
+    out = {'ok': True, 'busy': locks[session_id].locked(), 'worktree': has_wt,
+           'dirty': False, 'files': [], 'diff_hash': '', 'head': '',
+           'verification': {'tests': 'missing', 'typecheck': 'missing',
+                            'review': 'missing', 'security': 'missing'}}
+    if not has_wt:
+        return out
+    fp = await asyncio.to_thread(_worktree_fingerprint, str(wt))
+    review = await asyncio.to_thread(_worktree_review, state)
+    out.update({'dirty': bool(review.get('files')),
+                'files': review.get('files') or [],
+                'diff_hash': fp.get('diff_hash', ''),
+                'head': fp.get('head', '')})
+    out['verification'] = {
+        'tests': _ws_evidence_state(state.get('last_test_run'), fp, True),
+        'typecheck': _ws_evidence_state(state.get('last_typecheck'), fp, True),
+        'security': _ws_evidence_state(state.get('security_scan'), fp, True),
+        # code_review carries no guaranteed fingerprint; it is cleared by every
+        # write, so presence means it post-dates the last edit.
+        'review': _ws_evidence_state(state.get('code_review'), fp, False),
+    }
+    return out
