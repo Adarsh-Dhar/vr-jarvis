@@ -26,6 +26,8 @@ namespace JarvisVR
     public string[] direct_callers, indirect_dependents, possible_callers, import_dependents;
     public string[] passed_tests, failed_tests, not_run_tests;
   }
+  /// <summary>The exact change a test/review run was about (server reads it from the sandbox worktree).</summary>
+  [Serializable] public class ValidatedDto { public string task_id, branch, diff_hash; public string[] files; public int additions, deletions; }
   [Serializable] public class AskResponse
   {
     public string reply, error, pending_approval, test_results, test_source;
@@ -35,6 +37,7 @@ namespace JarvisVR
     public string[] unverified_evidence;
     public string[] tool_errors;
     public string task_id, proposal_status;
+    public ValidatedDto validated;
     public EvidenceItemDto[] evidence_items;
     public ActiveTaskDto active_task;
     public TestRunDto test_run;
@@ -53,7 +56,7 @@ namespace JarvisVR
   }
   [Serializable] public class TestRunDto
   {
-    public string status, source, runner, command, error;
+    public string status, source, runner, command, error, diff_hash, head;
     public int exit_code;
     public float duration_s;
     public string[] passed, failed_ids, skipped, checks_not_run;

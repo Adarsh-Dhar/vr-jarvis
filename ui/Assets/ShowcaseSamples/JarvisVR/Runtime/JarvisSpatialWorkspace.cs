@@ -113,6 +113,19 @@ namespace JarvisVR
     private static readonly string[] QuestionSections = { "OPEN", "DEFERRED", "RESOLVED" };
     private JarvisSpatialButton _taskPrevBtn, _taskNextBtn, _taskStartBtn, _taskDoneBtn, _taskWorkBtn;
 
+    // ---- conversation history, symbol outline, graph filters, settings ----
+    private readonly List<string> _chat = new List<string>();   // "Y|text" = developer, "J|text" = JARVIS (active session only)
+    private int _chatOffset, _chatShown;
+    private const int ChatMaxEntries = 60;
+    private int _outlineSel;
+    private int _kindFilter;                 // index into KindFilters; 0 = ALL
+    private string _edgeFilter;              // null = every relationship type
+    private JarvisSpatialButton _kindFilterBtn, _edgeFilterBtn, _voiceBtn, _quitBtn, _menuEditLabel;
+    private JarvisSpatialPanel _settingsPanel;
+    private bool _voiceEnabled = true, _quitArmed;
+    private ValidatedDto _validated;         // which change the last test/review run was about
+    private const float RotateStepDegrees = 30f;
+
     public void Initialize(Camera cam)
     {
       _cam = cam;
@@ -178,13 +191,13 @@ namespace JarvisVR
     private static readonly Dictionary<string, string[]> ModePanels = new Dictionary<string, string[]>
     {
       { "REPOS",  new[] { "repo" } },
-      { "MAP",    new[] { "repo", "evidence", "legend" } },
-      { "CODE",   new[] { "repo", "code", "evidence", "legend" } },
+      { "MAP",    new[] { "repo", "evidence", "legend", "chat" } },
+      { "CODE",   new[] { "repo", "code", "outline", "evidence", "legend" } },
       { "FLOW",   new[] { "activity", "evidence" } },
       { "TESTS",  new[] { "tests", "code", "legend" } },
-      { "IMPACT", new[] { "repo", "impact", "evidence", "legend" } },
-      { "AGENT",  new[] { "activity", "ghost" } },
-      { "DESIGN", new[] { "design_req", "design_cmp", "design_act", "activity", "legend" } },
+      { "IMPACT", new[] { "repo", "impact", "evidence", "legend", "chat" } },
+      { "AGENT",  new[] { "activity", "ghost", "chat" } },
+      { "DESIGN", new[] { "design_req", "design_cmp", "design_act", "activity", "legend", "chat" } },
     };
 
     // Panels live on a dome around the user instead of one flat wall:
@@ -210,6 +223,10 @@ namespace JarvisVR
       { "design_req", new Vector3(-65f,   6f, 1.9f) },
       { "design_cmp", new Vector3( 65f,   6f, 1.9f) },
       { "design_act", new Vector3( 65f, -28f, 1.8f) },
+      { "chat",     new Vector3( -65f, -28f, 1.8f) },
+      { "outline",  new Vector3( -65f, -28f, 1.8f) },
+      { "tools",    new Vector3(   0f, -42f, 1.45f) },
+      { "settings", new Vector3(  45f, -40f, 1.4f) },
     };
 
     /// <summary>Where the user's head is, in the workspace root's local space (see Recenter).</summary>
@@ -225,7 +242,7 @@ namespace JarvisVR
     private JarvisSpatialPanel AddPanel(string key, string title, float w, float h, float x, float y, Color accent)
     {
       Vector3 pos = Slots.TryGetValue(key, out Vector3 slot) ? SlotPosition(slot) : new Vector3(x, y, 0f);
-      JarvisSpatialPanel p = JarvisSpatialPanel.Create(_root, title, w, h, pos, accent, key != "nav" && key != "status" && key != "caption");
+      JarvisSpatialPanel p = JarvisSpatialPanel.Create(_root, title, w, h, pos, accent, key != "nav" && key != "status" && key != "caption" && key != "tools");
       _panels[key] = p;
       return p;
     }
@@ -316,6 +333,22 @@ namespace JarvisVR
       _taskStartBtn = _designActPanel.AddButton("START", 232, 192, 100, 50, () => TaskSetStatus("running"), 0f, pal.Green);
       _taskDoneBtn = _designActPanel.AddButton("DONE", 338, 192, 100, 50, () => TaskSetStatus("done"), 0f, pal.Green);
       _taskWorkBtn = _designActPanel.AddButton("WORK ON IT", 444, 192, 116, 50, WorkOnTask, 0f, pal.Amber);
+      // Rejecting sends the architecture back to draft and discards the plan generated from it (server clears it too).
+      _designActPanel.AddButton("REJECT DESIGN", 20, 252, 200, 50, () => DesignApprove(false), 0f, pal.Red);
+
+      JarvisSpatialPanel chat = AddPanel("chat", "Conversation", 440, 330, -1.12f, -0.46f, pal.Violet);
+      chat.SetBodyBox(56, 220); chat.Body.fontSize = 16;
+      chat.AddButton("< OLDER", 14, 280, 200, 40, () => { _chatOffset += Mathf.Max(1, _chatShown); RefreshChat(); }, 0f, pal.Violet);
+      chat.AddButton("NEWER >", 226, 280, 200, 40, () => { _chatOffset = Mathf.Max(0, _chatOffset - Mathf.Max(1, _chatShown)); RefreshChat(); }, 0f, pal.Violet);
+      RefreshChat();
+
+      JarvisSpatialPanel outline = AddPanel("outline", "Outline", 440, 330, -1.12f, -0.46f, pal.Cyan);
+      outline.SetBodyBox(56, 220); outline.Body.fontSize = 16;
+      outline.AddButton("< PREV", 14, 280, 100, 40, () => { _outlineSel--; RefreshOutline(); }, 0f, pal.Cyan);
+      outline.AddButton("NEXT >", 118, 280, 100, 40, () => { _outlineSel++; RefreshOutline(); }, 0f, pal.Cyan);
+      outline.AddButton("GO TO", 222, 280, 120, 40, () => OutlineGo(false), 0f, pal.Green);
+      outline.AddButton("IN MAP", 346, 280, 80, 40, () => OutlineGo(true), 0f, pal.Violet);
+      RefreshOutline();
 
       JarvisSpatialPanel caption = AddPanel("caption", "JARVIS", 980, 190, 0.15f, -0.52f, pal.Cyan);
       caption.SetBodyBox(54, 70); caption.Body.fontSize = 26;
@@ -332,8 +365,26 @@ namespace JarvisVR
         _navButtons[mode] = nav.AddButton(mode, x, 52, 100, 46, () => { _agentShown.Clear(); foreach (JarvisSpatialPanel pp in _panels.Values) pp.Reopen(); SetMode(mode); });
         x += 108f;
       }
-      nav.AddButton("CENTER", x, 52, 100, 46, Recenter);
+      nav.AddButton("CENTER", x, 52, 100, 46, () => { Recenter(); ResetGraphView(); });
       nav.AddButton("FX", x + 108f, 52, 100, 46, CycleIsolation);
+
+      // View tools: graph filters, rotation, runtime trace, settings, exit
+      JarvisSpatialPanel tools = AddPanel("tools", "View", 900, 110, 0.15f, -0.66f, pal.Cyan);
+      _kindFilterBtn = tools.AddButton("FILTER: ALL", 12, 52, 160, 46, CycleKindFilter);
+      _edgeFilterBtn = tools.AddButton("EDGE: ALL", 180, 52, 160, 46, CycleEdgeFilter);
+      tools.AddButton("ROT <", 348, 52, 80, 46, () => RotateGraph(-RotateStepDegrees));
+      tools.AddButton("ROT >", 436, 52, 80, 46, () => RotateGraph(+RotateStepDegrees));
+      tools.AddButton("TRACE", 524, 52, 100, 46, RunRuntimeTrace, 0f, pal.Violet);
+      tools.AddButton("SETTINGS", 632, 52, 140, 46, OpenSettings);
+      tools.AddButton("EXIT", 780, 52, 100, 46, ExitToProjects, 0f, pal.Red);
+
+      _settingsPanel = AddPanel("settings", "Settings", 520, 330, 0.6f, 0f, pal.Cyan);
+      _settingsPanel.SetBodyBox(56, 170); _settingsPanel.Body.fontSize = 18;
+      _voiceBtn = _settingsPanel.AddButton("VOICE: ON", 20, 250, 120, 50, ToggleVoiceEnabled);
+      _settingsPanel.AddButton("RESET LAYOUT", 146, 250, 150, 50, ResetLayout);
+      _quitBtn = _settingsPanel.AddButton("QUIT APP", 302, 250, 110, 50, QuitApp, 0f, pal.Red);
+      _settingsPanel.AddButton("CLOSE", 418, 250, 90, 50, () => { _settingsPanel.Show(false); _quitArmed = false; });
+      _settingsPanel.Show(false);
 
       RefreshStatus(); RefreshRepo(); RefreshActivity(); RefreshApproval();
       BuildMenu();
@@ -361,7 +412,7 @@ namespace JarvisVR
       string[] visible = ModePanels.ContainsKey(mode) ? ModePanels[mode] : ModePanels["MAP"];
       int shown = 0;
       bool awaiting = !string.IsNullOrEmpty(_pending) || !string.IsNullOrEmpty(_lastCommitBranch);
-      foreach (string key in new[] { "repo", "code", "evidence", "tests", "activity", "legend", "ghost", "approval", "impact", "design_req", "design_cmp", "design_act" })
+      foreach (string key in new[] { "repo", "code", "evidence", "tests", "activity", "legend", "ghost", "approval", "impact", "design_req", "design_cmp", "design_act", "chat", "outline" })
       {
         bool on = visible.Contains(key) || _agentShown.Contains(key);
         // approval shares its slot with evidence and tests: while something is pending or a
@@ -504,6 +555,7 @@ namespace JarvisVR
           cv.Members[i].Label.gameObject.SetActive(false);
         }
       }
+      if (_kindFilter != 0) ApplyFilters();   // a filter chosen earlier survives a graph reload
       RefreshEdgeVisibility();
     }
 
@@ -782,6 +834,7 @@ namespace JarvisVR
       RefreshStyles();
       RefreshEvidence();
       RefreshCode();
+      RefreshOutline();
       Log("selected " + _nodes[id].Dto.name);
       if (_bridge != null && !_source.ContainsKey(id) && !IsDesignNode(id))
         _bridge.GetSource(id, s => { if (s != null && s.status == "ok") { _source[id] = s; if (_selected == id) RefreshCode(); } });
@@ -892,7 +945,7 @@ namespace JarvisVR
       _edgesDirty = true;
     }
 
-    private void ToggleVoice() { if (_voice != null) _voice.ToggleListening(); }
+    private void ToggleVoice() { if (_voice != null && _voiceEnabled) _voice.ToggleListening(); }
 
     private void OpenKeyboard()
     {
@@ -903,7 +956,7 @@ namespace JarvisVR
     // Push-to-talk on the orb: hold the pinch while you speak, let go to send the message.
     private void VoiceDown()
     {
-      if (_voice == null || _voice.Current == JarvisVoice.State.Listening) return;
+      if (_voice == null || !_voiceEnabled || _voice.Current == JarvisVoice.State.Listening) return;
       JarvisAudio.Play(JarvisAudio.Cue.SelectTick);
       _voice.StartPushToTalk();
     }
@@ -924,7 +977,8 @@ namespace JarvisVR
       _progressSeen = 0;
       Say("Thinking…");
       Log("ask: " + text);
-      _bridge.Ask(text, _selected, OnAnswer, err => { Say(err); Log("error: " + err); _errorUntil = Time.unscaledTime + 4f; }, taskId);
+      AddChat(true, text);
+      _bridge.Ask(text, _selected, OnAnswer, err => { Say(err); Log("error: " + err); AddChat(false, "[error] " + err); _errorUntil = Time.unscaledTime + 4f; }, taskId);
     }
 
     // =========================================================== architecture design
@@ -937,11 +991,13 @@ namespace JarvisVR
       _progressSeen = 0;
       Say("Designing architecture…");
       Log("design: " + idea);
+      AddChat(true, idea);
       _bridge.DesignPropose(idea, r =>
       {
         if (r == null || r.architecture == null)
         {
           Say("Design failed: " + (r != null ? r.error : "no response"));
+          AddChat(false, "[error] design failed: " + (r != null ? r.error : "no response"));
           _errorUntil = Time.unscaledTime + 4f;
           return;
         }
@@ -960,6 +1016,7 @@ namespace JarvisVR
         RefreshAll();
         int n = r.architecture.components != null ? r.architecture.components.Length : 0;
         Say("Proposed " + n + " components. COMPARE, APPROVE, GENERATE PLAN in the Architecture panel.");
+        AddChat(false, "Proposed " + n + " components. Review them in DESIGN mode, then COMPARE and APPROVE.");
       }, err => { Say(err); _errorUntil = Time.unscaledTime + 4f; });
     }
 
@@ -983,7 +1040,7 @@ namespace JarvisVR
             g.nodes.Add(new GraphNodeDto { id = "x:" + x.node, name = x.name, kind = "external", cluster = "repo" });
       if (arch.relationships != null)
         foreach (RelationshipDto r in arch.relationships)
-          g.edges.Add(new GraphEdgeDto { src = "d:" + r.src, dst = "d:" + r.dst, kind = r.kind, type = r.kind, edge_id = r.id });
+          g.edges.Add(new GraphEdgeDto { src = "d:" + r.src, dst = "d:" + r.dst, kind = r.kind, type = r.kind, edge_id = r.id, reason = r.label });
 
       string sel = _selected;
       LoadGraph(g);
@@ -1041,8 +1098,10 @@ namespace JarvisVR
       {
         if (a == null) { Say("Approve failed."); return; }
         _design.architecture = a;
+        if (!approved) { _design.plan = null; _tasks = null; _taskSel = 0; }   // the server discards the plan with the approval
         RefreshAll();
-        Say(approved ? "Architecture approved. GENERATE PLAN is unlocked." : "Architecture moved back to draft.");
+        Say(approved ? "Architecture approved. The plan was generated: review it with TASK > in the Architecture panel." : "Design rejected. It is back in draft and the plan was discarded.");
+        Log(approved ? "design approved" : "design rejected");
       }, err => Say(err));
     }
 
@@ -1303,6 +1362,12 @@ namespace JarvisVR
     private void ApplyDesignTextOp(string text)
     {
       if (string.IsNullOrEmpty(_kbOpId)) { Say("Nothing to send."); return; }
+      if (_kbOp == "edge_label")
+      {
+        if (string.IsNullOrEmpty(text)) { Say("A link label cannot be empty."); return; }
+        SendDesignEdit(new[] { new DesignEditOpDto { op = "update_relationship", id = _kbOpId, label = text } }, "Link label -> " + text);
+        return;
+      }
       if (_kbOp == "task_done")
       {
         TaskDto dt = null;
@@ -1732,6 +1797,7 @@ namespace JarvisVR
 
     private void OnAnswer(AskResponse r)
     {
+      if (!string.IsNullOrEmpty(r.error) && !r.error.Contains("took too long")) AddChat(false, "[error] " + r.error);
       if (!string.IsNullOrEmpty(r.error))
       {
         if (r.error.Contains("took too long"))
@@ -1753,6 +1819,7 @@ namespace JarvisVR
       _agentEvidence = r.evidence;
       _agentTestResults = r.test_results;
       _lastTestRun = r.test_run;
+      _validated = r.validated;
       _unverifiedEvidence = r.unverified_evidence;
       bool graphChanged = false;
       if (r.scene_commands != null) foreach (SceneCommand c in r.scene_commands) graphChanged |= ApplyCommand(c);
@@ -1760,6 +1827,7 @@ namespace JarvisVR
       string reply = r.reply ?? "";
       if (r.test_source == "cached") reply += "  (Test results are SIMULATED.)";
       Say(reply);
+      if (!string.IsNullOrWhiteSpace(reply)) AddChat(false, reply);
       Log("JARVIS answered");
       Debug.Log("[JARVIS] reply: " + reply);
       if (_voice != null) _voice.Speak(reply);
@@ -1773,7 +1841,7 @@ namespace JarvisVR
       else if (graphChanged) SetMode("MAP");
     }
 
-    private void RefreshAll() { RefreshStyles(); RefreshEvidence(); RefreshCode(); RefreshGhost(); RefreshApproval(); RefreshTests(); RefreshQuickButtons(); RefreshDesign(); SetMode(_mode); }
+    private void RefreshAll() { RefreshStyles(); RefreshEvidence(); RefreshCode(); RefreshGhost(); RefreshApproval(); RefreshTests(); RefreshQuickButtons(); RefreshDesign(); RefreshChat(); RefreshOutline(); SetMode(_mode); }
 
     /// <summary>The function the quick question is about: the selected node, else the most connected one in this repository.</summary>
     private string QuickTarget()
@@ -2220,6 +2288,7 @@ namespace JarvisVR
       // Design, plan and tasks belong to the previous repository's session: drop them so DESIGN reloads
       // for the new session instead of showing (and acting on) stale data.
       _design = null; _designRequested = false; _tasks = null; _designWarning = null; _lastTaskError = null;
+      _chat.Clear(); _chatOffset = 0; _validated = null; RefreshChat();   // the conversation belongs to the previous repository's session
       _browserRepo = name;
       _browserPath = "";
       _browserPage = 0;
@@ -2459,6 +2528,7 @@ namespace JarvisVR
       _codePrev.gameObject.SetActive(true); _codeClose.gameObject.SetActive(true); _codeNext.gameObject.SetActive(true);
       _codePrev.Interactable = _openFilePage > 0;
       _codeNext.Interactable = _openFilePage < pages - 1;
+      RefreshOutline();
     }
 
     private void HighlightFileNodes(string path)
@@ -2473,6 +2543,7 @@ namespace JarvisVR
       _openFile = null;
       _codePrev.gameObject.SetActive(false); _codeClose.gameObject.SetActive(false); _codeNext.gameObject.SetActive(false);
       RefreshCode();
+      RefreshOutline();
     }
 
     private void RefreshActivity()
@@ -2706,6 +2777,7 @@ namespace JarvisVR
         extra += "\n\n<b><color=#" + Hex(pal.Red) + ">Failures</color></b>\n";
         foreach (string f in _testFailureLines) extra += "• " + Esc(f) + "\n";
       }
+      extra += ValidatedBlock();
       _panels["tests"].SetBody("<b><color=#" + Hex(vc) + ">" + verdict + "</color></b>\n" + _testSummary + extra);
     }
 
@@ -2729,7 +2801,7 @@ namespace JarvisVR
 
     private void BuildMenu()
     {
-      _menu = AddPanel("menu", "Node", 380, 720, 0f, 0f, JarvisSpatialFx.Magenta);
+      _menu = AddPanel("menu", "Node", 380, 780, 0f, 0f, JarvisSpatialFx.Magenta);
       _menu.SetBodyBox(54, 40); _menu.Body.fontSize = 20;
       _menu.AddButton("ASK ABOUT THIS", 20, 100, 340, 50, () =>
       {
@@ -2746,6 +2818,7 @@ namespace JarvisVR
       _menuLink = _menu.AddButton("START LINK", 20, 520, 340, 50, MenuStartLink);
       _menuDelEdge = _menu.AddButton("DELETE EDGE", 20, 580, 340, 50, MenuDeleteEdge);
       _menuCycleKind = _menu.AddButton("CYCLE EDGE KIND", 20, 640, 340, 50, MenuCycleEdgeKind);
+      _menuEditLabel = _menu.AddButton("EDIT LABEL", 20, 700, 340, 50, MenuEditEdgeLabel);
       _menu.Show(false);
     }
 
@@ -2810,6 +2883,22 @@ namespace JarvisVR
       _menu.Show(false);
     }
 
+    private string RelLabel(string id)
+    {
+      if (string.IsNullOrEmpty(id) || _design?.architecture?.relationships == null) return null;
+      foreach (RelationshipDto r in _design.architecture.relationships) if (r.id == id) return r.label;
+      return null;
+    }
+
+    private void MenuEditEdgeLabel()
+    {
+      if (string.IsNullOrEmpty(_menuEdgeKey)) { _menu.Show(false); return; }
+      _kbOp = "edge_label"; _kbOpId = _menuEdgeKey;
+      OpenKeyboard();
+      if (_kb == null) { _kbOp = null; _kbOpId = null; Say("The keyboard did not open (JARVIS is busy, or typing is unavailable here). Try again."); }
+      _menu.Show(false);
+    }
+
     private void MenuCycleEdgeKind()
     {
       if (string.IsNullOrEmpty(_menuEdgeKey) || _design?.architecture?.relationships == null) { _menu.Show(false); return; }
@@ -2838,7 +2927,7 @@ namespace JarvisVR
       // Design editing buttons only on architecture component nodes; edge buttons only on edges.
       foreach (JarvisSpatialButton b in new[] { _menuAddComp, _menuRename, _menuResp, _menuDelete, _menuLink })
         if (b != null) { b.ForceHidden = !design; b.gameObject.SetActive(design); }
-      foreach (JarvisSpatialButton b in new[] { _menuDelEdge, _menuCycleKind })
+      foreach (JarvisSpatialButton b in new[] { _menuDelEdge, _menuCycleKind, _menuEditLabel })
         if (b != null) { b.ForceHidden = true; b.gameObject.SetActive(false); }
       if (_menuLink != null)
       {
@@ -2866,13 +2955,14 @@ namespace JarvisVR
       _menuEdgeKey = edge.Dto.edge_id;
       _menuNode = null;
       _menu.SetTitle("Link " + edge.Dto.src + " > " + edge.Dto.dst);
-      _menu.SetBody("kind: " + (edge.Dto.kind ?? "?") + "  ·  " + edge.Dto.type);
+      string relLabel = RelLabel(edge.Dto.edge_id);
+      _menu.SetBody("kind: " + (edge.Dto.kind ?? "?") + "  ·  " + edge.Dto.type + "\nlabel: " + (string.IsNullOrEmpty(relLabel) ? "(none)" : relLabel));
       Vector3 mid = (edge.From.Root.position + edge.To.Root.position) * 0.5f;
       Vector3 toCam = (_cam.transform.position - mid).normalized;
       _menu.transform.position = mid + Vector3.up * 0.15f + toCam * 0.12f;
       foreach (JarvisSpatialButton b in new[] { _menuAddComp, _menuRename, _menuResp, _menuDelete, _menuLink })
         if (b != null) { b.ForceHidden = true; b.gameObject.SetActive(false); }
-      foreach (JarvisSpatialButton b in new[] { _menuDelEdge, _menuCycleKind })
+      foreach (JarvisSpatialButton b in new[] { _menuDelEdge, _menuCycleKind, _menuEditLabel })
         if (b != null) { b.ForceHidden = false; b.gameObject.SetActive(true); }
       _menu.Reopen();
       _menu.Show(true);
@@ -2941,8 +3031,9 @@ namespace JarvisVR
       cv.Collapsed = collapsed;
       for (int i = 1; i < cv.Members.Count; i++)   // member 0 stays as the cluster anchor
       {
-        cv.Members[i].Fx.SetShown(!collapsed);
-        cv.Members[i].Label.gameObject.SetActive(!collapsed);
+        bool vis = !collapsed && NodePasses(cv.Members[i].Dto);
+        cv.Members[i].Fx.SetShown(vis);
+        cv.Members[i].Label.gameObject.SetActive(vis);
       }
       RefreshEdgeVisibility();
     }
@@ -2961,15 +3052,14 @@ namespace JarvisVR
         if (!kv.Value.Pinned && Slots.TryGetValue(kv.Key, out Vector3 slot)) kv.Value.transform.localPosition = SlotPosition(slot);
       }
       _agentShown.Clear();
-      _graphRoot.localPosition = new Vector3(0f, 0.05f, 0f);
-      _graphRoot.localScale = Vector3.one * 0.85f;
+      ResetGraphView();
       Recenter();
     }
 
     private void RefreshEdgeVisibility()
     {
       foreach (EdgeView e in _edges)
-        if (e.Line != null) e.Line.gameObject.SetActive(e.From.Fx.Shown && e.To.Fx.Shown);
+        if (e.Line != null) e.Line.gameObject.SetActive(e.From.Fx.Shown && e.To.Fx.Shown && EdgePasses(e.Dto));
       _edgesDirty = true;
     }
 
@@ -3078,6 +3168,272 @@ namespace JarvisVR
         Renderer hr = _halo.GetComponent<Renderer>();
         if (hr.sharedMaterial != null && hr.sharedMaterial.HasProperty("_Color")) hr.sharedMaterial.SetColor("_Color", c);
       }
+    }
+
+    // =========================================================== conversation history
+
+    private void AddChat(bool developer, string text)
+    {
+      if (string.IsNullOrWhiteSpace(text)) return;
+      _chat.Add((developer ? "Y|" : "J|") + text.Trim());
+      while (_chat.Count > ChatMaxEntries) _chat.RemoveAt(0);
+      _chatOffset = 0;   // jump to the newest message
+      RefreshChat();
+    }
+
+    private static string ChatClip(string entry)
+    {
+      string body = entry.Length > 2 ? entry.Substring(2).Replace("\r", "").Replace("\n", " ") : "";
+      return body.Length > 280 ? body.Substring(0, 279) + "…" : body;
+    }
+
+    private void RefreshChat()
+    {
+      if (!_panels.ContainsKey("chat")) return;
+      JarvisPalette pal = JarvisPalette.Current;
+      if (_chat.Count == 0) { _panels["chat"].SetBody("No messages yet.\nPress TYPE or hold the orb and speak."); _chatShown = 0; return; }
+      _chatOffset = Mathf.Clamp(_chatOffset, 0, _chat.Count - 1);
+      int end = _chat.Count - _chatOffset, start = end, used = 0;
+      while (start > 0)
+      {
+        int len = ChatClip(_chat[start - 1]).Length + 8;
+        if (used + len > 600 && start < end) break;
+        used += len; start--;
+      }
+      _chatShown = end - start;
+      var sb = new StringBuilder();
+      sb.Append("<color=#").Append(Hex(pal.TextMuted)).Append('>').Append(start + 1).Append('-').Append(end)
+        .Append(" of ").Append(_chat.Count).Append("</color>\n");
+      for (int i = start; i < end; i++)
+      {
+        bool dev = _chat[i].StartsWith("Y|");
+        sb.Append("<b><color=#").Append(Hex(dev ? pal.Cyan : pal.Violet)).Append('>').Append(dev ? "YOU" : "JARVIS").Append("</color></b>  ")
+          .Append(Esc(ChatClip(_chat[i]))).Append('\n');
+      }
+      _panels["chat"].SetBody(sb.ToString());
+    }
+
+    // =========================================================== file outline
+
+    private static bool IsFunctionNode(GraphNodeDto d)
+    {
+      string k = d.kind ?? "";
+      return k == "function" || k == "method" || (d.level == "function" && k != "object");
+    }
+
+    private static bool IsClassNode(GraphNodeDto d)
+    {
+      string k = d.kind ?? "";
+      return k == "class" || k == "object" || d.level == "class";
+    }
+
+    /// <summary>Classes and functions of the open file (or of the selected node's file), in source order, from the loaded graph.</summary>
+    private List<GraphNodeDto> OutlineSymbols(out string file)
+    {
+      file = _openFile != null ? _openFile.path
+        : (!string.IsNullOrEmpty(_selected) && _nodes.TryGetValue(_selected, out NodeView sel) && !IsDesignNode(_selected) ? sel.Dto.file : null);
+      var list = new List<GraphNodeDto>();
+      if (string.IsNullOrEmpty(file) || _graph == null || _graph.nodes == null) return list;
+      foreach (GraphNodeDto d in _graph.nodes)
+        if (d.file == file && (IsFunctionNode(d) || IsClassNode(d))) list.Add(d);
+      list.Sort((a, b) => a.start.CompareTo(b.start));
+      return list;
+    }
+
+    private void RefreshOutline()
+    {
+      if (!_panels.ContainsKey("outline")) return;
+      JarvisPalette pal = JarvisPalette.Current;
+      List<GraphNodeDto> syms = OutlineSymbols(out string file);
+      if (string.IsNullOrEmpty(file)) { _panels["outline"].SetBody("Open a file in the repository browser, or select a node, to list its classes and functions."); return; }
+      if (syms.Count == 0) { _panels["outline"].SetBody(Esc(file) + "\n\nNo indexed classes or functions in this file."); return; }
+      _outlineSel = (_outlineSel % syms.Count + syms.Count) % syms.Count;
+      const int rows = 8;
+      int first = (_outlineSel / rows) * rows;
+      var sb = new StringBuilder();
+      sb.Append("<color=#").Append(Hex(pal.TextMuted)).Append('>').Append(Esc(file)).Append("  ·  ").Append(_outlineSel + 1).Append('/').Append(syms.Count).Append("</color>\n");
+      for (int i = first; i < syms.Count && i < first + rows; i++)
+      {
+        GraphNodeDto d = syms[i];
+        string row = (IsClassNode(d) ? "class " : "fn    ") + Esc(d.name ?? "?") + "  L" + d.start;
+        if (i == _outlineSel) sb.Append("<b><color=#").Append(Hex(pal.Cyan)).Append(">> ").Append(row).Append("</color></b>\n");
+        else sb.Append("   ").Append(row).Append('\n');
+      }
+      _panels["outline"].SetBody(sb.ToString());
+    }
+
+    /// <summary>Jump to the highlighted symbol: scroll the file to its line and select its graph node; optionally open the MAP.</summary>
+    private void OutlineGo(bool showInMap)
+    {
+      List<GraphNodeDto> syms = OutlineSymbols(out string file);
+      if (syms.Count == 0) { Say("Nothing to jump to: no indexed symbols for this file."); return; }
+      _outlineSel = (_outlineSel % syms.Count + syms.Count) % syms.Count;
+      GraphNodeDto d = syms[_outlineSel];
+      if (_openFile != null && d.start > 0) _openFilePage = Mathf.Max(0, (d.start - 1) / EditorLinesPerPage);
+      Select(d.id);
+      if (_openFile != null) RefreshOpenFile();
+      if (showInMap) SetMode("MAP");
+      Say((showInMap ? "Showing " : "Selected ") + d.name + " (line " + d.start + ").");
+    }
+
+    // =========================================================== graph filters and view
+
+    private static readonly string[] KindFilters = { "ALL", "FILES", "FUNCTIONS", "CLASSES" };
+
+    private bool NodePasses(GraphNodeDto d)
+    {
+      if (_kindFilter == 0 || d == null || IsDesignGraph()) return true;
+      string k = d.kind ?? "";
+      if (_kindFilter == 1) return k == "file" || k == "module";
+      if (_kindFilter == 2) return IsFunctionNode(d);
+      return IsClassNode(d);
+    }
+
+    private static string EdgeKindOf(GraphEdgeDto d) { return !string.IsNullOrEmpty(d.type) ? d.type : d.kind; }
+
+    private bool EdgePasses(GraphEdgeDto d) { return _edgeFilter == null || IsDesignGraph() || EdgeKindOf(d) == _edgeFilter; }
+
+    private void ApplyFilters()
+    {
+      foreach (NodeView n in _nodes.Values)
+      {
+        bool anchor = n.Cluster != null && n.Cluster.Members.Count > 0 && n.Cluster.Members[0] == n;
+        bool vis = NodePasses(n.Dto) && (n.Cluster == null || !n.Cluster.Collapsed || anchor);
+        n.Fx.SetShown(vis);
+        n.Label.gameObject.SetActive(vis);
+      }
+      _edgesDirty = true;
+      RefreshEdgeVisibility();
+    }
+
+    private void CycleKindFilter()
+    {
+      _kindFilter = (_kindFilter + 1) % KindFilters.Length;
+      if (_kindFilterBtn != null && _kindFilterBtn.Label != null) _kindFilterBtn.Label.text = "FILTER: " + KindFilters[_kindFilter];
+      ApplyFilters();
+      Say("Showing " + KindFilters[_kindFilter].ToLowerInvariant() + ".");
+    }
+
+    private void CycleEdgeFilter()
+    {
+      var kinds = new List<string>();
+      foreach (EdgeView e in _edges) { string k = EdgeKindOf(e.Dto); if (!string.IsNullOrEmpty(k) && !kinds.Contains(k)) kinds.Add(k); }
+      kinds.Sort();
+      int i = _edgeFilter == null ? -1 : kinds.IndexOf(_edgeFilter);
+      _edgeFilter = i + 1 < kinds.Count ? kinds[i + 1] : null;
+      if (_edgeFilterBtn != null && _edgeFilterBtn.Label != null)
+      {
+        string t = _edgeFilter ?? "ALL";
+        _edgeFilterBtn.Label.text = "EDGE: " + (t.Length > 9 ? t.Substring(0, 9) : t);
+      }
+      RefreshEdgeVisibility();
+      Say(_edgeFilter == null ? "Showing every relationship type." : "Showing only '" + _edgeFilter + "' relationships.");
+    }
+
+    private void RotateGraph(float degrees)
+    {
+      if (_graphRoot == null) return;
+      _graphRoot.localRotation = Quaternion.Euler(0f, degrees, 0f) * _graphRoot.localRotation;
+    }
+
+    private void ResetGraphView()
+    {
+      if (_graphRoot == null) return;
+      _graphRoot.localPosition = new Vector3(0f, 0.05f, 0f);
+      _graphRoot.localScale = Vector3.one * 0.85f;
+      _graphRoot.localRotation = Quaternion.identity;
+    }
+
+    // =========================================================== settings, exit, runtime trace, validation identity
+
+    private void OpenSettings()
+    {
+      if (_settingsPanel == null) return;
+      RefreshSettings();
+      _settingsPanel.Reopen();
+      _settingsPanel.Show(true);
+    }
+
+    private void RefreshSettings()
+    {
+      if (_settingsPanel == null) return;
+      JarvisServerSettings cfg = JarvisServerSettings.Load();
+      string url = cfg != null ? cfg.ServerUrl : "(no settings asset)";
+      string token = cfg != null && !string.IsNullOrEmpty(cfg.Token) && cfg.Token != "dev-token" ? "set" : "MISSING or default";
+      string repo = _health != null && !string.IsNullOrEmpty(_health.repo) ? _health.repo : "-";
+      _settingsPanel.SetBody("Server   " + url + (_serverOnline ? "  (online)" : "  (OFFLINE)") + "\n"
+        + "Token    " + token + "\n"
+        + "Repo     " + repo + "\n"
+        + "Mode     " + _mode + "\n"
+        + "Voice    " + (_voiceEnabled ? "on" : "off") + "\n\n"
+        + "URL and token are edited in Unity: JARVIS > Server.");
+    }
+
+    private void ToggleVoiceEnabled()
+    {
+      _voiceEnabled = !_voiceEnabled;
+      if (_voiceBtn != null && _voiceBtn.Label != null) _voiceBtn.Label.text = "VOICE: " + (_voiceEnabled ? "ON" : "OFF");
+      RefreshSettings();
+    }
+
+    /// <summary>Return to project selection (the repository list) without closing the app.</summary>
+    private void ExitToProjects()
+    {
+      if (_settingsPanel != null) _settingsPanel.Show(false);
+      _openFile = null;
+      ReturnToRepoList();
+      foreach (JarvisSpatialPanel p in _panels.Values) p.Reopen();
+      SetMode("REPOS");
+      Say("Back at project selection. Pick a repository to continue.");
+    }
+
+    private void QuitApp()
+    {
+      if (!_quitArmed)
+      {
+        _quitArmed = true;
+        if (_quitBtn != null && _quitBtn.Label != null) _quitBtn.Label.text = "CONFIRM?";
+        Say("Press QUIT APP again to close JARVIS.");
+        return;
+      }
+#if UNITY_EDITOR
+      UnityEditor.EditorApplication.isPlaying = false;
+#else
+      Application.Quit();
+#endif
+    }
+
+    /// <summary>Runtime tracing belongs to the testing agent; this only asks for it. Results come back as the normal answer,
+    /// highlighted nodes and evidence. Nothing is shown unless the trace actually returned it.</summary>
+    private void RunRuntimeTrace()
+    {
+      if (_bridge == null) return;
+      AskAgent("Use the testing agent to start a runtime trace, run the project's tests, stop the trace and report which functions executed and in what order. "
+        + "Highlight the executed functions in the graph. Report only what the trace returned, and say so plainly if runtime tracing is not supported for this repository.");
+    }
+
+    private string ValidatedBlock()
+    {
+      if (_validated == null || (string.IsNullOrEmpty(_validated.branch) && (_validated.files == null || _validated.files.Length == 0))) return "";
+      JarvisPalette pal = JarvisPalette.Current;
+      var sb = new StringBuilder("\n\n<b>Validated change</b>\n");
+      if (!string.IsNullOrEmpty(_validated.task_id)) sb.Append("task: ").Append(Esc(_validated.task_id)).Append('\n');
+      if (!string.IsNullOrEmpty(_validated.branch)) sb.Append("branch: ").Append(Esc(_validated.branch)).Append('\n');
+      sb.Append("+").Append(_validated.additions).Append(" -").Append(_validated.deletions).Append('\n');
+      if (_validated.files != null)
+        for (int i = 0; i < _validated.files.Length; i++)
+        {
+          if (i >= 6) { sb.Append("  + ").Append(_validated.files.Length - 6).Append(" more files\n"); break; }
+          sb.Append("• ").Append(Esc(_validated.files[i])).Append('\n');
+        }
+      if (_lastTestRun != null && !string.IsNullOrEmpty(_lastTestRun.diff_hash) && !string.IsNullOrEmpty(_validated.diff_hash))
+      {
+        bool same = _lastTestRun.diff_hash == _validated.diff_hash;
+        sb.Append("<color=#").Append(Hex(same ? pal.Green : pal.Red)).Append('>')
+          .Append(same ? "tests ran on exactly this diff" : "DIFF CHANGED since the tests ran: results do not cover it").Append("</color>\n");
+      }
+      else sb.Append("<color=#").Append(Hex(pal.Amber)).Append(">no test run is linked to this diff</color>\n");
+      return sb.ToString();
     }
 
     // =========================================================== loop

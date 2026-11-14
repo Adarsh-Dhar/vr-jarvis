@@ -990,6 +990,40 @@ def _validated_agent_result_entry(agent_name, value):
     return entry
 
 
+def _worktree_review(state: dict) -> dict:
+    """The change under review, read straight from the sandbox worktree (git), not from model text.
+
+    Gives the UI the complete diff (the model used to copy it into a tool call, which could cut it
+    short), the files and branch, and the same fingerprint the test runner records, so the UI can
+    show exactly which change a test run covered. Returns {} when there is no worktree."""
+    wt = state.get('worktree')
+    if not wt or not Path(str(wt)).is_dir():
+        return {}
+
+    def git(*args):
+        p = subprocess.run(['git', *args], cwd=str(wt), capture_output=True, text=True, timeout=15)
+        return p.stdout if p.returncode == 0 else ''
+
+    try:
+        subprocess.run(['git', 'add', '-N', '.'], cwd=str(wt), capture_output=True, text=True, timeout=15)
+        diff = git('diff', 'HEAD')
+        files = [f for f in git('diff', '--name-only', 'HEAD').splitlines() if f.strip()]
+        branch = git('rev-parse', '--abbrev-ref', 'HEAD').strip()
+        fp = _worktree_fingerprint(str(wt))
+    except Exception:
+        logging.getLogger('uvicorn.error').exception('worktree review failed')
+        return {}
+    lines = diff.splitlines()
+    return {
+        'diff': diff[:400000],
+        'files': files,
+        'branch': branch,
+        'diff_hash': fp.get('diff_hash', ''),
+        'additions': sum(1 for l in lines if l.startswith('+') and not l.startswith('+++')),
+        'deletions': sum(1 for l in lines if l.startswith('-') and not l.startswith('---')),
+    }
+
+
 def _build_ask_response(reply: str, error: str, state: dict) -> dict:
     """Build the standardized response for /ask and /ask/stream endpoints.
 
@@ -1003,6 +1037,19 @@ def _build_ask_response(reply: str, error: str, state: dict) -> dict:
     pending = _s(state.get('pending_approval'))
     approval_type = state.get('approval_type', '')
     has_patch = state.get('proposed_patch') or state.get('result_software_eng')
+
+    # The diff the developer reviews must be the real worktree diff, never a model-copied one.
+    review = _worktree_review(state) if (has_patch or pending or last) else {}
+    if review.get('diff'):
+        ghost_node = ''
+        kept = []
+        for c in commands:
+            if isinstance(c, dict) and c.get('type') == 'show_ghost_diff':
+                ghost_node = ghost_node or str(c.get('node_id') or '')
+                continue
+            kept.append(c)
+        kept.append({'type': 'show_ghost_diff', 'node_id': ghost_node, 'diff': review['diff']})
+        commands = kept
 
     # Structured evidence items for the contract: {file, first_line,
     # last_line, node_id, kind}. kind is 'confirmed' for graph nodes the
@@ -1041,6 +1088,11 @@ def _build_ask_response(reply: str, error: str, state: dict) -> dict:
                             'proposed' if has_patch else 'none'),
         'tool_errors': [str(e) for e in (state.get('tool_errors') or [])],
     }
+    if review:
+        resp['validated'] = {'task_id': state.get('active_task_id') or '',
+                             'branch': review['branch'], 'files': review['files'],
+                             'diff_hash': review['diff_hash'],
+                             'additions': review['additions'], 'deletions': review['deletions']}
     if results_degraded:
         # Only present when an AgentResult payload failed validation, so the
         # standard response shape is unchanged for healthy turns.
@@ -1663,7 +1715,13 @@ async def design_approve(session_id: str, body: DesignApproveBody):
         arch['approved_by'] = ''
         arch['approved_version'] = 0
         arch['approved_revision'] = 0
-    await set_state(session_id, {'design': arch})
+    delta = {'design': arch}
+    if not body.approved:
+        # A rejected design must not leave an approved plan behind: drop the plan and
+        # any comparison, and mark the plan stale if one existed (same as an edit does).
+        delta.update({'implementation_plan': {}, 'design_compare': {},
+                      'plan_stale': bool(view.get('plan'))})
+    await set_state(session_id, delta)
     plan = None
     if body.approved:
         # Approving completes the design workflow: generate the implementation

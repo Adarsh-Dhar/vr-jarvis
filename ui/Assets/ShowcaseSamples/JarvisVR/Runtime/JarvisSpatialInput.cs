@@ -36,6 +36,7 @@ namespace JarvisVR
     private Action _toggleVoice;
     private bool _zooming;
     private float _zoomStartDistance, _zoomStartScale = 1f;
+    private const float RotateDegPerSec = 60f;   // graph yaw speed for A/B (controller) or Q/E (editor)
     private const float PointerSensitivity = 0.5f; // Sensitivity for trackpad-based pointer movement
 
     public void Initialize(Camera cam, Transform graphRoot, Action toggleVoice)
@@ -173,6 +174,7 @@ namespace JarvisVR
 #endif
       foreach (Slot s in _slots) Process(s);
       UpdateTwoHandScale();
+      UpdateGraphRotate();
       foreach (Slot s in _slots) s.WasDown = s.Down;
     }
 
@@ -402,6 +404,25 @@ namespace JarvisVR
       }
       if (s.Node != null && !s.NodeDragging && !s.NodeHeld) s.Node.Select();
       s.Btn = null; s.Node = null; s.Grab = null; s.Resize = null; s.NodeDragging = false; s.NodeHeld = false;
+    }
+
+    /// <summary>Rotate the graph about its vertical axis: right-controller A / B (held), or Q / E in the editor.
+    /// Thumbsticks are already used for the pointer, so they are deliberately not used here.</summary>
+    private void UpdateGraphRotate()
+    {
+      if (_graphRoot == null || !_graphRoot.gameObject.activeInHierarchy) return;
+      float dir = 0f;
+      if (OVRInput.IsControllerConnected(OVRInput.Controller.RTouch))
+      {
+        if (OVRInput.Get(OVRInput.Button.One, OVRInput.Controller.RTouch)) dir += 1f;
+        if (OVRInput.Get(OVRInput.Button.Two, OVRInput.Controller.RTouch)) dir -= 1f;
+      }
+#if UNITY_EDITOR
+      if (Input.GetKey(KeyCode.E)) dir += 1f;
+      if (Input.GetKey(KeyCode.Q)) dir -= 1f;
+#endif
+      if (Mathf.Abs(dir) < 0.5f) return;
+      _graphRoot.localRotation = Quaternion.Euler(0f, dir * RotateDegPerSec * Time.unscaledDeltaTime, 0f) * _graphRoot.localRotation;
     }
 
     private void UpdateTwoHandScale()
