@@ -61,6 +61,43 @@ class SessionResponse(_Loose):
     session_id: str
 
 
+class SavedSessionSummary(_Loose):
+    session_id: str
+    title: str = ''
+    repo: str = ''
+    last_update: float = 0.0
+    message_count: int = 0
+    has_design: bool = False
+    has_plan: bool = False
+    resumable: bool = True      # False when the session belongs to another repository
+
+
+class SessionListResponse(_Loose):
+    active_repo: str
+    sessions: List[SavedSessionSummary]
+
+
+class SessionHistoryMessage(_Loose):
+    role: str                   # 'user' | 'assistant'
+    author: str = ''
+    text: str = ''
+    timestamp: float = 0.0
+
+
+class SessionHistoryResponse(_Loose):
+    session_id: str
+    messages: List[SessionHistoryMessage]
+
+
+class SessionResumeResponse(_Loose):
+    session_id: str
+    repo: str = ''
+    title: str = ''
+    message_count: int = 0
+    has_design: bool = False
+    has_plan: bool = False
+
+
 class RepositoryListResponse(_Loose):
     active: str
     repos: List[Dict[str, Any]]

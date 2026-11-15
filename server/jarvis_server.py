@@ -56,6 +56,10 @@ ASK_TIMEOUT = float(os.getenv('JARVIS_ASK_TIMEOUT', '170'))   # keep below the U
 TURN_TIMEOUT = float(os.getenv('JARVIS_TURN_TIMEOUT', '120'))
 MAX_SESSIONS = int(os.getenv('JARVIS_MAX_SESSIONS', '50'))
 SESSION_IDLE_TIMEOUT = int(os.getenv('JARVIS_SESSION_IDLE_TIMEOUT', '3600'))  # 1 hour
+# Evicting a session normally only drops it from the in-memory "active" table; the
+# saved conversation and design stay in the database. Set to 1 to also delete the
+# stored session (the old behaviour).
+EVICT_DELETES_SESSIONS = os.getenv('JARVIS_EVICT_DELETES_SESSIONS', '0') == '1'
 ENABLE_DIRECT_TOOLS = os.getenv('JARVIS_ENABLE_DIRECT_TOOLS', '0') == '1'
 
 # Allowlist for direct tool calls (read-only tools only)
@@ -294,7 +298,8 @@ async def _evict_one_safe_session() -> bool:
         if now - t >= SESSION_IDLE_TIMEOUT)
     for _, sid in expired:
         if await _session_is_safe_to_evict(sid):
-            await sessions.delete_session(app_name=APP, user_id=USER, session_id=sid)
+            if EVICT_DELETES_SESSIONS:
+                await sessions.delete_session(app_name=APP, user_id=USER, session_id=sid)
             session_last_used.pop(sid, None)
             locks.pop(sid, None)
             return True
@@ -549,6 +554,98 @@ async def new_session():
     await ensure(session_id)
     await set_state(session_id, {'repo': config.REPO_ROOT.name})   # bound for the session's life
     return {'session_id': session_id}
+
+
+# ---------------------------------------------------------------------------
+# Saved sessions: list, resume, history, delete. Everything lives in the session
+# database (conversation events + state) and data/design/<id>.json (design, plan).
+
+def _event_text(ev) -> str:
+    parts = getattr(getattr(ev, 'content', None), 'parts', None) or []
+    return ''.join(p.text for p in parts
+                   if getattr(p, 'text', None) and not getattr(p, 'thought', False)).strip()
+
+
+def _session_messages(sess) -> list:
+    out = []
+    for ev in (getattr(sess, 'events', None) or []):
+        if getattr(ev, 'partial', False):
+            continue
+        text = _event_text(ev)
+        if text:
+            out.append({'role': 'user' if ev.author == 'user' else 'assistant',
+                        'author': ev.author or '',
+                        'text': text,
+                        'timestamp': float(getattr(ev, 'timestamp', 0) or 0)})
+    return out
+
+
+def _session_summary(sess) -> dict:
+    from ai_agents.tools.architecture_tools import load_design
+    msgs = _session_messages(sess)
+    title = next((m['text'] for m in msgs if m['role'] == 'user'), '')[:80]
+    repo = (sess.state or {}).get('repo') or ''
+    d = load_design(sess.id)
+    return {'session_id': sess.id, 'title': title, 'repo': repo,
+            'last_update': float(getattr(sess, 'last_update_time', 0) or 0),
+            'message_count': len(msgs),
+            'has_design': bool(d.get('architecture')),
+            'has_plan': bool(d.get('plan')),
+            'resumable': (not repo) or repo == config.REPO_ROOT.name}
+
+
+@app.get('/sessions', dependencies=[Depends(auth)], response_model=SessionListResponse)
+async def list_saved_sessions(limit: int = 30):
+    limit = max(1, min(limit, 100))
+    resp = await sessions.list_sessions(app_name=APP, user_id=USER)
+    rows = sorted((s for s in (getattr(resp, 'sessions', None) or []) if not s.id.startswith('__')),
+                  key=lambda s: float(getattr(s, 'last_update_time', 0) or 0), reverse=True)[:limit]
+    out = []
+    for s in rows:
+        full = await sessions.get_session(app_name=APP, user_id=USER, session_id=s.id)
+        if full is not None:
+            out.append(_session_summary(full))
+    return {'active_repo': config.REPO_ROOT.name, 'sessions': out}
+
+
+@app.get('/session/{session_id}/history', dependencies=[Depends(auth)],
+         response_model=SessionHistoryResponse)
+async def session_history(session_id: str, limit: int = 200):
+    sess = await sessions.get_session(app_name=APP, user_id=USER, session_id=session_id)
+    if sess is None:
+        raise HTTPException(status_code=404, detail='Unknown session')
+    return {'session_id': session_id, 'messages': _session_messages(sess)[-max(1, min(limit, 1000)):]}
+
+
+@app.post('/session/{session_id}/resume', dependencies=[Depends(auth)],
+          response_model=SessionResumeResponse)
+async def resume_session(session_id: str):
+    """Re-attach to a saved session. Unlike ensure(), never creates one."""
+    _refuse_if_switching()
+    sess = await sessions.get_session(app_name=APP, user_id=USER, session_id=session_id)
+    if sess is None:
+        raise HTTPException(status_code=404, detail='Unknown session')
+    repo = (sess.state or {}).get('repo') or ''
+    if repo and repo != config.REPO_ROOT.name:
+        raise HTTPException(status_code=409,
+            detail=f'Session repository is {repo}, but the active repository is '
+                   f'{config.REPO_ROOT.name}. Select {repo} first.')
+    await ensure(session_id)                      # renews lease + last-used
+    s = _session_summary(sess)
+    return {k: s[k] for k in ('session_id', 'title', 'repo', 'message_count', 'has_design', 'has_plan')}
+
+
+@app.delete('/session/{session_id}', dependencies=[Depends(auth)])
+async def delete_saved_session(session_id: str):
+    from ai_agents.tools.architecture_tools import _design_path
+    if not await _session_is_safe_to_evict(session_id):
+        raise HTTPException(status_code=409,
+            detail='Session has a running turn, worktree, pending approval or unpromoted change.')
+    await sessions.delete_session(app_name=APP, user_id=USER, session_id=session_id)
+    session_last_used.pop(session_id, None)
+    locks.pop(session_id, None)
+    _design_path(session_id).unlink(missing_ok=True)
+    return {'ok': True}
 
 
 repo_lock = asyncio.Lock()
@@ -1781,6 +1878,21 @@ async def design_propose(body: DesignProposeBody):
 @app.get('/design/{session_id}', dependencies=[Depends(auth)], response_model=DesignResponse)
 async def design_get(session_id: str):
     return await _design_view(session_id)
+
+
+@app.get('/design/{session_id}/versions', dependencies=[Depends(auth)])
+async def design_versions(session_id: str):
+    from ai_agents.tools.architecture_tools import list_design_versions
+    return {'session_id': session_id, 'versions': list_design_versions(session_id)}
+
+
+@app.get('/design/{session_id}/versions/{revision}', dependencies=[Depends(auth)])
+async def design_version(session_id: str, revision: int):
+    from ai_agents.tools.architecture_tools import load_design_version
+    doc = load_design_version(session_id, revision)
+    if not doc:
+        raise HTTPException(status_code=404, detail='Unknown design revision')
+    return doc
 
 
 @app.post('/design/{session_id}/edit', dependencies=[Depends(auth)], response_model=DesignResponse)

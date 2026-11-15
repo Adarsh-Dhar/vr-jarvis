@@ -1100,6 +1100,54 @@ def _design_path(session_id: str) -> Path:
     return DESIGN_DIR / (safe + '.json')
 
 
+def _versions_dir(session_id: str) -> Path:
+    return DESIGN_DIR / 'history' / re.sub(r'[^A-Za-z0-9_-]', '', session_id or '')
+
+
+def _revision_of(doc: Dict[str, Any]) -> int:
+    arch = (doc or {}).get('architecture')
+    try:
+        return int((arch or {}).get('revision') or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _archive_previous_revision(session_id: str, final: Path, new_payload: Dict[str, Any]) -> None:
+    """When the architecture revision moves forward, keep the file being replaced as
+    data/design/history/<session>/r<revision>.json so earlier designs stay recoverable."""
+    try:
+        if not final.is_file():
+            return
+        old = json.loads(final.read_text(encoding='utf-8'))
+        rev = _revision_of(old)
+        if rev and rev != _revision_of(new_payload):
+            d = _versions_dir(session_id)
+            d.mkdir(parents=True, exist_ok=True)
+            (d / ('r%d.json' % rev)).write_text(json.dumps(old, indent=2, default=str), encoding='utf-8')
+    except Exception as exc:                      # history is best-effort; never block the save
+        log.warning('could not archive design revision for %s: %s', session_id, exc)
+
+
+def list_design_versions(session_id: str) -> List[Dict[str, Any]]:
+    d = _versions_dir(session_id)
+    out = []
+    if d.is_dir():
+        for f in d.glob('r*.json'):
+            try:
+                out.append({'revision': int(f.stem[1:]), 'saved_at': f.stat().st_mtime})
+            except ValueError:
+                continue
+    return sorted(out, key=lambda v: v['revision'])
+
+
+def load_design_version(session_id: str, revision: int) -> Dict[str, Any]:
+    f = _versions_dir(session_id) / ('r%d.json' % int(revision))
+    try:
+        return json.loads(f.read_text(encoding='utf-8')) if f.is_file() else {}
+    except Exception:
+        return {}
+
+
 def save_design(session_id: str, payload: Dict[str, Any]) -> bool:
     """Persist design state atomically; returns False on failure so callers
     can warn. Writes to a temp file, fsyncs, verifies the JSON reads back,
@@ -1116,6 +1164,7 @@ def save_design(session_id: str, payload: Dict[str, Any]) -> bool:
                 f.flush()
                 os.fsync(f.fileno())
             json.loads(Path(tmp).read_text(encoding='utf-8'))   # readback check
+            _archive_previous_revision(session_id, final, payload)
             os.replace(tmp, final)                                # atomic
         except Exception:
             Path(tmp).unlink(missing_ok=True)

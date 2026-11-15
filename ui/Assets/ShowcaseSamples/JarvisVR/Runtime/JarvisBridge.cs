@@ -172,6 +172,11 @@ namespace JarvisVR
   [Serializable] public class AgentResultDto { public string agent, summary, status; public float confidence; }
   [Serializable] public class TaskResponse { public bool busy; public string plan_summary; public TaskDto[] tasks; public string[] circular; public AgentResultDto[] agent_results; public string[] findings; }
   [Serializable] internal class SessionResponse { public string session_id; }
+  [Serializable] public class SessionResumeDto { public string session_id, repo, title; public int message_count; public bool has_design, has_plan; }
+  [Serializable] public class SessionMessageDto { public string role, author, text; public double timestamp; }
+  [Serializable] public class SessionHistoryDto { public string session_id; public SessionMessageDto[] messages; }
+  [Serializable] public class SavedSessionDto { public string session_id, title, repo; public double last_update; public int message_count; public bool has_design, has_plan, resumable; }
+  [Serializable] public class SessionListDto { public string active_repo; public SavedSessionDto[] sessions; }
   [Serializable] internal class AskRequest { public string session_id, text, selection, repo, task_id, request_id; }
   [Serializable] internal class ApproveRequest { public string session_id; public bool approved; public string repo, request_id; }
 
@@ -454,7 +459,46 @@ namespace JarvisVR
 
     /// <summary>Sessions are bound to one repository on the server. Drop ours so the next call opens a fresh
     /// session for the active repository instead of failing with HTTP 409.</summary>
-    public void ResetSession() { _session = null; }
+    public void ResetSession() { _session = null; PlayerPrefs.DeleteKey(SessionPrefKey); PlayerPrefs.Save(); }
+
+    private const string SessionPrefKey = "jarvis.session";
+    private void RememberSession(string id)
+    {
+      _session = id;
+      if (string.IsNullOrEmpty(id)) PlayerPrefs.DeleteKey(SessionPrefKey); else PlayerPrefs.SetString(SessionPrefKey, id);
+      PlayerPrefs.Save();
+    }
+
+    /// <summary>Re-attach to the session saved on this device (if the server still has it and it matches the
+    /// active repository). ok(null) means there is nothing to resume; a fresh session is then created lazily.</summary>
+    public void ResumeSavedSession(Action<SessionResumeDto, SessionMessageDto[]> ok) =>
+      StartCoroutine(ResumeRoutine(PlayerPrefs.GetString(SessionPrefKey, ""), ok));
+
+    public void ResumeSession(string id, Action<SessionResumeDto, SessionMessageDto[]> ok) =>
+      StartCoroutine(ResumeRoutine(id, ok));
+
+    private IEnumerator ResumeRoutine(string id, Action<SessionResumeDto, SessionMessageDto[]> ok)
+    {
+      if (string.IsNullOrEmpty(id)) { ok(null, null); yield break; }
+      SessionResumeDto info = null; bool failed = false;
+      yield return Send("POST", "/session/" + UnityWebRequest.EscapeURL(id) + "/resume", "{}",
+        b => { try { info = JsonUtility.FromJson<SessionResumeDto>(b); } catch { failed = true; } },
+        e => failed = true);
+      if (failed || info == null || string.IsNullOrEmpty(info.session_id))
+      {
+        if (id == _session || id == PlayerPrefs.GetString(SessionPrefKey, "")) RememberSession(null);   // gone or other repo
+        ok(null, null); yield break;
+      }
+      RememberSession(info.session_id);
+      SessionMessageDto[] msgs = new SessionMessageDto[0];
+      yield return Send("GET", "/session/" + UnityWebRequest.EscapeURL(info.session_id) + "/history?limit=60", null,
+        b => { try { msgs = JsonUtility.FromJson<SessionHistoryDto>(b).messages ?? msgs; } catch { } },
+        e => { });
+      ok(info, msgs);
+    }
+
+    public void ListSessions(Action<SessionListDto> ok, Action<string> fail) =>
+      StartCoroutine(Send("GET", "/sessions", null, b => ok(JsonUtility.FromJson<SessionListDto>(b)), fail));
 
     public void SelectRepo(string name, Action<bool> done)
     {
@@ -510,7 +554,7 @@ namespace JarvisVR
       if (!string.IsNullOrEmpty(_session)) yield break;
       string body = null;
       yield return Send("POST", "/session", "{}", b => body = b, fail);
-      if (body != null) _session = JsonUtility.FromJson<SessionResponse>(body).session_id;
+      if (body != null) RememberSession(JsonUtility.FromJson<SessionResponse>(body).session_id);
     }
 
     private IEnumerator AskRoutine(string text, string selection, string taskId, Action<AskResponse> ok, Action<string> fail)

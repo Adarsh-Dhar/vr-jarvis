@@ -158,6 +158,7 @@ namespace JarvisVR
       gameObject.AddComponent<JarvisSpatialInput>().Initialize(_cam, _graphRoot, ToggleVoice);
       Say("Hi. Pinch the orb to talk, or tap a quick question.");
       Log("workspace ready");
+      RestoreSavedSession();
 
       _bridge.GetHealth(h => { _health = h; _serverOnline = h != null && h.ok; RefreshStatus(); }, e => { _serverOnline = false; RefreshStatus(); });
       FetchRepos();
@@ -3102,6 +3103,21 @@ namespace JarvisVR
     }
 
     // =========================================================== conversation history
+
+    /// <summary>On startup, re-attach to the session saved on this device and replay its conversation.
+    /// Design and plan are loaded by the existing DESIGN-mode GetDesign call, which uses the resumed id.</summary>
+    private void RestoreSavedSession()
+    {
+      if (_bridge == null) return;
+      _bridge.ResumeSavedSession((info, msgs) =>
+      {
+        if (info == null) return;
+        if (msgs != null)
+          foreach (SessionMessageDto m in msgs) AddChat(m.role == "user", m.text);
+        Say("Resumed your last session" + (string.IsNullOrEmpty(info.title) ? "." : ": " + info.title));
+        Log("resumed session " + info.session_id + " (" + info.message_count + " messages)");
+      });
+    }
 
     private void AddChat(bool developer, string text)
     {
