@@ -29,7 +29,13 @@ namespace JarvisVR
     private readonly List<UndoEntry> _undo = new List<UndoEntry>();
     private JarvisSpatialButton _editModeBtn, _editPrevBtn, _editNextBtn, _editLineBtn,
       _editAddBtn, _editDelBtn, _editUndoBtn, _editRevertBtn,
-      _editVerifyBtn, _editReviewBtn, _editSubmitBtn;
+      _editVerifyBtn, _editReviewBtn, _editRunBtn, _editSelBtn, _editSubmitBtn;
+    // range selection: LINE ^/v move the end while SEL is on; EDIT LINE / DELETE LINE
+    // then operate on [SelLo..SelHi] instead of the single cursor line.
+    private bool _editSelMode;
+    private int _editSelStart, _editSelEnd;   // 1-based inclusive; 0 = no anchor yet
+    private bool _runBusy;
+    private readonly StringBuilder _runOutput = new StringBuilder();
 
     private sealed class UndoEntry
     {
@@ -46,8 +52,8 @@ namespace JarvisVR
       _editPanel.SetBodyBox(56, 120); _editPanel.UseMono(15);
       _editPanel.SetBody("Open a file in the repository browser, then press EDIT: ON.");
 
-      const float w = 262f, x0 = 14f, x1 = 284f, h = 46f;
-      float[] ys = { 150f, 204f, 258f, 312f, 366f, 420f };
+      const float w = 262f, x0 = 14f, x1 = 284f, h = 44f;
+      float[] ys = { 150f, 202f, 254f, 306f, 358f, 410f, 462f };
       _editModeBtn  = _editPanel.AddButton("EDIT: OFF",      x0, ys[0], w,  h, ToggleEditMode);
       _editPrevBtn  = _editPanel.AddButton("LINE ^",         x1, ys[0], w,  h, () => EditLineDelta(-1));
       _editNextBtn  = _editPanel.AddButton("LINE v",         x0, ys[1], w,  h, () => EditLineDelta(+1));
@@ -58,7 +64,9 @@ namespace JarvisVR
       _editRevertBtn= _editPanel.AddButton("REVERT FILE",    x1, ys[3], w,  h, EditRevertFile);
       _editVerifyBtn= _editPanel.AddButton("VERIFY",         x0, ys[4], w,  h, EditVerify, 0f, pal.Violet);
       _editReviewBtn= _editPanel.AddButton("REVIEW",         x1, ys[4], w,  h, EditReview, 0f, pal.Violet);
-      _editSubmitBtn= _editPanel.AddButton("SUBMIT",         x0, ys[5], 532f, h, EditSubmit, 0f, pal.Amber);
+      _editRunBtn   = _editPanel.AddButton("RUN",            x0, ys[5], w,  h, EditRun);
+      _editSelBtn   = _editPanel.AddButton("SEL: OFF",       x1, ys[5], w,  h, ToggleEditSel);
+      _editSubmitBtn= _editPanel.AddButton("SUBMIT",         x0, ys[6], 532f, h, EditSubmit, 0f, pal.Amber);
       RefreshEdit();
     }
 
@@ -163,6 +171,7 @@ namespace JarvisVR
       _editMode = false;
       _editLine = 1; _editBase = ""; _editPath = null;
       _editSyntax = null; _editSymbols = null;
+      _editSelMode = false; _editSelStart = _editSelEnd = 0;
       _undo.Clear();
       RefreshEdit();
     }
@@ -170,8 +179,45 @@ namespace JarvisVR
     private void EditLineDelta(int d)
     {
       int n = Mathf.Max(1, EditLineCount());
-      _editLine = Mathf.Clamp(_editLine + d, 1, n);
+      if (_editSelMode)
+      {
+        if (_editSelStart <= 0) _editSelStart = _editSelEnd = Mathf.Clamp(_editLine, 1, n);
+        _editSelEnd = Mathf.Clamp(_editSelEnd + d, 1, n);
+        _editLine = _editSelEnd;
+      }
+      else _editLine = Mathf.Clamp(_editLine + d, 1, n);
       RefreshOpenFile(); RefreshEdit();
+    }
+
+    // =========================================================== range selection
+
+    private bool HasEditSel
+    {
+      get { return _editSelMode && _editSelStart > 0 && _editSelEnd > 0; }
+    }
+    private int SelLo { get { return Mathf.Min(_editSelStart, _editSelEnd); } }
+    private int SelHi { get { return Mathf.Max(_editSelStart, _editSelEnd); } }
+
+    private void ToggleEditSel()
+    {
+      if (!EditReady()) return;
+      _editSelMode = !_editSelMode;
+      if (_editSelMode) _editSelStart = _editSelEnd = Mathf.Clamp(_editLine, 1, Mathf.Max(1, EditLineCount()));
+      else _editSelStart = _editSelEnd = 0;
+      RefreshEdit();
+    }
+
+    /// <summary>The current text of the selected line range, for undo bookkeeping.</summary>
+    private string SelText()
+    {
+      var lines = FileLines(_openFile != null ? _openFile.content : "");
+      var sb = new StringBuilder();
+      for (int i = SelLo; i <= Mathf.Min(SelHi, lines.Count); i++)
+      {
+        if (sb.Length > 0) sb.Append('\n');
+        sb.Append(lines[i - 1]);
+      }
+      return sb.ToString();
     }
 
     // =========================================================== edits
@@ -208,6 +254,11 @@ namespace JarvisVR
 
     private void EditReplaceLine(string text)
     {
+      if (HasEditSel)
+      {
+        SendEdit("replace", SelLo, SelHi, text ?? "", SelText());
+        return;
+      }
       int start = Mathf.Clamp(_editLine, 1, Mathf.Max(1, EditLineCount()));
       SendEdit("replace", start, start, text, CurrentEditLine());
     }
@@ -215,6 +266,11 @@ namespace JarvisVR
     private void EditDeleteLine()
     {
       if (!EditReady()) return;
+      if (HasEditSel)
+      {
+        SendEdit("delete", SelLo, SelHi, "", SelText());
+        return;
+      }
       var lines = FileLines(_openFile.content);
       if (_editLine < 1 || _editLine > lines.Count) { Say("No line " + _editLine + " to delete."); return; }
       SendEdit("delete", _editLine, _editLine, "", lines[_editLine - 1]);
@@ -244,6 +300,7 @@ namespace JarvisVR
       if (recordUndo)
         _undo.Add(new UndoEntry { Path = _editPath, Op = op, Start = start, End = end,
                                 OldText = undoOldText ?? "", NewText = newText ?? "" });
+      _editSelStart = _editSelEnd = 0;   // the range it described no longer exists
       _editBase = r.hash ?? _editBase;
       _editSyntax = r.syntax_errors;
       _editSymbols = r.symbols;
@@ -342,6 +399,44 @@ namespace JarvisVR
     }
 
     // =========================================================== revert / verify / review / submit
+
+    // =========================================================== run
+
+    /// <summary>POST /workspace/run with a fixed allowlisted argv: pytest in the
+    /// worktree. Output accumulates in _runOutput and shows in the panel body.</summary>
+    private void EditRun()
+    {
+      if (_bridge == null || _runBusy) return;
+      if (!_wsReady) { Say("No sandbox worktree yet — turn EDIT on for a file first."); return; }
+      _runOutput.Length = 0;
+      _runBusy = true;
+      RefreshEdit();
+      Say("Running pytest in the worktree…");
+      string[] argv = { "python3", "-m", "pytest", "-x", "-q" };
+      _bridge.WorkspaceRun(argv,
+        line => { RunOut(line); RefreshEdit(); },
+        code =>
+        {
+          _runBusy = false;
+          RunOut("[exit " + code + "]\n");
+          RefreshEdit();
+          PollEditStatus();
+        },
+        err =>
+        {
+          _runBusy = false;
+          RunOut("[error] " + (err ?? "failed") + "\n");
+          RefreshEdit();
+          Say("Run failed: " + err);
+        }, 110);
+    }
+
+    private void RunOut(string s)
+    {
+      _runOutput.Append(s ?? "");
+      if (_runOutput.Length > 8000)
+        _runOutput.Remove(0, _runOutput.Length - 8000);
+    }
 
     private void EditRevertFile()
     {
@@ -472,6 +567,8 @@ namespace JarvisVR
       if (_editRevertBtn != null) _editRevertBtn.Interactable = mode;
       if (_editVerifyBtn != null) _editVerifyBtn.Interactable = mode;
       if (_editReviewBtn != null) _editReviewBtn.Interactable = mode;
+      if (_editRunBtn != null) _editRunBtn.Interactable = _wsReady && !_runBusy;
+      if (_editSelBtn != null) { _editSelBtn.Interactable = mode; _editSelBtn.Label.text = _editSelMode ? "SEL: ON" : "SEL: OFF"; }
       if (_editSubmitBtn != null) _editSubmitBtn.Interactable = mode && AllEvidenceFresh();
 
       if (!open)
@@ -488,7 +585,10 @@ namespace JarvisVR
         return;
       }
       sb.Append("line ").Append(_editLine).Append('/').Append(n)
-        .Append("  ·  ").Append(_undo.Count).Append(" undo").Append('\n');
+        .Append("  ·  ").Append(_undo.Count).Append(" undo");
+      if (HasEditSel)
+        sb.Append("  ·  sel ").Append(SelLo).Append('-').Append(SelHi);
+      sb.Append('\n');
       WsVerificationDto v = _editStatus != null ? _editStatus.verification : null;
       sb.Append("verify  tests ").Append(VerStatus(v != null ? v.tests : null))
         .Append("  typecheck ").Append(VerStatus(v != null ? v.typecheck : null))
@@ -510,8 +610,19 @@ namespace JarvisVR
       }
       else if (_editSyntax != null)
         sb.Append("syntax: clean\n");
-      sb.Append("\nEDIT LINE replaces line ").Append(_editLine)
-        .Append(" · ADD LINE BELOW inserts after it\nVERIFY → REVIEW → SUBMIT, then approve.");
+      if (_runBusy)
+        sb.Append("<color=#").Append(Hex(pal.Cyan)).Append(">running pytest…</color>\n");
+      if (_runOutput.Length > 0)
+      {
+        sb.Append("<color=#").Append(Hex(pal.Cyan)).Append("RUN OUTPUT:</color>\n");
+        string[] runLines = _runOutput.ToString().Replace("\r", "").Split('\n');
+        int shown0 = Mathf.Max(0, runLines.Length - 10);
+        for (int i = shown0; i < runLines.Length; i++)
+          sb.Append("  ").Append(Esc(runLines[i])).Append('\n');
+      }
+      sb.Append("\nEDIT LINE replaces ").Append(HasEditSel ? "lines " + SelLo + "-" + SelHi : "line " + _editLine)
+        .Append(HasEditSel ? "" : " · ADD LINE BELOW inserts after it")
+        .Append("\nVERIFY → REVIEW → SUBMIT, then approve.");
       _editPanel.SetBody(sb.ToString());
     }
   }

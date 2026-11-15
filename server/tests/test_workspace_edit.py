@@ -253,6 +253,15 @@ class TestWorkspaceLineEdit:
             assert r.status_code == 400, (op, start, end)
         assert (worktree / 'f.txt').read_text() == 'a\nb\n'
 
+    def test_replace_middle_range(self, client, worktree):
+        sid = _bind(client, worktree)
+        (worktree / 'f.txt').write_text('a\nb\nc\nd\ne\n')
+        r = self._edit_ok(client, sid, worktree, 'f.txt', 'replace', 2,
+                          'B\nC\nD\n', end=4)
+        assert r.status_code == 200
+        assert (worktree / 'f.txt').read_text() == 'a\nB\nC\nD\ne\n'
+        assert r.json()['lines'] == 5
+
     def test_crlf_preserved(self, client, worktree):
         sid = _bind(client, worktree)
         r = self._edit_ok(client, sid, worktree, 'crlf.txt', 'replace', 2,

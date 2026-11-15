@@ -2906,6 +2906,77 @@ async def ws_status(session_id: str, repo: Optional[str] = None):
 
 
 # ---------------------------------------------------------------------------
+# /workspace/run: execute an allowlisted command inside the session worktree
+# and stream combined stdout/stderr back as SSE. argv is a list — there is no
+# shell — the child runs with cwd=worktree, and its environment is scrubbed of
+# anything that looks like a credential. Running code can change files, so the
+# same fingerprint check that marks agent edits stale applies here too.
+
+_WS_RUN_ALLOWED = {'python', 'python3', 'pytest', 'node', 'npm', 'npx'}
+_WS_RUN_MAX_SECONDS = 120
+_WS_RUN_MAX_BYTES = 200_000
+
+
+class WsRunBody(BaseModel):
+    session_id: str
+    argv: List[str]                 # e.g. ["python", "app.py"]; never a shell string
+    repo: Optional[str] = None
+    timeout: int = 0                # seconds; 0/negative = default 60, capped at 120
+
+
+@app.post('/workspace/run', dependencies=[Depends(auth)])
+async def ws_run(body: WsRunBody):
+    """Run an allowlisted program in the worktree; SSE events are
+    {'out': line}, {'exit': rc}, {'timeout': true}, {'truncated': true} or
+    {'error': msg}."""
+    await _ws_guard(body.session_id, body.repo)
+    _ws_refuse_busy(body.session_id)
+    state = (await ensure(body.session_id)).state
+    wt = _ws_worktree(state)
+    prog = Path(body.argv[0]).name if body.argv else ''
+    if not body.argv or prog not in _WS_RUN_ALLOWED or len(body.argv) > 32:
+        raise HTTPException(400, 'command not allowed')
+    timeout = body.timeout if body.timeout and body.timeout > 0 else 60
+    timeout = max(1, min(timeout, _WS_RUN_MAX_SECONDS))
+    env = {k: v for k, v in os.environ.items()
+           if not any(s in k.upper() for s in ('KEY', 'TOKEN', 'SECRET', 'PASSWORD'))}
+
+    async def gen():
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *body.argv, cwd=str(wt), env=env,
+                stdin=asyncio.subprocess.DEVNULL,
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT)
+        except Exception as exc:
+            yield 'data: ' + json.dumps({'error': str(exc)[:300]}) + '\n\n'
+            return
+        sent = 0
+        try:
+            async with asyncio.timeout(timeout):
+                while (line := await proc.stdout.readline()):
+                    sent += len(line)
+                    if sent > _WS_RUN_MAX_BYTES:
+                        proc.kill()
+                        yield 'data: ' + json.dumps({'truncated': True}) + '\n\n'
+                        break
+                    yield 'data: ' + json.dumps(
+                        {'out': line.decode(errors='replace')}) + '\n\n'
+            await proc.wait()
+            yield 'data: ' + json.dumps({'exit': proc.returncode}) + '\n\n'
+        except TimeoutError:
+            proc.kill()
+            await proc.wait()
+            yield 'data: ' + json.dumps({'timeout': True}) + '\n\n'
+        finally:
+            if proc.returncode is None:
+                proc.kill()
+                await proc.wait()
+
+    return StreamingResponse(gen(), media_type='text/event-stream',
+                             headers={'Cache-Control': 'no-cache'})
+
+
+# ---------------------------------------------------------------------------
 # Verification and approval for human workspace edits. /workspace/verify runs
 # the deterministic checks directly (no model turn), /workspace/review runs
 # the independent reviewer agent on the worktree diff, and /workspace/submit

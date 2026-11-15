@@ -330,6 +330,19 @@ namespace JarvisVR
     public string session_id, repo, request_id;
     public string[] steps, test_files;
   }
+  [Serializable] internal class WsRunRequest
+  {
+    public string session_id, repo;
+    public string[] argv;
+    public int timeout;              // seconds; 0 = server default (60, max 120)
+  }
+  /// <summary>One SSE event from POST /workspace/run. Exactly one of out/exit/timeout/truncated/error is set.</summary>
+  [Serializable] internal class WsRunEvent
+  {
+    public string @out, error;
+    public int exit;
+    public bool timeout, truncated;
+  }
 
   /// <summary>What the spatial workspace needs from a backend. Implemented by JarvisBridge.</summary>
   public interface IJarvisBackend
@@ -351,6 +364,7 @@ namespace JarvisVR
     void SelectRepo(string name, Action<bool> done);
     void ListSessions(Action<SessionListDto> ok, Action<string> fail);
     void ResumeSession(string id, Action<SessionResumeDto, SessionMessageDto[]> ok);
+    void ResumeSavedSession(Action<SessionResumeDto, SessionMessageDto[]> ok);
     void StartNewSession(Action<string> ok, Action<string> fail);
     string SessionId { get; }
     void GetProgress(int since, Action<ProgressDto> ok);
@@ -373,6 +387,8 @@ namespace JarvisVR
     void WorkspaceVerify(string[] testFiles, Action<WsVerifyDto> ok, Action<string> fail);
     void WorkspaceReview(Action<WsReviewDto> ok, Action<string> fail);
     void WorkspaceSubmit(Action<WsSubmitDto> ok, Action<string> fail);
+    void WorkspaceRun(string[] argv, Action<string> onLine, Action<int> onExit, Action<string> fail,
+                      int timeoutSeconds = 0);
     string LastRequestId { get; }
     void Feedback(string requestId, string rating, string question, string reply);
   }
@@ -848,6 +864,46 @@ namespace JarvisVR
       { session_id = _session, repo = ActiveRepo, request_id = NewRequestId() });
       yield return Send("POST", "/workspace/submit", json,
         b => ok(JsonUtility.FromJson<WsSubmitDto>(b)), fail);
+    }
+
+    public void WorkspaceRun(string[] argv, Action<string> onLine, Action<int> onExit, Action<string> fail,
+                             int timeoutSeconds = 0) =>
+      StartCoroutine(WsRunRoutine(argv, onLine, onExit, fail, timeoutSeconds));
+
+    /// <summary>POST /workspace/run returns an SSE stream; UnityWebRequest buffers
+    /// the body, so events are replayed line-by-line once the response completes.
+    /// onLine gets each output line, onExit the process return code.</summary>
+    private IEnumerator WsRunRoutine(string[] argv, Action<string> onLine, Action<int> onExit, Action<string> fail,
+                                     int timeoutSeconds)
+    {
+      bool failed = false;
+      yield return EnsureSession(e => { failed = true; fail(e); });
+      if (failed) yield break;
+      string json = JsonUtility.ToJson(new WsRunRequest
+      { session_id = _session, repo = ActiveRepo, argv = argv ?? new string[0], timeout = timeoutSeconds });
+      string body = null, err = null;
+      yield return Send("POST", "/workspace/run", json, b => body = b, e => err = e);
+      if (body == null) { fail(err ?? "run failed"); yield break; }
+      int exitCode = -1;
+      bool sawExit = false;
+      foreach (string raw in (body ?? "").Split('\n'))
+      {
+        string line = raw.Trim();
+        if (!line.StartsWith("data:")) continue;
+        string payload = line.Substring(5).Trim();
+        if (payload.Length == 0) continue;
+        WsRunEvent ev = null;
+        try { ev = JsonUtility.FromJson<WsRunEvent>(payload); }
+        catch { }
+        if (ev == null) continue;
+        if (!string.IsNullOrEmpty(ev.@out)) onLine?.Invoke(ev.@out);
+        if (ev.timeout) onLine?.Invoke("[timed out]\n");
+        if (ev.truncated) onLine?.Invoke("[output truncated]\n");
+        if (!string.IsNullOrEmpty(ev.error)) { fail(ev.error); yield break; }
+        if (payload.Contains("\"exit\"")) { exitCode = ev.exit; sawExit = true; }
+      }
+      if (!sawExit) { fail(err ?? "run ended without an exit status"); yield break; }
+      onExit?.Invoke(exitCode);
     }
 
     /// <summary>GET a /workspace/* endpoint. extraParam/extraValue add one query
