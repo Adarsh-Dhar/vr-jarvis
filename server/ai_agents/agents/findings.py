@@ -78,11 +78,29 @@ def record_finding(
     if not 0.0 <= confidence <= 1.0:
         raise ValueError(f"Confidence must be between 0.0 and 1.0, got {confidence}")
 
-    # Convert evidence dicts to Evidence objects
+    # Convert evidence dicts to Evidence objects. Agents routinely send partial
+    # dicts (a 'line' instead of start/end, no node_id/tool), so normalize and
+    # drop only the entries that still cannot be built — never fail the finding.
     evidence_objects = []
     for ev in evidence:
         if isinstance(ev, dict):
-            evidence_objects.append(Evidence(**ev))
+            ev = dict(ev)
+            if 'start' not in ev and 'line' in ev:
+                ev['start'] = ev.pop('line')
+            for key in ('start', 'end', 'line'):
+                if key in ev:
+                    try:
+                        ev[key] = int(ev[key])
+                    except (TypeError, ValueError):
+                        ev.pop(key)
+            ev.setdefault('end', ev.get('start') or 0)
+            ev.setdefault('file', '')
+            ev.setdefault('node_id', '')
+            ev.setdefault('tool', 'record_finding')
+            try:
+                evidence_objects.append(Evidence(**ev))
+            except Exception:
+                continue
         else:
             evidence_objects.append(ev)
 

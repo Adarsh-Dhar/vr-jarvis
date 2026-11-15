@@ -154,17 +154,22 @@ def _demo_answers() -> dict:
 
 
 def _demo_answer_for(text: str):
-    """The stored AskResponse dict for a scripted demo question, else None."""
-    if not DEMO_MODE:
+    """The stored AskResponse dict for a scripted demo question, else None.
+    While JARVIS_RECORD_DEMO=1 the cache is bypassed so every ask runs the
+    real agents and re-records — otherwise the first success would make all
+    later verification runs replay the stored answer."""
+    if not DEMO_MODE or RECORD_DEMO:
         return None
     ans = _demo_answers().get(_norm_question(text))
     return ans if isinstance(ans, dict) else None
 
 
-def _record_demo_answer(text: str, resp: dict):
+def _record_demo_answer(text: str, resp: dict, ok: bool = True):
     """JARVIS_RECORD_DEMO=1: append this real /ask response to the answers file,
-    keyed by the normalized question, so the next run serves it instantly."""
-    if not RECORD_DEMO or not isinstance(resp, dict) or not resp.get('reply'):
+    keyed by the normalized question, so the next run serves it instantly.
+    ok=False skips recording (e.g. the turn errored and the reply is the
+    demo-mode busy fallback — that must never become a stored answer)."""
+    if not ok or not RECORD_DEMO or not isinstance(resp, dict) or not resp.get('reply'):
         return
     try:
         p = Path(DEMO_ANSWERS_PATH)
@@ -668,12 +673,11 @@ class TranscribeBody(BaseModel):
 
 def _transcribe_audio(audio: bytes, mime: str) -> str:
     """Blocking call to the model. Kept separate so tests can replace it."""
-    from google import genai
-    client = genai.Client()          # reads GOOGLE_API_KEY (or the Vertex settings) from the environment
-    response = client.models.generate_content(
+    from ai_agents import api_keys     # rotates through GOOGLE_API_KEY, GOOGLE_API_KEY_1, ... when several are set
+    response = api_keys.with_client(lambda client: client.models.generate_content(
         model=STT_MODEL,
         contents=[types.Part.from_bytes(data=audio, mime_type=mime), STT_PROMPT],
-    )
+    ))
     return (response.text or '').strip().strip('"').strip()
 
 
@@ -952,7 +956,8 @@ async def health():
 @app.get('/metrics/llm', dependencies=[Depends(auth)])
 async def metrics_llm():
     """Cumulative model-call counters for this process (see ai_agents/llm.py)."""
-    return dict(llm.stats)
+    from ai_agents import api_keys
+    return {**llm.stats, 'api_keys': api_keys.get_pool().status()}
 
 
 class FeedbackBody(BaseModel):
@@ -1465,14 +1470,30 @@ def _worktree_review(state: dict) -> dict:
     }
 
 
+def _display_reply(reply: str, agent_answer: str) -> str:
+    """Pick what the VR panel shows. A specialist's final event can carry the
+    raw AgentResult JSON envelope; unwrap its 'answer' text. Falls back to the
+    parsed result answer when the event produced no text at all."""
+    text = (reply or '').strip()
+    if text.startswith('{'):
+        try:
+            data = json.loads(text)
+        except Exception:
+            data = None
+        if isinstance(data, dict) and isinstance(data.get('answer'), str) \
+                and data['answer'].strip() \
+                and ('status' in data or 'findings' in data or 'evidence' in data):
+            return data['answer'].strip()
+    return reply if reply else agent_answer
+
+
 def _build_ask_response(reply: str, error: str, state: dict) -> dict:
     """Build the standardized response for /ask and /ask/stream endpoints.
 
     This unified function ensures both endpoints return the same structure.
     """
     agent_answer, result_limitations, results_degraded = _agent_result_view(state)
-    if not reply and agent_answer:
-        reply = agent_answer
+    reply = _display_reply(reply, agent_answer)
     last = state.get('last_test_run') or {}
     commands = list(state.get('scene_commands', []))
     pending = _s(state.get('pending_approval'))
@@ -1692,6 +1713,7 @@ async def ask(body: AskBody, request: Request):
                 error = f'{type(exc).__name__}: {str(exc)[:200]}'
         # Demo mode: a failed model call still produces a normal answer so the
         # VR panel never shows a blank error.
+        had_error = bool(error)
         if DEMO_MODE and error and not reply:
             reply = _demo_fallback(body.text)
             error = ''
@@ -1708,7 +1730,7 @@ async def ask(body: AskBody, request: Request):
     resp = _build_ask_response(reply, error, state)
     resp['metrics'] = _ask_metrics(before, t_start, body.session_id)
     _log_metrics(body, resp)
-    _record_demo_answer(body.text, resp)
+    _record_demo_answer(body.text, resp, ok=not had_error)
     return resp
 
 

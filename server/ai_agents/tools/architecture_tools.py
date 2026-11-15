@@ -77,13 +77,12 @@ def _llm_json(system: str, user: str, fallback):
     never presented as AI-generated. Falls back to `fallback()` when there is
     no API key, the call fails, or the reply is not valid JSON."""
     try:
-        from google import genai
-        client = genai.Client()   # reads GOOGLE_API_KEY / Vertex settings from the environment
-        resp = client.models.generate_content(
+        from .. import api_keys   # rotates through several API keys when more than one is set
+        resp = api_keys.with_client(lambda client: client.models.generate_content(
             model=config.MODEL_NAME,
             contents=[system + '\n\n' + user],
             config={'response_mime_type': 'application/json'},
-        )
+        ))
         data = json.loads(resp.text or '{}')
         if isinstance(data, dict):
             return data, 'model'

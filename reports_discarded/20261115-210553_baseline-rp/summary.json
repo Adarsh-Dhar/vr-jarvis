@@ -1,0 +1,28 @@
+{
+  "tag": "baseline-rp",
+  "split": "dev",
+  "repeats": 3,
+  "cases": 14,
+  "runs": 42,
+  "infra_errors": 16,
+  "success_rate": 0.1538,
+  "fabricated_total": 0,
+  "unstable_cases": 3,
+  "by_category": {
+    "callees": 0.25,
+    "callers": 0.1111,
+    "where_defined": 0.0
+  },
+  "latency_ms_p50": 19536.5,
+  "latency_ms_p95": 34925.05,
+  "model_calls_mean": 15.65,
+  "tokens_mean": 44769,
+  "commit": "9735f6b2",
+  "env": {
+    "JARVIS_MODEL": "gemini-3.5-flash-lite",
+    "JARVIS_LITE_MODEL": "",
+    "JARVIS_LLM_RPM": "0",
+    "JARVIS_LLM_ATTEMPTS": "5",
+    "JARVIS_FAST_PATH": ""
+  }
+}

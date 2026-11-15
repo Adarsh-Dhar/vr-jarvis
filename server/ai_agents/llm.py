@@ -24,6 +24,8 @@ import time
 from google.adk.models.google_llm import Gemini
 from google.genai import types
 
+from . import api_keys
+
 log = logging.getLogger('uvicorn.error')
 
 RETRY = types.HttpRetryOptions(
@@ -66,12 +68,54 @@ async def _pace(rpm):
 
 
 class PacedGemini(Gemini):
-    '''Gemini with call counting, optional pacing and an optional cap on concurrent calls. Retries come from retry_options.'''
+    '''Gemini with call counting, optional pacing and an optional cap on concurrent calls. Retries come from retry_options.
+    With several API keys (see api_keys.py) a quota or expired-key error moves the call to the next key.'''
+
+    def _member(self, key):
+        '''A plain Gemini that talks with one specific key (built once per key). 429s are not retried inside
+        the client here: the pool switches key instead of waiting on an exhausted one.'''
+        cache = self.__dict__.setdefault('_key_members', {})
+        if key not in cache:
+            ro = types.HttpRetryOptions(
+                attempts=RETRY.attempts, initial_delay=RETRY.initial_delay, max_delay=RETRY.max_delay,
+                exp_base=2.0, jitter=1.0, http_status_codes=[c for c in RETRY.http_status_codes if c != 429])
+            cache[key] = Gemini(model=self.model, retry_options=ro, base_url=self.base_url,
+                                client_kwargs={'api_key': key})
+        return cache[key]
+
+    async def _calls(self, llm_request, stream):
+        pool = api_keys.get_pool()
+        if len(pool) < 2:
+            async for response in super().generate_content_async(llm_request, stream=stream):
+                yield response
+            return
+        max_wait = float(os.getenv('JARVIS_KEY_MAX_WAIT', '20'))
+        while True:
+            key = pool.get()
+            if key is None:
+                wait = pool.wait_seconds()
+                if wait is None:
+                    raise RuntimeError('all configured API keys are invalid or expired')
+                if wait > max_wait:
+                    raise RuntimeError('all API keys are out of quota; the next one is free in %ds' % int(wait))
+                await asyncio.sleep(wait + 0.5)
+                continue
+            started = False
+            try:
+                async for response in self._member(key).generate_content_async(llm_request.model_copy(deep=True), stream=stream):
+                    started = True
+                    yield response
+                return
+            except Exception as exc:
+                kind, secs = api_keys.classify(exc)
+                if started or kind == 'other':
+                    raise
+                pool.mark(key, kind, secs, exc)
 
     async def _logged(self, llm_request, stream):
         t0 = time.monotonic()
         last = None
-        async for response in super().generate_content_async(llm_request, stream=stream):
+        async for response in self._calls(llm_request, stream):
             last = response
             yield response
         usage = getattr(last, 'usage_metadata', None) if last is not None else None
