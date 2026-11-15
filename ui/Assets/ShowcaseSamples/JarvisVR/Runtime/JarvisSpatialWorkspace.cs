@@ -74,6 +74,17 @@ namespace JarvisVR
     private const int SessionRowsPerPage = 5;
     private const int EditorLinesPerPage = 18;
     private bool _serverOnline;
+    // Demo mode (server JARVIS_DEMO_MODE=1): auto-open the single demo repo,
+    // offer three scripted questions, and land on the graph without typing.
+    private bool _demoAutoOpened;
+    private readonly List<JarvisSpatialButton> _demoQButtons = new List<JarvisSpatialButton>();
+    private static readonly string[] DemoQuestions =
+    {
+      "What does this repository do?",
+      "Who calls deleteAccount?",
+      "What breaks if I change verifyToken?",
+    };
+    private static readonly string[] DemoQuestionLabels = { "What does it do?", "Who calls delete?", "What breaks?" };
     private string _selected, _mode = "MAP", _pending, _ghostDiff, _testSummary = "No test run yet.";
     private int _ghostPage;
     private bool _ghostSeenAll;
@@ -169,7 +180,13 @@ namespace JarvisVR
       Log("workspace ready");
       RestoreSavedSession();
 
-      _bridge.GetHealth(h => { _health = h; _serverOnline = h != null && h.ok; RefreshStatus(); }, e => { _serverOnline = false; RefreshStatus(); });
+      _bridge.GetHealth(h =>
+      {
+        _health = h; _serverOnline = h != null && h.ok;
+        if (h != null && h.demo_mode) ApplyDemoMode();
+        TryDemoAutoOpen();
+        RefreshStatus();
+      }, e => { _serverOnline = false; RefreshStatus(); });
       FetchRepos();
       _bridge.GetGraph(g =>
       {
@@ -363,6 +380,15 @@ namespace JarvisVR
       chat.AddButton("NEWER >", 226, 280, 200, 40, () => { _chatOffset = Mathf.Max(0, _chatOffset - Mathf.Max(1, _chatShown)); RefreshChat(); }, 0f, pal.Violet);
       chat.AddButton("GOOD", 14, 336, 200, 40, () => SendFeedback("up"), 0f, pal.Green);
       chat.AddButton("WRONG", 226, 336, 200, 40, () => SendFeedback("down"), 0f, pal.Red);
+      // Demo mode: three scripted questions matching server/demo_answers.json.
+      // Hidden until /health reports demo_mode (ShowDemoQuestions).
+      for (int i = 0; i < DemoQuestions.Length; i++)
+      {
+        string q = DemoQuestions[i];
+        JarvisSpatialButton qb = chat.AddButton(DemoQuestionLabels[i], 14 + i * 140, 388, 132, 38, () => Ask(q), 0f, pal.Violet);
+        qb.gameObject.SetActive(false);
+        _demoQButtons.Add(qb);
+      }
       RefreshChat();
 
       JarvisSpatialPanel outline = AddPanel("outline", "Outline", 440, 330, -1.12f, -0.46f, pal.Cyan);
@@ -1759,6 +1785,11 @@ namespace JarvisVR
       _unverifiedEvidence = r.unverified_evidence;
       bool graphChanged = false;
       if (r.scene_commands != null) foreach (SceneCommand c in r.scene_commands) graphChanged |= ApplyCommand(c);
+      // Highlight the nodes the answer was grounded in so judges see the link
+      // between the reply and the 3D graph.
+      if (r.evidence != null)
+        foreach (string id in r.evidence)
+          if (_nodes.ContainsKey(id)) _hot.Add(id);
       if (!string.IsNullOrEmpty(r.pending_approval)) _pending = r.pending_approval;
       string reply = r.reply ?? "";
       if (r.test_source == "cached") reply += "  (Test results are SIMULATED.)";
@@ -2176,6 +2207,52 @@ namespace JarvisVR
         + "  ·  EDGES " + visibleEdges + "  ·  " + (1f / Mathf.Max(Time.smoothDeltaTime, 0.0001f)).ToString("F0") + " fps");
     }
 
+    /// <summary>Demo mode: reveal the scripted-question buttons on the chat
+    /// panel. Called once /health reports demo_mode.</summary>
+    private void ShowDemoQuestions()
+    {
+      foreach (JarvisSpatialButton b in _demoQButtons)
+        if (b != null) b.gameObject.SetActive(true);
+    }
+
+    /// <summary>Demo first run: pick the demo repository and open its graph so a
+    /// satisfying answer is one pinch away. Runs once health AND the repo list
+    /// have both arrived (whichever is last triggers it).</summary>
+    private void TryDemoAutoOpen()
+    {
+      if (_demoAutoOpened || _health == null || !_health.demo_mode) return;
+      if (_repos == null || _repos.repos == null || _repos.repos.Count == 0) return;
+      if (_switching || (_bridge != null && _bridge.Busy)) return;
+      string name = _repos.repos[0].name;
+      if (_repos.active == name)
+      {
+        // The server already has the demo repo active: just show its graph.
+        _demoAutoOpened = true;
+        _browserRepo = name;
+        _browserPath = "";
+        LoadRepoFolder("");
+        _bridge.GetGraph(g =>
+        {
+          if (g != null && g.nodes != null && g.nodes.Count > 0)
+          {
+            LoadGraph(g);
+            var first = g.nodes.FirstOrDefault(n => n.kind != "module" && n.kind != "file");
+            if (first != null) Select(first.id);
+            Log("demo graph: " + g.nodes.Count + " nodes");
+          }
+          RefreshStatus();
+        });
+        SetMode("MAP");
+        Say("Demo build — pinch a suggested question, or hold the orb and speak. Pinch a node to read its code.");
+      }
+      else
+      {
+        // Should not happen with a single-repo demo deploy, but keep it working.
+        _demoAutoOpened = true;
+        OpenRepo(name);
+      }
+    }
+
     private void FetchRepos()
     {
       if (_bridge == null) return;
@@ -2186,6 +2263,7 @@ namespace JarvisVR
         _repos = r;
         _browserError = null;
         RefreshRepoBrowser();
+        TryDemoAutoOpen();
       }, error =>
       {
         _browserError = error;
@@ -2237,10 +2315,16 @@ namespace JarvisVR
       _repoTree = null;
       ExitEditMode();
       _openFile = null;
-      SetMode("REPOS");
+      SetMode(_demoMode ? "MAP" : "REPOS");
       // Load the file tree independently: browsing must not depend on graph indexing succeeding.
       LoadRepoFolder("");
-      _bridge.GetHealth(h => { _health = h; RefreshStatus(); }, e => { });
+      _bridge.GetHealth(h =>
+      {
+        _health = h;
+        if (h != null && h.demo_mode) ApplyDemoMode();
+        TryDemoAutoOpen();
+        RefreshStatus();
+      }, e => { });
       _bridge.GetGraph(g =>
       {
         if (g != null && g.nodes != null)
@@ -3297,6 +3381,21 @@ namespace JarvisVR
       });
     }
 
+    /// <summary>Taking the headset off pauses the app; putting it back on must
+    /// reconnect to the same session without re-selecting the repository. The
+    /// session id already survives in PlayerPrefs — this just refreshes health
+    /// (and re-applies demo mode) so a server restart is picked up.</summary>
+    private void OnApplicationPause(bool paused)
+    {
+      if (paused || _bridge == null) return;
+      _bridge.GetHealth(h =>
+      {
+        _health = h; _serverOnline = h != null && h.ok;
+        if (h != null && h.demo_mode) { ApplyDemoMode(); ShowDemoQuestions(); }
+        RefreshStatus();
+      }, e => { _serverOnline = false; RefreshStatus(); });
+    }
+
     private void AddChat(bool developer, string text)
     {
       if (string.IsNullOrWhiteSpace(text)) return;
@@ -3316,7 +3415,13 @@ namespace JarvisVR
     {
       if (!_panels.ContainsKey("chat")) return;
       JarvisPalette pal = JarvisPalette.Current;
-      if (_chat.Count == 0) { _panels["chat"].SetBody("No messages yet.\nPress TYPE or hold the orb and speak."); _chatShown = 0; return; }
+      if (_chat.Count == 0)
+      {
+        _panels["chat"].SetBody(_demoMode
+          ? "Demo build.\nPinch a suggested question below, or hold the orb and speak.\nPinch a node to open its code."
+          : "No messages yet.\nPress TYPE or hold the orb and speak.");
+        _chatShown = 0; return;
+      }
       _chatOffset = Mathf.Clamp(_chatOffset, 0, _chat.Count - 1);
       int end = _chat.Count - _chatOffset, start = end, used = 0;
       while (start > 0)

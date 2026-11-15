@@ -31,11 +31,28 @@ export JARVIS_REPOSITORY_DIR="/path/to/your/repositories"
 export JARVIS_MONTHLY_BUDGET="50.0"
 ```
 
+### Demo mode (judged / public build)
+
+```bash
+export JARVIS_DEMO_MODE=1                  # 404s run/debug/IDE/edit/verify routes
+export JARVIS_REPOSITORY_DIR="/path/to/demo-only-repo-dir"   # ONE demo repo inside
+export JARVIS_DEMO_ANSWERS="server/demo_answers.json"         # scripted Q&A cache
+export JARVIS_RECORD_DEMO=1                # while recording: save real /ask replies
+export JARVIS_RATE_PER_MIN=6               # per-IP burst limit on /ask
+export JARVIS_DAILY_ASK_CAP=300            # global daily cap on real model turns
+```
+
+In demo mode `/health` reports `"demo_mode": true`, the VR app hides the edit
+panel, scripted questions (see `docs/demo_script.md`) answer instantly from
+`demo_answers.json`, and failed model calls return a "busy" fallback instead of
+an error. Set a hard spending cap in Google AI billing as well — the in-code
+caps only protect against bursts.
+
 ### 3. Start the Server
 
 ```bash
 # From project root
-cd /Users/adarsh/Documents/vr-agent
+cd "$(git rev-parse --show-toplevel)"   # or your checkout of vr-jarvis
 uvicorn jarvis_server:app --app-dir server --host 127.0.0.1 --port 8000
 ```
 

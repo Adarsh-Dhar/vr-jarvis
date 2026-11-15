@@ -6,7 +6,7 @@ JARVIS agent testing evaluates whether agents know **when, why, and how** to use
 
 ## Location
 
-Agent tests are located in: `/Users/adarsh/Documents/vr-agent/jarvis-agent-evaluation/`
+Agent tests are located in: `jarvis-agent-evaluation/`
 
 ## Testing Philosophy
 
@@ -16,12 +16,12 @@ Agent tests are located in: `/Users/adarsh/Documents/vr-agent/jarvis-agent-evalu
 ### Three Independent Evaluation Systems
 
 1. **Tool Evaluation:** Technical correctness of individual tools
-   - Location: `/Users/adarsh/Documents/vr-agent/jarvis-tests/`
+   - Location: `jarvis-tests/`
    - Status: 98.45% complete (5,664/5,753 tests)
    - Focus: Tool signatures, parameters, return values
 
 2. **Agent Evaluation:** Agent decision-making and responsibility fulfillment
-   - Location: `/Users/adarsh/Documents/vr-agent/jarvis-agent-evaluation/`
+   - Location: `jarvis-agent-evaluation/`
    - Status: Infrastructure complete, 41 test cases, 100% execution success
    - Focus: Tool selection, judgment, evidence, boundaries
 
@@ -76,7 +76,7 @@ Agent tests are located in: `/Users/adarsh/Documents/vr-agent/jarvis-agent-evalu
 
 ### Running All Tests
 ```bash
-cd /Users/adarsh/Documents/vr-agent/jarvis-agent-evaluation/runner
+cd jarvis-agent-evaluation/runner
 python integrated_harness.py
 ```
 

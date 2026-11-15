@@ -24,9 +24,17 @@ def _test_id(full_name):
     return full_name
 
 
+def _clean_env():
+    """Child processes (test runs, typecheck, git helpers) must never see
+    credentials: strip anything that looks like a key/token/secret/password."""
+    bad = ('KEY', 'TOKEN', 'SECRET', 'PASSWORD')
+    return {k: v for k, v in os.environ.items() if not any(s in k.upper() for s in bad)}
+
+
 def _run(cmd, cwd, timeout=180):
     try:
-        p = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout)
+        p = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True,
+                           timeout=timeout, env=_clean_env())
         return p.returncode, p.stdout, p.stderr
     except subprocess.TimeoutExpired:
         return 124, '', 'timeout'
@@ -37,7 +45,8 @@ def _worktree_fingerprint(cwd):
     diff plus HEAD. /approve recomputes this and refuses stale results."""
     import hashlib as _hl
     head = _run(['git', 'rev-parse', 'HEAD'], cwd)[1].strip()
-    subprocess.run(['git', 'add', '-N', '.'], cwd=cwd, capture_output=True, text=True)
+    subprocess.run(['git', 'add', '-N', '.'], cwd=cwd, capture_output=True, text=True,
+                   env=_clean_env())
     diff = _run(['git', 'diff', 'HEAD'], cwd)[1]
     return {'diff_hash': _hl.sha256(diff.encode()).hexdigest()[:16], 'head': head}
 

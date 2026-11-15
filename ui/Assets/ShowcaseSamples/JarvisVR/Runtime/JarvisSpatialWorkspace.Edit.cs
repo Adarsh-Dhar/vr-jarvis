@@ -50,6 +50,10 @@ namespace JarvisVR
     private int _editSelStart, _editSelEnd;   // 1-based inclusive; 0 = no anchor yet
     private bool _runBusy;
     private readonly StringBuilder _runOutput = new StringBuilder();
+    // Demo mode (server JARVIS_DEMO_MODE=1, reported via /health demo_mode):
+    // editing, running, debugging and IDE routes all return 404, so the whole
+    // edit panel is hidden and its polling coroutines never start.
+    private bool _demoMode;
 
     private sealed class UndoEntry
     {
@@ -88,6 +92,38 @@ namespace JarvisVR
       _editStepBtn  = _editPanel.AddButton("STEP",           x0, ys[9], w,  h, EditDebugControl("next"));
       _editStopBtn  = _editPanel.AddButton("STOP",           x1, ys[9], w,  h, EditDebugStop, 0f, pal.Red);
       RefreshEdit();
+    }
+
+    /// <summary>Called once /health reports demo_mode. Hides every edit-panel
+    /// button (ForceHidden survives minimize/restore) and stops the polling
+    /// coroutines so nothing calls the disabled routes.</summary>
+    private void ApplyDemoMode()
+    {
+      if (_demoMode) return;
+      _demoMode = true;
+      if (_changesPoll != null) { StopCoroutine(_changesPoll); _changesPoll = null; }
+      if (_debugPoll != null) { StopCoroutine(_debugPoll); _debugPoll = null; }
+      _debugActive = false;
+      _editMode = false;
+      HideDemo(_editRunBtn); HideDemo(_editIdeBtn); HideDemo(_editBreakBtn);
+      HideDemo(_editDebugBtn); HideDemo(_editContBtn); HideDemo(_editStepBtn);
+      HideDemo(_editStopBtn);
+      // The server 404s every write/verify route in demo mode, so the editing
+      // controls are hidden too — judges see analysis and the 3D graph only.
+      HideDemo(_editModeBtn); HideDemo(_editPrevBtn); HideDemo(_editNextBtn);
+      HideDemo(_editLineBtn); HideDemo(_editAddBtn); HideDemo(_editDelBtn);
+      HideDemo(_editUndoBtn); HideDemo(_editRevertBtn); HideDemo(_editVerifyBtn);
+      HideDemo(_editReviewBtn); HideDemo(_editSubmitBtn); HideDemo(_editSelBtn);
+      ShowDemoQuestions();
+      RefreshEdit();
+    }
+
+    private static void HideDemo(JarvisSpatialButton b)
+    {
+      if (b == null) return;
+      b.ForceHidden = true;
+      b.Interactable = false;
+      b.gameObject.SetActive(false);
     }
 
     // =========================================================== helpers
@@ -158,6 +194,7 @@ namespace JarvisVR
 
     private void ToggleEditMode()
     {
+      if (_demoMode) { Say("Editing is disabled in this demo build."); return; }
       if (_editMode) { ExitEditMode(); Say("Edit mode off."); return; }
       if (_openFile == null) { Say("Open a file in the repository browser first."); return; }
       if (_openFile.truncated) { Say("This file is truncated; edit it in an IDE instead."); return; }
@@ -751,6 +788,11 @@ namespace JarvisVR
     private void RefreshEdit()
     {
       if (_editPanel == null) return;
+      if (_demoMode)
+      {
+        _editPanel.SetBody("Editing is disabled in this demo build.\nAsk JARVIS a question, or pinch a node to read its code.");
+        return;
+      }
       bool open = _openFile != null;
       bool mode = _editMode && open;
       JarvisPalette pal = JarvisPalette.Current;

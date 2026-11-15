@@ -239,7 +239,7 @@ namespace JarvisVR
 
   [Serializable] internal class RepoSelectRequest { public string name; }
   [Serializable] internal class RepoSelectResponse { public string active; public bool session_reset_required; }
-  [Serializable] public class HealthDto { public bool ok, cached_tests; public string repo, branch; public int changed; }
+  [Serializable] public class HealthDto { public bool ok, cached_tests, demo_mode; public string repo, branch; public int changed; }
 
   // ---- workspace editing: human edits inside the sandbox worktree ----
   // Field names match the /workspace/* JSON exactly (snake_case).

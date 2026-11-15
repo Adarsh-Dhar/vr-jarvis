@@ -14,7 +14,7 @@ import traceback
 import uuid
 import hmac
 import time
-from collections import defaultdict
+from collections import defaultdict, deque
 from pathlib import Path
 from typing import Optional, Dict, Any, List, Literal
 
@@ -80,6 +80,124 @@ EVICT_DELETES_SESSIONS = os.getenv('JARVIS_EVICT_DELETES_SESSIONS', '0') == '1'
 # running turn, live worktree, pending approval, unpromoted commit — are kept.
 SESSION_RETENTION_DAYS = float(os.getenv('JARVIS_SESSION_RETENTION_DAYS', '30'))
 ENABLE_DIRECT_TOOLS = os.getenv('JARVIS_ENABLE_DIRECT_TOOLS', '0') == '1'
+
+# ---- demo mode (JARVIS_DEMO_MODE=1) ---------------------------------------
+# Public/judged build: the risky workspace mutation routes return 404, scripted
+# demo questions are answered from a stored file (JARVIS_DEMO_ANSWERS), and ask
+# endpoints get a per-IP burst limit plus a global daily cap. Put ONLY the demo
+# repository in JARVIS_REPOSITORY_DIR so /repos/select has nothing to switch to.
+DEMO_MODE = os.getenv('JARVIS_DEMO_MODE', '0') == '1'
+DEMO_ANSWERS_PATH = os.getenv('JARVIS_DEMO_ANSWERS', '')
+RECORD_DEMO = os.getenv('JARVIS_RECORD_DEMO', '0') == '1' and DEMO_MODE
+RATE_PER_MIN = int(os.getenv('JARVIS_RATE_PER_MIN', '6'))
+DAILY_ASK_CAP = int(os.getenv('JARVIS_DAILY_ASK_CAP', '300'))
+
+_rl = defaultdict(deque)
+_daily = {'day': '', 'n': 0}
+
+
+def block_in_demo():
+    if DEMO_MODE:
+        raise HTTPException(status_code=404, detail='not available')
+
+
+def _client_ip(request: Request) -> str:
+    # Behind a reverse proxy the real client is the first X-Forwarded-For hop.
+    fwd = request.headers.get('x-forwarded-for', '')
+    if fwd:
+        return fwd.split(',')[0].strip()
+    return request.client.host if request.client else '?'
+
+
+def rate_limit(request: Request):
+    """Per-IP burst limit plus a global daily cap on real model turns.
+    Called inside the ask routes (not as a dependency) so stored demo answers
+    can return before the counters are touched."""
+    ip = _client_ip(request)
+    now = time.time()
+    q = _rl[ip]
+    while q and now - q[0] > 60:
+        q.popleft()
+    if len(q) >= RATE_PER_MIN:
+        raise HTTPException(429, 'Too many requests, wait a minute.')
+    q.append(now)
+    day = time.strftime('%Y-%m-%d')
+    if _daily['day'] != day:
+        _daily['day'], _daily['n'] = day, 0
+    if _daily['n'] >= DAILY_ASK_CAP:
+        raise HTTPException(429, 'Daily limit reached, try again tomorrow.')
+    _daily['n'] += 1
+
+
+def _norm_question(text: str) -> str:
+    return re.sub(r'\s+', ' ', (text or '').strip().lower())
+
+
+_demo_answers_cache = {'mtime': None, 'data': {}}
+
+
+def _demo_answers() -> dict:
+    if not DEMO_ANSWERS_PATH:
+        return {}
+    p = Path(DEMO_ANSWERS_PATH)
+    try:
+        m = p.stat().st_mtime_ns
+    except OSError:
+        return {}
+    if _demo_answers_cache['mtime'] != m:
+        try:
+            _demo_answers_cache['data'] = json.loads(p.read_text())
+        except Exception:
+            _demo_answers_cache['data'] = {}
+        _demo_answers_cache['mtime'] = m
+    return _demo_answers_cache['data']
+
+
+def _demo_answer_for(text: str):
+    """The stored AskResponse dict for a scripted demo question, else None."""
+    if not DEMO_MODE:
+        return None
+    ans = _demo_answers().get(_norm_question(text))
+    return ans if isinstance(ans, dict) else None
+
+
+def _record_demo_answer(text: str, resp: dict):
+    """JARVIS_RECORD_DEMO=1: append this real /ask response to the answers file,
+    keyed by the normalized question, so the next run serves it instantly."""
+    if not RECORD_DEMO or not isinstance(resp, dict) or not resp.get('reply'):
+        return
+    try:
+        p = Path(DEMO_ANSWERS_PATH)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        data = {}
+        if p.exists():
+            try:
+                data = json.loads(p.read_text())
+            except Exception:
+                data = {}
+        data[_norm_question(text)] = jsonable_encoder(resp)
+        p.write_text(json.dumps(data, indent=2, ensure_ascii=False))
+        _demo_answers_cache['mtime'] = None   # force reload on next lookup
+    except Exception:
+        logging.getLogger('uvicorn.error').exception('record demo answer failed')
+
+
+def _demo_fallback(text: str) -> str:
+    """Shown when a model call fails in demo mode: a busy message plus the
+    closest stored demo answer on a loose match, so the panel is never blank."""
+    import difflib
+    msg = 'JARVIS is busy right now. Try one of the suggested questions.'
+    answers = _demo_answers()
+    if not answers:
+        return msg
+    close = difflib.get_close_matches(_norm_question(text), list(answers.keys()),
+                                      n=1, cutoff=0.6)
+    if close:
+        reply = (answers[close[0]] or {}).get('reply') or ''
+        if reply:
+            return msg + '\n\nClosest match:\n' + reply
+    return msg
+
 
 # Allowlist for direct tool calls (read-only tools only)
 DIRECT_TOOL_ALLOWLIST = {
@@ -815,7 +933,8 @@ async def health():
     return {'ok': True, 'cached_tests': USE_CACHED_TESTS, 'repo': config.REPO_ROOT.name,
             'branch': _git('rev-parse', '--abbrev-ref', 'HEAD') or '?', 'changed': changed,
             'session_backend': SESSION_BACKEND,
-            'persistence_mode': 'durable' if SESSION_BACKEND == 'sqlite' else 'volatile',
+            'persistence_mode': 'durable' if SESSION_BACKEND in ('sqlite', 'postgres') else 'volatile',
+            'demo_mode': DEMO_MODE,
             'semantic_languages': ['python', 'javascript', 'typescript'],
             'analysis_support': {
                 'python': {'structure': True, 'calls': True, 'cfg': True, 'dfg': True},
@@ -952,7 +1071,7 @@ async def repos():
     return {'active': config.REPO_ROOT.name, 'repos': [repository.info(n) for n in repository.list_repos()]}
 
 
-@app.post('/repos/select', dependencies=[Depends(auth)], response_model=RepositorySelectResponse)
+@app.post('/repos/select', dependencies=[Depends(auth), Depends(block_in_demo)], response_model=RepositorySelectResponse)
 async def select_repo(body: RepoBody):
     # One active repository per server process. The check and the switch happen under repo_lock so no
     # request can slip in between them (asks refuse while repo_lock is held).
@@ -1097,11 +1216,22 @@ async def _run_turn_streaming(body):
 
 
 @app.post('/ask/stream', dependencies=[Depends(auth)])
-async def ask_stream(body: AskBody):
+async def ask_stream(body: AskBody, request: Request):
     """Stream agent progress as Server-Sent Events."""
     _refuse_if_switching()
     _require_active_repo(body.repo)
     await _check_session_repo(body.session_id)
+    stored = _demo_answer_for(body.text)
+    if stored is not None:
+        # Scripted demo question: replay the recorded response in the same
+        # event shapes a live turn emits. Skips the rate counters entirely.
+        reply_text = stored.get('reply') or ''
+        async def stored_gen():
+            yield 'data: ' + json.dumps({'type': 'final_response', 'content': reply_text}) + '\n\n'
+            yield 'data: ' + json.dumps({'type': 'final_state', 'response': stored}) + '\n\n'
+        return StreamingResponse(stored_gen(), media_type='text/event-stream',
+                                 headers={'Cache-Control': 'no-cache'})
+    rate_limit(request)
     async def gen():
         async with locks[body.session_id]:      # hold the lock for the whole stream
             # Re-check under the session lock: /repos/select treats a held session
@@ -1137,6 +1267,12 @@ async def ask_stream(body: AskBody):
             except Exception as exc:
                 error = f'{type(exc).__name__}: {str(exc)[:200]}'
                 yield 'data: ' + json.dumps({'type': 'error', 'error': error}) + '\n\n'
+
+            # Demo mode: a failed model call still produces a normal answer so
+            # the VR panel never shows a blank error.
+            if DEMO_MODE and error and not reply:
+                reply = _demo_fallback(body.text)
+                error = ''
 
             # Build and send final response using the same logic as /ask
             state = (await ensure(body.session_id)).state
@@ -1512,11 +1648,17 @@ def _fast_answer(text):
 
 
 @app.post('/ask', dependencies=[Depends(auth)], response_model=AskResponse)
-async def ask(body: AskBody):
+async def ask(body: AskBody, request: Request):
     """Non-streaming endpoint for compatibility."""
     _refuse_if_switching()
     _require_active_repo(body.repo)
     await _check_session_repo(body.session_id)
+    stored = _demo_answer_for(body.text)
+    if stored is not None:
+        # Scripted demo question: return the recorded response instantly and
+        # skip the rate counters entirely.
+        return stored
+    rate_limit(request)
     before = _llm_snapshot()
     t_start = time.monotonic()
     reply = ''
@@ -1548,6 +1690,11 @@ async def ask(body: AskBody):
                 error = 'JARVIS timed out on this request. Nothing was changed. Try again.'
             except Exception as exc:
                 error = f'{type(exc).__name__}: {str(exc)[:200]}'
+        # Demo mode: a failed model call still produces a normal answer so the
+        # VR panel never shows a blank error.
+        if DEMO_MODE and error and not reply:
+            reply = _demo_fallback(body.text)
+            error = ''
         state = (await ensure(body.session_id)).state
 
         # Offer commit approval only when the same evidence /approve requires is present
@@ -1561,6 +1708,7 @@ async def ask(body: AskBody):
     resp = _build_ask_response(reply, error, state)
     resp['metrics'] = _ask_metrics(before, t_start, body.session_id)
     _log_metrics(body, resp)
+    _record_demo_answer(body.text, resp)
     return resp
 
 
@@ -2644,7 +2792,7 @@ def _ws_rel(target, wt):
     return target.relative_to(Path(wt).resolve()).as_posix()
 
 
-@app.post('/workspace/open', dependencies=[Depends(auth)])
+@app.post('/workspace/open', dependencies=[Depends(auth), Depends(block_in_demo)])
 async def ws_open(body: WsOpenBody):
     """Ensure the session has a sandbox worktree; create one on branch
     jarvis/edit when missing. Never returns the absolute path."""
@@ -2716,7 +2864,7 @@ async def ws_get_file(session_id: str, path: str, repo: Optional[str] = None):
             'size': data.get('size', len(content)), 'source': 'main'}
 
 
-@app.put('/workspace/file', dependencies=[Depends(auth)])
+@app.put('/workspace/file', dependencies=[Depends(auth), Depends(block_in_demo)])
 async def ws_put_file(body: WsFileBody):
     """Whole-file write into the worktree with base_hash conflict detection."""
     await _ws_guard(body.session_id, body.repo)
@@ -2766,7 +2914,7 @@ async def ws_put_file(body: WsFileBody):
                 'symbols': symbols, 'verification': 'stale'}
 
 
-@app.post('/workspace/edit', dependencies=[Depends(auth)])
+@app.post('/workspace/edit', dependencies=[Depends(auth), Depends(block_in_demo)])
 async def ws_edit_lines(body: WsLineEditBody):
     """Line-range edit for the VR UI; same guarantees as PUT /workspace/file."""
     await _ws_guard(body.session_id, body.repo)
@@ -2810,7 +2958,7 @@ async def ws_edit_lines(body: WsLineEditBody):
                 'symbols': symbols, 'verification': 'stale'}
 
 
-@app.post('/workspace/revert', dependencies=[Depends(auth)])
+@app.post('/workspace/revert', dependencies=[Depends(auth), Depends(block_in_demo)])
 async def ws_revert(body: WsRevertBody):
     """Restore a worktree file to HEAD, or delete it when it is untracked."""
     await _ws_guard(body.session_id, body.repo)
@@ -2917,7 +3065,7 @@ async def ws_status(session_id: str, repo: Optional[str] = None):
 _WS_IDE_ALLOWED = {'code', 'codium', 'cursor'}
 
 
-@app.post('/workspace/open-ide', dependencies=[Depends(auth)])
+@app.post('/workspace/open-ide', dependencies=[Depends(auth), Depends(block_in_demo)])
 async def ws_open_ide(body: WsOpenBody):
     """Open the session worktree in an IDE on the machine running the server."""
     await _ws_guard(body.session_id, body.repo)
@@ -2963,7 +3111,7 @@ async def ws_changes(session_id: str, repo: Optional[str] = None):
 # languages report supported=false until their checker is wired in.
 
 
-@app.get('/workspace/diagnostics', dependencies=[Depends(auth)])
+@app.get('/workspace/diagnostics', dependencies=[Depends(auth), Depends(block_in_demo)])
 async def ws_diagnostics(session_id: str, path: str, repo: Optional[str] = None):
     await _ws_guard(session_id, repo)
     state = (await ensure(session_id)).state
@@ -3031,7 +3179,7 @@ def _ws_debug_stop(session_id):
             pass
 
 
-@app.post('/workspace/debug/start', dependencies=[Depends(auth)])
+@app.post('/workspace/debug/start', dependencies=[Depends(auth), Depends(block_in_demo)])
 async def ws_debug_start(body: WsDebugStartBody):
     await _ws_guard(body.session_id, body.repo)
     _ws_refuse_busy(body.session_id)
@@ -3055,7 +3203,7 @@ async def ws_debug_start(body: WsDebugStartBody):
     return {'ok': True}
 
 
-@app.get('/workspace/debug/state', dependencies=[Depends(auth)])
+@app.get('/workspace/debug/state', dependencies=[Depends(auth), Depends(block_in_demo)])
 async def ws_debug_state(session_id: str, repo: Optional[str] = None):
     await _ws_guard(session_id, repo)
     ds = _debug_sessions.get(session_id)
@@ -3065,7 +3213,7 @@ async def ws_debug_state(session_id: str, repo: Optional[str] = None):
     return {'ok': True, **ds.snapshot()}
 
 
-@app.post('/workspace/debug/control', dependencies=[Depends(auth)])
+@app.post('/workspace/debug/control', dependencies=[Depends(auth), Depends(block_in_demo)])
 async def ws_debug_control(body: WsDebugControlBody):
     await _ws_guard(body.session_id, body.repo)
     ds = _debug_sessions.get(body.session_id)
@@ -3116,7 +3264,7 @@ class WsRunBody(BaseModel):
     timeout: int = 0                # seconds; 0/negative = default 60, capped at 120
 
 
-@app.post('/workspace/run', dependencies=[Depends(auth)])
+@app.post('/workspace/run', dependencies=[Depends(auth), Depends(block_in_demo)])
 async def ws_run(body: WsRunBody):
     """Run an allowlisted program in the worktree; SSE events are
     {'out': line}, {'exit': rc}, {'timeout': true}, {'truncated': true} or
@@ -3215,7 +3363,7 @@ def _ws_verify_view(state, fp):
     }
 
 
-@app.post('/workspace/verify', dependencies=[Depends(auth)])
+@app.post('/workspace/verify', dependencies=[Depends(auth), Depends(block_in_demo)])
 async def ws_verify(body: WsVerifyBody):
     """Run test/typecheck/security verification directly against the worktree
     and record the evidence under the same state keys the agent tools write,
@@ -3274,7 +3422,7 @@ async def _ws_fingerprint(state):
         return {}
 
 
-@app.post('/workspace/review', dependencies=[Depends(auth)])
+@app.post('/workspace/review', dependencies=[Depends(auth), Depends(block_in_demo)])
 async def ws_review(body: WsReviewBody):
     """Independent review of the worktree diff for a human edit.
 
@@ -3332,7 +3480,7 @@ async def ws_review(body: WsReviewBody):
                 'blockers': blockers}
 
 
-@app.post('/workspace/submit', dependencies=[Depends(auth)])
+@app.post('/workspace/submit', dependencies=[Depends(auth), Depends(block_in_demo)])
 async def ws_submit(body: WsSubmitBody):
     """Move a verified human edit into the commit approval flow. Runs the same
     verification_blockers gate /approve uses, then sets pending_approval so the

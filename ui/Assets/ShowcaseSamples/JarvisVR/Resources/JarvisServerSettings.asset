@@ -12,5 +12,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3f9a1c7d2b8e4a65b0d1e7c4a9f26b13, type: 3}
   m_Name: JarvisServerSettings
   m_EditorClassIdentifier: 
-  ServerUrl: http://127.0.0.1:8000
+  # Hosted demo server (https so Android does not block it as cleartext).
+  # Replace with your deployed address before building the competition APK.
+  ServerUrl: https://your-server.example.com
+  # Demo-only token: must equal JARVIS_TOKEN on the server. Anyone who unpacks
+  # the APK can read this, so keep demo mode on and rotate it after judging.
+  # Do NOT commit a real token to a public repo.
   Token: ''

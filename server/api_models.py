@@ -35,6 +35,7 @@ class HealthResponse(_Loose):
     session_backend: str          # 'sqlite' | 'memory'
     persistence_mode: str         # 'durable' | 'volatile'
     persistence_warnings: List[Dict[str, Any]] = []
+    demo_mode: bool = False       # JARVIS_DEMO_MODE=1: mutation routes are disabled
 
 
 class GraphResponse(_Loose):
