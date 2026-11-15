@@ -348,11 +348,42 @@ class ReleaseGates:
                     print(f"❌ FAILED: Baseline missing required field: {field}")
                     return False
             
+            # Benchmark accuracy floors: .devin/benchmark_floors.json maps an
+            # eval tag group (see scripts/eval_report.py) to the minimum
+            # acceptable success_rate. The latest score in
+            # jarvis-agent-evaluation/reports/eval_summary.csv must meet it.
+            floors_path = self.project_root / '.devin' / 'benchmark_floors.json'
+            summary_path = (self.project_root / 'jarvis-agent-evaluation' /
+                            'reports' / 'eval_summary.csv')
+            benchmark_details = []
+            if floors_path.exists():
+                floors = json.loads(floors_path.read_text())
+                latest = {}
+                if summary_path.exists():
+                    import csv
+                    with open(summary_path) as f:
+                        for row in csv.DictReader(f):
+                            latest[row['group']] = float(row['success_rate'])
+                for group, floor in floors.get('floors', {}).items():
+                    score = latest.get(group)
+                    if score is None:
+                        benchmark_details.append(f"{group}: no benchmark data")
+                    elif score < floor:
+                        self.results['regression_tests']['passed'] = False
+                        self.results['regression_tests']['details'] = [
+                            f"Benchmark '{group}' accuracy {score} below floor {floor}"]
+                        print(f"❌ FAILED: benchmark '{group}' accuracy {score} < floor {floor}")
+                        return False
+                    else:
+                        benchmark_details.append(f"{group}: {score} >= {floor}")
+            if benchmark_details:
+                print("  benchmark floors: " + "; ".join(benchmark_details))
+
             self.results['regression_tests']['passed'] = True
             self.results['regression_tests']['details'] = [
                 f"Baseline version: {baseline.get('baseline_version')}",
                 f"Baseline pass rate: {baseline.get('baseline_metrics', {}).get('baseline_pass_rate', 0)}"
-            ]
+            ] + benchmark_details
             print("✅ PASSED: Regression baseline validated")
             return True
         except Exception as e:

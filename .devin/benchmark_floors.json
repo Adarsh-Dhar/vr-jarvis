@@ -1,0 +1,7 @@
+{
+  "description": "Minimum acceptable benchmark success_rate per eval tag group (scripts/eval_report.py group names). Update when a new score is accepted.",
+  "floors": {
+    "baseline-3.5-clean-r1": 0.25,
+    "baseline-3.5-big1k-dev": 0.15
+  }
+}

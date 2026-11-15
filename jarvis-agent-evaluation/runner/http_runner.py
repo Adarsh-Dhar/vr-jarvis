@@ -71,11 +71,28 @@ def main():
     ap.add_argument('--repeats', type=int, default=3)
     ap.add_argument('--tag', default='run')
     ap.add_argument('--base-url', default='http://127.0.0.1:8000')
+    ap.add_argument('--repo', default='', help='repository name; selects it via /repos/select before running')
     ap.add_argument('--limit', type=int, default=0)
+    ap.add_argument('--shard', default='', help='k/n: run only every n-th case starting at k (0-based), for parallel runs')
     a = ap.parse_args()
     token = os.environ.get('JARVIS_TOKEN', '')
     if not token:
         sys.exit('Set JARVIS_TOKEN')
+
+    if a.repo:
+        st, h = call(a.base_url, token, 'GET', '/health')
+        active = h.get('repo', '') if st == 200 else ''
+        if active != a.repo:
+            # /repos/select returns 409 while another session has a request in
+            # flight; retry until the switch goes through (parallel shards).
+            deadline = time.time() + 900
+            while True:
+                st, s = call(a.base_url, token, 'POST', '/repos/select', {'name': a.repo})
+                if st == 200:
+                    break
+                if st != 409 or time.time() > deadline:
+                    sys.exit('repo select failed: %s %s' % (st, s))
+                time.sleep(15)
 
     bench = yaml.safe_load(Path(a.benchmark).read_text())
     raw = json.loads(Path(a.graph).read_text())
@@ -83,6 +100,9 @@ def main():
     cases = [c for c in bench['cases'] if a.split == 'all' or c['split'] == a.split]
     if a.limit:
         cases = cases[:a.limit]
+    if a.shard:
+        k, n = (int(x) for x in a.shard.split('/'))
+        cases = cases[k::n]
 
     run_dir = Path('jarvis-agent-evaluation/reports') / (time.strftime('%Y%m%d-%H%M%S') + '_' + a.tag)
     run_dir.mkdir(parents=True, exist_ok=True)

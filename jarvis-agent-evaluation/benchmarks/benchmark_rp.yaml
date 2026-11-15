@@ -1,0 +1,174 @@
+repo: rp
+cases:
+- id: callers-799b0f17
+  repo: rp
+  category: callers
+  split: dev
+  question: Which functions call make_dataset? List them.
+  expect:
+    target: make_dataset
+    names:
+    - train
+- id: callers-7898b05e
+  repo: rp
+  category: callers
+  split: test
+  question: Which functions call _since? List them.
+  expect:
+    target: _since
+    names:
+    - rain_features
+- id: callers-41e7a619
+  repo: rp
+  category: callers
+  split: test
+  question: Which functions call build_features? List them.
+  expect:
+    target: build_features
+    names:
+    - train
+- id: callers-b6f1b3f7
+  repo: rp
+  category: callers
+  split: dev
+  question: Which functions call nutrient_features? List them.
+  expect:
+    target: nutrient_features
+    names:
+    - build_features
+- id: callers-cb2bcd77
+  repo: rp
+  category: callers
+  split: dev
+  question: Which functions call rain_features? List them.
+  expect:
+    target: rain_features
+    names:
+    - build_features
+- id: callees-41e7a619
+  repo: rp
+  category: callees
+  split: dev
+  question: Which functions does build_features call? List them.
+  expect:
+    target: build_features
+    names:
+    - nutrient_features
+    - rain_features
+    - temp_features
+- id: callees-cb2bcd77
+  repo: rp
+  category: callees
+  split: dev
+  question: Which functions does rain_features call? List them.
+  expect:
+    target: rain_features
+    names:
+    - _since
+- id: callees-a0694766
+  repo: rp
+  category: callees
+  split: dev
+  question: Which functions does load_nutrients call? List them.
+  expect:
+    target: load_nutrients
+    names:
+    - _daily
+    - _find
+    - _read
+- id: callees-27bbc925
+  repo: rp
+  category: callees
+  split: test
+  question: Which functions does load_obs call? List them.
+  expect:
+    target: load_obs
+    names:
+    - _find
+    - _read
+    - tsi_chl
+- id: callees-d2abe386
+  repo: rp
+  category: callees
+  split: dev
+  question: Which functions does load_rain call? List them.
+  expect:
+    target: load_rain
+    names:
+    - _find
+    - _read
+- id: where_defined-799b0f17
+  repo: rp
+  category: where_defined
+  split: dev
+  question: In which file is make_dataset defined?
+  expect:
+    target: make_dataset
+    file: eutro/data.py
+- id: where_defined-7898b05e
+  repo: rp
+  category: where_defined
+  split: test
+  question: In which file is _since defined?
+  expect:
+    target: _since
+    file: eutro/features.py
+- id: where_defined-41e7a619
+  repo: rp
+  category: where_defined
+  split: dev
+  question: In which file is build_features defined?
+  expect:
+    target: build_features
+    file: eutro/features.py
+- id: where_defined-b6f1b3f7
+  repo: rp
+  category: where_defined
+  split: dev
+  question: In which file is nutrient_features defined?
+  expect:
+    target: nutrient_features
+    file: eutro/features.py
+- id: where_defined-cb2bcd77
+  repo: rp
+  category: where_defined
+  split: dev
+  question: In which file is rain_features defined?
+  expect:
+    target: rain_features
+    file: eutro/features.py
+- id: negative-75dde3a0
+  repo: rp
+  category: negative
+  split: dev
+  question: Which functions call processRefund?
+  expect:
+    target: processRefund
+- id: negative-097f0fc1
+  repo: rp
+  category: negative
+  split: test
+  question: Which functions call syncLedger?
+  expect:
+    target: syncLedger
+- id: negative-836aca66
+  repo: rp
+  category: negative
+  split: test
+  question: Which functions call rotateKeys?
+  expect:
+    target: rotateKeys
+- id: negative-031041e5
+  repo: rp
+  category: negative
+  split: dev
+  question: Which functions call buildReport?
+  expect:
+    target: buildReport
+- id: negative-76622101
+  repo: rp
+  category: negative
+  split: dev
+  question: Which functions call purgeCache?
+  expect:
+    target: purgeCache

@@ -1,0 +1,167 @@
+repo: big1k
+cases:
+- id: callers-5eb3c148
+  repo: big1k
+  category: callers
+  split: dev
+  question: Which functions call fn0_0? List them.
+  expect:
+    target: fn0_0
+    names:
+    - fn419_3
+- id: callers-712327df
+  repo: big1k
+  category: callers
+  split: dev
+  question: Which functions call fn0_1? List them.
+  expect:
+    target: fn0_1
+    names:
+    - fn0_0
+- id: callers-e33499da
+  repo: big1k
+  category: callers
+  split: dev
+  question: Which functions call fn0_2? List them.
+  expect:
+    target: fn0_2
+    names:
+    - fn0_1
+- id: callers-fc9ec92f
+  repo: big1k
+  category: callers
+  split: test
+  question: Which functions call fn0_3? List them.
+  expect:
+    target: fn0_3
+    names:
+    - fn0_2
+- id: callers-ccc5ae11
+  repo: big1k
+  category: callers
+  split: dev
+  question: Which functions call fn50_0? List them.
+  expect:
+    target: fn50_0
+    names:
+    - fn13_3
+- id: callees-5eb3c148
+  repo: big1k
+  category: callees
+  split: dev
+  question: Which functions does fn0_0 call? List them.
+  expect:
+    target: fn0_0
+    names:
+    - fn0_1
+- id: callees-712327df
+  repo: big1k
+  category: callees
+  split: test
+  question: Which functions does fn0_1 call? List them.
+  expect:
+    target: fn0_1
+    names:
+    - fn0_2
+- id: callees-e33499da
+  repo: big1k
+  category: callees
+  split: test
+  question: Which functions does fn0_2 call? List them.
+  expect:
+    target: fn0_2
+    names:
+    - fn0_3
+- id: callees-fc9ec92f
+  repo: big1k
+  category: callees
+  split: dev
+  question: Which functions does fn0_3 call? List them.
+  expect:
+    target: fn0_3
+    names:
+    - fn331_0
+- id: callees-ccc5ae11
+  repo: big1k
+  category: callees
+  split: dev
+  question: Which functions does fn50_0 call? List them.
+  expect:
+    target: fn50_0
+    names:
+    - fn50_1
+- id: where_defined-5eb3c148
+  repo: big1k
+  category: where_defined
+  split: test
+  question: In which file is fn0_0 defined?
+  expect:
+    target: fn0_0
+    file: pkg00/mod00/file00000.ts
+- id: where_defined-712327df
+  repo: big1k
+  category: where_defined
+  split: dev
+  question: In which file is fn0_1 defined?
+  expect:
+    target: fn0_1
+    file: pkg00/mod00/file00000.ts
+- id: where_defined-e33499da
+  repo: big1k
+  category: where_defined
+  split: dev
+  question: In which file is fn0_2 defined?
+  expect:
+    target: fn0_2
+    file: pkg00/mod00/file00000.ts
+- id: where_defined-fc9ec92f
+  repo: big1k
+  category: where_defined
+  split: dev
+  question: In which file is fn0_3 defined?
+  expect:
+    target: fn0_3
+    file: pkg00/mod00/file00000.ts
+- id: where_defined-ccc5ae11
+  repo: big1k
+  category: where_defined
+  split: dev
+  question: In which file is fn50_0 defined?
+  expect:
+    target: fn50_0
+    file: pkg00/mod00/file00050.ts
+- id: negative-75dde3a0
+  repo: big1k
+  category: negative
+  split: dev
+  question: Which functions call processRefund?
+  expect:
+    target: processRefund
+- id: negative-097f0fc1
+  repo: big1k
+  category: negative
+  split: test
+  question: Which functions call syncLedger?
+  expect:
+    target: syncLedger
+- id: negative-836aca66
+  repo: big1k
+  category: negative
+  split: test
+  question: Which functions call rotateKeys?
+  expect:
+    target: rotateKeys
+- id: negative-031041e5
+  repo: big1k
+  category: negative
+  split: dev
+  question: Which functions call buildReport?
+  expect:
+    target: buildReport
+- id: negative-76622101
+  repo: big1k
+  category: negative
+  split: dev
+  question: Which functions call purgeCache?
+  expect:
+    target: purgeCache
