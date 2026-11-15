@@ -1360,10 +1360,11 @@ def _code_review_summary(state):
 def _parse_agent_result(value):
     """Fail-closed adapter: dicts, JSON strings and AgentResult instances are
     accepted; anything else raises TypeError."""
-    from ai_agents.agent_result import AgentResult
+    from ai_agents.agent_result import AgentResult, coerce_agent_result
 
     if isinstance(value, AgentResult):
         return value
+    value, _ = coerce_agent_result(value)      # same repair as the specialist boundary; broken JSON still fails
     if isinstance(value, dict):
         return AgentResult.model_validate(value)
     if isinstance(value, str):

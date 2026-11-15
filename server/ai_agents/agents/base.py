@@ -47,11 +47,14 @@ def _result_contract_callback(output_key: str):
     API-side validation in jarvis_server still runs as a second layer."""
     def _check(callback_context):
         from .. import config
-        from ..agent_result import AgentResult, validate_evidence_paths
+        from ..agent_result import AgentResult, validate_evidence_paths, coerce_agent_result
         state = callback_context.state
         raw = state.get(output_key)
         if raw is None or raw == '' or raw == {} or raw == []:
             return None
+        repaired = []
+        if not isinstance(raw, AgentResult):
+            raw, repaired = coerce_agent_result(raw)     # fix near-miss output instead of discarding it
         try:
             if isinstance(raw, AgentResult):
                 res = raw
@@ -65,6 +68,12 @@ def _result_contract_callback(output_key: str):
             path_errs = validate_evidence_paths(res, config.REPO_ROOT)
             if path_errs:
                 raise ValueError('; '.join(path_errs))
+            if repaired:
+                state[output_key] = res.model_dump_json()
+                log = state.get('specialist_repairs')
+                log = log if isinstance(log, list) else []
+                log.append({'agent': callback_context.agent_name, 'key': output_key, 'repairs': repaired})
+                state['specialist_repairs'] = log
         except Exception as exc:
             degraded = AgentResult(
                 status='failed',
