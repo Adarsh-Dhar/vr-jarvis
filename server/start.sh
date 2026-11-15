@@ -55,6 +55,9 @@ if [ "$JARVIS_HOST" = "0.0.0.0" ]; then
     fi
 fi
 
+if [ -z "${PYTHON_BIN:-}" ] && [ -x "$PWD/.venv/bin/python" ]; then
+    PYTHON_BIN="$PWD/.venv/bin/python"
+fi
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 
 echo "Starting JARVIS server on http://$JARVIS_HOST:8000"

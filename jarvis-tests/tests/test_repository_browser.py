@@ -65,8 +65,11 @@ def test_binary_files_are_not_opened(tmp_path, monkeypatch):
     _, repo = _make_repo(tmp_path, monkeypatch)
     (repo / "image.bin").write_bytes(b"\x00\x01\x02")
 
-    with pytest.raises(ValueError, match="Binary files"):
-        repository.read_browser_file("sample", "image.bin")
+    result = repository.read_browser_file("sample", "image.bin")
+
+    assert result["status"] == "binary"
+    assert result["content"] == ""
+    assert "Binary files" in result["error"]
 
 
 def test_symlink_is_not_browsable(tmp_path, monkeypatch):

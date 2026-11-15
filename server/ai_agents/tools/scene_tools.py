@@ -123,11 +123,13 @@ def open_vr_file(path: str, tool_context: ToolContext, line: int = 1, repo: str 
     config, store = _repo_api()
     name = repo or config.REPO_ROOT.name
     try:
-        store.read_browser_file(name, path)          # validates the path and that it is a readable text file
+        result = store.read_browser_file(name, path)  # validates the path and that it is a readable text file
     except KeyError:
         return {'status': 'error', 'reason': 'Unknown repository %r.' % name}
     except (FileNotFoundError, ValueError) as exc:
         return {'status': 'error', 'reason': 'Cannot open %r: %s' % (path, exc)}
+    if result.get('status') != 'ok':
+        return {'status': 'error', 'reason': 'Cannot open %r: %s' % (path, result.get('error') or result.get('status'))}
     return _emit(tool_context, {'type': 'open_file', 'repo': name, 'path': path, 'line': max(1, int(line))})
 
 

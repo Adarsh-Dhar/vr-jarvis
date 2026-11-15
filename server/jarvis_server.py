@@ -2762,6 +2762,11 @@ def _ws_hash(text):
     return hashlib.sha256(text.encode('utf-8')).hexdigest()
 
 
+def _ws_head(path, n=8192):
+    with Path(path).open('rb') as handle:
+        return handle.read(n)
+
+
 def _ws_read_text(path):
     """Full decoded text of a worktree file plus a truncation flag. The hash is
     always computed over the FULL text so base_hash stays stable for big files."""
@@ -2867,9 +2872,15 @@ async def ws_get_file(session_id: str, path: str, repo: Optional[str] = None):
             raise HTTPException(status_code=400, detail='path is not readable: ' + path)
         if not target.is_file():
             raise HTTPException(status_code=404, detail='file not found: ' + path)
+        head = await asyncio.to_thread(_ws_head, target)
+        if b'\x00' in head:
+            return {'status': 'binary', 'path': rel.as_posix(), 'content': '',
+                    'hash': '', 'truncated': False, 'size': target.stat().st_size,
+                    'source': 'worktree',
+                    'error': 'Binary files cannot be opened in the code viewer.'}
         text, truncated = await asyncio.to_thread(_ws_read_text, target)
         truncated = truncated or len(text) > repository.MAX_BROWSER_FILE_BYTES
-        return {'path': rel.as_posix(), 'content': _ws_content(text),
+        return {'status': 'ok', 'path': rel.as_posix(), 'content': _ws_content(text),
                 'hash': _ws_hash(text), 'truncated': truncated,
                 'size': len(text.encode('utf-8')), 'source': 'worktree'}
     try:
@@ -2882,8 +2893,11 @@ async def ws_get_file(session_id: str, path: str, repo: Optional[str] = None):
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     content = data.get('content') or ''
-    return {'path': data.get('path') or path, 'content': content,
-            'hash': _ws_hash(content), 'truncated': bool(data.get('truncated')),
+    status = data.get('status') or 'ok'
+    return {'status': status, 'path': data.get('path') or path,
+            'content': content if status == 'ok' else '',
+            'hash': _ws_hash(content) if status == 'ok' else '',
+            'truncated': bool(data.get('truncated')), 'error': data.get('error'),
             'size': data.get('size', len(content)), 'source': 'main'}
 
 

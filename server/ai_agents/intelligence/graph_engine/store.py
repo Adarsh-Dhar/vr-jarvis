@@ -226,7 +226,12 @@ def read_browser_file(name: str, relative_path: str) -> dict:
     with target.open('rb') as handle:
         raw = handle.read(MAX_BROWSER_FILE_BYTES + 1)
     if b'\x00' in raw[:8192]:
-        raise ValueError('Binary files cannot be opened in the code viewer.')
+        return {
+            'status': 'binary', 'repo': name,
+            'path': target.relative_to(repo).as_posix(), 'content': '',
+            'size': size, 'total_lines': 0, 'truncated': False,
+            'error': 'Binary files cannot be opened in the code viewer.',
+        }
     truncated = len(raw) > MAX_BROWSER_FILE_BYTES or size > MAX_BROWSER_FILE_BYTES
     raw = raw[:MAX_BROWSER_FILE_BYTES]
     content = raw.decode('utf-8-sig', errors='replace')

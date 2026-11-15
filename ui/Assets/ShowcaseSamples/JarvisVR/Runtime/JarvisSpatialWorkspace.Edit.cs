@@ -898,10 +898,10 @@ namespace JarvisVR
           if (_debugState.variables != null)
           {
             int shown = 0;
-            foreach (WsDebugVarDto v in _debugState.variables)
+            foreach (WsDebugVarDto dv in _debugState.variables)
             {
-              if (v == null || shown >= 8) continue;
-              sb.Append("    ").Append(Esc(v.name)).Append(" = ").Append(Esc(v.value)).Append('\n');
+              if (dv == null || shown >= 8) continue;
+              sb.Append("    ").Append(Esc(dv.name)).Append(" = ").Append(Esc(dv.value)).Append('\n');
               shown++;
             }
           }

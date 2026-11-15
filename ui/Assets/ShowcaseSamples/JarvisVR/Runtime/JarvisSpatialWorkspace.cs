@@ -2656,7 +2656,12 @@ namespace JarvisVR
       Say("Opening " + path + "...");
       Action<RepoFileDto> apply = file =>
       {
-        if (file == null || file.status != "ok") { Say("Could not open " + path + "."); return; }
+        if (file == null) { Say("Could not open " + path + "."); return; }
+        if (file.status != "ok")
+        {
+          Say("Could not open " + path + (string.IsNullOrEmpty(file.error) ? "." : ": " + file.error));
+          return;
+        }
         _openFile = file;
         int total = (file.content ?? "").Split('\n').Length;
         int pageCount = Mathf.Max(1, Mathf.CeilToInt(total / (float)EditorLinesPerPage));
@@ -2672,6 +2677,11 @@ namespace JarvisVR
       _bridge.WorkspaceGetFile(path, wf =>
       {
         if (wf == null) { _bridge.GetFile(_browserRepo, path, apply, e => Say("Could not open file: " + e)); return; }
+        if (wf.status != null && wf.status != "ok")
+        {
+          apply(new RepoFileDto { status = wf.status, error = wf.error, path = wf.path ?? path });
+          return;
+        }
         _wsReady = wf.source == "worktree";
         apply(new RepoFileDto
         {
