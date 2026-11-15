@@ -63,6 +63,15 @@ namespace JarvisVR
     private bool _treeLoading, _switching;
     private string _browserError;
     private const int BrowserRowsPerPage = 7;
+    // ---- saved-session picker (shares the REPOS start screen with the repo list)
+    private JarvisSpatialPanel _sessPanel;
+    private JarvisSpatialButton _sessRefresh, _sessNew, _sessPrev, _sessNext;
+    private readonly List<GameObject> _sessRows = new List<GameObject>();
+    private SessionListDto _sessions;
+    private int _sessPage;
+    private bool _sessLoading;
+    private string _sessError;
+    private const int SessionRowsPerPage = 5;
     private const int EditorLinesPerPage = 18;
     private bool _serverOnline;
     private string _selected, _mode = "MAP", _pending, _ghostDiff, _testSummary = "No test run yet.";
@@ -192,7 +201,7 @@ namespace JarvisVR
     private static readonly string[] NavModes = { "MAP", "CODE", "FLOW", "TESTS", "IMPACT", "AGENT", "DESIGN" };
     private static readonly Dictionary<string, string[]> ModePanels = new Dictionary<string, string[]>
     {
-      { "REPOS",  new[] { "repo" } },
+      { "REPOS",  new[] { "repo", "sessions" } },
       { "MAP",    new[] { "repo", "evidence", "legend", "chat" } },
       { "CODE",   new[] { "repo", "code", "edit", "outline", "evidence", "legend" } },
       { "FLOW",   new[] { "activity", "evidence" } },
@@ -227,6 +236,7 @@ namespace JarvisVR
       { "design_cmp", new Vector3( 65f,   6f, 1.9f) },
       { "design_act", new Vector3( 65f, -28f, 1.8f) },
       { "chat",     new Vector3( -65f, -28f, 1.8f) },
+      { "sessions", new Vector3( -65f, -28f, 1.8f) },   // shares chat's slot: never visible together
       { "outline",  new Vector3( -65f, -28f, 1.8f) },
       { "tools",    new Vector3(   0f, -42f, 1.45f) },
       { "settings", new Vector3(  45f, -40f, 1.4f) },
@@ -264,6 +274,14 @@ namespace JarvisVR
       _repoPrev = _repoPanel.AddButton("< PAGE", 20, 454, 190, 48, () => ChangeRepoPage(-1));
       _repoNext = _repoPanel.AddButton("PAGE >", 230, 454, 190, 48, () => ChangeRepoPage(+1));
       _repoBack.Interactable = _repoHome.Interactable = _repoPrev.Interactable = _repoNext.Interactable = false;
+
+      // Saved sessions: browse and reopen earlier conversations from the start screen.
+      _sessPanel = AddPanel("sessions", "Sessions", 440, 400, -1.12f, -0.46f, pal.Violet);
+      _sessPanel.SetBodyBox(96, 26); _sessPanel.Body.fontSize = 16;
+      _sessRefresh = _sessPanel.AddButton("REFRESH", 20, 56, 120, 38, FetchSessions);
+      _sessNew = _sessPanel.AddButton("NEW SESSION", 150, 56, 160, 38, StartNewSession);
+      _sessPrev = _sessPanel.AddButton("< PAGE", 20, 344, 190, 40, () => ChangeSessionPage(-1));
+      _sessNext = _sessPanel.AddButton("PAGE >", 230, 344, 190, 40, () => ChangeSessionPage(+1));
 
       _codePanel = AddPanel("code", "Code inspector", 560, 520, 1.18f, 0.20f, pal.Cyan);
       _codePanel.SetBodyBox(60, 370); _codePanel.UseMono(17);
@@ -421,7 +439,7 @@ namespace JarvisVR
       string[] visible = ModePanels.ContainsKey(mode) ? ModePanels[mode] : ModePanels["MAP"];
       int shown = 0;
       bool awaiting = !string.IsNullOrEmpty(_pending) || !string.IsNullOrEmpty(_lastCommitBranch);
-      foreach (string key in new[] { "repo", "code", "edit", "evidence", "tests", "activity", "legend", "ghost", "approval", "impact", "design_req", "design_cmp", "design_act", "chat", "outline" })
+      foreach (string key in new[] { "repo", "sessions", "code", "edit", "evidence", "tests", "activity", "legend", "ghost", "approval", "impact", "design_req", "design_cmp", "design_act", "chat", "outline" })
       {
         bool on = visible.Contains(key) || _agentShown.Contains(key);
         // approval shares its slot with evidence and tests: while something is pending or a
@@ -430,6 +448,7 @@ namespace JarvisVR
         if (awaiting && (key == "evidence" || key == "tests")) on = false;
         _panels[key].Show(on, on ? 0.05f * shown++ : 0f);
       }
+      if (mode == "REPOS") FetchSessions();
       RefreshStatus();
       RefreshCode();
     }
@@ -2396,6 +2415,155 @@ namespace JarvisVR
       _repoNext.Interactable = _browserPage < pageCount - 1;
       if (_repoPrev.Label != null) _repoPrev.Label.text = "< PAGE " + Mathf.Max(1, _browserPage) + "/" + pageCount;
       if (_repoNext.Label != null) _repoNext.Label.text = "PAGE " + Mathf.Min(pageCount, _browserPage + 2) + "/" + pageCount + " >";
+    }
+
+    // =========================================================== saved sessions
+
+    private void FetchSessions()
+    {
+      if (_bridge == null || _sessPanel == null) return;
+      _sessLoading = true;
+      _sessError = null;
+      RefreshSessionBrowser();
+      _bridge.ListSessions(d =>
+      {
+        _sessLoading = false;
+        _sessions = d;
+        _sessError = null;
+        _sessPage = Mathf.Min(_sessPage, Mathf.Max(0, Mathf.CeilToInt(SessionCount() / (float)SessionRowsPerPage) - 1));
+        RefreshSessionBrowser();
+      }, error =>
+      {
+        _sessLoading = false;
+        _sessError = error;
+        RefreshSessionBrowser();
+      });
+    }
+
+    private int SessionCount()
+    {
+      return _sessions != null && _sessions.sessions != null ? _sessions.sessions.Length : 0;
+    }
+
+    private void ChangeSessionPage(int delta)
+    {
+      int pages = Mathf.Max(1, Mathf.CeilToInt(SessionCount() / (float)SessionRowsPerPage));
+      _sessPage = Mathf.Clamp(_sessPage + delta, 0, pages - 1);
+      RefreshSessionBrowser();
+    }
+
+    private void ClearSessionRows()
+    {
+      foreach (GameObject row in _sessRows) if (row != null) Destroy(row);
+      _sessRows.Clear();
+    }
+
+    private void AddSessionRow(string label, int index, Action action, Color? accent = null)
+    {
+      float y = 128f + index * 40f;
+      JarvisSpatialButton button = _sessPanel.AddButton(label, 18f, y, 404f, 36f, action, 0f, accent);
+      _sessRows.Add(button.gameObject);
+    }
+
+    private static string SessionWhen(double unixSeconds)
+    {
+      if (unixSeconds <= 0) return "";
+      try { return DateTimeOffset.FromUnixTimeSeconds((long)unixSeconds).LocalDateTime.ToString("MM-dd HH:mm"); }
+      catch { return ""; }
+    }
+
+    private void RefreshSessionBrowser()
+    {
+      if (_sessPanel == null) return;
+      ClearSessionRows();
+      if (_sessLoading)
+      {
+        _sessPanel.SetBody("Loading saved sessions...");
+      }
+      else if (!string.IsNullOrEmpty(_sessError))
+      {
+        _sessPanel.SetBody("Server error: " + _sessError);
+      }
+      else if (_sessions == null || _sessions.sessions == null)
+      {
+        _sessPanel.SetBody("No session list yet. REFRESH to load.");
+      }
+      else
+      {
+        int count = SessionCount();
+        _sessPanel.SetBody(count + " saved session" + (count == 1 ? "" : "s") + "  ·  tap one to open");
+        string current = _bridge != null ? _bridge.SessionId : "";
+        int start = _sessPage * SessionRowsPerPage;
+        int end = Mathf.Min(count, start + SessionRowsPerPage);
+        for (int i = start; i < end; i++)
+        {
+          SavedSessionDto s = _sessions.sessions[i];
+          string title = string.IsNullOrWhiteSpace(s.title) ? "(empty session)" : s.title;
+          if (title.Length > 34) title = title.Substring(0, 33) + "…";
+          string when = SessionWhen(s.last_update);
+          string label = (s.session_id == current ? "● " : "") + title
+            + "  ·  " + (string.IsNullOrEmpty(s.repo) ? "?" : s.repo)
+            + "  ·  " + s.message_count + " msgs" + (string.IsNullOrEmpty(when) ? "" : "  ·  " + when);
+          string sid = s.session_id;
+          bool resumable = s.resumable;
+          AddSessionRow(label, i - start, () => OpenSavedSession(sid, resumable),
+            s.session_id == current ? JarvisPalette.Current.Green : (Color?)null);
+        }
+      }
+
+      int pageCount = Mathf.Max(1, Mathf.CeilToInt(SessionCount() / (float)SessionRowsPerPage));
+      _sessPrev.Interactable = _sessPage > 0;
+      _sessNext.Interactable = _sessPage < pageCount - 1;
+      if (_sessPrev.Label != null) _sessPrev.Label.text = "< PAGE " + Mathf.Max(1, _sessPage) + "/" + pageCount;
+      if (_sessNext.Label != null) _sessNext.Label.text = "PAGE " + Mathf.Min(pageCount, _sessPage + 2) + "/" + pageCount + " >";
+    }
+
+    /// <summary>Drops every piece of session-scoped UI state before attaching a different session.</summary>
+    private void ClearSessionState()
+    {
+      _design = null; _designRequested = false; _tasks = null; _designWarning = null; _lastTaskError = null;
+      _chat.Clear(); _chatOffset = 0; _chatShown = 0;
+      _validated = null; _lastTestRun = null; _unverifiedEvidence = null;
+      _agentEvidence = null; _agentTestResults = null; _agentShown.Clear();
+      _pending = null; _ghostDiff = null;
+      RefreshChat();
+    }
+
+    private void OpenSavedSession(string id, bool resumable)
+    {
+      if (_bridge == null || _switching || string.IsNullOrEmpty(id)) return;
+      if (!resumable)
+      {
+        Say("That session belongs to a different repository. Switch repositories first.");
+        return;
+      }
+      if (id == _bridge.SessionId) { Say("That is already the active session."); return; }
+      Say("Opening session...");
+      _bridge.ResumeSession(id, (info, msgs) =>
+      {
+        if (info == null) { Say("Could not open that session."); FetchSessions(); return; }
+        ClearSessionState();
+        if (msgs != null)
+          foreach (SessionMessageDto m in msgs) AddChat(m.role == "user", m.text);
+        RefreshChat();
+        Say("Opened session" + (string.IsNullOrEmpty(info.title) ? "." : ": " + info.title));
+        Log("opened session " + info.session_id + " (" + info.message_count + " messages)");
+        SetMode("MAP");
+        FetchSessions();
+      });
+    }
+
+    private void StartNewSession()
+    {
+      if (_bridge == null || _switching) return;
+      Say("Starting a new session...");
+      _bridge.StartNewSession(id =>
+      {
+        ClearSessionState();
+        Say("Started a new session.");
+        Log("new session " + id);
+        FetchSessions();
+      }, e => Say("Could not start a new session: " + e));
     }
 
     private void OpenRepoFile(string path)

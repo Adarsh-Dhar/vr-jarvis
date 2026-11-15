@@ -1020,8 +1020,10 @@ def verify_task_evidence(evidence: str, repo_root: Optional[str] = None, graph_p
                            'status': 'verified' if ok else 'failed',
                            'detail': 'commit exists' if ok else 'not a commit in repo'})
         else:
-            checks.append({'claim': tok, 'kind': 'commit', 'status': 'unknown',
-                           'detail': 'repository is not a git checkout'})
+            # A repository with no git history contains no commits at all, so
+            # a commit-SHA claim is fabricated, not merely unverifiable.
+            checks.append({'claim': tok, 'kind': 'commit', 'status': 'failed',
+                           'detail': 'repository is not a git checkout (no commits exist)'})
 
     # --- branch names ------------------------------------------------------
     # Only well-known branch prefixes are treated as claims; arbitrary
@@ -1039,8 +1041,8 @@ def verify_task_evidence(evidence: str, repo_root: Optional[str] = None, graph_p
                            'status': 'verified' if ok else 'failed',
                            'detail': 'local branch exists' if ok else 'no such branch'})
         else:
-            checks.append({'claim': tok, 'kind': 'branch', 'status': 'unknown',
-                           'detail': 'repository is not a git checkout'})
+            checks.append({'claim': tok, 'kind': 'branch', 'status': 'failed',
+                           'detail': 'repository is not a git checkout (no branches exist)'})
 
     # --- pytest node ids ---------------------------------------------------
     for path, name in sorted(set(_PYTEST_ID_RE.findall(text))):

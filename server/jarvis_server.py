@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import binascii
+import contextvars
 import gzip
 import hashlib
 import logging
@@ -51,6 +52,18 @@ from ai_agents.tools.graph_tools import get_source
 from ai_agents.agents.registry import initialize_agents
 
 APP, USER = 'jarvis', 'quest'
+
+# Per-user sessions: the X-Jarvis-User header selects which user's saved
+# sessions a request sees. Sessions, design state and history are all keyed
+# by session id, so users only ever see their own list. The contextvar keeps
+# the ~20 session-service call sites unchanged: middleware sets it per request
+# and code outside a request (startup, tests) falls back to USER.
+_current_user = contextvars.ContextVar('jarvis_current_user', default=USER)
+_USER_SAFE_RE = re.compile(r'[^A-Za-z0-9_.-]')
+
+
+def _user() -> str:
+    return _current_user.get()
 TOKEN = os.getenv('JARVIS_TOKEN')
 ASK_TIMEOUT = float(os.getenv('JARVIS_ASK_TIMEOUT', '170'))   # keep below the Unity request timeout
 TURN_TIMEOUT = float(os.getenv('JARVIS_TURN_TIMEOUT', '120'))
@@ -60,6 +73,10 @@ SESSION_IDLE_TIMEOUT = int(os.getenv('JARVIS_SESSION_IDLE_TIMEOUT', '3600'))  # 
 # saved conversation and design stay in the database. Set to 1 to also delete the
 # stored session (the old behaviour).
 EVICT_DELETES_SESSIONS = os.getenv('JARVIS_EVICT_DELETES_SESSIONS', '0') == '1'
+# Saved sessions older than this many days are deleted outright (session row,
+# design file and design history). 0 disables retention. Unsafe sessions —
+# running turn, live worktree, pending approval, unpromoted commit — are kept.
+SESSION_RETENTION_DAYS = float(os.getenv('JARVIS_SESSION_RETENTION_DAYS', '30'))
 ENABLE_DIRECT_TOOLS = os.getenv('JARVIS_ENABLE_DIRECT_TOOLS', '0') == '1'
 
 # Allowlist for direct tool calls (read-only tools only)
@@ -144,7 +161,22 @@ else:
 runner = Runner(agent=root_agent, app_name=APP, session_service=sessions)
 locks = defaultdict(asyncio.Lock)
 session_last_used = {}  # Track session last activity for eviction
+session_owner = {}      # session_id -> user_id, for cross-user housekeeping
 app = FastAPI(title='JARVIS bridge')
+
+
+@app.middleware('http')
+async def _user_context(request: Request, call_next):
+    raw = request.headers.get('x-jarvis-user', '')
+    user = _USER_SAFE_RE.sub('', raw)[:64]
+    _current_user.set(user or USER)
+    return await call_next(request)
+
+
+def _sid_user(sid) -> str:
+    """Owner of a session id: recorded when the session was last touched, else
+    the requesting user (fresh ids belong to the requester)."""
+    return session_owner.get(sid) or _user()
 
 
 def _rid(request):
@@ -254,7 +286,7 @@ _session_leases = SessionLeaseManager()
 
 async def _session_lease_state(sid):
     """(has_live_lease, lease_dict) for eviction decisions."""
-    sess = await sessions.get_session(app_name=APP, user_id=USER,
+    sess = await sessions.get_session(app_name=APP, user_id=_sid_user(sid),
                                       session_id=sid)
     if sess is None:
         return False, None
@@ -272,7 +304,7 @@ async def _session_is_safe_to_evict(sid) -> bool:
     approval, no unpromoted commit, no in-flight design/plan work."""
     if locks[sid].locked():
         return False
-    sess = await sessions.get_session(app_name=APP, user_id=USER, session_id=sid)
+    sess = await sessions.get_session(app_name=APP, user_id=_sid_user(sid), session_id=sid)
     if sess is None:
         return True
     st = sess.state
@@ -299,19 +331,66 @@ async def _evict_one_safe_session() -> bool:
     for _, sid in expired:
         if await _session_is_safe_to_evict(sid):
             if EVICT_DELETES_SESSIONS:
-                await sessions.delete_session(app_name=APP, user_id=USER, session_id=sid)
+                await sessions.delete_session(app_name=APP, user_id=_sid_user(sid), session_id=sid)
             session_last_used.pop(sid, None)
             locks.pop(sid, None)
             return True
     return False
 
 
+def _delete_design_data(session_id):
+    """Remove a session's persisted design doc and revision history."""
+    import shutil
+    from ai_agents.tools import architecture_tools as at
+    at._design_path(session_id).unlink(missing_ok=True)
+    hist = at._versions_dir(session_id)
+    if hist.is_dir():
+        shutil.rmtree(hist, ignore_errors=True)
+
+
+async def _retention_sweep(user) -> int:
+    """Delete one user's sessions idle longer than SESSION_RETENTION_DAYS.
+    Only sessions that are safe to evict are removed; anything with live work
+    is kept regardless of age. Returns the number deleted."""
+    if SESSION_RETENTION_DAYS <= 0:
+        return 0
+    cutoff = time.time() - SESSION_RETENTION_DAYS * 86400
+    try:
+        resp = await sessions.list_sessions(app_name=APP, user_id=user)
+    except Exception:
+        return 0
+    removed = 0
+    for s in getattr(resp, 'sessions', None) or []:
+        sid = s.id
+        if sid.startswith('__'):
+            continue
+        if float(getattr(s, 'last_update_time', 0) or 0) >= cutoff:
+            continue
+        session_owner.setdefault(sid, user)
+        if not await _session_is_safe_to_evict(sid):
+            continue
+        try:
+            await sessions.delete_session(app_name=APP, user_id=user, session_id=sid)
+        except Exception:
+            continue
+        session_last_used.pop(sid, None)
+        session_owner.pop(sid, None)
+        locks.pop(sid, None)
+        _delete_design_data(sid)
+        removed += 1
+    if removed:
+        logging.getLogger('uvicorn.error').info(
+            'session retention: deleted %d session(s) for user %s', removed, user)
+    return removed
+
+
 async def ensure(session_id):
-    session = await sessions.get_session(app_name=APP, user_id=USER, session_id=session_id)
+    user = _user()
+    session = await sessions.get_session(app_name=APP, user_id=user, session_id=session_id)
     if session is None:
         async with _session_create_lock:
             session = await sessions.get_session(
-                app_name=APP, user_id=USER, session_id=session_id)
+                app_name=APP, user_id=user, session_id=session_id)
             if session is None:
                 if len(session_last_used) >= MAX_SESSIONS:
                     if not await _evict_one_safe_session():
@@ -319,8 +398,9 @@ async def ensure(session_id):
                             status_code=429,
                             detail='Session capacity reached and no idle session can be safely removed.')
                 session = await sessions.create_session(
-                    app_name=APP, user_id=USER, session_id=session_id)
+                    app_name=APP, user_id=user, session_id=session_id)
     session_last_used[session_id] = time.time()
+    session_owner[session_id] = user
     # Renew the session lease on every access; a live lease held by a
     # different holder is reported but not stolen.
     try:
@@ -344,7 +424,7 @@ async def _sessions_blocking_switch():
         if locks[sid].locked():
             out.append((sid, 'an agent request is running'))
             continue
-        sess = await sessions.get_session(app_name=APP, user_id=USER, session_id=sid)
+        sess = await sessions.get_session(app_name=APP, user_id=_sid_user(sid), session_id=sid)
         if sess is None:
             continue
         st = sess.state
@@ -399,6 +479,7 @@ async def _register_persisted_sessions():
             # so the idle-timeout eviction still applies after a restart.
             session_last_used.setdefault(
                 sess.id, float(getattr(sess, 'last_update_time', 0) or 0))
+            session_owner.setdefault(sess.id, USER)   # this listing is the default user's
         # Lease migration: pre-lease persisted sessions get an initial
         # lease record so they are never treated as unowned/abandoned.
         from ai_agents.intelligence.session_leases import (
@@ -410,6 +491,9 @@ async def _register_persisted_sessions():
         if migrated:
             logging.getLogger('uvicorn.error').info(
                 'migrated %d session(s) to lease records', migrated)
+        # Retention: reap the default user's long-idle sessions at boot; other
+        # users are swept lazily the next time they list their sessions.
+        await _retention_sweep(USER)
     except Exception as exc:   # in-memory service or empty DB
         logging.getLogger('uvicorn.error').info('no persisted sessions registered: %s', exc)
 
@@ -597,12 +681,15 @@ def _session_summary(sess) -> dict:
 @app.get('/sessions', dependencies=[Depends(auth)], response_model=SessionListResponse)
 async def list_saved_sessions(limit: int = 30):
     limit = max(1, min(limit, 100))
-    resp = await sessions.list_sessions(app_name=APP, user_id=USER)
+    user = _user()
+    await _retention_sweep(user)          # lazy per-user cleanup of long-idle sessions
+    resp = await sessions.list_sessions(app_name=APP, user_id=user)
     rows = sorted((s for s in (getattr(resp, 'sessions', None) or []) if not s.id.startswith('__')),
                   key=lambda s: float(getattr(s, 'last_update_time', 0) or 0), reverse=True)[:limit]
     out = []
     for s in rows:
-        full = await sessions.get_session(app_name=APP, user_id=USER, session_id=s.id)
+        session_owner.setdefault(s.id, user)
+        full = await sessions.get_session(app_name=APP, user_id=user, session_id=s.id)
         if full is not None:
             out.append(_session_summary(full))
     return {'active_repo': config.REPO_ROOT.name, 'sessions': out}
@@ -611,7 +698,7 @@ async def list_saved_sessions(limit: int = 30):
 @app.get('/session/{session_id}/history', dependencies=[Depends(auth)],
          response_model=SessionHistoryResponse)
 async def session_history(session_id: str, limit: int = 200):
-    sess = await sessions.get_session(app_name=APP, user_id=USER, session_id=session_id)
+    sess = await sessions.get_session(app_name=APP, user_id=_user(), session_id=session_id)
     if sess is None:
         raise HTTPException(status_code=404, detail='Unknown session')
     return {'session_id': session_id, 'messages': _session_messages(sess)[-max(1, min(limit, 1000)):]}
@@ -622,7 +709,7 @@ async def session_history(session_id: str, limit: int = 200):
 async def resume_session(session_id: str):
     """Re-attach to a saved session. Unlike ensure(), never creates one."""
     _refuse_if_switching()
-    sess = await sessions.get_session(app_name=APP, user_id=USER, session_id=session_id)
+    sess = await sessions.get_session(app_name=APP, user_id=_user(), session_id=session_id)
     if sess is None:
         raise HTTPException(status_code=404, detail='Unknown session')
     repo = (sess.state or {}).get('repo') or ''
@@ -637,14 +724,18 @@ async def resume_session(session_id: str):
 
 @app.delete('/session/{session_id}', dependencies=[Depends(auth)])
 async def delete_saved_session(session_id: str):
-    from ai_agents.tools.architecture_tools import _design_path
+    # Ownership check first: session ids are unguessable but a user must never
+    # delete another user's design file through a guessed/foreign id.
+    if await sessions.get_session(app_name=APP, user_id=_user(), session_id=session_id) is None:
+        raise HTTPException(status_code=404, detail='Unknown session')
     if not await _session_is_safe_to_evict(session_id):
         raise HTTPException(status_code=409,
             detail='Session has a running turn, worktree, pending approval or unpromoted change.')
-    await sessions.delete_session(app_name=APP, user_id=USER, session_id=session_id)
+    await sessions.delete_session(app_name=APP, user_id=_user(), session_id=session_id)
     session_last_used.pop(session_id, None)
+    session_owner.pop(session_id, None)
     locks.pop(session_id, None)
-    _design_path(session_id).unlink(missing_ok=True)
+    _delete_design_data(session_id)
     return {'ok': True}
 
 
@@ -959,7 +1050,7 @@ async def _run_turn_streaming(body):
     """Run turn with streaming progress."""
     message = types.Content(role='user', parts=[types.Part(text=body.text)])
 
-    async for event in runner.run_async(user_id=USER, session_id=body.session_id, new_message=message):
+    async for event in runner.run_async(user_id=_user(), session_id=body.session_id, new_message=message):
         # Stream progress events
         if event.is_final_response():
             text = ' '.join(p.text for p in (event.content.parts if event.content else []) if getattr(p, 'text', None))
@@ -1036,7 +1127,7 @@ async def _run_turn(body):
     message = types.Content(role='user', parts=[types.Part(text=body.text)])
     reply = ''
     agents = []
-    async for event in runner.run_async(user_id=USER, session_id=body.session_id, new_message=message):
+    async for event in runner.run_async(user_id=_user(), session_id=body.session_id, new_message=message):
         if event.author and event.author not in agents:
             agents.append(event.author)
         if event.is_final_response() and event.content and event.content.parts:
@@ -2921,7 +3012,7 @@ async def ws_review(body: WsReviewBody):
 
         async def _run():
             async for _event in reviewer_runner.run_async(
-                    user_id=USER, session_id=body.session_id,
+                    user_id=_user(), session_id=body.session_id,
                     new_message=message):
                 pass
         try:

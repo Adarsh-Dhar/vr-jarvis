@@ -115,7 +115,7 @@ Tools live in `server/ai_agents/tools/`. Follow these conventions:
 - ✓ Phase A: Tool safety and correctness (complete)
 - ⏳ Phase B: Tool gaps (partial - spatial tools need Unity integration)
 - ⏳ Phase C: Agent layer (partial - needs Gemini for evaluation)
-- ⏳ Phase D: Server improvements (partial - session persistence pending)
+- ⏳ Phase D: Server improvements (sessions persist in SQLite across restarts, are listed/resumable/deletable via `/sessions`, and are reaped after `JARVIS_SESSION_RETENTION_DAYS`; per-user sessions via the `X-Jarvis-User` header)
 - ⏳ Phase E: Unity integration (requires Unity Editor)
 - ⏳ Phase F: Verification (requires Gemini and headset)
 

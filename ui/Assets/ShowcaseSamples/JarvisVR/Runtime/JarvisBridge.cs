@@ -349,6 +349,10 @@ namespace JarvisVR
     void GetTree(string repo, string path, Action<RepoTreeDto> ok, Action<string> fail);
     void GetFile(string repo, string path, Action<RepoFileDto> ok, Action<string> fail);
     void SelectRepo(string name, Action<bool> done);
+    void ListSessions(Action<SessionListDto> ok, Action<string> fail);
+    void ResumeSession(string id, Action<SessionResumeDto, SessionMessageDto[]> ok);
+    void StartNewSession(Action<string> ok, Action<string> fail);
+    string SessionId { get; }
     void GetProgress(int since, Action<ProgressDto> ok);
     void Transcribe(byte[] wav, Action<string> ok, Action<string> fail);
     void DesignPropose(string ideaText, Action<DesignProposeResponse> ok, Action<string> fail);
@@ -390,6 +394,8 @@ namespace JarvisVR
     /// server can reject calls made against a stale repository (409).</summary>
     public string ActiveRepo = "";
     public bool Busy { get; private set; }
+    /// <summary>Active session id: the in-memory one, else the id persisted on this device.</summary>
+    public string SessionId => !string.IsNullOrEmpty(_session) ? _session : PlayerPrefs.GetString(SessionPrefKey, "");
     private static JarvisServerSettings _settings;
     private static JarvisServerSettings Settings
     {
@@ -499,6 +505,22 @@ namespace JarvisVR
 
     public void ListSessions(Action<SessionListDto> ok, Action<string> fail) =>
       StartCoroutine(Send("GET", "/sessions", null, b => ok(JsonUtility.FromJson<SessionListDto>(b)), fail));
+
+    /// <summary>Create a fresh session on the server and make it the active one.
+    /// Session-scoped UI (chat, design, plan) must be reset by the caller.</summary>
+    public void StartNewSession(Action<string> ok, Action<string> fail) =>
+      StartCoroutine(NewSessionRoutine(ok, fail));
+
+    private IEnumerator NewSessionRoutine(Action<string> ok, Action<string> fail)
+    {
+      string id = null; string err = null;
+      yield return Send("POST", "/session", "{}",
+        b => { try { id = JsonUtility.FromJson<SessionResponse>(b).session_id; } catch { err = "bad response"; } },
+        e => err = e);
+      if (string.IsNullOrEmpty(id)) { fail(err ?? "Could not start a new session."); yield break; }
+      RememberSession(id);
+      ok(id);
+    }
 
     public void SelectRepo(string name, Action<bool> done)
     {
@@ -859,6 +881,9 @@ namespace JarvisVR
         req.downloadHandler = new DownloadHandlerBuffer();
         string token = !string.IsNullOrEmpty(Token) ? Token : ResolveToken();
         if (!string.IsNullOrEmpty(token)) req.SetRequestHeader("Authorization", "Bearer " + token);
+        // Optional per-user identity: sessions, designs and plans are scoped to it server-side.
+        string user = PlayerPrefs.GetString("jarvis.user", "");
+        if (!string.IsNullOrEmpty(user)) req.SetRequestHeader("X-Jarvis-User", user);
         req.timeout = TimeoutSeconds;
         yield return req.SendWebRequest();
         if (req.result != UnityWebRequest.Result.Success)
