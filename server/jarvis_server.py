@@ -173,6 +173,14 @@ async def _user_context(request: Request, call_next):
     return await call_next(request)
 
 
+def _install_design_owner_provider():
+    from ai_agents.tools import architecture_tools as _at
+    _at._owner_provider = _user
+
+
+_install_design_owner_provider()
+
+
 def _sid_user(sid) -> str:
     """Owner of a session id: recorded when the session was last touched, else
     the requesting user (fresh ids belong to the requester)."""
@@ -384,7 +392,19 @@ async def _retention_sweep(user) -> int:
     return removed
 
 
+def _check_design_owner(session_id):
+    """404 when the session id has a saved design that belongs to another user.
+    Legacy design files with no recorded owner belong to the default user."""
+    from ai_agents.tools.architecture_tools import design_owner
+    owner = design_owner(session_id)
+    if owner is None:
+        return
+    if (owner or USER) != _user():
+        raise HTTPException(status_code=404, detail='Unknown session')
+
+
 async def ensure(session_id):
+    _check_design_owner(session_id)
     user = _user()
     session = await sessions.get_session(app_name=APP, user_id=user, session_id=session_id)
     if session is None:
@@ -472,14 +492,20 @@ async def _register_persisted_sessions():
                 pass
     asyncio.get_event_loop().create_task(_trace_gc())
     try:
-        resp = await sessions.list_sessions(app_name=APP, user_id=USER)
+        # user_id=None lists every user's sessions, so each one is tracked for
+        # the repo-switch guard and eviction, with its real owner recorded.
+        resp = await sessions.list_sessions(app_name=APP)
         persisted = list(getattr(resp, 'sessions', None) or [])
+        owners = {USER}
         for sess in persisted:
+            if sess.id.startswith('__'):
+                continue
             # Stamp with the session's real last activity, not restart time,
             # so the idle-timeout eviction still applies after a restart.
             session_last_used.setdefault(
                 sess.id, float(getattr(sess, 'last_update_time', 0) or 0))
-            session_owner.setdefault(sess.id, USER)   # this listing is the default user's
+            session_owner.setdefault(sess.id, getattr(sess, 'user_id', None) or USER)
+            owners.add(session_owner[sess.id])
         # Lease migration: pre-lease persisted sessions get an initial
         # lease record so they are never treated as unowned/abandoned.
         from ai_agents.intelligence.session_leases import (
@@ -491,9 +517,10 @@ async def _register_persisted_sessions():
         if migrated:
             logging.getLogger('uvicorn.error').info(
                 'migrated %d session(s) to lease records', migrated)
-        # Retention: reap the default user's long-idle sessions at boot; other
-        # users are swept lazily the next time they list their sessions.
-        await _retention_sweep(USER)
+        # Retention: reap every user's long-idle sessions at boot (each user is
+        # also swept lazily whenever they list their sessions).
+        for _owner in sorted(owners):
+            await _retention_sweep(_owner)
     except Exception as exc:   # in-memory service or empty DB
         logging.getLogger('uvicorn.error').info('no persisted sessions registered: %s', exc)
 
@@ -1973,12 +2000,14 @@ async def design_get(session_id: str):
 
 @app.get('/design/{session_id}/versions', dependencies=[Depends(auth)])
 async def design_versions(session_id: str):
+    _check_design_owner(session_id)
     from ai_agents.tools.architecture_tools import list_design_versions
     return {'session_id': session_id, 'versions': list_design_versions(session_id)}
 
 
 @app.get('/design/{session_id}/versions/{revision}', dependencies=[Depends(auth)])
 async def design_version(session_id: str, revision: int):
+    _check_design_owner(session_id)
     from ai_agents.tools.architecture_tools import load_design_version
     doc = load_design_version(session_id, revision)
     if not doc:

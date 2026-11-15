@@ -1150,6 +1150,25 @@ def load_design_version(session_id: str, revision: int) -> Dict[str, Any]:
         return {}
 
 
+# Design files are keyed by session id, so each one records which user owns it
+# (`_owner`). The server installs `_owner_provider` to return the requesting user;
+# tools and tests that never set it simply write ownerless (legacy) files.
+OWNER_KEY = '_owner'
+_owner_provider = lambda: None   # noqa: E731
+
+
+def design_owner(session_id: str) -> Optional[str]:
+    """None when no design file exists; '' for a legacy file with no owner
+    recorded; otherwise the owning user id."""
+    p = _design_path(session_id)
+    if not p.is_file():
+        return None
+    try:
+        return str(json.loads(p.read_text()).get(OWNER_KEY) or '')
+    except Exception:
+        return ''
+
+
 def save_design(session_id: str, payload: Dict[str, Any]) -> bool:
     """Persist design state atomically; returns False on failure so callers
     can warn. Writes to a temp file, fsyncs, verifies the JSON reads back,
@@ -1159,6 +1178,11 @@ def save_design(session_id: str, payload: Dict[str, Any]) -> bool:
     try:
         DESIGN_DIR.mkdir(parents=True, exist_ok=True)
         final = _design_path(session_id)
+        # Ownership is sticky: keep the recorded owner, else stamp the current user.
+        owner = design_owner(session_id) or _owner_provider()
+        payload = dict(payload)
+        if owner:
+            payload[OWNER_KEY] = owner
         fd, tmp = tempfile.mkstemp(dir=str(DESIGN_DIR), suffix='.tmp')
         try:
             with os.fdopen(fd, 'w', encoding='utf-8') as f:
