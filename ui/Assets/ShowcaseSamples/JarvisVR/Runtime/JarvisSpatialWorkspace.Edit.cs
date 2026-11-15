@@ -29,7 +29,21 @@ namespace JarvisVR
     private readonly List<UndoEntry> _undo = new List<UndoEntry>();
     private JarvisSpatialButton _editModeBtn, _editPrevBtn, _editNextBtn, _editLineBtn,
       _editAddBtn, _editDelBtn, _editUndoBtn, _editRevertBtn,
-      _editVerifyBtn, _editReviewBtn, _editRunBtn, _editSelBtn, _editSubmitBtn;
+      _editVerifyBtn, _editReviewBtn, _editRunBtn, _editSelBtn, _editSubmitBtn,
+      _editIdeBtn, _editBreakBtn, _editDebugBtn, _editContBtn, _editStepBtn, _editStopBtn;
+    // IDE-change polling: token from /workspace/changes; a change means the
+    // file was edited in VS Code, so the viewer reloads it.
+    private string _lastChangesToken;
+    private Coroutine _changesPoll;
+    // Live diagnostics: line -> checker item, refreshed (debounced) after edits.
+    private readonly Dictionary<int, WsDiagItem> _diagByLine = new Dictionary<int, WsDiagItem>();
+    private int _diagGen;
+    // Debugger: breakpoints are 1-based lines of the file being edited.
+    private readonly HashSet<int> _bpLines = new HashSet<int>();
+    private string _bpPath;
+    private bool _debugActive;
+    private WsDebugStateDto _debugState;
+    private Coroutine _debugPoll;
     // range selection: LINE ^/v move the end while SEL is on; EDIT LINE / DELETE LINE
     // then operate on [SelLo..SelHi] instead of the single cursor line.
     private bool _editSelMode;
@@ -48,12 +62,12 @@ namespace JarvisVR
     private void BuildEditPanel()
     {
       JarvisPalette pal = JarvisPalette.Current;
-      _editPanel = AddPanel("edit", "Edit", 560, 520, 1.18f, 0.20f, pal.Green);
+      _editPanel = AddPanel("edit", "Edit", 560, 720, 1.18f, 0.20f, pal.Green);
       _editPanel.SetBodyBox(56, 120); _editPanel.UseMono(15);
       _editPanel.SetBody("Open a file in the repository browser, then press EDIT: ON.");
 
       const float w = 262f, x0 = 14f, x1 = 284f, h = 44f;
-      float[] ys = { 150f, 202f, 254f, 306f, 358f, 410f, 462f };
+      float[] ys = { 150f, 202f, 254f, 306f, 358f, 410f, 462f, 514f, 566f, 618f };
       _editModeBtn  = _editPanel.AddButton("EDIT: OFF",      x0, ys[0], w,  h, ToggleEditMode);
       _editPrevBtn  = _editPanel.AddButton("LINE ^",         x1, ys[0], w,  h, () => EditLineDelta(-1));
       _editNextBtn  = _editPanel.AddButton("LINE v",         x0, ys[1], w,  h, () => EditLineDelta(+1));
@@ -67,6 +81,12 @@ namespace JarvisVR
       _editRunBtn   = _editPanel.AddButton("RUN",            x0, ys[5], w,  h, EditRun);
       _editSelBtn   = _editPanel.AddButton("SEL: OFF",       x1, ys[5], w,  h, ToggleEditSel);
       _editSubmitBtn= _editPanel.AddButton("SUBMIT",         x0, ys[6], 532f, h, EditSubmit, 0f, pal.Amber);
+      _editIdeBtn   = _editPanel.AddButton("IDE",            x0, ys[7], w,  h, EditOpenIde, 0f, pal.Cyan);
+      _editBreakBtn = _editPanel.AddButton("BREAK",          x1, ys[7], w,  h, EditToggleBreakpoint, 0f, pal.Orange);
+      _editDebugBtn = _editPanel.AddButton("DEBUG",          x0, ys[8], w,  h, EditDebugStart, 0f, pal.Violet);
+      _editContBtn  = _editPanel.AddButton("CONT",           x1, ys[8], w,  h, EditDebugControl("continue"));
+      _editStepBtn  = _editPanel.AddButton("STEP",           x0, ys[9], w,  h, EditDebugControl("next"));
+      _editStopBtn  = _editPanel.AddButton("STOP",           x1, ys[9], w,  h, EditDebugStop, 0f, pal.Red);
       RefreshEdit();
     }
 
@@ -158,8 +178,13 @@ namespace JarvisVR
           _editLine = Mathf.Clamp(_openFilePage * EditorLinesPerPage + 1, 1, Mathf.Max(1, EditLineCount()));
           _undo.Clear();
           _editSyntax = null; _editSymbols = null;
+          _diagByLine.Clear(); _bpLines.Clear(); _bpPath = _editPath;
+          _debugState = null; _debugActive = false;
           RefreshOpenFile(); RefreshEdit();
           PollEditStatus();
+          StartChangesPoll();
+          StartDebugPoll();
+          ScheduleDiagnostics();
           Say("EDIT ON — LINE ^/v picks a line, EDIT LINE replaces it. VERIFY → REVIEW → SUBMIT when done.");
           Log("edit mode on: " + _editPath);
         }, err => Say("Sandbox read failed: " + err));
@@ -173,6 +198,17 @@ namespace JarvisVR
       _editSyntax = null; _editSymbols = null;
       _editSelMode = false; _editSelStart = _editSelEnd = 0;
       _undo.Clear();
+      _diagByLine.Clear(); _diagGen++;
+      _bpLines.Clear(); _bpPath = null;
+      _lastChangesToken = null;
+      if (_changesPoll != null) { StopCoroutine(_changesPoll); _changesPoll = null; }
+      if (_debugPoll != null) { StopCoroutine(_debugPoll); _debugPoll = null; }
+      if (_debugActive && _bridge != null)
+      {
+        _debugActive = false;
+        _bridge.DebugControl("stop", r => { }, e => { });
+      }
+      _debugState = null;
       RefreshEdit();
     }
 
@@ -281,6 +317,8 @@ namespace JarvisVR
                           bool recordUndo = true)
     {
       if (_bridge == null || _openFile == null) return;
+      if (_debugState != null && _debugState.status == "stopped")
+        Say("Program is stopped at a breakpoint — line numbers may have shifted.");
       string path = _editPath ?? _openFile.path;
       _bridge.WorkspaceEditLines(path, op, start, end, newText, _editBase,
         r => OnEditApplied(r, op, start, end, newText, undoOldText, recordUndo),
@@ -333,6 +371,7 @@ namespace JarvisVR
       _ghostSeenAll = false; _ghostDiff = null; _ghostPage = 0;
       RefreshTests(); RefreshApproval(); RefreshGhost();
       PollEditStatus();
+      ScheduleDiagnostics();
     }
 
     private void ReloadEditFile()
@@ -516,6 +555,166 @@ namespace JarvisVR
       });
     }
 
+    // =========================================================== IDE link
+
+    /// <summary>Open the session worktree in the IDE configured on the server
+    /// (JARVIS_IDE_COMMAND). The server runs it, so this works tethered or not.</summary>
+    private void EditOpenIde()
+    {
+      if (_bridge == null) return;
+      if (!_wsReady) { Say("No sandbox worktree yet — turn EDIT on for a file first."); return; }
+      Say("Opening the worktree in the IDE…");
+      _bridge.WorkspaceOpenIde(o =>
+      {
+        if (o == null || !o.ok) { Say("IDE open failed: " + (o != null ? o.detail : "no response")); return; }
+        Say("Worktree opened in the IDE. Edits there show up here within a few seconds.");
+      }, err => Say("IDE open failed: " + err));
+    }
+
+    /// <summary>Poll /workspace/changes while edit mode is on; a new token means
+    /// a file changed on disk (IDE or external tool), so reload and re-check.</summary>
+    private void StartChangesPoll()
+    {
+      if (_changesPoll != null) StopCoroutine(_changesPoll);
+      _changesPoll = StartCoroutine(PollWorkspaceChanges());
+    }
+
+    private IEnumerator PollWorkspaceChanges()
+    {
+      var wait = new WaitForSeconds(2f);
+      while (_editMode && _bridge != null)
+      {
+        yield return wait;
+        if (!_editMode || _bridge == null) yield break;
+        _bridge.WorkspaceChanges(c =>
+        {
+          if (c == null || !_editMode) return;
+          if (_lastChangesToken == null) { _lastChangesToken = c.token; return; }
+          if (c.token == _lastChangesToken) return;
+          _lastChangesToken = c.token;
+          ReloadEditFile();
+          AfterWorkspaceChange();
+          Say("File changed outside the editor. Reloaded.");
+        }, e => { });
+      }
+      _changesPoll = null;
+    }
+
+    // =========================================================== diagnostics
+
+    private WsDiagItem DiagForLine(int lineNo)
+    {
+      WsDiagItem it;
+      return _diagByLine.TryGetValue(lineNo, out it) ? it : null;
+    }
+
+    /// <summary>Debounced: run diagnostics 1.5s after the last edit/change.</summary>
+    private void ScheduleDiagnostics()
+    {
+      _diagGen++;
+      int gen = _diagGen;
+      StartCoroutine(DiagAfterDelay(gen));
+    }
+
+    private IEnumerator DiagAfterDelay(int gen)
+    {
+      yield return new WaitForSeconds(1.5f);
+      if (gen != _diagGen || !_editMode || _bridge == null || string.IsNullOrEmpty(_editPath)) yield break;
+      string path = _editPath;
+      _bridge.WorkspaceDiagnostics(path, d =>
+      {
+        if (d == null || !d.ok || !d.supported || path != _editPath) return;
+        _diagByLine.Clear();
+        if (d.items != null)
+          foreach (WsDiagItem it in d.items)
+            if (it != null && it.line > 0) _diagByLine[it.line] = it;
+        RefreshOpenFile(); RefreshEdit();
+      }, e => { });
+    }
+
+    // =========================================================== debugger
+
+    private void EditToggleBreakpoint()
+    {
+      if (!EditReady()) return;
+      int line = Mathf.Clamp(_editLine, 1, Mathf.Max(1, EditLineCount()));
+      if (_bpPath != _editPath) { _bpPath = _editPath; _bpLines.Clear(); }
+      if (!_bpLines.Add(line)) _bpLines.Remove(line);
+      RefreshEdit();
+    }
+
+    private void EditDebugStart()
+    {
+      if (_bridge == null || _debugActive) return;
+      if (!EditReady()) return;
+      if (_editPath == null || !_editPath.EndsWith(".py"))
+      { Say("Debug needs a .py file — open one and turn EDIT on."); return; }
+      if (_bpPath != _editPath) { _bpPath = _editPath; _bpLines.Clear(); }
+      var bps = new List<WsDebugBpDto>();
+      foreach (int l in _bpLines) bps.Add(new WsDebugBpDto { path = _editPath, line = l });
+      bps.Sort((a, b) => a.line.CompareTo(b.line));
+      Say("Starting debugger" + (bps.Count > 0 ? " with " + bps.Count + " breakpoint(s)" : "") + "…");
+      _bridge.DebugStart(_editPath, new string[0], bps.ToArray(), r =>
+      {
+        if (r == null || !r.ok) { Say("Debug start failed: " + (r != null ? r.detail : "no response")); return; }
+        _debugActive = true;
+        _debugState = null;
+        StartDebugPoll();
+        RefreshEdit();
+      }, err => Say("Debug start failed: " + err));
+    }
+
+    private Action EditDebugControl(string action)
+    {
+      return () => DebugSend(action);
+    }
+
+    private void EditDebugStop()
+    {
+      DebugSend("stop");
+    }
+
+    private void DebugSend(string action)
+    {
+      if (_bridge == null) return;
+      _bridge.DebugControl(action, r =>
+      {
+        if (r == null || !r.ok) Say("Debug " + action + " failed: " + (r != null ? r.detail : "no response"));
+        if (action == "stop") { _debugActive = false; _debugState = null; }
+        RefreshEdit();
+      }, err => Say("Debug " + action + " failed: " + err));
+    }
+
+    private void StartDebugPoll()
+    {
+      if (_debugPoll != null) StopCoroutine(_debugPoll);
+      _debugPoll = StartCoroutine(PollDebugState());
+    }
+
+    private IEnumerator PollDebugState()
+    {
+      var wait = new WaitForSeconds(1f);
+      while (_debugActive && _bridge != null)
+      {
+        yield return wait;
+        if (!_debugActive || _bridge == null) yield break;
+        _bridge.DebugState(s =>
+        {
+          if (s == null || !_debugActive) return;
+          _debugState = s;
+          if (s.status == "none" || s.status == "exited" || s.status == "error")
+          {
+            _debugActive = false;
+            if (s.status == "error" && !string.IsNullOrEmpty(s.error)) Say("Debug error: " + s.error);
+            else if (s.status == "exited") Say("Program finished.");
+          }
+          else if (s.status == "stopped") RefreshOpenFile();
+          RefreshEdit();
+        }, e => { });
+      }
+      _debugPoll = null;
+    }
+
     // =========================================================== status and refresh
 
     private void PollEditStatus()
@@ -570,6 +769,18 @@ namespace JarvisVR
       if (_editRunBtn != null) _editRunBtn.Interactable = _wsReady && !_runBusy;
       if (_editSelBtn != null) { _editSelBtn.Interactable = mode; _editSelBtn.Label.text = _editSelMode ? "SEL: ON" : "SEL: OFF"; }
       if (_editSubmitBtn != null) _editSubmitBtn.Interactable = mode && AllEvidenceFresh();
+      bool isPy = mode && _editPath != null && _editPath.EndsWith(".py");
+      if (_editIdeBtn != null) _editIdeBtn.Interactable = _wsReady;
+      if (_editBreakBtn != null)
+      {
+        _editBreakBtn.Interactable = isPy;
+        _editBreakBtn.Label.text = _bpLines.Count > 0 ? "BREAK (" + _bpLines.Count + ")" : "BREAK";
+      }
+      if (_editDebugBtn != null) _editDebugBtn.Interactable = isPy && !_debugActive;
+      bool dbgStopped = _debugState != null && _debugState.status == "stopped";
+      if (_editContBtn != null) _editContBtn.Interactable = _debugActive && dbgStopped;
+      if (_editStepBtn != null) _editStepBtn.Interactable = _debugActive && dbgStopped;
+      if (_editStopBtn != null) _editStopBtn.Interactable = _debugActive;
 
       if (!open)
       {
@@ -619,6 +830,46 @@ namespace JarvisVR
         int shown0 = Mathf.Max(0, runLines.Length - 10);
         for (int i = shown0; i < runLines.Length; i++)
           sb.Append("  ").Append(Esc(runLines[i])).Append('\n');
+      }
+      WsDiagItem curDiag = DiagForLine(_editLine);
+      if (curDiag != null && !string.IsNullOrEmpty(curDiag.message))
+      {
+        bool warn = curDiag.severity == "warning";
+        sb.Append("<color=#").Append(Hex(warn ? pal.Orange : pal.Red)).Append(">L")
+          .Append(_editLine).Append(' ').Append(Esc(curDiag.message)).Append("</color>\n");
+      }
+      if (_bpPath == _editPath && _bpLines.Count > 0)
+      {
+        var bps = new List<int>(_bpLines); bps.Sort();
+        sb.Append("breakpoints: ");
+        foreach (int b in bps) sb.Append(b).Append(' ');
+        sb.Append('\n');
+      }
+      if (_debugActive || _debugState != null)
+      {
+        sb.Append("<color=#").Append(Hex(pal.Violet)).Append(">debug: ")
+          .Append(_debugState != null ? _debugState.status : "starting").Append("</color>\n");
+        if (dbgStopped && _debugState != null)
+        {
+          sb.Append("  stopped ").Append(Esc(_debugState.file ?? "")).Append(':')
+            .Append(_debugState.line).Append('\n');
+          if (_debugState.variables != null)
+          {
+            int shown = 0;
+            foreach (WsDebugVarDto v in _debugState.variables)
+            {
+              if (v == null || shown >= 8) continue;
+              sb.Append("    ").Append(Esc(v.name)).Append(" = ").Append(Esc(v.value)).Append('\n');
+              shown++;
+            }
+          }
+        }
+        if (_debugState != null && _debugState.output != null && _debugState.output.Length > 0)
+        {
+          int shown1 = Mathf.Max(0, _debugState.output.Length - 6);
+          for (int i = shown1; i < _debugState.output.Length; i++)
+            sb.Append("  ").Append(Esc(_debugState.output[i])).Append('\n');
+        }
       }
       sb.Append("\nEDIT LINE replaces ").Append(HasEditSel ? "lines " + SelLo + "-" + SelHi : "line " + _editLine)
         .Append(HasEditSel ? "" : " · ADD LINE BELOW inserts after it")

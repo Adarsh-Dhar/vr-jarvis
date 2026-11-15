@@ -109,10 +109,23 @@ class TestWorkspaceFile:
 
     def test_get_falls_back_to_main_checkout(self, client, worktree):
         sid = _sid(client)  # no worktree bound
-        r = _get_file(client, sid, 'package.json')
+        # REPO_ROOT varies by machine; pick any readable text file in it.
+        root = jarvis_server.config.REPO_ROOT
+        path = None
+        for p in sorted(root.rglob('*')):
+            if not p.is_file():
+                continue
+            rel = p.relative_to(root)
+            if '.git' in rel.parts or 'node_modules' in rel.parts:
+                continue
+            path = rel.as_posix()
+            break
+        assert path, 'no file found in main checkout'
+        r = _get_file(client, sid, path)
         assert r.status_code == 200
         data = r.json()
         assert data['source'] == 'main'
+        assert data['path'] == path
         assert 'hash' in data and 'content' in data
 
     def test_get_rejects_escape(self, client, worktree):
@@ -330,3 +343,19 @@ class TestWorkspaceDiffAndStatus:
         s = client.get('/workspace/status',
                        params={'session_id': sid}, headers=H).json()
         assert s['worktree'] is False and s['dirty'] is False
+
+    def test_external_edit_marks_evidence_stale(self, client, worktree):
+        """An edit made outside the VR editor (IDE, program output) changes the
+        worktree fingerprint, so earlier verification evidence goes stale."""
+        sid = _bind(client, worktree)
+        fp = jarvis_server._worktree_fingerprint(str(worktree))
+        _set(sid, {'last_test_run': {'diff_hash': fp['diff_hash'],
+                                     'head': fp['head']}})
+        s1 = client.get('/workspace/status',
+                        params={'session_id': sid}, headers=H).json()
+        assert s1['verification']['tests'] == 'fresh'
+        # Simulate an IDE edit on disk.
+        (worktree / 'app.py').write_text('def main():\n    return 42\n')
+        s2 = client.get('/workspace/status',
+                        params={'session_id': sid}, headers=H).json()
+        assert s2['verification']['tests'] == 'stale'

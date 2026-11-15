@@ -21,3 +21,5 @@ psycopg2-binary
 sqlalchemy
 jsonschema
 bandit==1.8.3
+debugpy
+pyright

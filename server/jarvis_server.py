@@ -41,13 +41,15 @@ from ai_agents import llm
 from ai_agents.tools.git_tools import (
     commit_worktree, create_worktree, promote_branch)
 from ai_agents.tools.exec_tools import (
-    _clear_verification, _review_verdict, _worktree_fingerprint,
+    _clear_verification, _pyright_argv, _review_verdict, _worktree_fingerprint,
     verification_blockers, review_blockers, run_tests, run_typecheck)
 from ai_agents.tools.security_tools import run_security_scan
 from ai_agents.tools.path_resolver import (
     PathResolutionError, resolve_worktree_read, resolve_worktree_write)
 from ai_agents.tools.workspace_tools import (
     apply_line_edit, quick_syntax_check, worktree_symbols)
+from ai_agents.tools.runtime_tools import _validate_script_in_root
+from ai_agents.runtime.debug_session import DebugSession
 from ai_agents.tools.graph_tools import get_source
 from ai_agents.agents.registry import initialize_agents
 
@@ -351,6 +353,7 @@ async def _evict_one_safe_session() -> bool:
                 await sessions.delete_session(app_name=APP, user_id=_sid_user(sid), session_id=sid)
             session_last_used.pop(sid, None)
             locks.pop(sid, None)
+            _ws_debug_stop(sid)
             return True
     return False
 
@@ -390,6 +393,7 @@ async def _retention_sweep(user) -> int:
         session_owner.pop(sid, None)
         locks.pop(sid, None)
         _delete_design_data(sid)
+        _ws_debug_stop(sid)
         removed += 1
     if removed:
         logging.getLogger('uvicorn.error').info(
@@ -768,6 +772,7 @@ async def delete_saved_session(session_id: str):
     session_owner.pop(session_id, None)
     locks.pop(session_id, None)
     _delete_design_data(session_id)
+    _ws_debug_stop(session_id)
     return {'ok': True}
 
 
@@ -2903,6 +2908,193 @@ async def ws_status(session_id: str, repo: Optional[str] = None):
         'review': _ws_evidence_state(state.get('code_review'), fp, False),
     }
     return out
+
+
+# ---------------------------------------------------------------------------
+# IDE link: open the session worktree in a desktop IDE on the server machine,
+# and poll a cheap token so the VR client notices files changed there.
+
+_WS_IDE_ALLOWED = {'code', 'codium', 'cursor'}
+
+
+@app.post('/workspace/open-ide', dependencies=[Depends(auth)])
+async def ws_open_ide(body: WsOpenBody):
+    """Open the session worktree in an IDE on the machine running the server."""
+    await _ws_guard(body.session_id, body.repo)
+    cmd = os.getenv('JARVIS_IDE_COMMAND', '')
+    if cmd not in _WS_IDE_ALLOWED:
+        raise HTTPException(403, 'IDE opening is disabled; set JARVIS_IDE_COMMAND=code')
+    state = (await ensure(body.session_id)).state
+    wt = _ws_worktree(state)
+    try:
+        subprocess.Popen([cmd, str(wt)], stdin=subprocess.DEVNULL,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except OSError as exc:
+        raise HTTPException(500, 'could not start ' + cmd + ': ' + str(exc)[:200])
+    return {'ok': True}
+
+
+def _ws_changes_token(wt):
+    out = subprocess.run(['git', 'status', '--porcelain', '-uall'], cwd=str(wt),
+                         capture_output=True, text=True, timeout=10).stdout
+    files = [l[3:].strip() for l in out.splitlines() if l.strip()]
+    h = hashlib.sha256()
+    for f in sorted(files):
+        try:
+            st = (Path(wt) / f).stat()
+            h.update(('%s:%d:%d' % (f, st.st_mtime_ns, st.st_size)).encode())
+        except OSError:
+            h.update((f + ':gone').encode())
+    return h.hexdigest()[:16], files
+
+
+@app.get('/workspace/changes', dependencies=[Depends(auth)])
+async def ws_changes(session_id: str, repo: Optional[str] = None):
+    await _ws_guard(session_id, repo)
+    state = (await ensure(session_id)).state
+    wt = _ws_worktree(state)
+    token, files = await asyncio.to_thread(_ws_changes_token, wt)
+    return {'ok': True, 'token': token, 'files': files[:200]}
+
+
+# ---------------------------------------------------------------------------
+# Live diagnostics: per-file markers for the lines a checker flags. Python
+# files go through pyright (the same checker run_typecheck uses); other
+# languages report supported=false until their checker is wired in.
+
+
+@app.get('/workspace/diagnostics', dependencies=[Depends(auth)])
+async def ws_diagnostics(session_id: str, path: str, repo: Optional[str] = None):
+    await _ws_guard(session_id, repo)
+    state = (await ensure(session_id)).state
+    wt = _ws_worktree(state)
+    target = (wt / path).resolve()
+    if wt.resolve() not in target.parents or not target.is_file():
+        raise HTTPException(400, 'bad path')
+    if target.suffix != '.py':
+        return {'ok': True, 'supported': False, 'items': []}
+    argv = _pyright_argv()
+    if not argv:
+        return {'ok': True, 'supported': True, 'items': [],
+                'error': 'pyright is not installed'}
+    argv = argv + ['--outputjson', str(target)]
+
+    def _run_pyright():
+        p = subprocess.run(argv, cwd=str(wt), capture_output=True, text=True, timeout=30)
+        return p.stdout
+
+    try:
+        out = await asyncio.to_thread(_run_pyright)
+        data = json.loads(out or '{}')
+    except Exception:
+        return {'ok': True, 'supported': True, 'items': [], 'error': 'checker failed'}
+    items = [{'line': d['range']['start']['line'] + 1,
+              'severity': d.get('severity', 'error'),
+              'message': d.get('message', '')[:200]}
+             for d in data.get('generalDiagnostics', [])][:100]
+    return {'ok': True, 'supported': True, 'items': items}
+
+
+# ---------------------------------------------------------------------------
+# Debugger: run a worktree .py script under debugpy and expose breakpoints,
+# stepping and variables over simple HTTP routes. The client polls state; it
+# never speaks DAP. One session per session_id; idle sessions are killed.
+
+_debug_sessions = {}   # session_id -> DebugSession
+
+
+class WsDebugBp(BaseModel):
+    path: str
+    line: int = 1
+
+
+class WsDebugStartBody(BaseModel):
+    session_id: str
+    script: str                  # worktree-relative .py path
+    args: List[str] = []
+    breakpoints: List[WsDebugBp] = []
+    repo: Optional[str] = None
+
+
+class WsDebugControlBody(BaseModel):
+    session_id: str
+    action: str                  # continue / next / stepin / stop
+    repo: Optional[str] = None
+
+
+def _ws_debug_stop(session_id):
+    ds = _debug_sessions.pop(session_id, None)
+    if ds is not None:
+        try:
+            ds.stop()
+        except Exception:
+            pass
+
+
+@app.post('/workspace/debug/start', dependencies=[Depends(auth)])
+async def ws_debug_start(body: WsDebugStartBody):
+    await _ws_guard(body.session_id, body.repo)
+    _ws_refuse_busy(body.session_id)
+    state = (await ensure(body.session_id)).state
+    wt = _ws_worktree(state)
+    if not body.script.endswith('.py'):
+        raise HTTPException(400, 'script must be a .py file')
+    err = _validate_script_in_root(body.script, wt)
+    if err:
+        raise HTTPException(400, err)
+    wt_r = wt.resolve()
+    for bp in body.breakpoints:
+        target = (wt / bp.path).resolve()
+        if wt_r not in target.parents or not target.is_file():
+            raise HTTPException(400, 'bad breakpoint path: ' + bp.path)
+    _ws_debug_stop(body.session_id)   # one debug session per session_id
+    bps = [{'path': bp.path, 'line': bp.line} for bp in body.breakpoints]
+    ds = await asyncio.to_thread(DebugSession, wt, body.script,
+                                 list(body.args or []), bps)
+    _debug_sessions[body.session_id] = ds
+    return {'ok': True}
+
+
+@app.get('/workspace/debug/state', dependencies=[Depends(auth)])
+async def ws_debug_state(session_id: str, repo: Optional[str] = None):
+    await _ws_guard(session_id, repo)
+    ds = _debug_sessions.get(session_id)
+    if ds is None:
+        return {'ok': True, 'status': 'none', 'file': '', 'line': 0,
+                'variables': [], 'output': []}
+    return {'ok': True, **ds.snapshot()}
+
+
+@app.post('/workspace/debug/control', dependencies=[Depends(auth)])
+async def ws_debug_control(body: WsDebugControlBody):
+    await _ws_guard(body.session_id, body.repo)
+    ds = _debug_sessions.get(body.session_id)
+    if ds is None:
+        raise HTTPException(409, 'No debug session. Call /workspace/debug/start first.')
+    action = body.action
+    try:
+        if action == 'continue':
+            await asyncio.to_thread(ds.cont)
+        elif action == 'next':
+            await asyncio.to_thread(ds.step, 'next')
+        elif action == 'stepin':
+            await asyncio.to_thread(ds.step, 'stepIn')
+        elif action == 'stop':
+            await asyncio.to_thread(ds.stop)
+            _ws_debug_stop(body.session_id)
+        else:
+            raise HTTPException(400, 'unknown action: ' + str(action))
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(500, str(exc)[:300])
+    return {'ok': True}
+
+
+@app.on_event('shutdown')
+async def _stop_debug_sessions():
+    for sid in list(_debug_sessions):
+        _ws_debug_stop(sid)
 
 
 # ---------------------------------------------------------------------------

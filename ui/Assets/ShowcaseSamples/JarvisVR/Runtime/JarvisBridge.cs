@@ -262,6 +262,19 @@ namespace JarvisVR
     public WsSymbolDto[] symbols;
   }
   [Serializable] public class WsVerificationDto { public string tests, typecheck, review, security; }
+  [Serializable] public class WsChangesDto { public bool ok; public string token; public string[] files; }
+  [Serializable] public class WsDiagItem { public int line; public string severity, message; }
+  [Serializable] public class WsDiagDto { public bool ok, supported; public string error; public WsDiagItem[] items; }
+  [Serializable] public class WsDebugBpDto { public string path; public int line; }
+  [Serializable] public class WsDebugVarDto { public string name, value; }
+  [Serializable] public class WsDebugStateDto
+  {
+    public bool ok;
+    public string status, file, error;   // none/starting/running/stopped/exited/error
+    public int line;
+    public WsDebugVarDto[] variables;
+    public string[] output;
+  }
   [Serializable] public class WsStatusDto
   {
     public bool ok, busy, worktree, dirty;
@@ -336,6 +349,14 @@ namespace JarvisVR
     public string[] argv;
     public int timeout;              // seconds; 0 = server default (60, max 120)
   }
+  [Serializable] internal class WsDebugStartRequest
+  {
+    public string session_id, script, repo;
+    public string[] args;
+    public WsDebugBpDto[] breakpoints;
+  }
+  [Serializable] internal class WsDebugControlRequest { public string session_id, action, repo; }
+  [Serializable] public class WsOkDto { public bool ok; public string detail; }
   /// <summary>One SSE event from POST /workspace/run. Exactly one of out/exit/timeout/truncated/error is set.</summary>
   [Serializable] internal class WsRunEvent
   {
@@ -384,6 +405,13 @@ namespace JarvisVR
     void WorkspaceRevert(string path, Action<WsEditResponse> ok, Action<string> fail);
     void WorkspaceDiff(Action<WsDiffDto> ok, Action<string> fail);
     void WorkspaceStatus(Action<WsStatusDto> ok, Action<string> fail);
+    void WorkspaceChanges(Action<WsChangesDto> ok, Action<string> fail);
+    void WorkspaceOpenIde(Action<WsOpenDto> ok, Action<string> fail);
+    void WorkspaceDiagnostics(string path, Action<WsDiagDto> ok, Action<string> fail);
+    void DebugStart(string script, string[] args, WsDebugBpDto[] breakpoints,
+                    Action<WsOkDto> ok, Action<string> fail);
+    void DebugState(Action<WsDebugStateDto> ok, Action<string> fail);
+    void DebugControl(string action, Action<WsOkDto> ok, Action<string> fail);
     void WorkspaceVerify(string[] testFiles, Action<WsVerifyDto> ok, Action<string> fail);
     void WorkspaceReview(Action<WsReviewDto> ok, Action<string> fail);
     void WorkspaceSubmit(Action<WsSubmitDto> ok, Action<string> fail);
@@ -820,6 +848,60 @@ namespace JarvisVR
 
     public void WorkspaceStatus(Action<WsStatusDto> ok, Action<string> fail) =>
       StartCoroutine(WsGetRoutine("/workspace/status", null, null, ok, fail));
+
+    public void WorkspaceChanges(Action<WsChangesDto> ok, Action<string> fail) =>
+      StartCoroutine(WsGetRoutine("/workspace/changes", null, null, ok, fail));
+
+    public void WorkspaceOpenIde(Action<WsOpenDto> ok, Action<string> fail) =>
+      StartCoroutine(WsOpenIdeRoutine(ok, fail));
+
+    private IEnumerator WsOpenIdeRoutine(Action<WsOpenDto> ok, Action<string> fail)
+    {
+      bool failed = false;
+      yield return EnsureSession(e => { failed = true; fail(e); });
+      if (failed) yield break;
+      string json = JsonUtility.ToJson(new WsSessionRequest { session_id = _session, repo = ActiveRepo });
+      yield return Send("POST", "/workspace/open-ide", json, b => ok(JsonUtility.FromJson<WsOpenDto>(b)), fail);
+    }
+
+    public void WorkspaceDiagnostics(string path, Action<WsDiagDto> ok, Action<string> fail) =>
+      StartCoroutine(WsGetRoutine("/workspace/diagnostics", "path", path, ok, fail));
+
+    public void DebugStart(string script, string[] args, WsDebugBpDto[] breakpoints,
+                           Action<WsOkDto> ok, Action<string> fail) =>
+      StartCoroutine(WsDebugStartRoutine(script, args, breakpoints, ok, fail));
+
+    private IEnumerator WsDebugStartRoutine(string script, string[] args, WsDebugBpDto[] breakpoints,
+                                            Action<WsOkDto> ok, Action<string> fail)
+    {
+      bool failed = false;
+      yield return EnsureSession(e => { failed = true; fail(e); });
+      if (failed) yield break;
+      string json = JsonUtility.ToJson(new WsDebugStartRequest
+      {
+        session_id = _session, script = script ?? "", repo = ActiveRepo,
+        args = args ?? new string[0], breakpoints = breakpoints ?? new WsDebugBpDto[0]
+      });
+      yield return Send("POST", "/workspace/debug/start", json,
+        b => ok(JsonUtility.FromJson<WsOkDto>(b)), fail);
+    }
+
+    public void DebugState(Action<WsDebugStateDto> ok, Action<string> fail) =>
+      StartCoroutine(WsGetRoutine("/workspace/debug/state", null, null, ok, fail));
+
+    public void DebugControl(string action, Action<WsOkDto> ok, Action<string> fail) =>
+      StartCoroutine(WsDebugControlRoutine(action, ok, fail));
+
+    private IEnumerator WsDebugControlRoutine(string action, Action<WsOkDto> ok, Action<string> fail)
+    {
+      bool failed = false;
+      yield return EnsureSession(e => { failed = true; fail(e); });
+      if (failed) yield break;
+      string json = JsonUtility.ToJson(new WsDebugControlRequest
+      { session_id = _session, action = action ?? "", repo = ActiveRepo });
+      yield return Send("POST", "/workspace/debug/control", json,
+        b => ok(JsonUtility.FromJson<WsOkDto>(b)), fail);
+    }
 
     public void WorkspaceVerify(string[] testFiles, Action<WsVerifyDto> ok, Action<string> fail) =>
       StartCoroutine(WsVerifyRoutine(testFiles, ok, fail));

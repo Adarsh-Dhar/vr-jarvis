@@ -531,6 +531,9 @@ def _pyright_argv():
         exe = shutil.which(name)
         if exe:
             return [exe]
+    # pip-installed pyright may live in the user site dir, off PATH.
+    if importlib.util.find_spec('pyright'):
+        return [sys.executable, '-m', 'pyright']
     return None
 
 

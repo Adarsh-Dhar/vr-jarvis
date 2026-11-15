@@ -2643,12 +2643,22 @@ namespace JarvisVR
         int lineNo = i + 1;
         bool cursor = _editMode && lineNo == _editLine;
         bool synErr = _editMode && HasEditSyntaxError(lineNo);
+        WsDiagItem diag = _editMode ? DiagForLine(lineNo) : null;
+        bool dbgStop = _editMode && _debugState != null
+          && _debugState.status == "stopped" && _debugState.line == lineNo
+          && _debugState.file == (_editPath ?? "");
         string num = lineNo.ToString().PadLeft(width);
         if (cursor) sb.Append("<color=#").Append(Hex(ep.Amber)).Append('>').Append(num).Append(" »</color>  ");
+        else if (dbgStop) sb.Append("<color=#").Append(Hex(ep.Cyan)).Append('>').Append(num).Append(" »</color>  ");
+        else if (diag != null && diag.severity != "warning") sb.Append("<color=#").Append(Hex(ep.Red)).Append('>').Append(num).Append(" !</color>  ");
+        else if (diag != null) sb.Append("<color=#").Append(Hex(ep.Orange)).Append('>').Append(num).Append(" !</color>  ");
         else if (synErr) sb.Append("<color=#").Append(Hex(ep.Red)).Append('>').Append(num).Append(" !</color>  ");
         else sb.Append("<color=#").Append(Hex(ep.TextMuted)).Append('>').Append(num).Append("  </color>");
         sb.Append(hl[i]);
-        if (synErr && _editSyntax != null)
+        if (diag != null && !string.IsNullOrEmpty(diag.message))
+          sb.Append("  <color=#").Append(Hex(diag.severity == "warning" ? ep.Orange : ep.Red))
+            .Append(">⚠ ").Append(EscapeRichText(diag.message)).Append("</color>");
+        else if (synErr && _editSyntax != null)
           foreach (SyntaxErrorDto se in _editSyntax)
             if (se != null && se.line == lineNo && !string.IsNullOrEmpty(se.message))
             { sb.Append("  <color=#").Append(Hex(ep.Red)).Append(">⚠ ").Append(Esc(se.message)).Append("</color>"); break; }
