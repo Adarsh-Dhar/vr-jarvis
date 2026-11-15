@@ -20,6 +20,7 @@ from typing import Any, Dict, List, Optional, Union
 from google.adk.tools import ToolContext
 
 from .. import config
+from . import design_store
 
 log = logging.getLogger(__name__)
 
@@ -1097,13 +1098,16 @@ def verify_task_evidence(evidence: str, repo_root: Optional[str] = None, graph_p
 # Disk persistence (design docs survive server restarts)
 
 
+def _safe_id(session_id: str) -> str:
+    return re.sub(r'[^A-Za-z0-9_-]', '', session_id or '')
+
+
 def _design_path(session_id: str) -> Path:
-    safe = re.sub(r'[^A-Za-z0-9_-]', '', session_id or '')
-    return DESIGN_DIR / (safe + '.json')
+    return DESIGN_DIR / (_safe_id(session_id) + '.json')
 
 
 def _versions_dir(session_id: str) -> Path:
-    return DESIGN_DIR / 'history' / re.sub(r'[^A-Za-z0-9_-]', '', session_id or '')
+    return DESIGN_DIR / 'history' / _safe_id(session_id)
 
 
 def _revision_of(doc: Dict[str, Any]) -> int:
@@ -1131,6 +1135,8 @@ def _archive_previous_revision(session_id: str, final: Path, new_payload: Dict[s
 
 
 def list_design_versions(session_id: str) -> List[Dict[str, Any]]:
+    if design_store.enabled():
+        return design_store.list_versions(_safe_id(session_id))
     d = _versions_dir(session_id)
     out = []
     if d.is_dir():
@@ -1143,6 +1149,12 @@ def list_design_versions(session_id: str) -> List[Dict[str, Any]]:
 
 
 def load_design_version(session_id: str, revision: int) -> Dict[str, Any]:
+    if design_store.enabled():
+        try:
+            return design_store.load_version(_safe_id(session_id), int(revision))
+        except Exception as exc:
+            log.warning('could not load design version for %s: %s', session_id, exc)
+            return {}
     f = _versions_dir(session_id) / ('r%d.json' % int(revision))
     try:
         return json.loads(f.read_text(encoding='utf-8')) if f.is_file() else {}
@@ -1160,6 +1172,8 @@ _owner_provider = lambda: None   # noqa: E731
 def design_owner(session_id: str) -> Optional[str]:
     """None when no design file exists; '' for a legacy file with no owner
     recorded; otherwise the owning user id."""
+    if design_store.enabled():
+        return design_store.owner(_safe_id(session_id))
     p = _design_path(session_id)
     if not p.is_file():
         return None
@@ -1175,6 +1189,12 @@ def save_design(session_id: str, payload: Dict[str, Any]) -> bool:
     then os.replace()s into place so a crash never leaves a torn file."""
     import os
     import tempfile
+    if design_store.enabled():
+        try:
+            return design_store.save(_safe_id(session_id), payload, _owner_provider)
+        except Exception as exc:
+            log.warning('could not persist design state for %s: %s', session_id, exc)
+            return False
     try:
         DESIGN_DIR.mkdir(parents=True, exist_ok=True)
         final = _design_path(session_id)
@@ -1202,6 +1222,12 @@ def save_design(session_id: str, payload: Dict[str, Any]) -> bool:
 
 
 def load_design(session_id: str) -> Dict[str, Any]:
+    if design_store.enabled():
+        try:
+            return design_store.load(_safe_id(session_id))
+        except Exception as exc:
+            log.warning('could not load design state for %s: %s', session_id, exc)
+            return {}
     try:
         p = _design_path(session_id)
         if p.is_file():
@@ -1209,3 +1235,15 @@ def load_design(session_id: str) -> Dict[str, Any]:
     except Exception as exc:
         log.warning('could not load design state for %s: %s', session_id, exc)
     return {}
+
+
+def delete_design_data(session_id: str) -> None:
+    """Remove a session's design doc and revision history from whichever store is active."""
+    if design_store.enabled():
+        design_store.delete_all(_safe_id(session_id))
+        return
+    import shutil
+    _design_path(session_id).unlink(missing_ok=True)
+    hist = _versions_dir(session_id)
+    if hist.is_dir():
+        shutil.rmtree(hist, ignore_errors=True)

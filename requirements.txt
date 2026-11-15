@@ -16,6 +16,8 @@ tree-sitter-java
 tree-sitter-c-sharp
 tree-sitter-cpp
 aiosqlite
+asyncpg
+psycopg2-binary
 sqlalchemy
 jsonschema
 bandit==1.8.3

@@ -143,14 +143,23 @@ def validate_security_config():
 # Validate security on import
 validate_security_config()
 
-# Explicit session backend: 'sqlite' (durable, default) or 'memory' (volatile,
-# for tests/dev). An unknown value fails startup instead of silently falling
-# back to whichever service happened to import.
+# Explicit session backend: 'sqlite' (durable, default), 'postgres' (durable,
+# Postgres via ADK), or 'memory' (volatile, for tests/dev). An unknown value
+# fails startup instead of silently falling back to whichever service happened
+# to import.
 SESSION_BACKEND = os.getenv('JARVIS_SESSION_BACKEND', 'sqlite').lower()
-if SESSION_BACKEND not in ('sqlite', 'memory'):
-    raise RuntimeError('JARVIS_SESSION_BACKEND must be sqlite or memory')
+if SESSION_BACKEND not in ('sqlite', 'postgres', 'memory'):
+    raise RuntimeError('JARVIS_SESSION_BACKEND must be sqlite, postgres or memory')
 
-if SESSION_BACKEND == 'sqlite':
+if SESSION_BACKEND == 'postgres':
+    # Conversations go to Postgres through ADK's DatabaseSessionService (asyncpg driver).
+    _pg_url = os.getenv('JARVIS_SESSION_DB', '')
+    if not _pg_url.startswith('postgresql+asyncpg://'):
+        raise RuntimeError('JARVIS_SESSION_DB must start with postgresql+asyncpg:// '
+                           'when JARVIS_SESSION_BACKEND=postgres')
+    from google.adk.sessions import DatabaseSessionService
+    sessions = DatabaseSessionService(db_url=_pg_url)
+elif SESSION_BACKEND == 'sqlite':
     from google.adk.sessions import DatabaseSessionService   # ImportError fails startup
     (config.ROOT / 'data').mkdir(parents=True, exist_ok=True)
     sessions = DatabaseSessionService(
@@ -348,12 +357,8 @@ async def _evict_one_safe_session() -> bool:
 
 def _delete_design_data(session_id):
     """Remove a session's persisted design doc and revision history."""
-    import shutil
     from ai_agents.tools import architecture_tools as at
-    at._design_path(session_id).unlink(missing_ok=True)
-    hist = at._versions_dir(session_id)
-    if hist.is_dir():
-        shutil.rmtree(hist, ignore_errors=True)
+    at.delete_design_data(session_id)
 
 
 async def _retention_sweep(user) -> int:
