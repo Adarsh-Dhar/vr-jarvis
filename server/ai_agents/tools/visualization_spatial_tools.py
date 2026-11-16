@@ -576,6 +576,12 @@ def visualize_control_flow(
 
         from ._common import abs_repo_path
         rel_file = node.get('file', '')
+        if not str(rel_file).endswith('.py'):
+            return {
+                'status': 'not_applicable',
+                'function_id': function_id,
+                'reason': 'Control-flow visualization is only implemented for Python source'
+            }
         with open(abs_repo_path(rel_file), 'r', encoding='utf-8') as f:
             source = f.read()
 
@@ -676,6 +682,13 @@ def visualize_unified_graph(
                 graph, function_id, node, tool_context,
                 max_repository_functions=max_repository_functions,
                 summarize=summarize, max_nodes=max_nodes)
+
+        if not str(node.get('file', '')).endswith('.py'):
+            return {
+                'status': 'not_applicable',
+                'function_id': function_id,
+                'reason': 'Unified graph visualization is only implemented for Python source'
+            }
 
         cfg, dfg = _build_cfg_dfg_for_node(graph, node, function_id)
 
@@ -1451,11 +1464,12 @@ def navigate_to_code_element(
 
 @safe
 def navigate_to_relationship(
-    node_id: str,
+    from_id: str,
+    to_id: str,
     tool_context: ToolContext
 ) -> dict:
     """Alias for trace_relationship_path."""
-    return trace_relationship_path(node_id, tool_context)
+    return trace_relationship_path(from_id, to_id, tool_context)
 
 
 @safe
@@ -1530,6 +1544,39 @@ def explain_graph_edge(
         }
 
 
+def _graph_edges_list(graph_entry):
+    """Normalize a graph_state entry's edges to a list of dicts.
+
+    graph_state stores edges as a dict keyed by edge id, but the dataflow
+    engines (PathQueryEngine, GraphSummarizer) iterate edges as a list.
+    Also maps the src/dst/from/to key variants onto source/target."""
+    edges = graph_entry.get('edges', {})
+    if isinstance(edges, dict):
+        edges = list(edges.values())
+    out = []
+    for e in edges:
+        if not isinstance(e, dict):
+            continue
+        e = dict(e)
+        if 'source' not in e:
+            e['source'] = e.get('src', e.get('from'))
+        if 'target' not in e:
+            e['target'] = e.get('dst', e.get('to'))
+        out.append(e)
+    return out
+
+
+def _graph_nodes_list(graph_entry):
+    """Normalize a graph_state entry's nodes to a list of dicts.
+
+    graph_state stores nodes as a dict keyed by node id, but the dataflow
+    engines (PathQueryEngine, GraphSummarizer) iterate nodes as a list."""
+    nodes = graph_entry.get('nodes', {})
+    if isinstance(nodes, dict):
+        return [n for n in nodes.values() if isinstance(n, dict)]
+    return [n for n in nodes if isinstance(n, dict)]
+
+
 @safe
 def query_graph_path(
     graph_id: str,
@@ -1552,8 +1599,8 @@ def query_graph_path(
 
         # Build graph dict for path engine
         graph_dict = {
-            'nodes': graph_state[graph_id]['nodes'],
-            'edges': graph_state[graph_id]['edges']
+            'nodes': _graph_nodes_list(graph_state[graph_id]),
+            'edges': _graph_edges_list(graph_state[graph_id])
         }
 
         engine = PathQueryEngine()
@@ -1626,8 +1673,8 @@ def expand_graph_neighborhood(
 
         # Build graph dict
         graph_dict = {
-            'nodes': graph_state[graph_id]['nodes'],
-            'edges': graph_state[graph_id]['edges']
+            'nodes': _graph_nodes_list(graph_state[graph_id]),
+            'edges': _graph_edges_list(graph_state[graph_id])
         }
 
         summarizer = GraphSummarizer()

@@ -152,9 +152,15 @@ class GraphPersistenceManager:
 
         return True
 
+    @staticmethod
+    def _cache_filename(function_id: str) -> str:
+        """function_id contains '/' (e.g. 'pkg/mod.py::func'); flatten it so
+        the cache stays a flat directory of *.json files."""
+        return function_id.replace('/', '_').replace('\\', '_') + '.json'
+
     def _persist_entry(self, entry: GraphCacheEntry):
         """Persist a cache entry to disk."""
-        cache_file = self._cache_dir / f"{entry.function_id}.json"
+        cache_file = self._cache_dir / self._cache_filename(entry.function_id)
         with open(cache_file, 'w') as f:
             json.dump({
                 'function_id': entry.function_id,
@@ -169,7 +175,7 @@ class GraphPersistenceManager:
 
     def _remove_persisted_entry(self, function_id: str):
         """Remove a persisted cache entry."""
-        cache_file = self._cache_dir / f"{function_id}.json"
+        cache_file = self._cache_dir / self._cache_filename(function_id)
         if cache_file.exists():
             cache_file.unlink()
 

@@ -4,7 +4,7 @@ One test per tool group asserting non-empty payloads and ID round-trip through C
 
 import pytest
 from ai_agents import config, repository
-from ai_agents import codegraph
+from ai_agents.intelligence.graph_engine import codegraph
 from pathlib import Path
 
 

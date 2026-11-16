@@ -1,0 +1,10 @@
+{
+  "function_id": "eutro/train.py::train",
+  "content_hash": "c3c8a36e448e761b2f5bc3faa030ad8e",
+  "cfg_hash": "8ec82603bb1e7f3d1e67be7b9ff02405",
+  "dfg_hash": "3eac1f3c2ef5215eb9bd13e28ae0975a",
+  "callee_hashes": {},
+  "dependency_digests": {},
+  "timestamp": 1794851084.0074098,
+  "metadata": {}
+}

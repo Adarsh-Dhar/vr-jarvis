@@ -97,7 +97,7 @@ def activate(name):
     graph_tools.GRAPH_PATH = path
     graph_tools._graph.cache_clear()
     # Clear CodeGraph cache
-    from ... import codegraph
+    from . import codegraph
     codegraph.clear_cache()
     # Per-function data-flow facts are keyed on repo/graph/source; drop them too.
     try:

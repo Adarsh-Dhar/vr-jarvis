@@ -14,6 +14,7 @@ import traceback
 import uuid
 import hmac
 import time
+from contextlib import asynccontextmanager
 from collections import defaultdict, deque
 from pathlib import Path
 from typing import Optional, Dict, Any, List, Literal
@@ -45,7 +46,8 @@ from ai_agents.tools.exec_tools import (
     verification_blockers, review_blockers, run_tests, run_typecheck)
 from ai_agents.tools.security_tools import run_security_scan
 from ai_agents.tools.path_resolver import (
-    PathResolutionError, resolve_worktree_read, resolve_worktree_write)
+    PathResolutionError, resolve_repo_read, resolve_worktree_read,
+    resolve_worktree_write)
 from ai_agents.tools.workspace_tools import (
     apply_line_edit, quick_syntax_check, worktree_symbols)
 from ai_agents.tools.runtime_tools import _validate_script_in_root
@@ -296,7 +298,17 @@ runner = Runner(agent=root_agent, app_name=APP, session_service=sessions)
 locks = defaultdict(asyncio.Lock)
 session_last_used = {}  # Track session last activity for eviction
 session_owner = {}      # session_id -> user_id, for cross-user housekeeping
-app = FastAPI(title='JARVIS bridge')
+
+
+@asynccontextmanager
+async def _lifespan(_app: FastAPI):
+    await _register_persisted_sessions()
+    yield
+    for sid in list(_debug_sessions):
+        _ws_debug_stop(sid)
+
+
+app = FastAPI(title='JARVIS bridge', lifespan=_lifespan)
 
 
 @app.middleware('http')
@@ -374,7 +386,7 @@ def log_audit(agent: str, tool: str, args: dict, outcome: str, duration: float):
     """Write audit entry to log file."""
     import datetime
     entry = {
-        'timestamp': datetime.datetime.utcnow().isoformat(),
+        'timestamp': datetime.datetime.now(datetime.UTC).isoformat(),
         'agent': agent,
         'tool': tool,
         'args_redacted': {k: '***' if 'token' in k.lower() or 'key' in k.lower() or 'password' in k.lower() else v 
@@ -595,7 +607,6 @@ def _refuse_if_switching():
         raise HTTPException(status_code=409, detail='A repository switch is in progress. Retry in a moment.')
 
 
-@app.on_event('startup')
 async def _register_persisted_sessions():
     """Sessions persisted in the database survive a restart, but session_last_used does not. Re-register
     them so the repo-switch guard sees their worktrees / pending approvals / unpromoted commits."""
@@ -2029,7 +2040,7 @@ async def _persist_design(session_id) -> bool:
     if not ok:
         import datetime
         _PERSIST_WARNINGS.append({'session_id': session_id,
-                                  'at': datetime.datetime.utcnow().isoformat()})
+                                  'at': datetime.datetime.now(datetime.UTC).isoformat()})
         del _PERSIST_WARNINGS[:-20]
     return ok
 
@@ -2883,22 +2894,30 @@ async def ws_get_file(session_id: str, path: str, repo: Optional[str] = None):
         return {'status': 'ok', 'path': rel.as_posix(), 'content': _ws_content(text),
                 'hash': _ws_hash(text), 'truncated': truncated,
                 'size': len(text.encode('utf-8')), 'source': 'worktree'}
+    # No worktree: read from the main checkout (config.REPO_ROOT) directly.
+    # Going through repository.read_browser_file would depend on
+    # REPOSITORY_DIR listing health, which tests and repo switches can break.
+    repo_root = Path(config.REPO_ROOT).resolve()
     try:
-        data = await asyncio.to_thread(repository.read_browser_file,
-                                       config.REPO_ROOT.name, path)
-    except FileNotFoundError:
-        raise HTTPException(status_code=404, detail='file not found: ' + path)
-    except KeyError:
-        raise HTTPException(status_code=404, detail='unknown repository')
-    except ValueError as exc:
+        target = resolve_repo_read(path, root=repo_root)
+    except PathResolutionError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    content = data.get('content') or ''
-    status = data.get('status') or 'ok'
-    return {'status': status, 'path': data.get('path') or path,
-            'content': content if status == 'ok' else '',
-            'hash': _ws_hash(content) if status == 'ok' else '',
-            'truncated': bool(data.get('truncated')), 'error': data.get('error'),
-            'size': data.get('size', len(content)), 'source': 'main'}
+    rel = target.relative_to(repo_root)
+    if rel.parts and rel.parts[0] in ('.git', 'node_modules'):
+        raise HTTPException(status_code=400, detail='path is not readable: ' + path)
+    if not target.is_file():
+        raise HTTPException(status_code=404, detail='file not found: ' + path)
+    head = await asyncio.to_thread(_ws_head, target)
+    if b'\x00' in head:
+        return {'status': 'binary', 'path': rel.as_posix(), 'content': '',
+                'hash': '', 'truncated': False, 'size': target.stat().st_size,
+                'source': 'main',
+                'error': 'Binary files cannot be opened in the code viewer.'}
+    text, truncated = await asyncio.to_thread(_ws_read_text, target)
+    truncated = truncated or len(text) > repository.MAX_BROWSER_FILE_BYTES
+    return {'status': 'ok', 'path': rel.as_posix(), 'content': _ws_content(text),
+            'hash': _ws_hash(text), 'truncated': truncated,
+            'size': len(text.encode('utf-8')), 'source': 'main', 'error': None}
 
 
 @app.put('/workspace/file', dependencies=[Depends(auth), Depends(block_in_demo)])
@@ -3274,12 +3293,6 @@ async def ws_debug_control(body: WsDebugControlBody):
     except Exception as exc:
         raise HTTPException(500, str(exc)[:300])
     return {'ok': True}
-
-
-@app.on_event('shutdown')
-async def _stop_debug_sessions():
-    for sid in list(_debug_sessions):
-        _ws_debug_stop(sid)
 
 
 # ---------------------------------------------------------------------------

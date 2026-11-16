@@ -405,7 +405,19 @@ def measure_test_coverage(
             timeout=60
         )
 
-        if result.returncode != 0:
+        coverage_file = path / '.coverage.json'
+        if not coverage_file.exists():
+            coverage_file = path / 'coverage.json'
+
+        if result.returncode == 5:
+            # pytest exit code 5: no tests collected — nothing to measure.
+            return {
+                'status': 'not_applicable',
+                'reason': 'No tests found in repository',
+                'repository_path': str(path)
+            }
+
+        if result.returncode != 0 and not coverage_file.exists():
             return {
                 'status': 'error',
                 'error': f"Coverage run failed: {result.stderr[-500:] if result.stderr else result.stdout[-500:]}",
@@ -413,10 +425,6 @@ def measure_test_coverage(
             }
 
         # Try to read the coverage.json file
-        coverage_file = path / '.coverage.json'
-        if not coverage_file.exists():
-            coverage_file = path / 'coverage.json'
-        
         if not coverage_file.exists():
             return {
                 'status': 'error',
@@ -1036,9 +1044,9 @@ def compare_before_after(
         
         before_path = Path(before_snapshot)
         after_path = Path(after_snapshot)
-        
+
         # If paths exist, compare files
-        if before_path.exists() and after_path.exists():
+        if before_path.is_file() and after_path.is_file():
             before_content = before_path.read_text(encoding='utf-8')
             after_content = after_path.read_text(encoding='utf-8')
             

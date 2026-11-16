@@ -7,7 +7,7 @@ from typing import Optional, List, Dict, Any
 import re
 import time
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from google.adk.tools import ToolContext
 from ._safe import safe
 
@@ -230,7 +230,7 @@ def detect_voice_activity(audio_data: str, tool_context: ToolContext) -> dict:
                 'audio_length': audio_length,
                 'average_energy': avg_energy,
                 'variance': variance,
-                'timestamp': datetime.utcnow().isoformat(),
+                'timestamp': datetime.now(UTC).isoformat(),
                 'note': 'Energy-based detection - real VAD requires audio analysis (WebRTC VAD, silero-vad, etc.)'
             }
         except Exception:
@@ -244,7 +244,7 @@ def detect_voice_activity(audio_data: str, tool_context: ToolContext) -> dict:
                 'confidence': min(0.8, variance / 100.0),
                 'audio_length': audio_length,
                 'data_variance': variance,
-                'timestamp': datetime.utcnow().isoformat(),
+                'timestamp': datetime.now(UTC).isoformat(),
                 'note': 'Fallback variance detection - real VAD requires audio analysis'
             }
     except Exception as e:
@@ -633,7 +633,7 @@ def interrupt_current_response(tool_context: ToolContext) -> dict:
             'status': 'ok',
             'interrupted': True,
             'message': 'Response interrupted',
-            'timestamp': datetime.utcnow().isoformat()
+            'timestamp': datetime.now(UTC).isoformat()
         }
     except Exception as e:
         return {

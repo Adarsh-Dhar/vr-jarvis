@@ -34,10 +34,11 @@ Return your analysis to state['result_relationship']
 '''
 
 
-def build_relationship_intelligence_agent() -> LlmAgent:
-    """Build the Relationship Intelligence agent."""
+def build_relationship_intelligence_agent(name="relationship_intelligence") -> LlmAgent:
+    """Build the Relationship Intelligence agent. Pass a unique name when the
+    agent is placed in more than one pipeline (ADK names must be unique)."""
     spec = create_agent_spec(
-        name="relationship_intelligence",
+        name=name,
         instruction=INSTRUCTION,
         tools=TOOLSETS["relationship_intelligence"],
         output_key="result_relationship",

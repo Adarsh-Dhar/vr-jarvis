@@ -345,7 +345,7 @@ def _log_authorization(agent: str, tool: str, args: dict, outcome: str, duration
     AUDIT_LOG_PATH.parent.mkdir(exist_ok=True)
     
     entry = {
-        'timestamp': datetime.datetime.utcnow().isoformat(),
+        'timestamp': datetime.datetime.now(datetime.UTC).isoformat(),
         'type': 'authorization',
         'agent': agent,
         'tool': tool,

@@ -34,6 +34,11 @@ PERMISSION_CEILINGS = {
     "review_verifier_agent": 'execute',
     "gate_review_verifier_agent": 'execute',
     "code_reviewer": 'read',
+    # Pipeline-scoped instances of shared specialists (unique ADK names).
+    "debug_investigator_agent": 'read',
+    "debug_relationship_intelligence": 'read',
+    "debug_data_flow_intelligence": 'read',
+    "phase2_data_flow_intelligence": 'read',
 }
 
 # Tool permission levels - must contain every tool name in TOOLSETS
@@ -224,6 +229,10 @@ TOOLSETS: Dict[str, List[str]] = {
     "code_understanding": ['get_symbol_definition', 'get_symbol_references', 'get_symbol_hover_info', 'get_type_hierarchy', 'get_imports', 'get_exports', 'get_scope_information', 'parse_source_code', 'extract_symbols', 'resolve_types', 'explain_function', 'explain_class', 'explain_module', 'explain_condition', 'extract_function_contract', 'identify_side_effects', 'identify_hidden_assumptions', 'infer_code_intent', 'trace_function_logic', 'analyze_control_flow', 'get_runtime_trace', 'read_file_range', 'record_finding', 'get_findings'],
     "relationship_intelligence": ['find_callers', 'find_callees', 'find_indirect_callers', 'trace_call_chain', 'get_call_sites', 'explain_call_resolution', 'build_call_graph', 'build_dependency_graph', 'find_dependents', 'find_all_paths_between_symbols', 'find_circular_dependencies', 'analyze_architecture_boundaries', 'calculate_change_impact', 'find_interface_implementations', 'trace_cross_module_relationships', 'record_finding', 'get_findings'],
     "data_flow_intelligence": ['trace_variable_origin', 'trace_variable_usage', 'trace_variable_modifications', 'trace_parameter_flow', 'trace_return_value_flow', 'trace_transformations', 'trace_cross_function_flow', 'trace_file_operations', 'trace_state_changes', 'build_data_flow_graph', 'get_runtime_trace', 'record_finding', 'get_findings'],
+    # Same toolsets under the pipeline-unique agent names used in agent.py.
+    "debug_relationship_intelligence": ['find_callers', 'find_callees', 'find_indirect_callers', 'trace_call_chain', 'get_call_sites', 'explain_call_resolution', 'build_call_graph', 'build_dependency_graph', 'find_dependents', 'find_all_paths_between_symbols', 'find_circular_dependencies', 'analyze_architecture_boundaries', 'calculate_change_impact', 'find_interface_implementations', 'trace_cross_module_relationships', 'record_finding', 'get_findings'],
+    "debug_data_flow_intelligence": ['trace_variable_origin', 'trace_variable_usage', 'trace_variable_modifications', 'trace_parameter_flow', 'trace_return_value_flow', 'trace_transformations', 'trace_cross_function_flow', 'trace_file_operations', 'trace_state_changes', 'build_data_flow_graph', 'get_runtime_trace', 'record_finding', 'get_findings'],
+    "phase2_data_flow_intelligence": ['trace_variable_origin', 'trace_variable_usage', 'trace_variable_modifications', 'trace_parameter_flow', 'trace_return_value_flow', 'trace_transformations', 'trace_cross_function_flow', 'trace_file_operations', 'trace_state_changes', 'build_data_flow_graph', 'get_runtime_trace', 'record_finding', 'get_findings'],
     # fix_pipeline agents (agents/fix.py). Tool names are the bound callables'
     # __name__ values — aliases in fix.py (e.g. repo_search_symbols) resolve
     # to the canonical export name.
@@ -262,6 +271,14 @@ TOOLSETS: Dict[str, List[str]] = {
                             'get_node'],
     "test_mapper_agent": ['get_callers', 'find_tests_for_node', 'get_coverage'],
     "investigator_agent": [
+        'search_graph_symbols', 'get_node', 'get_callers', 'get_callees',
+        'get_dependents', 'trace_path', 'get_cluster', 'get_source',
+        'find_tests_for_node', 'list_files', 'read_file', 'search_code',
+        'search_symbols', 'get_symbol_definition', 'get_symbol_references',
+        'get_symbol_hover_info', 'get_call_hierarchy', 'get_type_hierarchy',
+        'parse_source_code', 'extract_symbols', 'resolve_types',
+        'analyze_control_flow', 'analyze_dependencies'],
+    "debug_investigator_agent": [
         'search_graph_symbols', 'get_node', 'get_callers', 'get_callees',
         'get_dependents', 'trace_path', 'get_cluster', 'get_source',
         'find_tests_for_node', 'list_files', 'read_file', 'search_code',

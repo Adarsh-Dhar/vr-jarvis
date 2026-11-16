@@ -34,10 +34,11 @@ Return your analysis to state['result_data_flow']
 '''
 
 
-def build_data_flow_agent() -> LlmAgent:
-    """Build the Data Flow Intelligence agent."""
+def build_data_flow_agent(name="data_flow_intelligence") -> LlmAgent:
+    """Build the Data Flow Intelligence agent. Pass a unique name when the
+    agent is placed in more than one pipeline (ADK names must be unique)."""
     spec = create_agent_spec(
-        name="data_flow_intelligence",
+        name=name,
         instruction=INSTRUCTION,
         tools=TOOLSETS["data_flow_intelligence"],
         output_key="result_data_flow",

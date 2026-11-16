@@ -43,11 +43,12 @@ Return a JSON object with these keys:
 - evidence_nodes: every node id you relied on
 '''
 
-def make_investigator() -> LlmAgent:
+def make_investigator(name='investigator_agent') -> LlmAgent:
     """Build an Investigator instance. Needed because ADK agents cannot have
-    two parents — pipelines that each need an investigator must not share one."""
+    two parents — pipelines that each need an investigator must not share one.
+    Each pipeline passes a unique name so find_agent() never sees duplicates."""
     agent = LlmAgent(
-        name='investigator_agent',
+        name=name,
         model=model_for('investigator'),
         include_contents='none',
         description=('Answers where, how and why questions about existing code by searching the code graph '
@@ -66,7 +67,7 @@ def make_investigator() -> LlmAgent:
         after_tool_callback=evidence_collector,
     )
     from .registry import AGENT_CONFIG
-    AGENT_CONFIG['investigator_agent'] = {
+    AGENT_CONFIG[name] = {
         "permission_ceiling": "read",
         "tool_budget": 20,
     }

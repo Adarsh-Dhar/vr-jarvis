@@ -66,7 +66,8 @@ impact_pipeline = SequentialAgent(
 debug_analysis = ParallelAgent(
     name='debug_analysis',
     description='Relationship intelligence and data-flow intelligence analyse the investigation in parallel.',
-    sub_agents=[build_relationship_intelligence_agent(), build_data_flow_agent()],
+    sub_agents=[build_relationship_intelligence_agent('debug_relationship_intelligence'),
+                build_data_flow_agent('debug_data_flow_intelligence')],
 )
 
 debug_pipeline = SequentialAgent(
@@ -74,7 +75,7 @@ debug_pipeline = SequentialAgent(
     description=('Debugs an error, stack trace or failure: investigates the code, analyses relationships '
                  'and data flow, then reports likely cause, evidence, a proposed correction and an '
                  'explanation. Read-only; does not modify code.'),
-    sub_agents=[make_investigator(), debug_analysis,
+    sub_agents=[make_investigator('debug_investigator_agent'), debug_analysis,
                 make_critic('debug_critic', 'findings'),
                 make_scene_director('debug_scene')],
 )
@@ -140,7 +141,8 @@ fix_pipeline = SequentialAgent(
 phase2_specialists = ParallelAgent(
     name='phase2_specialists',
     description='Run Repository, Code Understanding, and Relationship in parallel',
-    sub_agents=[repository_intelligence_agent, code_understanding_agent, relationship_intelligence_agent, build_data_flow_agent()],
+    sub_agents=[repository_intelligence_agent, code_understanding_agent, relationship_intelligence_agent,
+                build_data_flow_agent('phase2_data_flow_intelligence')],
 )
 
 # Single project-understanding role: one named pipeline that routes to the

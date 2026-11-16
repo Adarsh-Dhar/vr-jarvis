@@ -11,7 +11,7 @@ from pathlib import Path
 def test_control_flow_dotted_id_works():
     """Ensure control flow works with dotted IDs and returns actual blocks."""
     from ai_agents.tools.analysis_tools import analyze_control_flow
-    from ai_agents import codegraph
+    from ai_agents.intelligence.graph_engine import codegraph
     
     # Test with dotted ID - try to resolve through CodeGraph
     graph = codegraph.load_current_graph()
@@ -48,7 +48,7 @@ def test_data_flow_graph_emission():
 def test_change_impact_depth_correct():
     """Test change impact distinguishes direct vs indirect callers."""
     from ai_agents.tools.relationship_intelligence_tools import calculate_change_impact
-    from ai_agents import codegraph
+    from ai_agents.intelligence.graph_engine import codegraph
     
     # Load graph
     graph = codegraph.load_current_graph()

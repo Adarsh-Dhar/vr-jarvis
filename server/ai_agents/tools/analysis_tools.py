@@ -329,7 +329,7 @@ def analyze_control_flow(function_name: str, tool_context: ToolContext) -> dict:
             'kind': node.get('kind'),
         }
 
-        result = analyze_python_control_flow(graph, symbol)
+        result = analyze_python_control_flow(graph, symbol, use_cache=False)
 
         if 'error' in result:
             return {
@@ -338,11 +338,13 @@ def analyze_control_flow(function_name: str, tool_context: ToolContext) -> dict:
                 'function_name': function_name,
             }
 
+        cfg_dict = result['graph'].to_dict()
         return {
             'status': 'ok',
             'function_name': function_name,
             'function_id': result['metadata'].get('function_id'),
-            'cfg': result['graph'].to_dict(),
+            'cfg': cfg_dict,
+            'blocks': cfg_dict.get('nodes', []),
             'validation': result['validation'],
             'diagnostics': result['diagnostics'],
             'metadata': result['metadata'],
