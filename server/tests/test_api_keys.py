@@ -87,6 +87,54 @@ def test_status_never_shows_full_key():
     assert p.status()[0]['key'] == '...1234'
 
 
+def test_repeated_quota_failures_back_off():
+    p = api_keys.KeyPool(['a'])
+    p.mark('a', 'quota', 10)
+    first = p._until['a'] - time.time()
+    p.mark('a', 'quota', 10)
+    second = p._until['a'] - time.time()
+    assert second > first * 1.5                     # second rest is roughly double
+    p.ok('a')
+    p.mark('a', 'quota', 10)
+    assert p._until['a'] - time.time() < second      # success resets the backoff
+
+
+def test_backoff_never_shortens_a_daily_rest():
+    p = api_keys.KeyPool(['a'])
+    p.mark('a', 'quota', 20000)                      # per-day quota: ~5.5h
+    p.mark('a', 'quota', 20000)
+    assert p._until['a'] - time.time() > 19000
+
+
+def test_pool_resumes_last_key_after_restart(tmp_path):
+    state = str(tmp_path / 'state.json')
+    p = api_keys.KeyPool(['a', 'b', 'c'], state_path=state)
+    p.mark('a', 'quota', 60)
+    assert p.get() == 'b'                       # last used key is 'b'
+    p2 = api_keys.KeyPool(['a', 'b', 'c'], state_path=state)
+    assert p2.get() == 'b'                      # first pick after "restart" resumes on 'b'
+    assert p2.get() == 'b'                      # and keeps using 'b' while it is usable
+    p2.mark('b', 'quota', 60)
+    assert p2.get() == 'a'                      # once 'b' rests, normal order resumes: GOOGLE_API_KEY first
+
+
+def test_pool_round_robin_resumes_after_last_key(tmp_path):
+    state = str(tmp_path / 'state.json')
+    p = api_keys.KeyPool(['a', 'b', 'c'], 'round_robin', state_path=state)
+    assert p.get() == 'a' and p.get() == 'b'      # last used key is 'b'
+    p2 = api_keys.KeyPool(['a', 'b', 'c'], 'round_robin', state_path=state)
+    assert [p2.get() for _ in range(2)] == ['c', 'a']   # rotation continues after 'b'
+
+
+def test_pool_state_falls_back_to_first_key_when_last_is_gone(tmp_path):
+    state = str(tmp_path / 'state.json')
+    p = api_keys.KeyPool(['a', 'b'], state_path=state)
+    p.mark('a', 'quota', 60)
+    assert p.get() == 'b'
+    p2 = api_keys.KeyPool(['a', 'x'], state_path=state)   # 'b' was removed from .env
+    assert p2.get() == 'a'
+
+
 # ---------- end to end through the model wrapper ----------
 
 class _Fake(BaseHTTPRequestHandler):

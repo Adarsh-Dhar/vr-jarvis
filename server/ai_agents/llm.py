@@ -100,11 +100,13 @@ class PacedGemini(Gemini):
                     raise RuntimeError('all API keys are out of quota; the next one is free in %ds' % int(wait))
                 await asyncio.sleep(wait + 0.5)
                 continue
+            pool.note_model(key, self.model, self.base_url)
             started = False
             try:
                 async for response in self._member(key).generate_content_async(llm_request.model_copy(deep=True), stream=stream):
                     started = True
                     yield response
+                pool.ok(key)
                 return
             except Exception as exc:
                 kind, secs = api_keys.classify(exc)

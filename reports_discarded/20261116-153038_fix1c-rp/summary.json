@@ -1,0 +1,24 @@
+{
+  "tag": "fix1c-rp",
+  "split": "dev",
+  "repeats": 3,
+  "cases": 14,
+  "runs": 42,
+  "infra_errors": 42,
+  "success_rate": 0.0,
+  "fabricated_total": 0,
+  "unstable_cases": 0,
+  "by_category": {},
+  "latency_ms_p50": 0,
+  "latency_ms_p95": 0,
+  "model_calls_mean": 0,
+  "tokens_mean": 0,
+  "commit": "a56ca880",
+  "env": {
+    "JARVIS_MODEL": "gemini-3.5-flash-lite",
+    "JARVIS_LITE_MODEL": "",
+    "JARVIS_LLM_RPM": "0",
+    "JARVIS_LLM_ATTEMPTS": "5",
+    "JARVIS_FAST_PATH": ""
+  }
+}

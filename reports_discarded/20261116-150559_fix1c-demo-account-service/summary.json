@@ -1,0 +1,27 @@
+{
+  "tag": "fix1c-demo-account-service",
+  "split": "dev",
+  "repeats": 3,
+  "cases": 8,
+  "runs": 24,
+  "infra_errors": 20,
+  "success_rate": 0.5,
+  "fabricated_total": 0,
+  "unstable_cases": 0,
+  "by_category": {
+    "callees": 1.0,
+    "callers": 0.3333
+  },
+  "latency_ms_p50": 83614.0,
+  "latency_ms_p95": 146944.75,
+  "model_calls_mean": 18,
+  "tokens_mean": 91699,
+  "commit": "a56ca880",
+  "env": {
+    "JARVIS_MODEL": "gemini-3.5-flash-lite",
+    "JARVIS_LITE_MODEL": "",
+    "JARVIS_LLM_RPM": "0",
+    "JARVIS_LLM_ATTEMPTS": "5",
+    "JARVIS_FAST_PATH": ""
+  }
+}

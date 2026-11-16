@@ -2670,6 +2670,7 @@ namespace JarvisVR
         SetMode("CODE");
         RefreshOpenFile();
         HighlightFileNodes(path);
+        if (string.IsNullOrEmpty(file.content)) Say(path + " is an empty file.");
         Log("opened " + path);
       };
       // Prefer the workspace read: when a sandbox worktree exists it returns the
@@ -2711,12 +2712,14 @@ namespace JarvisVR
       if (_codePanel == null || _openFile == null) return;
       _codePanel.SetTitle(_openFile.path);
       string[] hl = JarvisSyntax.HighlightLines(_openFile.content, _openFile.path);
+      // An empty file (for example .gitkeep) highlights to one blank line; show it as empty, not as a blank panel.
+      bool emptyFile = string.IsNullOrEmpty(_openFile.content) && !_editMode;
       int pages = Mathf.Max(1, Mathf.CeilToInt(hl.Length / (float)EditorLinesPerPage));
       // In edit mode the cursor line drives the page, like OutlineGo does.
       if (_editMode && _editLine > 0)
         _openFilePage = Mathf.Clamp((_editLine - 1) / EditorLinesPerPage, 0, pages - 1);
       int first = _openFilePage * EditorLinesPerPage;
-      int last = Mathf.Min(hl.Length, first + EditorLinesPerPage);
+      int last = emptyFile ? first : Mathf.Min(hl.Length, first + EditorLinesPerPage);
       int width = hl.Length.ToString().Length;
       var sb = new StringBuilder();
       JarvisPalette ep = JarvisPalette.Current;
@@ -2730,7 +2733,7 @@ namespace JarvisVR
       else
       {
         sb.Append("<color=#").Append(Hex(ep.TextMuted)).Append(">READ-ONLY VIEW  ·  ")
-          .Append(hl.Length).Append(" lines  ·  page ").Append(_openFilePage + 1).Append('/').Append(pages).Append("</color>\n\n");
+          .Append(emptyFile ? 0 : hl.Length).Append(" lines  ·  page ").Append(_openFilePage + 1).Append('/').Append(pages).Append("</color>\n\n");
       }
       for (int i = first; i < last; i++)
       {
@@ -2758,6 +2761,8 @@ namespace JarvisVR
             { sb.Append("  <color=#").Append(Hex(ep.Red)).Append(">⚠ ").Append(Esc(se.message)).Append("</color>"); break; }
         sb.Append('\n');
       }
+      if (emptyFile)
+        sb.Append("<color=#").Append(Hex(ep.TextMuted)).Append(">(empty file: 0 bytes, nothing to show. Placeholder files such as .gitkeep are empty on purpose.)</color>");
       if (_openFile.truncated) sb.Append("\n<color=#").Append(Hex(JarvisPalette.Current.Amber)).Append(">File truncated at 512 KB.</color>");
       _codePanel.SetBody(sb.ToString());
       _codePrev.gameObject.SetActive(true); _codeClose.gameObject.SetActive(true); _codeNext.gameObject.SetActive(true);
